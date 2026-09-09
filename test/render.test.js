@@ -7,12 +7,19 @@ import { rectangularRing } from './fixtures.js';
 test('an R30 arc runs corner to corner of its mat', () => {
   const d = arcPath({ kind: 'arc', r: 1, cell: [0, 1], corner: 'SW' });
   // endpoints (1,2) along the S edge and (0,1) along the W edge, centre (1,1)
-  assert.match(d, /^M 1 2 A 1 1 0 0 [01] 0 1$/);
+  assert.equal(d, 'M 1 2 A 1 1 0 0 1 0 1');
 });
 
 test('an R60 arc spans two mats each way', () => {
   const d = arcPath({ kind: 'arcLarge', r: 2, cell: [0, 2], corner: 'SW' });
-  assert.match(d, /^M 2 3 A 2 2 0 0 [01] 0 1$/);
+  assert.equal(d, 'M 2 3 A 2 2 0 0 1 0 1');
+});
+
+test('sweep flag is derived per corner, not hard-coded', () => {
+  assert.equal(arcPath({ kind: 'arc', r: 1, cell: [0, 0], corner: 'NE' }), 'M 0 0 A 1 1 0 0 1 1 1');
+  assert.equal(arcPath({ kind: 'arc', r: 1, cell: [0, 0], corner: 'SE' }), 'M 0 1 A 1 1 0 0 0 1 0');
+  assert.equal(arcPath({ kind: 'arc', r: 1, cell: [0, 0], corner: 'SW' }), 'M 1 1 A 1 1 0 0 1 0 0');
+  assert.equal(arcPath({ kind: 'arc', r: 1, cell: [0, 0], corner: 'NW' }), 'M 1 0 A 1 1 0 0 0 0 1');
 });
 
 test('geometry lists one rect per mat and one line per straight barrier', () => {

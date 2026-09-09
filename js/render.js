@@ -1,4 +1,4 @@
-import { placedCells, placedWalls, MAT_MM } from './geometry.js';
+import { placedCells, MAT_MM } from './geometry.js';
 import { computeBarriers, computeMetrics, findOverlaps } from './model.js';
 
 export const MAT_PX = 24;
@@ -70,7 +70,7 @@ export function layoutToSvgString(layout, { pad = 1 } = {}) {
   const arcs = g.arcs
     .map((a) => `<path d="${a.d}" fill="none" stroke="#f2f2f2" stroke-width="0.12" stroke-linecap="round"/>`)
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" width="${g.bbox.w * MAT_PX}" height="${g.bbox.h * MAT_PX}">${mats}${lines}${arcs}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" width="${vb[2] * MAT_PX}" height="${vb[3] * MAT_PX}">${mats}${lines}${arcs}</svg>`;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
