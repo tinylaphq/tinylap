@@ -19,6 +19,11 @@ export const PART_LABELS = {
 // the starter set exactly: 36*2 + 6*2 + 6*1 = 90 joints of each type.
 export const MOUNT_POINTS = { straight: 2, curve: 2, curveLarge: 2, cornerCap: 1 };
 
+// priceRank: a relative cheapest-first ordering hint used only to sort
+// recommendKit's candidates — not sourced from any manual or price list,
+// just an unverified guess at kit price order. The headline recommendation
+// (renderBom's "Short on pieces — <kit> covers it") sorts on this, so treat
+// which kit gets named with that in mind.
 export const KITS = {
   '87033': {
     name: 'Circuit 30 Starter, 48 pcs',
@@ -37,6 +42,11 @@ export const KITS = {
   '87033-01': {
     name: 'Circuit 30 Expansion, 63 pcs',
     priceRank: 2,
+    // 63 here vs. spec §2.2's 36 + 26 = 62: the kit is sold and boxed as
+    // "63 pcs" (this constant), while 87031-01 is documented as the 62-pcs
+    // variant of the same expansion. Defensible as two real, differently
+    // counted SKUs rather than a typo, but code and spec disagree on their
+    // face — flagged here rather than silently changed without evidence.
     mats: { square: 63 },
     barriers: { straight: 26 },
     joints: { a: 52, b: 52 },

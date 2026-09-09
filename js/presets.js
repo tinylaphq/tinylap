@@ -33,11 +33,15 @@ export function rectangularRing() {
 }
 
 // Task 16: the 87033 manual shows an L-shaped layout labelled 2.1 m x 2.7 m
-// (a 7x9 mat bounding box) but its published figures don't all fit one
-// 2-mat-wide L ring at once — see spec 13.2. Rather than transcribe the
-// low-resolution figure pixel by pixel, this is built from the constraints
-// that ARE certain: a 7x9 outer box with a corner notch cut out to make an
-// L, eroded inward by 2 mats (the track width) to leave the infield hole.
+// (a 7x9 mat bounding box). An earlier analysis in spec 13.2 concluded the
+// published figures (48 mats, 7x9 bounding box, 6 quarter-rounds) could not
+// all hold in one 2-mat-wide L ring at once — that conclusion was wrong; a
+// corrected erosion argument in spec 13.2 shows a construction exists that
+// hits all of them exactly, and this preset (and test/stock-l.test.js) is
+// that construction, verified against the model code. Built from the
+// constraints that ARE certain: a 7x9 outer box with a corner notch cut out
+// to make an L, eroded inward by 2 mats (the track width) to leave the
+// infield hole.
 //
 // The notch has to be at least 2x2 for the reflex corner it creates to be
 // a genuine corner rather than a 1-cell nick (see spec 13.2's "a, b >= 2"
