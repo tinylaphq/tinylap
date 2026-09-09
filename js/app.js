@@ -173,7 +173,7 @@ document.addEventListener('keydown', (e) => {
       }
       return;
     }
-    if (state.selected !== null) {
+    if (state.selected !== null && !state.dragging) {
       e.preventDefault();
       commit((l) => {
         const p = l.pieces[state.selected];
