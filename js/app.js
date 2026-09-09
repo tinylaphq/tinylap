@@ -384,23 +384,45 @@ const presetsDialog = document.querySelector('#presets-dialog');
 function renderPresetsList() {
   const stock = stockFromKits(state.kits);
   const list = document.querySelector('#presets-list');
-  list.replaceChildren(...PRESETS.map((preset) => {
+  list.replaceChildren(...PRESETS.map((preset) => presetListItem(preset, stock)));
+}
+
+// One preset's row. Isolated in its own try/catch: layoutToSvgString
+// throws on non-finite coordinates, and renderPresetsList runs *before*
+// showModal() — an unguarded throw here would abort the whole .map(),
+// meaning the dialog never opens and every other, valid preset silently
+// vanishes along with the broken one. So a bad preset degrades on its
+// own: log it for diagnosis, show its name with a "couldn't be drawn"
+// note, and leave it unclickable (no data-preset-id, so the delegated
+// click handler's `button[data-preset-id]` selector never matches it).
+function presetListItem(preset, stock) {
+  const li = document.createElement('li');
+  try {
     const layout = createLayout({ pieces: preset.pieces });
     const rows = diffStock(billOfMaterials(layout), stock);
     const shortfall = rows.reduce((total, r) => total + r.short, 0);
-    const badge = shortfall === 0 ? 'Buildable' : `Short by ${shortfall} piece${shortfall === 1 ? '' : 's'}`;
+    const buildable = shortfall === 0;
+    const badge = buildable ? 'Buildable' : `Short by ${shortfall} piece${shortfall === 1 ? '' : 's'}`;
 
-    const li = document.createElement('li');
     const button = document.createElement('button');
     button.type = 'button';
+    button.className = 'preset-card';
     button.dataset.presetId = preset.id;
-    button.innerHTML = `${layoutToSvgString(layout, { pad: 1 })}
-      <span class="preset-name">${preset.name}</span>
-      <span class="preset-source">${preset.source}</span>
-      <span class="preset-badge">${badge}</span>`;
+    button.innerHTML = `<span class="preset-thumb">${layoutToSvgString(layout, { pad: 1 })}</span>
+      <span class="preset-info">
+        <span class="preset-name">${preset.name}</span>
+        <span class="preset-source">${preset.source}</span>
+        <span class="preset-badge ${buildable ? 'preset-badge--ok' : 'preset-badge--bad'}">${badge}</span>
+      </span>`;
     li.append(button);
-    return li;
-  }));
+  } catch (error) {
+    console.error(`Preset "${preset.id}" could not be rendered:`, error);
+    const p = document.createElement('p');
+    p.className = 'preset-broken';
+    p.textContent = `${preset.name || preset.id}: thumbnail could not be drawn.`;
+    li.append(p);
+  }
+  return li;
 }
 
 document.querySelector('#btn-presets').addEventListener('click', () => {

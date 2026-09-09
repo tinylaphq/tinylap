@@ -31,3 +31,16 @@ main { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
 .ghost.invalid rect { fill: var(--bad); }
 .port-handle { fill: var(--ok); opacity: 0.7; cursor: grab; }
 .port-handle:hover { opacity: 1; }
+
+#presets-list { list-style: none; padding: 0; margin: 0; }
+#presets-list li { margin-bottom: 0.5rem; }
+.preset-card { display: flex; gap: 0.75rem; align-items: center; width: 100%;
+               padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;
+               background: none; text-align: left; cursor: pointer; }
+.preset-thumb svg { display: block; width: 4rem; height: auto; }
+.preset-info { display: flex; flex-direction: column; gap: 0.15rem; }
+.preset-name { font-weight: 600; }
+.preset-source { font-size: 0.85em; color: #888; }
+.preset-badge--ok { color: var(--ok); font-weight: 600; }
+.preset-badge--bad { color: var(--bad); font-weight: 600; }
+.preset-broken { color: var(--bad); font-style: italic; }
