@@ -57,6 +57,12 @@ document.querySelector('#palette-list').addEventListener('dragstart', (e) => {
   e.dataTransfer.effectAllowed = 'copy';
 });
 
+document.querySelector('#palette-list').addEventListener('dragend', () => {
+  state.tool = null;
+  state.ghost = null;
+  state.hoverCell = null;
+});
+
 canvas.addEventListener('dragover', (e) => {
   if (!state.tool) return;
   e.preventDefault();
@@ -75,14 +81,20 @@ canvas.addEventListener('dragleave', (e) => {
 
 canvas.addEventListener('drop', (e) => {
   e.preventDefault();
-  if (!state.tool || !state.ghost?.valid) { state.ghost = null; state.hoverCell = null; render(); return; }
-  const [x, y] = pointerCell(e);
+  if (!state.tool || !state.ghost?.valid || !state.hoverCell) {
+    state.tool = null;
+    state.ghost = null;
+    state.hoverCell = null;
+    render();
+    return;
+  }
+  const [x, y] = state.hoverCell;
   const { type, rot } = state.tool;
   commit((l) => l.pieces.push({ type, x, y, rot }));
+  state.tool = null;
   state.ghost = null;
   state.hoverCell = null;
   state.lastPlaced = { type, rot, x, y };
-  render();
 });
 
 document.addEventListener('keydown', (e) => {
