@@ -4,13 +4,22 @@ import { PRESETS } from '../js/presets.js';
 import {
   createLayout, findOverlaps, isClosedCircuit, computeBarriers, computeMetrics,
 } from '../js/model.js';
-import { KITS } from '../js/inventory.js';
+import { KITS, billOfMaterials } from '../js/inventory.js';
 
 // Task 16: reconcile the stock L against the 87033 contents (spec 13.2).
-// The manual's published figures don't all fit one 2-mat-wide L ring at
-// once when checked with a rough area estimate, so only the certain
-// invariants of an L ring are asserted here; the rest is reported by the
-// calibration test below rather than enforced.
+//
+// Correction: this suite originally only asserted the L topology's certain
+// invariants (closed circuit, 6 quarter-rounds/caps/curves) and reported
+// the mat/straight counts without asserting them, because the initial
+// analysis in spec 13.2 concluded the 87033 figures could not all hold at
+// once for a real 2-mat-wide L ring. That analysis was wrong — see the
+// Task 16 result in spec 13.2. The constructed ring below matches the
+// 87033 kit's contents exactly (mats, straights, bounding box and joints),
+// so those figures are now asserted, not just reported.
+//
+// This proves the 87033 figures are jointly achievable, and that *this*
+// construction achieves them — not that it is the exact layout Kyosho
+// drew in the manual. See spec 13.2 for that caveat.
 
 const stockL = () => createLayout({ pieces: PRESETS.find((p) => p.id === 'stock-l').pieces });
 
@@ -31,16 +40,25 @@ test('an L ring needs six corner caps and six curve barriers, as the box ships',
   assert.equal(counts.curve, 6);
 });
 
-test('CALIBRATION: report the mat and straight deltas against 87033', () => {
-  const { counts } = computeBarriers(stockL());
-  const { mats, bbox } = computeMetrics(stockL());
+test('the stock L derives the 87033 kit contents exactly', () => {
+  const layout = stockL();
+  const { counts } = computeBarriers(layout);
+  const { mats, bbox, matCount } = computeMetrics(layout);
+  const { joints } = billOfMaterials(layout);
   const kit = KITS['87033'];
+
   console.log('stock L reconciliation vs 87033');
-  console.log('  bounding box   ', `${bbox.w} x ${bbox.h} mats`);
+  console.log('  bounding box   ', `${bbox.w} x ${bbox.h} mats`, 'vs', '7 x 9');
+  console.log('  total mats     ', matCount, 'vs', kit.mats.square + kit.mats.quarterRound);
   console.log('  square mats    ', mats.square, 'vs', kit.mats.square);
   console.log('  straights      ', counts.straight, 'vs', kit.barriers.straight);
-  // Deliberately not asserted as equal — see spec section 13.2. The
-  // trivial assertion below only guards against this test asserting
-  // nothing at all.
-  assert.ok(mats.square > 0);
+  console.log('  joints (a, b)  ', `${joints.a}, ${joints.b}`, 'vs', `${kit.joints.a}, ${kit.joints.b}`);
+
+  assert.equal(bbox.w, 7);
+  assert.equal(bbox.h, 9);
+  assert.equal(matCount, 48);
+  assert.equal(mats.square, kit.mats.square);
+  assert.equal(counts.straight, kit.barriers.straight);
+  assert.equal(joints.a, kit.joints.a);
+  assert.equal(joints.b, kit.joints.b);
 });

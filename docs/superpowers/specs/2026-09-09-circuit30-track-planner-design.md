@@ -331,7 +331,9 @@ test with `node:test` and zero dependencies:
   every figure of which is derivable by hand: 48 mats (44 square + 4 quarter-round),
   48 boundary edges, 4 curves consuming 8 of them, so 40 straight barriers and 4 corner
   caps. If the walk disagrees with that, the walk is wrong.
-- The stock L is a **calibration** case, not a pass/fail one — see §13.2.
+- The stock L is a **hard pass/fail** case: its mat count, straight-barrier
+  count, bounding box and joint totals must equal the 87033 kit exactly, not just
+  its quarter-round/cap/curve counts — see §13.2.
 - lap length and bounding box
 - round-tripping a layout through export and import
 
@@ -361,9 +363,22 @@ This is isolated to one object in `geometry.js`. Confirm by measuring a physical
 or from a higher-resolution official layout sheet, before the BOM is used to justify
 buying a Large Corner kit.
 
-### 13.2 The stock L cannot be reconciled from the manual alone
+### 13.2 Reconciling the stock L against the 87033 contents
 
-The published figures for the 87033 layout do not describe a single 2-mat-wide L ring.
+**Correction (Task 16):** the original version of this section argued below that the
+87033 figures could not all hold in one 2-mat-wide L ring, concluding "at most two of
+{48 mats, 7 x 9 bounding box, 6 quarter-rounds} can hold." That conclusion was wrong.
+The **Task 16 result** further down built and verified, against the real model code
+rather than by hand, a ring that hits all three exactly — plus the straight-barrier
+and joint counts, with zero shortfall and zero surplus against the 87033 kit. The
+flaw was in the area argument below: it assumed a 2-wide ring's infield must be the
+*independent* sum of a base rectangular hole and a separately-eroded notch, but a
+fixed-distance erosion doesn't split apart like that near a corner. The original
+reasoning is kept below, clearly marked, because seeing why it looked sound and where
+it broke is more useful than deleting it.
+
+The published figures for the 87033 layout were originally thought not to describe a
+single 2-mat-wide L ring. **This turned out to be wrong — see the correction above.**
 
 Corner counts are consistent: an L ring has 5 convex plus 1 reflex corner on its outer
 boundary and the mirror on its infield hole, giving **6 quarter-round mats and 6 corner
@@ -377,15 +392,20 @@ Area is not. For an L inside a 7 x 9 box with an `a x b` notch, a 2-wide ring ho
 48 would require `a + b = 2`, i.e. no notch. A plain 7 x 9 rectangular ring does hold
 exactly 48, but has 4 corners and would need 4 quarter-rounds and 4 caps, not 6 and 6.
 
-So at most two of {48 mats, 7 x 9 bounding box, 6 quarter-rounds} can hold. The likely
-explanation is that the 2.1 m and 2.7 m leaders measure the L's legs rather than its
-bounding box, or that the set ships spare mats. The figure is too low-resolution to
-settle it.
+**Superseded conclusion — see the correction at the top of this section and the
+Task 16 result below.** The reasoning above concluded that at most two of {48 mats,
+7 x 9 bounding box, 6 quarter-rounds} could hold, and speculated that the 2.1 m and
+2.7 m leaders measure the L's legs rather than its bounding box, or that the set ships
+spare mats. That conclusion does not hold: a construction exists that satisfies all
+three simultaneously, and the box contents besides. It was the area estimate's own
+independence assumption that was too loose, not the published figures.
 
-**Consequence for the build:** the stock L is constructed and checked, but only its
-certain invariants are asserted in code — closed circuit, 6 quarter-rounds, 6 caps, 6
-curves. Mat and straight-barrier counts are reported by a `CALIBRATION:` test rather
-than enforced, per the reasoning below.
+**Consequence for the build:** the stock L is constructed and checked, and — now that
+the Task 16 result below has shown the 87033 figures are exactly achievable — its mat
+count, straight-barrier count, bounding box and joint totals are asserted as hard
+equalities in `test/stock-l.test.js`, alongside the quarter-round/cap/curve counts.
+If the boundary walk or the piece list ever drifts from the 87033 contents, that test
+fails.
 
 **Task 16 result — the area argument above undercounts.** The `a, b >= 2` / `52 - 2a -
 2b` estimate above treats the notch and the 2-mat erosion as independent: base
