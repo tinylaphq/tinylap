@@ -398,7 +398,13 @@ document.querySelector('#btn-save').addEventListener('click', () => {
 
 const openInput = document.querySelector('#open-input');
 document.querySelector('#btn-open').addEventListener('click', () => openInput.click());
-openInput.addEventListener('change', () => loadFile(openInput.files[0]));
+// loadFile never rejects (its own try/catch swallows import errors), so
+// .finally() here runs after both the success and failure paths. Resetting
+// the input's value is what lets choosing the same filename twice in a row
+// fire 'change' again — the browser only fires it when the value differs.
+openInput.addEventListener('change', () => {
+  loadFile(openInput.files[0]).finally(() => { openInput.value = ''; });
+});
 
 async function loadFile(file) {
   if (!file) return;
@@ -406,6 +412,21 @@ async function loadFile(file) {
     state.history.push(structuredClone(state.layout));
     state.layout = importHtml(await file.text());
     state.selected = null;
+    // The new layout invalidates anything computed against the old one:
+    // a ghost/pending placement, a hovered cell, or an armed tool all
+    // referenced state.layout as it was before this import. Space's
+    // handler revalidates a pending ghost against the live layout before
+    // committing, so nothing corrupt could actually be placed — but
+    // leaving these set would still show a stale ghost on the canvas and
+    // let Space drop a leftover piece at coordinates that mean nothing in
+    // the newly loaded layout. Deliberately not touching state.dragging:
+    // opening a file only happens via a toolbar click or a page-level
+    // drop, neither of which can be mid-drag, and forcing that flag false
+    // here would strand an in-flight drag's own cleanup instead.
+    state.ghost = null;
+    state.pending = null;
+    state.hoverCell = null;
+    state.tool = null;
     render();
   } catch (error) {
     document.querySelector('#status').textContent = error.message;
