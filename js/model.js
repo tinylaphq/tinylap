@@ -1,4 +1,4 @@
-import { placedCells, placedPorts } from './geometry.js';
+import { placedCells, placedPorts, placedWalls } from './geometry.js';
 
 export function createLayout(overrides = {}) {
   return { version: 1, unit: 'mat', room: null, pieces: [], ...overrides };
@@ -101,4 +101,74 @@ function isSingleComponent(layout) {
     }
   }
   return seen.size === cells.size;
+}
+
+const NEIGHBOUR = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
+
+// For each corner, the two edges meeting there and the direction each
+// one runs as you walk away from the corner.
+const CORNER_EDGES = {
+  NE: [['N', [-1, 0]], ['E', [0, 1]]],
+  SE: [['S', [-1, 0]], ['E', [0, -1]]],
+  SW: [['S', [1, 0]], ['W', [0, -1]]],
+  NW: [['N', [1, 0]], ['W', [0, 1]]],
+};
+
+export function boundaryEdges(layout) {
+  const cells = occupiedSet(layout);
+  const open = openEdgeIds(layout);
+  const edges = new Set();
+  for (const key of cells) {
+    const [x, y] = parseCellKey(key);
+    for (const dir of ['N', 'E', 'S', 'W']) {
+      const [dx, dy] = NEIGHBOUR[dir];
+      if (cells.has(cellKey([x + dx, y + dy]))) continue;
+      const id = edgeId([x, y], dir);
+      if (open.has(id)) continue;
+      edges.add(id);
+    }
+  }
+  return edges;
+}
+
+export function arcEdgeIds(wall) {
+  const ids = [];
+  for (const [dir, [sx, sy]] of CORNER_EDGES[wall.corner]) {
+    for (let i = 0; i < wall.r; i++) {
+      ids.push(edgeId([wall.cell[0] + sx * i, wall.cell[1] + sy * i], dir));
+    }
+  }
+  return ids;
+}
+
+// A cap belongs at a concave corner: three of the four cells around the
+// vertex occupied, one empty.
+function isConcaveVertex(cells, [vx, vy]) {
+  const around = [[vx - 1, vy - 1], [vx, vy - 1], [vx - 1, vy], [vx, vy]];
+  return around.filter((c) => cells.has(cellKey(c))).length === 3;
+}
+
+export function computeBarriers(layout) {
+  const edges = boundaryEdges(layout);
+  const cells = occupiedSet(layout);
+  const counts = { straight: 0, curve: 0, curveLarge: 0, cornerCap: 0 };
+  const arcs = [];
+
+  for (const piece of layout.pieces) {
+    for (const wall of placedWalls(piece)) {
+      if (wall.kind === 'cap') {
+        if (isConcaveVertex(cells, wall.vertex)) counts.cornerCap += 1;
+        continue;
+      }
+      const claimed = arcEdgeIds(wall);
+      if (!claimed.every((id) => edges.has(id))) continue;
+      for (const id of claimed) edges.delete(id);
+      if (wall.kind === 'arc') counts.curve += 1;
+      else counts.curveLarge += 2;
+      arcs.push(wall);
+    }
+  }
+
+  counts.straight = edges.size;
+  return { counts, straightEdgeIds: [...edges], arcs };
 }

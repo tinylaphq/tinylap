@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit } from '../js/model.js';
-import { fourCornerLoop } from './fixtures.js';
+import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers } from '../js/model.js';
+import { fourCornerLoop, rectangularRing } from './fixtures.js';
 
 test('a new layout is empty and versioned', () => {
   const l = createLayout();
@@ -91,4 +91,41 @@ test('a 2x2 loop of four R30 corners is a closed circuit', () => {
   assert.deepEqual(findOverlaps(l), []);
   assert.equal(matchPorts(l).open.length, 0);
   assert.equal(isClosedCircuit(l), true);
+});
+
+test('a lone straight is walled on its two long sides only', () => {
+  const l = createLayout({ pieces: [{ type: 'straight', x: 0, y: 0, rot: 0 }] });
+  assert.deepEqual([...boundaryEdges(l)].sort(), ['V:0:0', 'V:2:0']);
+  const { counts } = computeBarriers(l);
+  assert.deepEqual(counts, { straight: 2, curve: 0, curveLarge: 0, cornerCap: 0 });
+});
+
+test('an arc claims r edges along each side of its corner', () => {
+  assert.deepEqual(
+    arcEdgeIds({ kind: 'arc', r: 1, cell: [0, 1], corner: 'SW' }).sort(),
+    ['H:0:2', 'V:0:1'],
+  );
+  assert.deepEqual(
+    arcEdgeIds({ kind: 'arcLarge', r: 2, cell: [0, 2], corner: 'SW' }).sort(),
+    ['H:0:3', 'H:1:3', 'V:0:1', 'V:0:2'],
+  );
+});
+
+test('four corners packed solid have curves but no caps', () => {
+  const l = createLayout({ pieces: fourCornerLoop() });
+  const { counts } = computeBarriers(l);
+  assert.deepEqual(counts, { straight: 8, curve: 4, curveLarge: 0, cornerCap: 0 });
+});
+
+test('the 7x9 rectangular ring matches its hand-derived figures', () => {
+  const l = createLayout({ pieces: rectangularRing() });
+  assert.deepEqual(findOverlaps(l), []);
+  assert.equal(isClosedCircuit(l), true);
+  assert.equal(occupiedSet(l).size, 48);
+
+  // Outer perimeter 2*(7+9)=32 edges, inner hole 2*(3+5)=16, total 48.
+  // Four arcs consume 2 edges each, leaving 40 straights. The hole's four
+  // corners are concave, so four caps.
+  const { counts } = computeBarriers(l);
+  assert.deepEqual(counts, { straight: 40, curve: 4, curveLarge: 0, cornerCap: 4 });
 });
