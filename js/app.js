@@ -31,6 +31,7 @@ state.ghost = null;    // { cells, valid }
 state.hoverCell = null; // [x, y] last cell hovered while dragging
 state.history = [];
 state.selected = null; // index into layout.pieces, or null
+state.dragging = false; // true while a piece move-drag is in flight
 
 export function commit(mutate) {
   state.history.push(structuredClone(state.layout));
@@ -112,28 +113,40 @@ canvas.addEventListener('pointerdown', (e) => {
   const piece = state.layout.pieces[index];
   const [cx, cy] = pointerCell(e);
   const grab = { dx: piece.x - cx, dy: piece.y - cy, index, moved: false };
+  let current = piece; // last-written position, so a round-trip back to the
+                        // start is still recognised as "no-op" correctly
   canvas.setPointerCapture(e.pointerId);
+  state.dragging = true;
 
   const onMove = (ev) => {
     const [nx, ny] = pointerCell(ev);
     const next = { ...piece, x: nx + grab.dx, y: ny + grab.dy };
-    if (next.x === piece.x && next.y === piece.y) return;
+    if (next.x === current.x && next.y === current.y) return;
     if (!grab.moved) { state.history.push(structuredClone(state.layout)); grab.moved = true; }
     state.layout.pieces[grab.index] = next;
+    current = next;
     render();
   };
-  const onUp = () => {
-    canvas.releasePointerCapture(e.pointerId);
+  const cleanup = () => {
+    try { canvas.releasePointerCapture(e.pointerId); } catch { /* already released, e.g. on pointercancel */ }
     canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp);
+    canvas.removeEventListener('pointercancel', onCancel);
+    state.dragging = false;
   };
+  const onUp = () => cleanup();
+  const onCancel = () => cleanup();
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
+  canvas.addEventListener('pointercancel', onCancel);
 
   render();
 });
 
 export function undo() {
+  if (state.dragging) return; // a move-drag is holding grab.index/piece against
+                               // the current state.layout; swapping it out from
+                               // under an in-flight drag would corrupt it
   const previous = state.history.pop();
   if (previous) { state.layout = previous; state.selected = null; render(); }
 }
@@ -171,7 +184,7 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (state.selected === null) return;
+    if (state.selected === null || state.dragging) return;
     e.preventDefault();
     const index = state.selected;
     state.selected = null;
