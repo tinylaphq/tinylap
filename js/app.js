@@ -67,6 +67,11 @@ function advanceGhost() {
   if (!last) { state.pending = null; state.ghost = null; return; }
   const index = state.layout.pieces.length - 1;
   const stillOpen = openPorts(state.layout).filter((o) => o.pieceIndex === index);
+  // Deliberate tie-break, inherited from the brief: when a piece has two
+  // still-open ports (e.g. it was placed in open space, not against
+  // anything), pick the last one in port-definition order rather than the
+  // first — for `straight` that's S over N, i.e. "continue forward", not
+  // "double back". Not proven for every piece type, just the working rule.
   const forward = stillOpen.at(-1);
   if (!forward) { state.pending = null; state.ghost = null; return; }
   const next = placeAgainst(forward.port, last.type, last.rot);
@@ -79,6 +84,12 @@ document.querySelector('#palette-list').addEventListener('dragstart', (e) => {
   const type = e.target.dataset.type;
   if (!type) return;
   state.tool = { type, rot: 0 };
+  // A new palette drag supersedes any armed auto-advance pending: dragover
+  // is about to start overwriting state.ghost with the tool preview, and
+  // the invariant is state.pending is non-null only when state.ghost shows
+  // exactly that pending piece — once the ghost stops showing it, pending
+  // must stop pointing at it too.
+  state.pending = null;
   e.dataTransfer.setData('text/plain', type);
   e.dataTransfer.effectAllowed = 'copy';
 });
@@ -119,6 +130,10 @@ canvas.addEventListener('drop', (e) => {
     state.tool = null;
     state.ghost = null;
     state.hoverCell = null;
+    // Belt-and-suspenders with the dragstart clear above: whatever cleared
+    // ghost here must also clear pending, or Space could place a piece
+    // whose ghost was never shown for this failed drop.
+    state.pending = null;
     render();
     return;
   }
@@ -128,6 +143,9 @@ canvas.addEventListener('drop', (e) => {
   state.tool = null;
   state.hoverCell = null;
   state.lastPlaced = { type, rot, x, y };
+  // As in the Space/Enter handler: advanceGhost() runs after commit()'s own
+  // render(), so this trailing render() is what actually shows the newly
+  // armed ghost — not a redundant second paint of the same state.
   advanceGhost();
   render();
 });
@@ -212,6 +230,14 @@ canvas.addEventListener('pointerdown', (e) => {
     for (let i = 0; i < wanted; i++) {
       const next = placeAgainst(tip, 'straight', rot);
       if (!next) break;
+      // placeAgainst is purely geometric — it answers "where must this sit
+      // to connect", not "is that space free". Check occupancy (recomputed
+      // each iteration so it also sees pieces already laid earlier in this
+      // same run, e.g. a run that curls back on itself) and stop the run
+      // at the first blocked cell rather than skipping it and continuing —
+      // a run with a hole in it is worse than a short run.
+      const taken = occupiedSet(state.layout);
+      if (placedCells(next).some((c) => taken.has(cellKey(c)))) break;
       state.layout.pieces.push(next);
       laid += 1;
       const forward = placedPorts(next).find((p) => p.dir === origin.port.dir);
@@ -253,7 +279,16 @@ export function undo() {
                                // the current state.layout; swapping it out from
                                // under an in-flight drag would corrupt it
   const previous = state.history.pop();
-  if (previous) { state.layout = previous; state.selected = null; render(); }
+  if (previous) {
+    state.layout = previous;
+    state.selected = null;
+    // Any armed ghost/pending was computed against the layout that just
+    // went away — reverting the layout invalidates both, or Space could
+    // place an orphan piece computed against a state that no longer exists.
+    state.ghost = null;
+    state.pending = null;
+    render();
+  }
 }
 
 // Single document-level keydown listener: Task 11's rotate-in-flight-tool
@@ -301,11 +336,20 @@ document.addEventListener('keydown', (e) => {
     // Guard on state.dragging too: commit() below pushes state.layout onto
     // history and mutates it, which must not race a port-handle drag that
     // is speculatively rebuilding state.layout on every pointermove.
-    if (!state.pending || state.dragging) return;
+    // Guard on state.ghost?.valid exactly as drop does: advanceGhost()
+    // computes validity via ghostFor but a piece can be geometrically
+    // placeAgainst-able while still overlapping existing pieces (e.g. the
+    // last piece closing a loop back onto the first) — that overlap check
+    // must gate the commit, not just be computed and ignored.
+    if (!state.pending || !state.ghost?.valid || state.dragging) return;
     e.preventDefault();
     const next = state.pending;
     commit((l) => l.pieces.push(next));
     state.lastPlaced = next;
+    // advanceGhost() runs after commit()'s own render(), so it mutates
+    // ghost/pending state that render already drew — this trailing render
+    // is what actually shows the freshly re-armed ghost; it is not
+    // redundant with commit()'s render.
     advanceGhost();
     render();
   }
