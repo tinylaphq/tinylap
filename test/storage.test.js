@@ -45,3 +45,37 @@ test('an unknown piece type is rejected', () => {
 test('a file with no layout block is rejected', () => {
   assert.throws(() => importHtml('<!doctype html><html><body>hi</body></html>'), /no layout/i);
 });
+
+test('a piece with a non-numeric x is rejected', () => {
+  const html = exportHtml(ring()).replace('"x": 0', '"x": "nope"');
+  assert.throws(() => importHtml(html), /nope/);
+});
+
+test('a piece with a non-finite y is rejected', () => {
+  const html = exportHtml(ring()).replace('"y": 0', '"y": null');
+  assert.throws(() => importHtml(html), /null/);
+});
+
+test('a malformed room is rejected', () => {
+  const html = exportHtml(ring()).replace('"w": 12', '"w": "wide"');
+  assert.throws(() => importHtml(html), /room/i);
+});
+
+test('a round trip still works for a valid layout with a non-null room', () => {
+  const before = ring();
+  const after = importHtml(exportHtml(before));
+  assert.deepEqual(after, before);
+});
+
+test('the json block escapes an embedded </script> to prevent injection', () => {
+  const layout = {
+    version: 1,
+    unit: 'mat',
+    room: null,
+    pieces: [{ type: 'straight', x: 0, y: 0, rot: 0, note: '</script><script>alert(1)</script>' }],
+  };
+  const html = exportHtml(layout);
+  assert.doesNotMatch(html, /<\/script><script>alert\(1\)<\/script>/);
+  const data = extractLayoutJson(html);
+  assert.equal(data.pieces[0].note, '</script><script>alert(1)</script>');
+});

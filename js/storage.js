@@ -44,7 +44,7 @@ export function exportHtml(layout) {
 <table><caption>Bill of materials</caption><tbody>${rows}</tbody></table>
 <p>Open this file in the Circuit 30 Planner to keep editing it.</p>
 <script type="application/json" id="${LAYOUT_SCRIPT_ID}">
-${JSON.stringify(layout, null, 2)}
+${JSON.stringify(layout, null, 2).replace(/</g, '\\u003c')}
 </script>
 </html>
 `;
@@ -81,10 +81,21 @@ export function importHtml(html) {
     if (![0, 90, 180, 270].includes(piece.rot)) {
       throw new Error(`Unknown rotation: ${piece.rot}`);
     }
+    if (!Number.isFinite(piece.x)) throw new Error(`Invalid piece x: ${piece.x}`);
+    if (!Number.isFinite(piece.y)) throw new Error(`Invalid piece y: ${piece.y}`);
+  }
+
+  let room = null;
+  if (data.room != null) {
+    const { w, h } = data.room;
+    if (!Number.isFinite(w) || !Number.isFinite(h)) {
+      throw new Error(`Invalid room: ${JSON.stringify(data.room)}`);
+    }
+    room = { w, h };
   }
 
   return createLayout({
-    room: data.room ?? null,
+    room,
     pieces: data.pieces.map(({ type, x, y, rot }) => ({ type, x, y, rot })),
   });
 }
