@@ -336,12 +336,27 @@ document.addEventListener('keydown', (e) => {
     // Guard on state.dragging too: commit() below pushes state.layout onto
     // history and mutates it, which must not race a port-handle drag that
     // is speculatively rebuilding state.layout on every pointermove.
-    // Guard on state.ghost?.valid exactly as drop does: advanceGhost()
-    // computes validity via ghostFor but a piece can be geometrically
-    // placeAgainst-able while still overlapping existing pieces (e.g. the
-    // last piece closing a loop back onto the first) — that overlap check
-    // must gate the commit, not just be computed and ignored.
-    if (!state.pending || !state.ghost?.valid || state.dragging) return;
+    if (!state.pending || state.dragging) return;
+    // state.ghost.valid was computed by advanceGhost() at the moment
+    // state.pending was armed — any later gesture that mutates
+    // state.layout without touching ghost/pending (e.g. a drag-to-extend
+    // run that lays pieces onto exactly the cells state.pending targets)
+    // leaves that flag stale. Revalidate against the *current* layout
+    // right before committing, rather than trusting a flag captured
+    // earlier — this is the third staleness bug in this feature, so the
+    // fix is "always recheck live state", not "find and patch this one
+    // path".
+    const fresh = ghostFor(state.pending.type, state.pending.rot, [state.pending.x, state.pending.y]);
+    if (!fresh.valid) {
+      // Stop the stale ghost from silently sitting there rejecting
+      // keypresses forever — clear it so the UI reflects that this
+      // pending placement is dead.
+      state.pending = null;
+      state.ghost = null;
+      render();
+      return;
+    }
+    state.ghost = fresh;
     e.preventDefault();
     const next = state.pending;
     commit((l) => l.pieces.push(next));
