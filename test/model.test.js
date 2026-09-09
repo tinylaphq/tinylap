@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics } from '../js/model.js';
+import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts } from '../js/model.js';
 import { MAT_MM } from '../js/geometry.js';
 import { fourCornerLoop, rectangularRing } from './fixtures.js';
 
@@ -155,4 +155,33 @@ test('mat totals equal the occupied cell count', () => {
   const m = computeMetrics(createLayout({ pieces: rectangularRing() }));
   const summed = Object.values(m.mats).reduce((a, b) => a + b, 0);
   assert.equal(summed, m.matCount);
+});
+
+test('a straight is placed to meet a southward port', () => {
+  const port = { cells: [[0, 0], [1, 0]], dir: 'S' };
+  assert.deepEqual(placeAgainst(port, 'straight', 0), { type: 'straight', x: 0, y: 1, rot: 0 });
+});
+
+test('a straight is placed to meet an eastward port', () => {
+  const port = { cells: [[0, 0], [0, 1]], dir: 'E' };
+  assert.deepEqual(placeAgainst(port, 'straight', 90), { type: 'straight', x: 1, y: 0, rot: 90 });
+});
+
+test('placing against a port actually closes that port', () => {
+  const first = { type: 'straight', x: 0, y: 0, rot: 0 };
+  const l = createLayout({ pieces: [first] });
+  const south = openPorts(l).find(({ port }) => port.dir === 'S').port;
+  const next = placeAgainst(south, 'straight', 0);
+  l.pieces.push(next);
+  assert.equal(matchPorts(l).matched.size, 1);
+  assert.equal(openPorts(l).length, 2);
+});
+
+test('a rotation with no opposing port yields null', () => {
+  const port = { cells: [[0, 0], [1, 0]], dir: 'S' };
+  assert.equal(placeAgainst(port, 'straight', 90), null);
+});
+
+test('a closed circuit has no open ports', () => {
+  assert.equal(openPorts(createLayout({ pieces: rectangularRing() })).length, 0);
 });

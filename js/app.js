@@ -1,6 +1,6 @@
-import { createLayout, occupiedSet, cellKey } from './model.js';
+import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey } from './model.js';
 import { drawLayout } from './render.js';
-import { PIECES, placedCells } from './geometry.js';
+import { PIECES, placedCells, placedPorts } from './geometry.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -20,7 +20,12 @@ function renderPalette() {
 }
 
 export function render() {
-  drawLayout(canvas, state.layout, { room: state.layout.room, selected: state.selected });
+  drawLayout(canvas, state.layout, {
+    room: state.layout.room,
+    ghost: state.ghost,
+    selected: state.selected,
+    handles: true,
+  });
 }
 
 renderPalette();
@@ -31,7 +36,9 @@ state.ghost = null;    // { cells, valid }
 state.hoverCell = null; // [x, y] last cell hovered while dragging
 state.history = [];
 state.selected = null; // index into layout.pieces, or null
-state.dragging = false; // true while a piece move-drag is in flight
+state.dragging = false; // true while a piece move-drag or port-handle drag is in flight
+state.lastPlaced = null; // { type, x, y, rot } of the most recently placed piece
+state.pending = null;    // { type, x, y, rot } the auto-advance ghost would place on Space/Enter
 
 export function commit(mutate) {
   state.history.push(structuredClone(state.layout));
@@ -51,6 +58,23 @@ function ghostFor(type, rot, [x, y]) {
   return { cells, valid: !cells.some((c) => taken.has(cellKey(c))) };
 }
 
+// Auto-advance: after any placement, ghost the same piece again at the open
+// port left at its far end, so a run of identical pieces chains with
+// Space/Enter alone. Clears both state.pending and state.ghost together on
+// every "can't continue" branch so the two never disagree with each other.
+function advanceGhost() {
+  const last = state.lastPlaced;
+  if (!last) { state.pending = null; state.ghost = null; return; }
+  const index = state.layout.pieces.length - 1;
+  const stillOpen = openPorts(state.layout).filter((o) => o.pieceIndex === index);
+  const forward = stillOpen.at(-1);
+  if (!forward) { state.pending = null; state.ghost = null; return; }
+  const next = placeAgainst(forward.port, last.type, last.rot);
+  if (!next) { state.pending = null; state.ghost = null; return; }
+  state.pending = next;
+  state.ghost = ghostFor(next.type, next.rot, [next.x, next.y]);
+}
+
 document.querySelector('#palette-list').addEventListener('dragstart', (e) => {
   const type = e.target.dataset.type;
   if (!type) return;
@@ -61,8 +85,15 @@ document.querySelector('#palette-list').addEventListener('dragstart', (e) => {
 
 document.querySelector('#palette-list').addEventListener('dragend', () => {
   state.tool = null;
-  state.ghost = null;
   state.hoverCell = null;
+  // Correction 4: dragend always fires after drop, whether or not drop
+  // committed a piece. drop's success path calls advanceGhost() to arm a
+  // pending auto-advance ghost — if dragend unconditionally nulled
+  // state.ghost here, it would wipe that ghost out a moment after
+  // advanceGhost set it, and auto-advance would silently never show
+  // anything. So dragend only clears the ghost when there is nothing
+  // pending for it to preserve.
+  if (!state.pending) state.ghost = null;
   render();
 });
 
@@ -72,7 +103,7 @@ canvas.addEventListener('dragover', (e) => {
   e.dataTransfer.dropEffect = 'copy';
   state.hoverCell = pointerCell(e);
   state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
-  drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selected });
+  drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selected, handles: true });
 });
 
 canvas.addEventListener('dragleave', (e) => {
@@ -95,9 +126,10 @@ canvas.addEventListener('drop', (e) => {
   const { type, rot } = state.tool;
   commit((l) => l.pieces.push({ type, x, y, rot }));
   state.tool = null;
-  state.ghost = null;
   state.hoverCell = null;
   state.lastPlaced = { type, rot, x, y };
+  advanceGhost();
+  render();
 });
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -143,6 +175,79 @@ canvas.addEventListener('pointerdown', (e) => {
   render();
 });
 
+// Drag-to-extend: press an open-port handle and drag outward to lay a run
+// of straights in one gesture. The existing pointerdown listener above
+// already returns early for '.port-handle' targets (Task 12's guard), so
+// this listener owns the gesture cleanly.
+canvas.addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('.port-handle');
+  if (!handle) return;
+  e.stopPropagation();
+
+  // Keyed by portKey, not array index: an index into openPorts(layout)
+  // would only be safe if that array's order were guaranteed identical
+  // between the render that drew this handle and this pointerdown — a
+  // stable string key sidesteps needing that guarantee at all.
+  const origin = openPorts(state.layout).find((o) => portKey(o.port) === handle.dataset.port);
+  if (!origin) return;
+
+  const baseline = structuredClone(state.layout);
+  const rot = origin.port.dir === 'N' || origin.port.dir === 'S' ? 0 : 90;
+  let laid = 0;
+  canvas.setPointerCapture(e.pointerId);
+  state.dragging = true;
+
+  const onMove = (ev) => {
+    const [cx, cy] = pointerCell(ev);
+    const [ox, oy] = origin.port.cells[0];
+    const wanted = Math.max(0, Math.abs(cx - ox) + Math.abs(cy - oy) - 1);
+
+    state.layout = structuredClone(baseline);
+    laid = 0;
+    // Track the tip port we just created directly, rather than
+    // re-searching openPorts(...) for "some port facing origin's
+    // direction" each iteration — that search could match an unrelated
+    // open port elsewhere in the layout that happens to face the same way.
+    let tip = origin.port;
+    for (let i = 0; i < wanted; i++) {
+      const next = placeAgainst(tip, 'straight', rot);
+      if (!next) break;
+      state.layout.pieces.push(next);
+      laid += 1;
+      const forward = placedPorts(next).find((p) => p.dir === origin.port.dir);
+      if (!forward) break;
+      tip = forward;
+    }
+    render();
+  };
+  const cleanup = () => {
+    try { canvas.releasePointerCapture(e.pointerId); } catch { /* already released, e.g. on pointercancel */ }
+    canvas.removeEventListener('pointermove', onMove);
+    canvas.removeEventListener('pointerup', onUp);
+    canvas.removeEventListener('pointercancel', onCancel);
+    state.dragging = false;
+  };
+  const onUp = () => {
+    cleanup();
+    // One undo step for the whole run, matching the move-drag's pattern
+    // of only recording history when something actually changed.
+    if (laid > 0) state.history.push(baseline);
+  };
+  const onCancel = () => {
+    // Abnormal termination, not a deliberate "keep what I built" signal
+    // (that's pointerup) — discard the speculative run instead of
+    // committing a partial one with no undo step to remove it.
+    state.layout = baseline;
+    cleanup();
+    render();
+  };
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', onUp);
+  canvas.addEventListener('pointercancel', onCancel);
+
+  render();
+});
+
 export function undo() {
   if (state.dragging) return; // a move-drag is holding grab.index/piece against
                                // the current state.layout; swapping it out from
@@ -169,7 +274,7 @@ document.addEventListener('keydown', (e) => {
       state.tool.rot = (state.tool.rot + 90) % 360;
       if (state.hoverCell) {
         state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
-        drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selected });
+        drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selected, handles: true });
       }
       return;
     }
@@ -189,5 +294,19 @@ document.addEventListener('keydown', (e) => {
     const index = state.selected;
     state.selected = null;
     commit((l) => l.pieces.splice(index, 1));
+    return;
+  }
+
+  if (e.key === ' ' || e.key === 'Enter') {
+    // Guard on state.dragging too: commit() below pushes state.layout onto
+    // history and mutates it, which must not race a port-handle drag that
+    // is speculatively rebuilding state.layout on every pointermove.
+    if (!state.pending || state.dragging) return;
+    e.preventDefault();
+    const next = state.pending;
+    commit((l) => l.pieces.push(next));
+    state.lastPlaced = next;
+    advanceGhost();
+    render();
   }
 });

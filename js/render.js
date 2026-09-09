@@ -1,5 +1,5 @@
 import { placedCells, MAT_MM } from './geometry.js';
-import { computeBarriers, computeMetrics, findOverlaps } from './model.js';
+import { computeBarriers, computeMetrics, findOverlaps, openPorts, portKey } from './model.js';
 
 export const MAT_PX = 24;
 
@@ -96,7 +96,7 @@ const el = (name, attrs) => {
   return node;
 };
 
-export function drawLayout(svgEl, layout, { room = null, ghost = null, selected = null } = {}) {
+export function drawLayout(svgEl, layout, { room = null, ghost = null, selected = null, handles = false } = {}) {
   const g = layoutGeometry(layout);
   svgEl.replaceChildren();
 
@@ -135,6 +135,21 @@ export function drawLayout(svgEl, layout, { room = null, ghost = null, selected 
   for (const l of g.lines) wallsG.append(el('line', { ...l, class: 'wall' }));
   for (const a of g.arcs) wallsG.append(el('path', { d: a.d, class: 'wall' }));
   svgEl.append(wallsG);
+
+  if (handles) {
+    const handlesG = el('g', { class: 'handles' });
+    openPorts(layout).forEach(({ port }) => {
+      const [dx, dy] = { N: [0, -0.5], S: [0, 0.5], E: [0.5, 0], W: [-0.5, 0] }[port.dir];
+      const cx = (port.cells[0][0] + port.cells[1][0]) / 2 + 0.5 + dx;
+      const cy = (port.cells[0][1] + port.cells[1][1]) / 2 + 0.5 + dy;
+      // Keyed by portKey (its edge ids), not array index: openPorts' order
+      // is deterministic within one call, but keying by index would still
+      // require the array not to be re-sorted between render and
+      // pointerdown, which a stable string key avoids depending on at all.
+      handlesG.append(el('circle', { cx, cy, r: 0.22, class: 'port-handle', 'data-port': portKey(port) }));
+    });
+    svgEl.append(handlesG);
+  }
 
   if (ghost) {
     const ghostG = el('g', { class: ghost.valid ? 'ghost valid' : 'ghost invalid' });

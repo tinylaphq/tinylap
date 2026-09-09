@@ -196,3 +196,26 @@ export function computeMetrics(layout) {
 
   return { bbox, matCount: cells.length, mats, lapMm };
 }
+
+export const openPorts = (layout) => matchPorts(layout).open;
+
+const sortCells = (cells) => [...cells].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+
+// Where a piece of `type`/`rot` must sit so its opposite-facing port meets
+// `port`. Returns null if that rotation has no port facing the right way.
+export function placeAgainst(port, type, rot) {
+  const want = OPPOSITE[port.dir];
+  const mate = rotatedDef(type, rot).ports.find((p) => p.dir === want);
+  if (!mate) return null;
+
+  const [dx, dy] = NEIGHBOUR[port.dir];
+  const target = sortCells(port.cells.map(([x, y]) => [x + dx, y + dy]));
+  const local = sortCells(mate.cells);
+
+  return {
+    type,
+    rot,
+    x: target[0][0] - local[0][0],
+    y: target[0][1] - local[0][1],
+  };
+}
