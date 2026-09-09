@@ -74,3 +74,19 @@ test('the recommendation is the cheapest kit that clears every shortfall', () =>
   const kit = recommendKit(rows);
   assert.equal(kit.id, '87033-01');
 });
+
+// I6: recommendKit already returned null for "nothing short" (asserted
+// above) — pin the OTHER null case too, where something is short but no
+// single kit's stock clears it. Checked headlessly first: the biggest
+// single kit's straight-barrier count is 87031's 72, so 60 (an earlier
+// candidate figure) is actually clearable by 87031 alone and would NOT
+// pin this branch — 100 straights against empty stock exceeds every kit's
+// count on its own and reliably has no single-kit candidate.
+test('a shortfall no single kit can clear recommends nothing', () => {
+  const rows = diffStock(
+    { mats: {}, barriers: { straight: 100 }, joints: { a: 0, b: 0 } },
+    emptyStock(),
+  );
+  assert.ok(rows.some((r) => r.short > 0));
+  assert.equal(recommendKit(rows), null);
+});

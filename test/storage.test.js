@@ -17,7 +17,12 @@ test('the export states its dimensions, mat count and lap length', () => {
   const html = exportHtml(ring());
   assert.match(html, /2\.10 m/);
   assert.match(html, /2\.70 m/);
-  assert.match(html, /48/);
+  // Assert against the figcaption specifically, not just /48/ anywhere in
+  // the document — "48" also appears elsewhere (e.g. inside the embedded
+  // layout JSON's piece coordinates), so a bare /48/ match is close to
+  // tautological.
+  const figcaption = html.match(/<figcaption>([\s\S]*?)<\/figcaption>/)[1];
+  assert.match(figcaption, /48 mats/);
 });
 
 test('the layout json rides along and survives a round trip', () => {

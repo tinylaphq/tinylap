@@ -47,12 +47,10 @@ test('the stock L derives the 87033 kit contents exactly', () => {
   const { joints } = billOfMaterials(layout);
   const kit = KITS['87033'];
 
-  console.log('stock L reconciliation vs 87033');
-  console.log('  bounding box   ', `${bbox.w} x ${bbox.h} mats`, 'vs', '7 x 9');
-  console.log('  total mats     ', matCount, 'vs', kit.mats.square + kit.mats.quarterRound);
-  console.log('  square mats    ', mats.square, 'vs', kit.mats.square);
-  console.log('  straights      ', counts.straight, 'vs', kit.barriers.straight);
-  console.log('  joints (a, b)  ', `${joints.a}, ${joints.b}`, 'vs', `${kit.joints.a}, ${kit.joints.b}`);
+  // The figures below (bbox, matCount, mats.square, counts.straight,
+  // joints) are the ones reconciled against the 87033 kit contents — kept
+  // available here for whoever next needs to eyeball them, but not printed
+  // on every passing run.
 
   assert.equal(bbox.w, 7);
   assert.equal(bbox.h, 9);

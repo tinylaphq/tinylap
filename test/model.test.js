@@ -118,6 +118,48 @@ test('four corners packed solid have curves but no caps', () => {
   assert.deepEqual(counts, { straight: 8, curve: 4, curveLarge: 0, cornerCap: 0 });
 });
 
+// I6: cornerR60 was never exercised through the boundary walk. R60 is the
+// provisional piece (spec §13.1), and the Large Corner kit (87033-02) is
+// exactly the purchase this app's recommendation exists to advise on, so
+// getting computeBarriers right for it matters more than for any other
+// single piece. Verified headlessly against the model before asserting
+// (see final-fix-report.md): a lone R60 corner claims two arcLarge edges
+// per side (counts.curveLarge += 2 per wall, per computeBarriers) at its
+// one arcLarge wall, one concave cap at its inner vertex, and its
+// remaining four boundary edges as plain straights.
+test('a lone R60 corner counts two large-curve halves, one cap, four straights', () => {
+  const l = createLayout({ pieces: [{ type: 'cornerR60', x: 0, y: 0, rot: 0 }] });
+  const { counts } = computeBarriers(l);
+  assert.deepEqual(counts, { straight: 4, curve: 0, curveLarge: 2, cornerCap: 1 });
+});
+
+// I6: the arc-skip branch (computeBarriers's `if (!claimed.every(...)) continue;`)
+// was never exercised. An arc's two claimed edges must BOTH still be on the
+// occupied-cell boundary for the arc to be counted; butt a second piece
+// against one of an R30 corner's outer arc edges and that edge stops being
+// a boundary edge (its neighbour cell is now occupied), so the arc is
+// skipped entirely — verified headlessly: a lone cornerR30 at (0,0) counts
+// { straight: 2, curve: 1 }, but with a straight butted against its arc's
+// outer S side at (0,2) the curve is skipped and both of the arc's edges
+// end up (one directly, one by not being claimed) among the straights,
+// raising the straight count to 4 with curve back to 0.
+//
+// Known consequence (documented, not fixed — out of scope for this wave):
+// computeMetrics.mats still counts the corner's own quarterRound mat
+// regardless of whether its arc barrier was actually walled, so the BOM
+// overstates a real curve barrier's mats in exactly this configuration.
+// Fixing that needs the model to relate "which mats are on the boundary"
+// to "which barriers were actually counted", which is a model change.
+test('a piece butted against a corner arc\'s outer edge skips that arc', () => {
+  const l = createLayout({ pieces: [
+    { type: 'cornerR30', x: 0, y: 0, rot: 0 },
+    { type: 'straight', x: 0, y: 2, rot: 0 },
+  ] });
+  assert.deepEqual(findOverlaps(l), []);
+  const { counts } = computeBarriers(l);
+  assert.deepEqual(counts, { straight: 4, curve: 0, curveLarge: 0, cornerCap: 0 });
+});
+
 test('the 7x9 rectangular ring matches its hand-derived figures', () => {
   const l = createLayout({ pieces: rectangularRing() });
   assert.deepEqual(findOverlaps(l), []);
