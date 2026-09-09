@@ -327,12 +327,11 @@ test with `node:test` and zero dependencies:
 - footprint union and overlap detection
 - boundary walk producing the expected barrier list, including arc overrides
 - port matching, open-end counting, closed-circuit detection
-- BOM totals for known layouts. The strongest single check: the stock L must derive
-  **exactly** the 87033 contents — 42 square mats, 6 quarter-round, 36 straight
-  barriers, 6 curve, 6 corner caps. That falls out of the geometry, since an L-shaped
-  2-wide loop has 5 convex plus 1 concave corner on its outer boundary and the reverse
-  on its infield hole, giving 6 rounded corners and 6 caps. If the walk disagrees, the
-  model is wrong.
+- BOM totals for known layouts. The reference case is a **7 × 9 rectangular ring**,
+  every figure of which is derivable by hand: 48 mats (44 square + 4 quarter-round),
+  48 boundary edges, 4 curves consuming 8 of them, so 40 straight barriers and 4 corner
+  caps. If the walk disagrees with that, the walk is wrong.
+- The stock L is a **calibration** case, not a pass/fail one — see §13.2.
 - lap length and bounding box
 - round-tripping a layout through export and import
 
@@ -362,7 +361,33 @@ This is isolated to one object in `geometry.js`. Confirm by measuring a physical
 or from a higher-resolution official layout sheet, before the BOM is used to justify
 buying a Large Corner kit.
 
-### 13.2 Deferred
+### 13.2 The stock L cannot be reconciled from the manual alone
+
+The published figures for the 87033 layout do not describe a single 2-mat-wide L ring.
+
+Corner counts are consistent: an L ring has 5 convex plus 1 reflex corner on its outer
+boundary and the mirror on its infield hole, giving **6 quarter-round mats and 6 corner
+caps**, exactly as shipped. Perimeter is consistent too: 36 straights plus 6 curves
+implies 48 boundary edges, and since eroding a rectilinear ring inward by 2 changes
+perimeter by `-2 * 2 * (convex - reflex) = -16`, the total is `2 * P_out - 16 = 48`,
+so `P_out = 32` — matching a 7 x 9 bounding box.
+
+Area is not. For an L inside a 7 x 9 box with an `a x b` notch, a 2-wide ring holds
+`52 - 2a - 2b` mats. A real notch needs `a, b >= 2`, capping the ring at **44 mats**;
+48 would require `a + b = 2`, i.e. no notch. A plain 7 x 9 rectangular ring does hold
+exactly 48, but has 4 corners and would need 4 quarter-rounds and 4 caps, not 6 and 6.
+
+So at most two of {48 mats, 7 x 9 bounding box, 6 quarter-rounds} can hold. The likely
+explanation is that the 2.1 m and 2.7 m leaders measure the L's legs rather than its
+bounding box, or that the set ships spare mats. The figure is too low-resolution to
+settle it.
+
+**Consequence for the build:** the stock L is transcribed and checked, but only its
+certain invariants are asserted — closed circuit, 6 quarter-rounds, 6 caps. Mat and
+straight-barrier deltas against the 87033 contents are reported, not enforced. Resolve
+by counting the physical set, then tighten the test.
+
+### 13.3 Deferred
 
 - Layout generation from inventory.
 - Matted infield as a BOM option.
