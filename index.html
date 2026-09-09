@@ -31,7 +31,10 @@
 
   <aside id="bom" aria-label="Bill of materials">
     <h2>Materials</h2>
-    <table id="bom-table"><tbody></tbody></table>
+    <table id="bom-table">
+      <thead><tr><th scope="col">Part</th><th scope="col">Owned</th><th scope="col">Used</th></tr></thead>
+      <tbody></tbody>
+    </table>
     <dl id="metrics">
       <dt>Size</dt><dd><output id="out-size">—</output></dd>
       <dt>Lap</dt><dd><output id="out-lap">—</output></dd>
@@ -40,8 +43,12 @@
     <p id="recommendation"></p>
   </aside>
 
-  <dialog id="inventory-dialog"><form method="dialog" id="inventory-form"></form></dialog>
-  <dialog id="room-dialog">
+  <dialog id="inventory-dialog" aria-labelledby="inventory-dialog-title">
+    <h2 id="inventory-dialog-title">Edit inventory</h2>
+    <form method="dialog" id="inventory-form"></form>
+  </dialog>
+  <dialog id="room-dialog" aria-labelledby="room-dialog-title">
+    <h2 id="room-dialog-title">Room boundary</h2>
     <form method="dialog" id="room-form">
       <p><label>Width (m) <input type="number" name="w" step="0.3" min="0"></label></p>
       <p><label>Depth (m) <input type="number" name="h" step="0.3" min="0"></label></p>
@@ -51,7 +58,9 @@
       </menu>
     </form>
   </dialog>
-  <dialog id="presets-dialog"><ul id="presets-list"></ul>
+  <dialog id="presets-dialog" aria-labelledby="presets-dialog-title">
+    <h2 id="presets-dialog-title">Presets</h2>
+    <ul id="presets-list"></ul>
     <form method="dialog"><button>Close</button></form>
   </dialog>
 

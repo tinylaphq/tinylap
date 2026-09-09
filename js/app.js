@@ -1,11 +1,14 @@
-import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey } from './model.js';
+import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, computeMetrics, isClosedCircuit } from './model.js';
 import { drawLayout } from './render.js';
-import { PIECES, placedCells, placedPorts } from './geometry.js';
+import { PIECES, MAT_MM, placedCells, placedPorts } from './geometry.js';
+import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
+import { exportHtml, importHtml } from './storage.js';
 
 const canvas = document.querySelector('#canvas');
 
 const state = {
   layout: createLayout(),
+  kits: { '87033': 1 },
 };
 
 function renderPalette() {
@@ -19,6 +22,44 @@ function renderPalette() {
   }));
 }
 
+const metres = (mats) => ((mats * MAT_MM) / 1000).toFixed(2);
+
+// Renders the materials panel: owned-vs-used per part (red when short) and
+// the kit recommendation, plus the size/lap/mat-count readouts. Reads only
+// from state.layout and state.kits — never mutates either, so it is safe
+// to call from render() on every commit.
+function renderBom() {
+  const bom = billOfMaterials(state.layout);
+  const rows = diffStock(bom, stockFromKits(state.kits)).filter((r) => r.used > 0 || r.owned > 0);
+
+  document.querySelector('#bom-table tbody').replaceChildren(...rows.map((r) => {
+    const tr = document.createElement('tr');
+    if (r.short > 0) tr.className = 'short';
+    tr.innerHTML = `<th scope="row">${r.label}</th><td>${r.owned}</td><td>${r.used}</td>`;
+    return tr;
+  }));
+
+  const kit = recommendKit(rows);
+  document.querySelector('#recommendation').textContent = kit
+    ? `Short on pieces — ${kit.name} (${kit.id}) covers it.`
+    : 'Everything you need is in stock.';
+
+  const { bbox, matCount, lapMm } = computeMetrics(state.layout);
+  document.querySelector('#out-size').value = bbox ? `${metres(bbox.w)} × ${metres(bbox.h)} m` : '—';
+  document.querySelector('#out-lap').value = lapMm ? `${(lapMm / 1000).toFixed(2)} m` : '—';
+  document.querySelector('#out-mats').value = String(matCount);
+}
+
+// Renders the status line: empty / open-ends / closed-circuit. Reads only
+// from state.layout — never mutates it or calls render() itself.
+function renderStatus() {
+  const open = openPorts(state.layout).length;
+  document.querySelector('#status').textContent =
+    state.layout.pieces.length === 0 ? 'Empty — drag a piece from the left.'
+    : isClosedCircuit(state.layout) ? 'Closed circuit ✓'
+    : `${open} open end${open === 1 ? '' : 's'}`;
+}
+
 export function render() {
   drawLayout(canvas, state.layout, {
     room: state.layout.room,
@@ -26,6 +67,8 @@ export function render() {
     selected: state.selected,
     handles: true,
   });
+  renderBom();
+  renderStatus();
 }
 
 renderPalette();
@@ -272,6 +315,110 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.addEventListener('pointercancel', onCancel);
 
   render();
+});
+
+// Inventory dialog: state.kits is UI-only (never written into state.layout,
+// never persisted by exportHtml) so editing it doesn't touch undo history.
+const inventoryDialog = document.querySelector('#inventory-dialog');
+document.querySelector('#btn-inventory').addEventListener('click', () => {
+  const form = document.querySelector('#inventory-form');
+  form.replaceChildren(
+    ...Object.entries(KITS).map(([id, kit]) => {
+      const p = document.createElement('p');
+      p.innerHTML = `<label>${kit.name} (${id})
+        <input type="number" name="${id}" min="0" step="1" value="${state.kits[id] ?? 0}"></label>`;
+      return p;
+    }),
+    Object.assign(document.createElement('menu'), {
+      innerHTML: '<button value="save">Save</button><button value="cancel" formnovalidate>Cancel</button>',
+    }),
+  );
+  inventoryDialog.showModal();
+});
+
+inventoryDialog.addEventListener('close', () => {
+  if (inventoryDialog.returnValue !== 'save') return;
+  const data = new FormData(document.querySelector('#inventory-form'));
+  state.kits = Object.fromEntries([...data].map(([k, v]) => [k, Number(v) || 0]));
+  render();
+});
+
+// Room dialog: the room lives on state.layout, so this goes through
+// commit() to stay undoable. Metres are converted to whole mats — the unit
+// state.layout.room is actually stored in (see render.js, which compares
+// room.w/h directly against the mat-unit bbox). Non-finite or non-positive
+// input is rejected rather than stored: storage.js's importHtml validates
+// room on load and would reject a saved file containing one, so writing a
+// bad value into the live layout would produce a layout that can't be
+// re-opened after being saved.
+const roomDialog = document.querySelector('#room-dialog');
+const roomToMats = (m) => Math.round((m * 1000) / MAT_MM);
+document.querySelector('#btn-room').addEventListener('click', () => {
+  const form = document.querySelector('#room-form');
+  const room = state.layout.room;
+  form.w.value = room ? metres(room.w) : '';
+  form.h.value = room ? metres(room.h) : '';
+  roomDialog.showModal();
+});
+
+roomDialog.addEventListener('close', () => {
+  if (roomDialog.returnValue === 'clear') {
+    commit((l) => { l.room = null; });
+    return;
+  }
+  if (roomDialog.returnValue !== 'set') return;
+  const data = new FormData(document.querySelector('#room-form'));
+  const w = Number(data.get('w'));
+  const h = Number(data.get('h'));
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
+  commit((l) => { l.room = { w: roomToMats(w), h: roomToMats(h) }; });
+});
+
+// Save / open. Correction 1: the canvas drop handler above must NOT get a
+// stopPropagation() call here. Reasoning verified against the code: these
+// document-level dragover/drop listeners gate on
+// e.dataTransfer.types.includes('Files') and e.dataTransfer.files.length.
+// A palette drag (dragstart above) only ever calls
+// e.dataTransfer.setData('text/plain', type) — it never adds a File, so
+// types never includes 'Files' and files.length is always 0 for a palette
+// drag. The canvas drop handler already runs first (event order: target
+// before ancestors) and always calls preventDefault(), so by the time this
+// listener sees a bubbled palette-drop event, files.length is 0 and it
+// returns immediately without touching state. There is no conflict to
+// prevent, so no stopPropagation() is added.
+document.querySelector('#btn-save').addEventListener('click', () => {
+  const blob = new Blob([exportHtml(state.layout)], { type: 'text/html' });
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: 'circuit30-layout.html',
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+const openInput = document.querySelector('#open-input');
+document.querySelector('#btn-open').addEventListener('click', () => openInput.click());
+openInput.addEventListener('change', () => loadFile(openInput.files[0]));
+
+async function loadFile(file) {
+  if (!file) return;
+  try {
+    state.history.push(structuredClone(state.layout));
+    state.layout = importHtml(await file.text());
+    state.selected = null;
+    render();
+  } catch (error) {
+    document.querySelector('#status').textContent = error.message;
+  }
+}
+
+document.addEventListener('dragover', (e) => {
+  if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+});
+document.addEventListener('drop', (e) => {
+  if (!e.dataTransfer.files.length) return;
+  e.preventDefault();
+  loadFile(e.dataTransfer.files[0]);
 });
 
 export function undo() {
