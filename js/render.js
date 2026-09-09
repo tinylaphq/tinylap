@@ -18,6 +18,14 @@ const CORNER_STEPS = {
   NW: [[1, 0], [0, 1]],
 };
 
+// Guards every coordinate interpolated into SVG markup strings. A
+// non-finite value is meaningless geometry, not content to sanitise, so
+// it is rejected outright rather than escaped.
+function assertFinite(value, label) {
+  if (!Number.isFinite(value)) throw new Error(`Invalid ${label}: ${value}`);
+  return value;
+}
+
 export function arcPath(wall) {
   const { r, cell, corner } = wall;
   const [vx, vy] = CORNER_VERTEX[corner](cell);
@@ -27,7 +35,12 @@ export function arcPath(wall) {
   const c = [vx + (s1[0] + s2[0]) * r, vy + (s1[1] + s2[1]) * r];
   const cross = (a[0] - c[0]) * (b[1] - c[1]) - (a[1] - c[1]) * (b[0] - c[0]);
   const sweep = cross > 0 ? 1 : 0;
-  return `M ${a[0]} ${a[1]} A ${r} ${r} 0 0 ${sweep} ${b[0]} ${b[1]}`;
+  const ax = assertFinite(a[0], 'arc coordinate');
+  const ay = assertFinite(a[1], 'arc coordinate');
+  const rr = assertFinite(r, 'arc radius');
+  const bx = assertFinite(b[0], 'arc coordinate');
+  const by = assertFinite(b[1], 'arc coordinate');
+  return `M ${ax} ${ay} A ${rr} ${rr} 0 0 ${sweep} ${bx} ${by}`;
 }
 
 function edgeLine(id) {
@@ -60,17 +73,20 @@ export function layoutGeometry(layout) {
 
 export function layoutToSvgString(layout, { pad = 1 } = {}) {
   const g = layoutGeometry(layout);
-  const vb = [g.bbox.x - pad, g.bbox.y - pad, g.bbox.w + pad * 2, g.bbox.h + pad * 2];
+  const vb = [g.bbox.x - pad, g.bbox.y - pad, g.bbox.w + pad * 2, g.bbox.h + pad * 2]
+    .map((n) => assertFinite(n, 'viewBox component'));
   const mats = g.mats
-    .map((m) => `<rect x="${m.x}" y="${m.y}" width="1" height="1" fill="#2b2b2b" stroke="#3d3d3d" stroke-width="0.02"/>`)
+    .map((m) => `<rect x="${assertFinite(m.x, 'mat x')}" y="${assertFinite(m.y, 'mat y')}" width="1" height="1" fill="#2b2b2b" stroke="#3d3d3d" stroke-width="0.02"/>`)
     .join('');
   const lines = g.lines
-    .map((l) => `<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="#f2f2f2" stroke-width="0.12" stroke-linecap="round"/>`)
+    .map((l) => `<line x1="${assertFinite(l.x1, 'line x1')}" y1="${assertFinite(l.y1, 'line y1')}" x2="${assertFinite(l.x2, 'line x2')}" y2="${assertFinite(l.y2, 'line y2')}" stroke="#f2f2f2" stroke-width="0.12" stroke-linecap="round"/>`)
     .join('');
   const arcs = g.arcs
     .map((a) => `<path d="${a.d}" fill="none" stroke="#f2f2f2" stroke-width="0.12" stroke-linecap="round"/>`)
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" width="${vb[2] * MAT_PX}" height="${vb[3] * MAT_PX}">${mats}${lines}${arcs}</svg>`;
+  const width = assertFinite(vb[2] * MAT_PX, 'width');
+  const height = assertFinite(vb[3] * MAT_PX, 'height');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" width="${width}" height="${height}">${mats}${lines}${arcs}</svg>`;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

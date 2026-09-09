@@ -43,3 +43,8 @@ test('an empty layout still produces valid svg', () => {
   assert.match(svg, /<svg /);
   assert.match(svg, /<\/svg>$/);
 });
+
+test('layoutToSvgString rejects a piece with a non-numeric coordinate', () => {
+  const layout = createLayout({ pieces: [{ type: 'straight', x: 'nope', y: 0, rot: 0 }] });
+  assert.throws(() => layoutToSvgString(layout), /Invalid viewBox component: NaN/);
+});
