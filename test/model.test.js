@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers } from '../js/model.js';
+import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics } from '../js/model.js';
+import { MAT_MM } from '../js/geometry.js';
 import { fourCornerLoop, rectangularRing } from './fixtures.js';
 
 test('a new layout is empty and versioned', () => {
@@ -128,4 +129,30 @@ test('the 7x9 rectangular ring matches its hand-derived figures', () => {
   // corners are concave, so four caps.
   const { counts } = computeBarriers(l);
   assert.deepEqual(counts, { straight: 40, curve: 4, curveLarge: 0, cornerCap: 4 });
+});
+
+test('an empty layout has no bounding box', () => {
+  const m = computeMetrics(createLayout());
+  assert.equal(m.bbox, null);
+  assert.equal(m.matCount, 0);
+  assert.equal(m.lapMm, 0);
+});
+
+test('the 7x9 ring measures 7 by 9 mats and 48 mats of material', () => {
+  const m = computeMetrics(createLayout({ pieces: rectangularRing() }));
+  assert.deepEqual(m.bbox, { x: 0, y: 0, w: 7, h: 9 });
+  assert.equal(m.matCount, 48);
+  assert.deepEqual(m.mats, { square: 44, quarterRound: 4 });
+});
+
+test('lap length sums piece centrelines', () => {
+  const m = computeMetrics(createLayout({ pieces: rectangularRing() }));
+  const expected = 16 * MAT_MM + 4 * (Math.PI / 2) * MAT_MM;
+  assert.ok(Math.abs(m.lapMm - expected) < 1e-6, `${m.lapMm} vs ${expected}`);
+});
+
+test('mat totals equal the occupied cell count', () => {
+  const m = computeMetrics(createLayout({ pieces: rectangularRing() }));
+  const summed = Object.values(m.mats).reduce((a, b) => a + b, 0);
+  assert.equal(summed, m.matCount);
 });

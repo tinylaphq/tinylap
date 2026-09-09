@@ -1,4 +1,4 @@
-import { placedCells, placedPorts, placedWalls } from './geometry.js';
+import { placedCells, placedPorts, placedWalls, rotatedDef } from './geometry.js';
 
 export function createLayout(overrides = {}) {
   return { version: 1, unit: 'mat', room: null, pieces: [], ...overrides };
@@ -171,4 +171,28 @@ export function computeBarriers(layout) {
 
   counts.straight = edges.size;
   return { counts, straightEdgeIds: [...edges], arcs };
+}
+
+export function computeMetrics(layout) {
+  const cells = [...occupiedSet(layout)].map(parseCellKey);
+
+  const bbox = cells.length === 0 ? null : (() => {
+    const xs = cells.map((c) => c[0]);
+    const ys = cells.map((c) => c[1]);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x + 1, h: Math.max(...ys) - y + 1 };
+  })();
+
+  const mats = {};
+  let lapMm = 0;
+  for (const piece of layout.pieces) {
+    const def = rotatedDef(piece.type, piece.rot);
+    for (const [kind, n] of Object.entries(def.mats)) {
+      mats[kind] = (mats[kind] ?? 0) + n;
+    }
+    lapMm += def.centrelineMm;
+  }
+
+  return { bbox, matCount: cells.length, mats, lapMm };
 }
