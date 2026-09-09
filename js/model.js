@@ -103,7 +103,7 @@ function isSingleComponent(layout) {
   return seen.size === cells.size;
 }
 
-const NEIGHBOUR = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
+export const NEIGHBOUR = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
 
 // For each corner, the two edges meeting there and the direction each
 // one runs as you walk away from the corner.

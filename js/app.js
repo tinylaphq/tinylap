@@ -1,4 +1,4 @@
-import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, computeMetrics, isClosedCircuit } from './model.js';
+import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR } from './model.js';
 import { drawLayout, layoutToSvgString } from './render.js';
 import { PIECES, MAT_MM, placedCells, placedPorts } from './geometry.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
@@ -10,6 +10,18 @@ const canvas = document.querySelector('#canvas');
 const state = {
   layout: createLayout(),
   kits: { '87033': 1 },
+  tool: null,     // { type, rot }
+  ghost: null,    // { cells, valid }
+  hoverCell: null, // [x, y] last cell hovered while dragging
+  history: [],
+  selected: null, // index into layout.pieces, or null
+  dragging: false, // true while a piece move-drag or port-handle drag is in flight
+  lastPlaced: null, // { type, x, y, rot } of the most recently placed piece
+  pending: null,    // { type, x, y, rot } the auto-advance ghost would place on Space/Enter
+  error: null,      // C1: message from the last failed operation (e.g. a bad
+                     // file open) that renderStatus prefers over its normal
+                     // text — never written into #status directly, since
+                     // render() owns that field and repaints it on every call.
 };
 
 function renderPalette() {
@@ -40,10 +52,26 @@ function renderBom() {
     return tr;
   }));
 
-  const kit = recommendKit(rows);
-  document.querySelector('#recommendation').textContent = kit
-    ? `Short on pieces — ${kit.name} (${kit.id}) covers it.`
-    : 'Everything you need is in stock.';
+  // I2: computeBarriers/computeMetrics both sum per-piece declarations, so
+  // an overlapping layout's figures are simply wrong (not just "unusual") —
+  // two overlapping straights report matCount 3 but mats.square 4. Flag it
+  // rather than presenting numbers known to be off.
+  const overlapCount = findOverlaps(state.layout).length;
+  document.querySelector('#bom-warning').textContent = overlapCount > 0
+    ? `${overlapCount} overlapping mat${overlapCount === 1 ? '' : 's'} — these figures are unreliable until the overlap is fixed.`
+    : '';
+
+  // I3: recommendKit returns null both when nothing is short AND when
+  // something is short but no single kit clears it — those are opposite
+  // messages, so branch on the shortfall first rather than trusting null
+  // to mean "you're fine".
+  const short = rows.some((r) => r.short > 0);
+  const kit = short ? recommendKit(rows) : null;
+  document.querySelector('#recommendation').textContent = !short
+    ? 'Everything you need is in stock.'
+    : kit
+      ? `Short on pieces — ${kit.name} (${kit.id}) covers it.`
+      : 'Short on pieces — no single kit covers it.';
 
   const { bbox, matCount, lapMm } = computeMetrics(state.layout);
   document.querySelector('#out-size').value = bbox ? `${metres(bbox.w)} × ${metres(bbox.h)} m` : '—';
@@ -51,11 +79,30 @@ function renderBom() {
   document.querySelector('#out-mats').value = String(matCount);
 }
 
-// Renders the status line: empty / open-ends / closed-circuit. Reads only
-// from state.layout — never mutates it or calls render() itself.
+// Renders the status line: error / overlap / empty / open-ends /
+// closed-circuit, in that preference order. Reads only from state.layout
+// and state.error — never mutates either or calls render() itself.
 function renderStatus() {
+  const status = document.querySelector('#status');
+  // C1: an error from the last failed operation takes priority over the
+  // normal status text — render() calls this on every commit and on plenty
+  // of non-mutating interactions too (e.g. a click on empty canvas), so if
+  // the error were ever written into #status directly it would be erased
+  // by the very next repaint.
+  if (state.error) {
+    status.textContent = state.error;
+    return;
+  }
+  // I2: an overlapping layout is invalid, not merely "has open ends" — say
+  // so plainly rather than falling through to a possibly-zero open-end
+  // count that reads as if the layout were fine.
+  const overlapCount = findOverlaps(state.layout).length;
+  if (overlapCount > 0) {
+    status.textContent = `${overlapCount} overlapping mat${overlapCount === 1 ? '' : 's'} — layout invalid`;
+    return;
+  }
   const open = openPorts(state.layout).length;
-  document.querySelector('#status').textContent =
+  status.textContent =
     state.layout.pieces.length === 0 ? 'Empty — drag a piece from the left.'
     : isClosedCircuit(state.layout) ? 'Closed circuit ✓'
     : `${open} open end${open === 1 ? '' : 's'}`;
@@ -75,18 +122,14 @@ export function render() {
 renderPalette();
 render();
 
-state.tool = null;     // { type, rot }
-state.ghost = null;    // { cells, valid }
-state.hoverCell = null; // [x, y] last cell hovered while dragging
-state.history = [];
-state.selected = null; // index into layout.pieces, or null
-state.dragging = false; // true while a piece move-drag or port-handle drag is in flight
-state.lastPlaced = null; // { type, x, y, rot } of the most recently placed piece
-state.pending = null;    // { type, x, y, rot } the auto-advance ghost would place on Space/Enter
-
 export function commit(mutate) {
   state.history.push(structuredClone(state.layout));
   mutate(state.layout);
+  // Any successful mutation supersedes a stale error from a previous failed
+  // operation (C1) — but rendering alone (e.g. a click that only changes
+  // selection) must not clear it, or the feedback disappears before the
+  // user can read it.
+  state.error = null;
   render();
 }
 
@@ -199,6 +242,13 @@ canvas.addEventListener('pointerdown', (e) => {
   // on this same element; a click there must not fall through to selection.
   if (e.target.closest('.port-handle')) return;
 
+  // I5: selection (click on a mat or on empty canvas) is one of the paths
+  // that never dismissed an armed auto-advance ghost — clear it here so
+  // Space can no longer place a leftover piece behind whatever the user
+  // just selected instead.
+  state.pending = null;
+  state.ghost = null;
+
   const rect = e.target.closest('.mat');
   if (!rect) { state.selected = null; render(); return; }
 
@@ -216,7 +266,7 @@ canvas.addEventListener('pointerdown', (e) => {
     const [nx, ny] = pointerCell(ev);
     const next = { ...piece, x: nx + grab.dx, y: ny + grab.dy };
     if (next.x === current.x && next.y === current.y) return;
-    if (!grab.moved) { state.history.push(structuredClone(state.layout)); grab.moved = true; }
+    if (!grab.moved) { state.history.push(structuredClone(state.layout)); grab.moved = true; state.error = null; }
     state.layout.pieces[grab.index] = next;
     current = next;
     render();
@@ -262,7 +312,17 @@ canvas.addEventListener('pointerdown', (e) => {
   const onMove = (ev) => {
     const [cx, cy] = pointerCell(ev);
     const [ox, oy] = origin.port.cells[0];
-    const wanted = Math.max(0, Math.abs(cx - ox) + Math.abs(cy - oy) - 1);
+    // I1: straights are always laid forward along origin.port.dir, so the
+    // run length must be the cursor's displacement *projected onto that
+    // direction* — Manhattan distance (the old formula) also counts
+    // sideways movement and treats a backward drag as a positive length.
+    // Piece i of the run lands i cells beyond [ox, oy] (placeAgainst steps
+    // one NEIGHBOUR cell per call, chained through each new tip port), so
+    // a projected delta of exactly D cells means D pieces are wanted — no
+    // "-1": verified headlessly (see final-fix-report.md) that subtracting
+    // 1 here left the run one cell short of the cursor.
+    const [dx, dy] = NEIGHBOUR[origin.port.dir];
+    const wanted = Math.max(0, (cx - ox) * dx + (cy - oy) * dy);
 
     state.layout = structuredClone(baseline);
     laid = 0;
@@ -301,7 +361,7 @@ canvas.addEventListener('pointerdown', (e) => {
     cleanup();
     // One undo step for the whole run, matching the move-drag's pattern
     // of only recording history when something actually changed.
-    if (laid > 0) state.history.push(baseline);
+    if (laid > 0) { state.history.push(baseline); state.error = null; }
   };
   const onCancel = () => {
     // Abnormal termination, not a deliberate "keep what I built" signal
@@ -466,7 +526,10 @@ document.querySelector('#btn-save').addEventListener('click', () => {
     download: 'circuit30-layout.html',
   });
   a.click();
-  URL.revokeObjectURL(a.href);
+  // Minor: revoking synchronously right after click() on a detached anchor
+  // is a known cause of silently-failing downloads outside Chrome — some
+  // browsers haven't started the download yet. Defer it a tick instead.
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
 });
 
 const openInput = document.querySelector('#open-input');
@@ -481,29 +544,46 @@ openInput.addEventListener('change', () => {
 
 async function loadFile(file) {
   if (!file) return;
+  // C1: parse and validate the incoming file BEFORE touching history or
+  // state.layout. importHtml can throw (bad version, unknown piece type,
+  // non-finite coordinates, malformed room, ...) — pushing the history
+  // snapshot first meant a failed import still left a phantom undo step
+  // that did nothing when popped, since state.layout was never actually
+  // replaced. Only commit history once the new layout is known-good.
+  let imported;
   try {
-    state.history.push(structuredClone(state.layout));
-    state.layout = importHtml(await file.text());
-    state.selected = null;
-    // The new layout invalidates anything computed against the old one:
-    // a ghost/pending placement, a hovered cell, or an armed tool all
-    // referenced state.layout as it was before this import. Space's
-    // handler revalidates a pending ghost against the live layout before
-    // committing, so nothing corrupt could actually be placed — but
-    // leaving these set would still show a stale ghost on the canvas and
-    // let Space drop a leftover piece at coordinates that mean nothing in
-    // the newly loaded layout. Deliberately not touching state.dragging:
-    // opening a file only happens via a toolbar click or a page-level
-    // drop, neither of which can be mid-drag, and forcing that flag false
-    // here would strand an in-flight drag's own cleanup instead.
-    state.ghost = null;
-    state.pending = null;
-    state.hoverCell = null;
-    state.tool = null;
-    render();
+    imported = importHtml(await file.text());
   } catch (error) {
-    document.querySelector('#status').textContent = error.message;
+    // Routed through state.error rather than written into #status
+    // directly: renderStatus() runs on every render() call, including
+    // ones triggered by unrelated, non-mutating interactions (e.g. a click
+    // on empty canvas), and would otherwise overwrite this message on the
+    // very next repaint.
+    state.error = error.message;
+    render();
+    return;
   }
+
+  state.history.push(structuredClone(state.layout));
+  state.layout = imported;
+  state.selected = null;
+  state.error = null;
+  // The new layout invalidates anything computed against the old one:
+  // a ghost/pending placement, a hovered cell, or an armed tool all
+  // referenced state.layout as it was before this import. Space's
+  // handler revalidates a pending ghost against the live layout before
+  // committing, so nothing corrupt could actually be placed — but
+  // leaving these set would still show a stale ghost on the canvas and
+  // let Space drop a leftover piece at coordinates that mean nothing in
+  // the newly loaded layout. Deliberately not touching state.dragging:
+  // opening a file only happens via a toolbar click or a page-level
+  // drop, neither of which can be mid-drag, and forcing that flag false
+  // here would strand an in-flight drag's own cleanup instead.
+  state.ghost = null;
+  state.pending = null;
+  state.hoverCell = null;
+  state.tool = null;
+  render();
 }
 
 document.addEventListener('dragover', (e) => {
@@ -528,6 +608,9 @@ export function undo() {
     // place an orphan piece computed against a state that no longer exists.
     state.ghost = null;
     state.pending = null;
+    // C1: undo is itself a successful mutation, so it also supersedes a
+    // stale error from a previous failed operation.
+    state.error = null;
     render();
   }
 }
@@ -537,10 +620,30 @@ export function undo() {
 // here so there is exactly one handler, not two competing ones.
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('input, textarea, select')) return;
+  // Minor: the input/textarea/select guard above misses an open <dialog> —
+  // its own focused controls (a button, etc.) don't match that selector,
+  // so with a modal open Space/Enter would both activate the focused
+  // button AND commit a pending piece behind it, and 'r' would rotate the
+  // hidden selection underneath.
+  if (document.querySelector('dialog[open]')) return;
 
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
     undo();
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    // I5: the only way to dismiss an armed auto-advance ghost used to be
+    // to place it — five other paths cleared pending/ghost, but there was
+    // no way to just cancel one. dialog[open] is already handled above, so
+    // this Escape is free to mean "dismiss the ghost" without also being
+    // asked to close a modal.
+    if (state.pending || state.ghost) {
+      state.pending = null;
+      state.ghost = null;
+      render();
+    }
     return;
   }
 
@@ -556,6 +659,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (state.selected !== null && !state.dragging) {
       e.preventDefault();
+      // I5: rotate is one of the paths that never dismissed an armed
+      // auto-advance ghost.
+      state.pending = null;
+      state.ghost = null;
       commit((l) => {
         const p = l.pieces[state.selected];
         p.rot = (p.rot + 90) % 360;
@@ -569,6 +676,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     const index = state.selected;
     state.selected = null;
+    // I5: delete is one of the paths that never dismissed an armed
+    // auto-advance ghost.
+    state.pending = null;
+    state.ghost = null;
     commit((l) => l.pieces.splice(index, 1));
     return;
   }
