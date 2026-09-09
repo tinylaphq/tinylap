@@ -20,7 +20,7 @@ function renderPalette() {
 }
 
 export function render() {
-  drawLayout(canvas, state.layout, { room: state.layout.room });
+  drawLayout(canvas, state.layout, { room: state.layout.room, selected: state.selected });
 }
 
 renderPalette();
@@ -30,6 +30,7 @@ state.tool = null;     // { type, rot }
 state.ghost = null;    // { cells, valid }
 state.hoverCell = null; // [x, y] last cell hovered while dragging
 state.history = [];
+state.selected = null; // index into layout.pieces, or null
 
 export function commit(mutate) {
   state.history.push(structuredClone(state.layout));
@@ -70,7 +71,7 @@ canvas.addEventListener('dragover', (e) => {
   e.dataTransfer.dropEffect = 'copy';
   state.hoverCell = pointerCell(e);
   state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
-  drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost });
+  drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selected });
 });
 
 canvas.addEventListener('dragleave', (e) => {
@@ -98,13 +99,82 @@ canvas.addEventListener('drop', (e) => {
   state.lastPlaced = { type, rot, x, y };
 });
 
+canvas.addEventListener('pointerdown', (e) => {
+  // Task 13 adds open-port drag handles with their own pointerdown listener
+  // on this same element; a click there must not fall through to selection.
+  if (e.target.closest('.port-handle')) return;
+
+  const rect = e.target.closest('.mat');
+  if (!rect) { state.selected = null; render(); return; }
+
+  const index = Number(rect.dataset.piece);
+  state.selected = index;
+  const piece = state.layout.pieces[index];
+  const [cx, cy] = pointerCell(e);
+  const grab = { dx: piece.x - cx, dy: piece.y - cy, index, moved: false };
+  canvas.setPointerCapture(e.pointerId);
+
+  const onMove = (ev) => {
+    const [nx, ny] = pointerCell(ev);
+    const next = { ...piece, x: nx + grab.dx, y: ny + grab.dy };
+    if (next.x === piece.x && next.y === piece.y) return;
+    if (!grab.moved) { state.history.push(structuredClone(state.layout)); grab.moved = true; }
+    state.layout.pieces[grab.index] = next;
+    render();
+  };
+  const onUp = () => {
+    canvas.releasePointerCapture(e.pointerId);
+    canvas.removeEventListener('pointermove', onMove);
+    canvas.removeEventListener('pointerup', onUp);
+  };
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', onUp);
+
+  render();
+});
+
+export function undo() {
+  const previous = state.history.pop();
+  if (previous) { state.layout = previous; state.selected = null; render(); }
+}
+
+// Single document-level keydown listener: Task 11's rotate-in-flight-tool
+// behaviour and Task 12's select/rotate/delete/undo behaviour are merged
+// here so there is exactly one handler, not two competing ones.
 document.addEventListener('keydown', (e) => {
-  if (e.key.toLowerCase() !== 'r') return;
-  if (state.tool) {
-    state.tool.rot = (state.tool.rot + 90) % 360;
-    if (state.hoverCell) {
-      state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
-      drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost });
+  if (e.target.matches('input, textarea, select')) return;
+
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    undo();
+    return;
+  }
+
+  if (e.key.toLowerCase() === 'r') {
+    if (state.tool) {
+      e.preventDefault();
+      state.tool.rot = (state.tool.rot + 90) % 360;
+      if (state.hoverCell) {
+        state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
+        drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selected });
+      }
+      return;
     }
+    if (state.selected !== null) {
+      e.preventDefault();
+      commit((l) => {
+        const p = l.pieces[state.selected];
+        p.rot = (p.rot + 90) % 360;
+      });
+    }
+    return;
+  }
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (state.selected === null) return;
+    e.preventDefault();
+    const index = state.selected;
+    state.selected = null;
+    commit((l) => l.pieces.splice(index, 1));
   }
 });

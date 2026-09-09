@@ -96,7 +96,7 @@ const el = (name, attrs) => {
   return node;
 };
 
-export function drawLayout(svgEl, layout, { room = null, ghost = null } = {}) {
+export function drawLayout(svgEl, layout, { room = null, ghost = null, selected = null } = {}) {
   const g = layoutGeometry(layout);
   svgEl.replaceChildren();
 
@@ -120,9 +120,12 @@ export function drawLayout(svgEl, layout, { room = null, ghost = null } = {}) {
 
   const matsG = el('g', { class: 'mats' });
   for (const m of g.mats) {
+    const classes = ['mat'];
+    if (m.overlapping) classes.push('overlap');
+    if (m.pieceIndex === selected) classes.push('selected');
     matsG.append(el('rect', {
       x: m.x, y: m.y, width: 1, height: 1,
-      class: m.overlapping ? 'mat overlap' : 'mat',
+      class: classes.join(' '),
       'data-piece': m.pieceIndex,
     }));
   }
