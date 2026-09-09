@@ -61,6 +61,7 @@ document.querySelector('#palette-list').addEventListener('dragend', () => {
   state.tool = null;
   state.ghost = null;
   state.hoverCell = null;
+  render();
 });
 
 canvas.addEventListener('dragover', (e) => {
