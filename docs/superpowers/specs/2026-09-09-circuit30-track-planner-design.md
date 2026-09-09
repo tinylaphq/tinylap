@@ -382,10 +382,47 @@ explanation is that the 2.1 m and 2.7 m leaders measure the L's legs rather than
 bounding box, or that the set ships spare mats. The figure is too low-resolution to
 settle it.
 
-**Consequence for the build:** the stock L is transcribed and checked, but only its
-certain invariants are asserted — closed circuit, 6 quarter-rounds, 6 caps. Mat and
-straight-barrier deltas against the 87033 contents are reported, not enforced. Resolve
-by counting the physical set, then tighten the test.
+**Consequence for the build:** the stock L is constructed and checked, but only its
+certain invariants are asserted in code — closed circuit, 6 quarter-rounds, 6 caps, 6
+curves. Mat and straight-barrier counts are reported by a `CALIBRATION:` test rather
+than enforced, per the reasoning below.
+
+**Task 16 result — the area argument above undercounts.** The `a, b >= 2` / `52 - 2a -
+2b` estimate above treats the notch and the 2-mat erosion as independent: base
+rectangular hole plus a separately-eroded notch extension. They aren't independent —
+eroding a rectilinear region by a fixed distance measures each cell's distance to the
+*nearest* non-region cell in any direction, and near a corner notch that distance is
+already short, so the hole doesn't need to (and shouldn't) extend as far there as the
+additive estimate assumed. Eroding the actual 7 x 9-minus-2x2-notch shape precisely
+(Chebyshev distance to the nearest excluded cell, same rule the existing 3 x 5 hole in
+the plain 7 x 9 ring already uses) gives a smaller, L-shaped hole than the estimate,
+and the resulting ring holds more material than 44.
+
+Built and verified against `js/model.js` and `js/inventory.js` directly (`node -e`,
+not by hand), the `stock-l` preset — outer 7 x 9 box, 2x2 notch cut from one corner,
+infield hole eroded 2 mats in from every edge including the notch — produces:
+
+- bounding box **7 x 9 mats**
+- **42 square + 6 quarter-round mats (48 total)**
+- **36 straight barriers, 6 curves, 6 corner caps**
+- **90 joints of each type**
+
+Every one of these is an exact match to the 87033 box contents (`js/inventory.js`
+`KITS['87033']`), and `diffStock(billOfMaterials(stockL), stockFromKits({'87033':
+1}))` reports zero shortfall and zero surplus on every part. So a construction
+*does* exist that reconciles all three figures the earlier paragraph called mutually
+exclusive — the earlier area estimate was simply not tight enough to find it, not
+proof that no such ring exists.
+
+**This does not fully resolve the question.** It shows the published figures are
+jointly achievable by *some* 2-mat-wide L ring in a 7 x 9 box with a real (>= 2x2)
+notch — the notch that also happens to maximise mat count, per this task's brief. It
+does not prove this specific notch position, corner-cut corner, or piece layout is
+the one Kyosho actually drew in the 87032/87033 manual; a different notch placement,
+or the manual depicting a genuinely different shape (e.g. asymmetric leg widths), is
+still possible and would change which physical mats are marked "spare." Counting the
+physical set against this exact piece list is still how an owner would confirm it
+matches, not just that the totals happen to.
 
 ### 13.3 Deferred
 

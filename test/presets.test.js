@@ -4,10 +4,10 @@ import { PRESETS } from '../js/presets.js';
 import { createLayout, findOverlaps, isClosedCircuit } from '../js/model.js';
 
 test('every preset is a valid, closed, non-overlapping circuit', () => {
-  // Correction 3: only the derived reference ring ships in this task
-  // (correction 2), so the minimum count is 1, not 2 — Task 16 adds the
-  // second preset and can tighten this back up.
-  assert.ok(PRESETS.length >= 1);
+  // Correction 3: only the derived reference ring shipped through Task 15
+  // (correction 2). Task 16 adds the stock L as a second preset, so the
+  // minimum is tightened back up to 2.
+  assert.ok(PRESETS.length >= 2);
   for (const preset of PRESETS) {
     const l = createLayout({ pieces: preset.pieces });
     assert.deepEqual(findOverlaps(l), [], `${preset.id} overlaps`);
