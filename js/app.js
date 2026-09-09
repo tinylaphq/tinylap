@@ -1,8 +1,9 @@
 import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, computeMetrics, isClosedCircuit } from './model.js';
-import { drawLayout } from './render.js';
+import { drawLayout, layoutToSvgString } from './render.js';
 import { PIECES, MAT_MM, placedCells, placedPorts } from './geometry.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
 import { exportHtml, importHtml } from './storage.js';
+import { PRESETS } from './presets.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -372,6 +373,56 @@ roomDialog.addEventListener('close', () => {
   const h = Number(data.get('h'));
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
   commit((l) => { l.room = { w: roomToMats(w), h: roomToMats(h) }; });
+});
+
+// Presets gallery: one entry per PRESETS item, with a thumbnail, name,
+// source attribution, and a buildability badge computed against the
+// current owned inventory (state.kits). Badges are recomputed on every
+// open — not cached — since state.kits can change between openings.
+const presetsDialog = document.querySelector('#presets-dialog');
+
+function renderPresetsList() {
+  const stock = stockFromKits(state.kits);
+  const list = document.querySelector('#presets-list');
+  list.replaceChildren(...PRESETS.map((preset) => {
+    const layout = createLayout({ pieces: preset.pieces });
+    const rows = diffStock(billOfMaterials(layout), stock);
+    const shortfall = rows.reduce((total, r) => total + r.short, 0);
+    const badge = shortfall === 0 ? 'Buildable' : `Short by ${shortfall} piece${shortfall === 1 ? '' : 's'}`;
+
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.presetId = preset.id;
+    button.innerHTML = `${layoutToSvgString(layout, { pad: 1 })}
+      <span class="preset-name">${preset.name}</span>
+      <span class="preset-source">${preset.source}</span>
+      <span class="preset-badge">${badge}</span>`;
+    li.append(button);
+    return li;
+  }));
+}
+
+document.querySelector('#btn-presets').addEventListener('click', () => {
+  renderPresetsList();
+  presetsDialog.showModal();
+});
+
+document.querySelector('#presets-list').addEventListener('click', (e) => {
+  const button = e.target.closest('button[data-preset-id]');
+  if (!button) return;
+  const preset = PRESETS.find((p) => p.id === button.dataset.presetId);
+  if (!preset) return;
+  commit((l) => { l.pieces = structuredClone(preset.pieces); });
+  // A loaded preset invalidates anything computed against the previous
+  // layout — same clearing this file does on import (see loadFile below).
+  state.selected = null;
+  state.ghost = null;
+  state.pending = null;
+  state.hoverCell = null;
+  state.tool = null;
+  render();
+  presetsDialog.close();
 });
 
 // Save / open. Correction 1: the canvas drop handler above must NOT get a
