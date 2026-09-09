@@ -66,3 +66,31 @@ test('the three piece types have the footprints the spec fixes', () => {
   assert.deepEqual(PIECES.cornerR30.mats, { square: 3, quarterRound: 1 });
   assert.deepEqual(PIECES.cornerR60.mats, { square: 6, arcLarge: 2 });
 });
+
+import { placedCells, placedPorts, placedWalls } from '../js/geometry.js';
+
+test('placement translates a rotated footprint onto the grid', () => {
+  const cells = placedCells({ type: 'straight', x: 5, y: 3, rot: 0 });
+  assert.deepEqual(cells, [[5, 3], [6, 3]]);
+});
+
+test('placement composes rotation and translation', () => {
+  const cells = placedCells({ type: 'straight', x: 5, y: 3, rot: 90 });
+  assert.deepEqual(cells, [[5, 3], [5, 4]]);
+});
+
+test('ports and walls are placed in the same frame as cells', () => {
+  const ports = placedPorts({ type: 'cornerR30', x: 10, y: 10, rot: 0 });
+  assert.deepEqual(ports[0], { cells: [[10, 10], [11, 10]], dir: 'N' });
+  assert.deepEqual(ports[1], { cells: [[11, 10], [11, 11]], dir: 'E' });
+
+  const walls = placedWalls({ type: 'cornerR30', x: 10, y: 10, rot: 0 });
+  assert.deepEqual(walls.find((w) => w.kind === 'cap').vertex, [12, 10]);
+  assert.deepEqual(walls.find((w) => w.kind === 'arc').cell, [10, 11]);
+});
+
+test('an R60 corner occupies 3x3 minus its inner cell', () => {
+  const cells = placedCells({ type: 'cornerR60', x: 0, y: 0, rot: 0 });
+  assert.equal(cells.length, 8);
+  assert.ok(!cells.some(([x, y]) => x === 2 && y === 0), 'inner cell [2,0] is empty');
+});

@@ -125,3 +125,22 @@ export function rotatedDef(type, rot) {
   cache.set(key, out);
   return out;
 }
+
+export function placedCells({ type, x, y, rot }) {
+  return rotatedDef(type, rot).cells.map(([cx, cy]) => [cx + x, cy + y]);
+}
+
+export function placedPorts({ type, x, y, rot }) {
+  return rotatedDef(type, rot).ports.map((p) => ({
+    cells: p.cells.map(([cx, cy]) => [cx + x, cy + y]),
+    dir: p.dir,
+  }));
+}
+
+export function placedWalls({ type, x, y, rot }) {
+  return rotatedDef(type, rot).walls.map((w) =>
+    w.kind === 'cap'
+      ? { kind: 'cap', vertex: [w.vertex[0] + x, w.vertex[1] + y] }
+      : { ...w, cell: [w.cell[0] + x, w.cell[1] + y] },
+  );
+}
