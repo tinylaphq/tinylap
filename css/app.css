@@ -15,7 +15,7 @@ main { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
 #palette li { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;
               margin-bottom: 0.5rem; cursor: grab; display: flex;
               justify-content: space-between; align-items: center; }
-#palette li:has(+ *) { user-select: none; }
+#palette li { user-select: none; }
 #bom table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 #bom td { text-align: right; }
 #bom tr.short { color: var(--bad); font-weight: 600; }
