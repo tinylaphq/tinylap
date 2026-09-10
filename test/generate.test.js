@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { turnSignatures, outlineName, buildLoop } from '../js/generate.js';
+import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey } from '../js/generate.js';
 import { createLayout, isClosedCircuit, findOverlaps, occupiedSet } from '../js/model.js';
 
 test('four corners give exactly one outline: the rectangle', () => {
@@ -79,4 +79,24 @@ test('an L outline (with its one left turn) closes', () => {
   assert.deepEqual(findOverlaps(l), []);
   assert.equal(isClosedCircuit(l), true);
   assert.equal(occupiedSet(l).size, 36);
+});
+
+test('a rectangle and its quarter turn share a canonical key', () => {
+  const a = buildLoop({ signature: 'RRRR', sides: [3, 5, 3, 5], cornerType: 'cornerR30' });
+  const b = buildLoop({ signature: 'RRRR', sides: [5, 3, 5, 3], cornerType: 'cornerR30' });
+  assert.ok(a && b);
+  assert.equal(canonicalLayoutKey(a), canonicalLayoutKey(b));
+});
+
+test('a translated layout shares a canonical key', () => {
+  const a = buildLoop({ signature: 'RRRR', sides: [3, 5, 3, 5], cornerType: 'cornerR30' });
+  const moved = a.map((p) => ({ ...p, x: p.x + 7, y: p.y - 3 }));
+  assert.equal(canonicalLayoutKey(a), canonicalLayoutKey(moved));
+});
+
+test('genuinely different layouts have different keys', () => {
+  const rect = buildLoop({ signature: 'RRRR', sides: [3, 5, 3, 5], cornerType: 'cornerR30' });
+  const bigger = buildLoop({ signature: 'RRRR', sides: [4, 5, 4, 5], cornerType: 'cornerR30' });
+  assert.ok(rect && bigger);
+  assert.notEqual(canonicalLayoutKey(rect), canonicalLayoutKey(bigger));
 });

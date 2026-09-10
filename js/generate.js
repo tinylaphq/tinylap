@@ -167,3 +167,25 @@ export function buildLoop({ signature, sides, cornerType = 'cornerR30' }) {
   // on them), so no separate findOverlaps scan is needed here.
   return isClosedCircuit(createLayout({ pieces })) ? pieces : null;
 }
+
+// The 8 symmetries of the square: optional mirror, then 0-3 quarter turns.
+function symmetry(cells, index) {
+  return cells.map(([x, y]) => {
+    let a = index & 4 ? -x : x;
+    let b = y;
+    for (let i = 0; i < (index & 3); i++) [a, b] = [-b, a];
+    return [a, b];
+  });
+}
+
+export function canonicalLayoutKey(pieces) {
+  const cells = pieces.flatMap((p) => placedCells(p));
+  const forms = [];
+  for (let i = 0; i < 8; i++) {
+    const t = symmetry(cells, i);
+    const mx = Math.min(...t.map((c) => c[0]));
+    const my = Math.min(...t.map((c) => c[1]));
+    forms.push(t.map(([x, y]) => `${x - mx},${y - my}`).sort().join(';'));
+  }
+  return forms.sort()[0];
+}
