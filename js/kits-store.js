@@ -13,6 +13,13 @@ export const DEFAULT_KITS = { '87033': 1 };
 // left behind by an older build. Anything that is not a clean map of known
 // kit ids to non-negative integers falls back to the default rather than
 // half-applying.
+//
+// An unknown id is dropped but the rest of the payload is kept: it is most
+// likely a kit added by a newer build, and silently ignoring it while
+// trusting the rest is the forgiving, forward-compatible read. A malformed
+// count, by contrast, discards the whole payload: it means the value was
+// corrupted or hand-edited, and partially trusting a corrupted payload is
+// worse than starting clean. The asymmetry is deliberate.
 export function parseKits(raw) {
   if (typeof raw !== 'string') return { ...DEFAULT_KITS };
   let data;
@@ -25,8 +32,8 @@ export function parseKits(raw) {
 
   const out = {};
   for (const [id, count] of Object.entries(data)) {
-    if (!KITS[id]) continue;                                   // unknown kit: drop it
-    if (!Number.isInteger(count) || count < 0) return { ...DEFAULT_KITS };
+    if (!Object.hasOwn(KITS, id)) continue;                      // unknown kit: drop it
+    if (!Number.isSafeInteger(count) || count < 0) return { ...DEFAULT_KITS };
     out[id] = count;
   }
   return Object.keys(out).length > 0 ? out : { ...DEFAULT_KITS };
