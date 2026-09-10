@@ -4,12 +4,13 @@ import { PIECES, MAT_MM, placedCells, placedPorts } from './geometry.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
 import { exportHtml, importHtml } from './storage.js';
 import { PRESETS } from './presets.js';
+import { loadKits, saveKits } from './kits-store.js';
 
 const canvas = document.querySelector('#canvas');
 
 const state = {
   layout: createLayout(),
-  kits: { '87033': 1 },
+  kits: loadKits(localStorage),
   tool: null,     // { type, rot }
   ghost: null,    // { cells, valid }
   hoverCell: null, // [x, y] last cell hovered while dragging
@@ -445,6 +446,7 @@ inventoryDialog.addEventListener('close', () => {
   if (inventoryDialog.returnValue !== 'save') return;
   const data = new FormData(document.querySelector('#inventory-form'));
   state.kits = Object.fromEntries([...data].map(([k, v]) => [k, Number(v) || 0]));
+  saveKits(localStorage, state.kits);
   render();
 });
 
