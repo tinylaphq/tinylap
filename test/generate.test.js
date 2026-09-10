@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey } from '../js/generate.js';
+import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes } from '../js/generate.js';
 import { createLayout, isClosedCircuit, findOverlaps, occupiedSet } from '../js/model.js';
+import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
+import { stockL } from '../js/presets.js';
 
 test('four corners give exactly one outline: the rectangle', () => {
   assert.deepEqual(turnSignatures(4), ['RRRR']);
@@ -99,4 +101,69 @@ test('genuinely different layouts have different keys', () => {
   const bigger = buildLoop({ signature: 'RRRR', sides: [4, 5, 4, 5], cornerType: 'cornerR30' });
   assert.ok(rect && bigger);
   assert.notEqual(canonicalLayoutKey(rect), canonicalLayoutKey(bigger));
+});
+
+test('a starter set generates layouts, all of them buildable', () => {
+  const stock = stockFromKits({ '87033': 1 });
+  const { results } = generateLayouts(stock, { maxSide: 10 });
+  assert.ok(results.length > 0, 'expected some layouts');
+  for (const r of results) {
+    const l = createLayout({ pieces: r.pieces });
+    assert.deepEqual(findOverlaps(l), [], `${r.key} overlaps`);
+    assert.equal(isClosedCircuit(l), true, `${r.key} is not closed`);
+    const short = diffStock(billOfMaterials(l), stock).filter((row) => row.short > 0);
+    assert.deepEqual(short, [], `${r.key} exceeds stock`);
+  }
+});
+
+test('results are deduplicated', () => {
+  const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
+  const keys = results.map((r) => r.key);
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+test('the stock L is among the generated results', () => {
+  const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
+  const target = canonicalLayoutKey(stockL());
+  assert.ok(results.some((r) => r.key === target), 'the trusted stock-L fixture was not generated');
+});
+
+test('a room boundary shrinks the result set', () => {
+  const stock = stockFromKits({ '87033': 1 });
+  const all = generateLayouts(stock, { maxSide: 10 });
+  const small = generateLayouts(stock, { maxSide: 10, room: { w: 7, h: 7 } });
+  assert.ok(small.results.length < all.results.length);
+  for (const r of small.results) {
+    assert.ok(r.bbox.w <= 7 && r.bbox.h <= 7, `${r.key} does not fit the room`);
+  }
+});
+
+test('hitting the budget is reported, never silent', () => {
+  const out = generateLayouts(stockFromKits({ '87031': 4 }), { maxSide: 14, budget: 200 });
+  assert.equal(out.stopped, true);
+  assert.ok(out.examined >= 200);
+});
+
+test('closes() never rejects a tuple that buildLoop can actually build', () => {
+  // The pre-filter is a performance optimisation; it must never lose a
+  // layout. This exhaustively cross-checks it against the builder for
+  // small tuples, across every outline — not just the rectangle, whose
+  // symmetric headings hide errors in the corner-displacement term.
+  for (const corners of [4, 6]) {
+    for (const signature of turnSignatures(corners)) {
+      const max = 3;
+      const tuples = [];
+      const walk = (i, acc) => {
+        if (i === corners) { tuples.push([...acc]); return; }
+        for (let n = 0; n <= max; n++) walk(i + 1, [...acc, n]);
+      };
+      walk(0, []);
+      for (const sides of tuples) {
+        if (buildLoop({ signature, sides, cornerType: 'cornerR30' })) {
+          assert.ok(closes(signature, sides, 'cornerR30'),
+            `closes() rejected a buildable tuple: ${signature} ${sides}`);
+        }
+      }
+    }
+  }
 });

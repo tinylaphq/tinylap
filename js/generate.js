@@ -11,7 +11,8 @@
 // for what happens when that rule is broken.
 
 import { ROTATIONS, placedCells, placedPorts } from './geometry.js';
-import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey } from './model.js';
+import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics } from './model.js';
+import { billOfMaterials, diffStock } from './inventory.js';
 
 // Rotate a string left by n.
 const rotate = (s, n) => s.slice(n) + s.slice(0, n);
@@ -188,4 +189,176 @@ export function canonicalLayoutKey(pieces) {
     forms.push(t.map(([x, y]) => `${x - mx},${y - my}`).sort().join(';'));
   }
   return forms.sort()[0];
+}
+
+// Unit step per heading. RIGHT_OF/LEFT_OF above are the single copy of the
+// turn tables (Task 2) — reused here rather than redeclared so the two
+// never drift apart.
+const STEP = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
+
+// The heading each side of an outline is walked in.
+function headings(signature) {
+  const out = [];
+  let dir = 'N';
+  for (const turn of signature) {
+    out.push(dir);
+    dir = turn === 'R' ? RIGHT_OF[dir] : LEFT_OF[dir];
+  }
+  return out;
+}
+
+// The opposite of each heading — used only to work out which of a corner's
+// two ports is the one that attaches backward onto the growing chain.
+const OPPOSITE_OF = { N: 'S', S: 'N', E: 'W', W: 'E' };
+
+// Midpoint of a port's edge, in the piece's own local cell coordinates.
+// A port spans two adjacent cells (the fixed 2-mat track width); its edge
+// sits on whichever side `dir` names.
+function portMidpoint(port) {
+  const xs = port.cells.map((c) => c[0]);
+  const ys = port.cells.map((c) => c[1]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  if (port.dir === 'N') return [(minX + maxX + 1) / 2, minY];
+  if (port.dir === 'S') return [(minX + maxX + 1) / 2, maxY + 1];
+  if (port.dir === 'E') return [maxX + 1, (minY + maxY + 1) / 2];
+  return [minX, (minY + maxY + 1) / 2]; // 'W'
+}
+
+// How far a corner piece of `cornerType` carries the walk along each of its
+// two headings — the displacement `closes()` was missing. Measured, not
+// hardcoded, from the piece's own unrotated ports (as buildLoop places
+// them): one port is the one that attaches backward onto the chain (so the
+// heading arriving at the corner is the OPPOSITE of that port's own facing
+// direction — matching ports face opposite ways, same as any two abutting
+// edges), and the other is the exit port, whose facing direction *is* the
+// heading leaving the corner (exactly the exitDir convention `append` and
+// `closes` both already use). The displacement between the two ports'
+// edge midpoints decomposes evenly onto those two heading vectors; that
+// even split is `k`. If a future piece's geometry ever made the two axes
+// disagree, that is a real modelling error worth surfacing loudly, so this
+// asserts rather than silently picking one.
+//
+// Measured this way: cornerR30 -> k=1, cornerR60 -> k=2. (Not asserted as
+// literals — recomputed from geometry every time, cached below.)
+const cornerFactorCache = new Map();
+function cornerDisplacementFactor(cornerType) {
+  if (cornerFactorCache.has(cornerType)) return cornerFactorCache.get(cornerType);
+  const [entryPort, exitPort] = placedPorts({ type: cornerType, x: 0, y: 0, rot: 0 });
+  const hIn = OPPOSITE_OF[entryPort.dir];
+  const hOut = exitPort.dir;
+  const d = [
+    portMidpoint(exitPort)[0] - portMidpoint(entryPort)[0],
+    portMidpoint(exitPort)[1] - portMidpoint(entryPort)[1],
+  ];
+  const denom = [STEP[hIn][0] + STEP[hOut][0], STEP[hIn][1] + STEP[hOut][1]];
+  const solve = (i) => (denom[i] !== 0 ? d[i] / denom[i] : null);
+  const kx = solve(0);
+  const ky = solve(1);
+  const k = kx ?? ky;
+  if (kx !== null && ky !== null && kx !== ky) {
+    throw new Error(`corner displacement factor disagrees between axes for ${cornerType}: x gives ${kx}, y gives ${ky}`);
+  }
+  cornerFactorCache.set(cornerType, k);
+  return k;
+}
+
+// A closed outline's side lengths, plus the displacement each corner
+// contributes along its two headings, must sum to zero on both axes.
+// Checking this before building is what makes enumeration fast; every
+// tuple that survives is still built and validated by isClosedCircuit (via
+// buildLoop). This is not a breach of the no-parallel-maths rule: it
+// computes no mat counts, barrier counts or areas, only which candidates
+// are worth building.
+//
+// Each corner between side i and side i+1 (cyclically) advances the walk
+// by `k` along heading[i] (finishing the turn into the corner) and `k`
+// along heading[i+1] (leaving it) — see cornerDisplacementFactor. Summed
+// cyclically over all corners, corner i's contribution to heading[i] and
+// corner i-1's contribution to heading[i] both land on heading[i], so the
+// total correction is just `2k` added to every side length before the
+// usual sum. For a rectangle the four headings sum to zero on their own,
+// so the correction vanishes and the old side-lengths-only check happened
+// to still work — which is exactly why it silently failed only on outlines
+// with a left turn (every outline except the plain rectangle).
+export function closes(signature, sides, cornerType) {
+  const k = cornerDisplacementFactor(cornerType);
+  let x = 0;
+  let y = 0;
+  headings(signature).forEach((dir, i) => {
+    const n = sides[i] + 2 * k;
+    x += STEP[dir][0] * n;
+    y += STEP[dir][1] * n;
+  });
+  return x === 0 && y === 0;
+}
+
+function cornerTypesFor(stock) {
+  const types = [];
+  if (stock.mats.quarterRound > 0) types.push('cornerR30');
+  if (stock.mats.arcLarge > 0) types.push('cornerR60');
+  return types;
+}
+
+// Enumerate every buildable, affordable layout the given stock can pay for.
+// Walks each distinct outline (turnSignatures) and every side-length tuple
+// up to maxSide, arithmetically pre-filtering with closes() before paying
+// the cost of actually building a candidate with buildLoop. Every survivor
+// is still built from real pieces, validated internally by buildLoop, and
+// checked against stock via billOfMaterials/diffStock — no mat, barrier or
+// area maths happens in this file.
+//
+// opts: { maxCorners = 10, maxSide = 12, budget = 20000, room = null }.
+// Returns { results, examined, stopped }. `stopped` is true, and `examined`
+// reports how many candidates were checked, whenever the budget is hit —
+// so a caller can never mistake a truncated run for a complete one.
+export function generateLayouts(stock, opts = {}) {
+  const { maxCorners = 10, maxSide = 12, budget = 20000, room = null } = opts;
+  const totalMats = stock.mats.square + stock.mats.quarterRound + stock.mats.arcLarge;
+  // Each straight is 2 mats, so the straights alone cannot exceed this.
+  const maxStraights = Math.floor(totalMats / 2);
+
+  const results = [];
+  const seen = new Set();
+  let examined = 0;
+  let stopped = false;
+
+  for (const cornerType of cornerTypesFor(stock)) {
+    for (let corners = 4; corners <= maxCorners; corners += 2) {
+      for (const signature of turnSignatures(corners)) {
+        const sides = new Array(corners).fill(0);
+
+        const walk = (i, used) => {
+          if (stopped) return;
+          if (i === corners) {
+            if (!closes(signature, sides, cornerType)) return;
+            if (++examined > budget) { stopped = true; return; }
+            const pieces = buildLoop({ signature, sides: [...sides], cornerType });
+            if (!pieces) return;
+            const layout = createLayout({ pieces });
+            const { bbox, matCount, lapMm } = computeMetrics(layout);
+            if (room && (bbox.w > room.w || bbox.h > room.h)) return;
+            if (diffStock(billOfMaterials(layout), stock).some((r) => r.short > 0)) return;
+            const key = canonicalLayoutKey(pieces);
+            if (seen.has(key)) return;
+            seen.add(key);
+            results.push({ pieces, signature, cornerType, sides: [...sides], matCount, lapMm, bbox, key });
+            return;
+          }
+          for (let n = 0; n <= maxSide; n++) {
+            if (used + n > maxStraights) break;
+            sides[i] = n;
+            walk(i + 1, used + n);
+            if (stopped) return;
+          }
+          sides[i] = 0;
+        };
+        walk(0, 0);
+      }
+    }
+  }
+
+  return { results, examined, stopped };
 }
