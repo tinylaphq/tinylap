@@ -114,17 +114,51 @@ const CORNER_EDGES = {
   NW: [['N', [1, 0]], ['W', [0, 1]]],
 };
 
+// Edges that carry a wall: the outline of the occupied mats, minus open
+// ports, plus internal edges between two different pieces that touch
+// without joining through a matched port (see unjoinedContacts below —
+// barriers belong to the pieces, not just the outline, so an unjoined
+// contact must be walled too).
+//
+// Built as one pass over one piece-ownership map (occupancy), rather than
+// the outline walk and unjoinedContacts each rebuilding their own —
+// boundaryEdges is called on every computeBarriers, which generate.js's
+// candidate search does a lot, so the per-cell work here matters.
 export function boundaryEdges(layout) {
-  const cells = occupiedSet(layout);
-  const open = openEdgeIds(layout);
+  const occ = occupancy(layout);
+  const { matched } = matchPorts(layout);
+
+  // Partition every port's edges into "open" (unmatched — an opening, not
+  // a wall) and "legit" (matched — a real join, also not a wall) in one
+  // pass, rather than calling openEdgeIds and unjoinedContacts separately
+  // and each re-deriving this from matchPorts.
+  const openIds = new Set();
+  const legitIds = new Set();
+  layout.pieces.forEach((piece) => {
+    for (const port of placedPorts(piece)) {
+      const bucket = matched.has(portKey(port)) ? legitIds : openIds;
+      for (const id of portEdgeIds(port)) bucket.add(id);
+    }
+  });
+
   const edges = new Set();
-  for (const key of cells) {
+  for (const [key, owners] of occ) {
     const [x, y] = parseCellKey(key);
     for (const dir of ['N', 'E', 'S', 'W']) {
       const [dx, dy] = NEIGHBOUR[dir];
-      if (cells.has(cellKey([x + dx, y + dy]))) continue;
+      const nKey = cellKey([x + dx, y + dy]);
+      const nOwners = occ.get(nKey);
       const id = edgeId([x, y], dir);
-      if (open.has(id)) continue;
+      if (!nOwners) {
+        // Nothing occupies the far side: the outline, unless it's an
+        // open port (an opening, not a wall).
+        if (!openIds.has(id)) edges.add(id);
+        continue;
+      }
+      if (owners.some((o) => nOwners.includes(o))) continue; // same piece
+      // A different piece occupies the far side: walled, unless the two
+      // are actually joined here through a matched port.
+      if (legitIds.has(id)) continue;
       edges.add(id);
     }
   }

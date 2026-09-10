@@ -147,31 +147,38 @@ test('a lone R60 corner sweeps its inside and rounds its outside, with no cap', 
   assert.deepEqual(mats, { square: 5, quarterRound: 1, arcLarge: 2 });
 });
 
-// I6: the arc-skip branch (computeBarriers's `if (!claimed.every(...)) continue;`)
-// was never exercised. An arc's two claimed edges must BOTH still be on the
-// occupied-cell boundary for the arc to be counted; butt a second piece
-// against one of an R30 corner's outer arc edges and that edge stops being
-// a boundary edge (its neighbour cell is now occupied), so the arc is
-// skipped entirely — verified headlessly: a lone cornerR30 at (0,0) counts
-// { straight: 2, curve: 1 }, but with a straight butted against its arc's
-// outer S side at (0,2) the curve is skipped and both of the arc's edges
-// end up (one directly, one by not being claimed) among the straights,
-// raising the straight count to 4 with curve back to 0.
+// I6, revised by task 11: this fixture used to exercise the arc-skip branch
+// (computeBarriers's `if (!claimed.every(...)) continue;`) — butting a
+// straight against an R30 corner's outer arc edge used to leave that edge
+// off the occupied-cell boundary (both neighbouring cells were occupied,
+// by different, unjoined pieces), so the arc's claim failed and it was
+// skipped. That was actually two instances of the same bug task 11 fixes:
+// the corner and the straight share TWO edges (H:0:2, under the arc, and
+// H:1:2, next to it), and neither had a wall at all — verified headlessly
+// via unjoinedContacts(layout), which reports exactly ['H:0:2', 'H:1:2'].
+// Task 11 wires those into boundaryEdges as unjoined-contact walls, so both
+// of the arc's claimed edges (H:0:2 and V:0:1) are now present and the arc
+// IS claimed: curve goes back to 1, and H:1:2 — previously missing
+// entirely — now correctly counts as a straight.
 //
-// Known consequence (documented, not fixed — out of scope for this wave):
-// computeMetrics.mats still counts the corner's own quarterRound mat
-// regardless of whether its arc barrier was actually walled, so the BOM
-// overstates a real curve barrier's mats in exactly this configuration.
-// Fixing that needs the model to relate "which mats are on the boundary"
-// to "which barriers were actually counted", which is a model change.
-test('a piece butted against a corner arc\'s outer edge skips that arc', () => {
+// This also resolves the "known consequence" flagged by the original I6
+// comment: computeMetrics.mats always counted the corner's quarterRound
+// mat regardless of whether its arc barrier was walled, which used to
+// disagree with a curve count of 0 here. Now mats and barriers agree.
+//
+// The arc-skip branch itself is no longer exercised by any fixture in this
+// suite — the only way left to hit it is a matched port that happens to
+// coincide with one of an arc's own edges, which no piece definition
+// produces. Left in place as defensive code, not dead-code-eliminated.
+test('a piece butted against a corner arc\'s outer edge now gets both edges walled, arc included', () => {
   const l = createLayout({ pieces: [
     { type: 'cornerR30', x: 0, y: 0, rot: 0 },
     { type: 'straight', x: 0, y: 2, rot: 0 },
   ] });
   assert.deepEqual(findOverlaps(l), []);
+  assert.deepEqual(unjoinedContacts(l).sort(), ['H:0:2', 'H:1:2']);
   const { counts } = computeBarriers(l);
-  assert.deepEqual(counts, { straight: 4, curve: 0, curveLarge: 0, cornerCap: 0 });
+  assert.deepEqual(counts, { straight: 4, curve: 1, curveLarge: 0, cornerCap: 0 });
 });
 
 test('the 7x9 rectangular ring matches its hand-derived figures', () => {
@@ -311,4 +318,43 @@ test('a real track has no unjoined piece contacts', () => {
 test('the four-mat-wide slab has unjoined piece contacts', () => {
   const layout = createLayout({ pieces: fourMatSlab() });
   assert.ok(unjoinedContacts(layout).length > 0);
+});
+
+// Task 11 safety property: both real tracks have zero unjoined contacts
+// (proven above), so walling unjoined contacts must not change their
+// barrier counts at all. Pinned to the exact figures measured on the code
+// before task 11's fix, not to whatever boundaryEdges happens to produce
+// now — that is what makes this an invariance proof rather than a tautology.
+test('walling unjoined contacts leaves both real tracks\' barrier counts untouched', () => {
+  assert.deepEqual(computeBarriers(createLayout({ pieces: stockL() })).counts, {
+    straight: 36, curve: 6, curveLarge: 0, cornerCap: 6,
+  });
+  assert.deepEqual(computeBarriers(createLayout({ pieces: rectangularRing() })).counts, {
+    straight: 40, curve: 4, curveLarge: 0, cornerCap: 4,
+  });
+});
+
+// A straight is two mats wide and one long with N/S ports, so these sit
+// side by side and do not connect. Each walls its own E/W edge, and the
+// shared edge must carry one barrier serving both lanes.
+test('two pieces touching without a join still get a wall between them', () => {
+  const layout = createLayout({ pieces: [
+    { type: 'straight', x: 0, y: 0, rot: 0 },
+    { type: 'straight', x: 2, y: 0, rot: 0 },
+  ] });
+  assert.equal(matchPorts(layout).matched.size, 0, 'fixture must be unjoined');
+  assert.ok(boundaryEdges(layout).has(edgeId([1, 0], 'E')), 'shared edge must be walled');
+  assert.equal(computeBarriers(layout).counts.straight, 3);
+});
+
+// Stacked along the travel axis: these DO connect, so the shared edge
+// stays open and the count must not move. This is the guard that matters:
+// if it moves, the fix is walling joins it should not.
+test('joining two pieces end to end adds no wall between them', () => {
+  const layout = createLayout({ pieces: [
+    { type: 'straight', x: 0, y: 0, rot: 0 },
+    { type: 'straight', x: 0, y: 1, rot: 0 },
+  ] });
+  assert.equal(matchPorts(layout).matched.size, 1, 'fixture must be joined');
+  assert.equal(computeBarriers(layout).counts.straight, 4);
 });
