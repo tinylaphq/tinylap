@@ -62,30 +62,36 @@ export const PIECES = {
     centrelineMm: QUARTER_TURN_MM,
   },
 
-  cornerR60: {                                         // enter E, exit S
+  cornerR60: {                                         // enter N, exit W
     label: 'Corner R60',
-    // Three mats, not four: the large corner sweeps the inside of the turn
-    // away entirely. That is why 87033-02 gives exactly 4 plain + 8 shaped
-    // mats and 8 curve halves — one plain, two shaped and two halves per
-    // corner — and ships no caps, no straights and no quarter-rounds. The
-    // two shaped mats are their own curved shape, not squares with a
-    // corner clipped.
+    // The COMPLETE placeable corner, not just the kit's contribution.
     //
-    // It uses FEWER mats than an R30 corner while being the faster corner:
-    // carving out the apex is what opens the racing line.
-    cells: [[1, 0], [0, 1], [1, 1]],
+    // 87033-02 supplies only the inside of the turn: three mats (two
+    // shaped, one plain) and two curve halves, with no outside barriers
+    // at all. Those three alone leave a corridor one mat wide, which is
+    // not a usable corner — so the piece placed on the canvas is that
+    // inner assembly plus an outer layer of plain mats and barriers from
+    // a base set, bringing the corridor back to the fixed two mats.
+    // This is why the kit's manual says it cannot be used alone.
+    cells: [
+      [1, 0], [2, 0],                                  // 3x3 minus the swept
+      [0, 1], [1, 1], [2, 1],                          // inner cell [0,0]
+      [0, 2], [1, 2], [2, 2],
+    ],
     ports: [
-      { cells: [[1, 0], [1, 1]], dir: 'E' },
-      { cells: [[0, 1], [1, 1]], dir: 'S' },
+      { cells: [[1, 0], [2, 0]], dir: 'N' },
+      { cells: [[0, 1], [0, 2]], dir: 'W' },
     ],
-    // Anchored on the swept-away inner cell [0,0]: its S and E edges are
-    // the two boundary edges lining the gap, and the arc replaces both
-    // with one continuous sweep across the two shaped mats.
     walls: [
-      { kind: 'arcLarge', r: 1, cell: [0, 0], corner: 'SE' },
+      // Inside: the kit's sweep, hugging the gap. Concave — it curves
+      // toward the corner, not away from it.
+      { kind: 'arcLarge', r: 1, cell: [0, 0], corner: 'SE', concave: true },
+      // Outside: an ordinary quarter-round from the base set, as on any
+      // other corner. The kit supplies nothing for this edge.
+      { kind: 'arc', r: 1, cell: [2, 2], corner: 'SE' },
     ],
-    mats: { square: 1, arcLarge: 2 },
-    centrelineMm: 1.5 * QUARTER_TURN_MM,
+    mats: { square: 5, quarterRound: 1, arcLarge: 2 },
+    centrelineMm: 2 * QUARTER_TURN_MM,
   },
 };
 

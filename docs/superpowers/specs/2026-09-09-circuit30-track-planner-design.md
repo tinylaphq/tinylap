@@ -341,46 +341,53 @@ test with `node:test` and zero dependencies:
 
 ## 13. Provisional decisions and open questions
 
-### 13.1 Large corner geometry — corrected twice
+### 13.1 Large corner geometry
 
-**The large corner is three mats, and it sweeps the inside of the turn away
-entirely.** `cornerR60` occupies a 2 x 2 area with the inner cell gone: two
-shaped mats — their own curved shape, not squares with a corner clipped — plus
-one plain mat. It derives 2 large curve halves, 2 straight barriers, no curves
-and **no corner caps**.
+`cornerR60` is the **complete placeable corner**, not the kit's contribution.
+It occupies a 3 x 3 block with the inner cell swept away — 8 mats — and derives
+2 large curve halves, 1 curve, 4 straights and no corner caps.
 
-It uses *fewer* mats than an R30 corner (3 against 4) while being the faster
-corner. Carving out the apex is precisely what opens the racing line; "large"
-refers to the radius the car can carry, not the floor area consumed.
+**87033-02 supplies only the inside of the turn.** Three mats per corner (two
+shaped, one plain) and two curve halves, with no outside barriers at all. Those
+three alone leave a corridor one mat wide, which is not a usable corner. The
+placeable piece is that inner assembly plus an outer layer of plain mats and
+barriers from a base set, restoring the fixed two-mat corridor. That is exactly
+why the kit's manual says it cannot be used alone.
 
-**This decomposes to exactly a quarter of 87033-02.** The kit holds 4 plain
-mats, 8 shaped mats and 8 curve halves. Per corner that is 1 plain + 2 shaped
-+ 2 halves — which is this piece, with nothing left over and nothing missing.
-No caps, no straights, no quarter-rounds are supplied because the corner needs
-none.
+Per corner: kit gives 2 shaped mats + 1 plain + 2 curve halves; the base set
+gives 4 plain, 1 quarter-round, 1 curve and 4 straights.
 
-Two earlier models were wrong and both were caught by the owner comparing the
-rendered piece against the real product:
+The two walls curve in opposite senses and this matters:
 
-1. *Outer arc, sharp inner apex closed by a cap.* Contradicted by the kit
-   shipping no caps at all — a cap exists to close a sharp apex, so a kit
-   containing none cannot have one.
-2. *Inner sweep across a 3 x 3 block with a rounded outer corner.* Right about
-   the inside, wrong about the size, and it invented a quarter-round the kit
-   does not supply.
+- the **inside** is *concave* — it hugs the swept gap, curving toward the
+  corner;
+- the **outside** is an ordinary *convex* quarter-round clip, as on any corner.
 
-The 87031-02 assembly diagram was also misread at first: its exploded view
-shows the two curve halves offset above the mats before assembly, which reads
-as two parallel walls. They are one arc.
+A single arc routine that always assumed the convex case put the centre on the
+wrong side of the inner sweep, bulging the inside barrier outward into the
+track. `arcParts` in `render.js` now takes a `concave` flag; the endpoints are
+identical either way, only the centre differs, and with it which of the two
+possible arcs is drawn.
+
+Three earlier models were wrong, each caught by the owner against the real
+product and a photograph:
+
+1. *Outer large arc, sharp inner apex closed by a cap.* Contradicted by the
+   kit shipping no caps — a cap closes a sharp apex, so a kit with none has
+   none.
+2. *Inner sweep, but square outside.* The kit supplies no outside barriers, so
+   nothing about it implies a square outer corner; every other corner in
+   Kyosho's layouts is rounded.
+3. *Only the kit's three mats.* Correct about the kit, wrong as a placeable
+   piece — it yields a one-mat corridor.
+
+The 87031-02 exploded assembly view was also misread early on: it shows the two
+curve halves offset above the mats before assembly, which reads as two parallel
+walls. They are one arc.
 
 No manual exists for 87033-02 — Kyosho publishes instruction sheets only for
 the older 87031 series — so the printed figures cannot settle this. The
 physical piece is the authority.
-
-Pinned in `test/geometry.test.js` (3 cells, `{square:1, arcLarge:2}`) and
-`test/model.test.js` (2 large curve halves, zero caps). The parts-list
-identity above is the reason those numbers are worth asserting: if any drifts,
-the piece no longer decomposes to a quarter of the kit.
 
 ### 13.2 Reconciling the stock L against the 87033 contents
 

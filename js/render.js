@@ -31,16 +31,33 @@ function assertFinite(value, label) {
 // a cut corner reads as cut. Without this every arc was drawn as a stroke
 // lying across an intact square, which is what made the large corner look
 // like it was missing a tile rather than swept.
-export function cutPath(wall) {
-  const { r, cell, corner } = wall;
-  const [vx, vy] = CORNER_VERTEX[corner](cell);
+// Endpoints, centre and sweep for a wall's arc.
+//
+// A convex clip (a quarter-round trimming an outer corner) curves AWAY from
+// the corner vertex, so its centre sits diagonally inward at V + r*(u1+u2).
+// A concave sweep (the inside of a turn, hugging the gap) curves TOWARD the
+// vertex, so its centre is V itself. Same two endpoints either way — only
+// the centre differs, and with it which of the two possible arcs is drawn.
+// Using the convex centre for a concave sweep bulges the barrier outward
+// into the track, which is exactly backwards.
+function arcParts(wall) {
+  const { r, cell, corner, concave = false } = wall;
+  const v = CORNER_VERTEX[corner](cell);
   const [s1, s2] = CORNER_STEPS[corner];
-  const a = [vx + s1[0] * r, vy + s1[1] * r];
-  const b = [vx + s2[0] * r, vy + s2[1] * r];
-  const c = [vx + (s1[0] + s2[0]) * r, vy + (s1[1] + s2[1]) * r];
+  const a = [v[0] + s1[0] * r, v[1] + s1[1] * r];
+  const b = [v[0] + s2[0] * r, v[1] + s2[1] * r];
+  const c = concave ? v : [v[0] + (s1[0] + s2[0]) * r, v[1] + (s1[1] + s2[1]) * r];
   const cross = (a[0] - c[0]) * (b[1] - c[1]) - (a[1] - c[1]) * (b[0] - c[0]);
-  const sweep = cross > 0 ? 1 : 0;
-  return `M ${vx} ${vy} L ${a[0]} ${a[1]} A ${r} ${r} 0 0 ${sweep} ${b[0]} ${b[1]} Z`;
+  return { v, a, b, r, sweep: cross > 0 ? 1 : 0, far: [v[0] + (s1[0] + s2[0]) * r, v[1] + (s1[1] + s2[1]) * r] };
+}
+
+export function cutPath(wall) {
+  const { v, a, b, r, sweep, far } = arcParts(wall);
+  // Convex: remove the sliver between the corner vertex and the arc.
+  // Concave: remove everything from the arc out to the diagonal corner.
+  return wall.concave
+    ? `M ${a[0]} ${a[1]} A ${r} ${r} 0 0 ${sweep} ${b[0]} ${b[1]} L ${far[0]} ${far[1]} Z`
+    : `M ${v[0]} ${v[1]} L ${a[0]} ${a[1]} A ${r} ${r} 0 0 ${sweep} ${b[0]} ${b[1]} Z`;
 }
 
 export function arcPath(wall) {
