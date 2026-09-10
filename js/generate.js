@@ -385,12 +385,27 @@ function isCanonicalTuple(signature, sides) {
 // checked against stock via billOfMaterials/diffStock — no mat, barrier or
 // area maths happens in this file.
 //
-// opts: { maxCorners = 10, maxSide = 12, budget = 20000, room = null,
+// opts: { maxCorners = 8, maxSide = 12, budget = 20000, room = null,
 // skipTupleDedup = false, maxVariantsPerCharacter = 50,
 // skipCornerCountStop = false }. `skipTupleDedup` disables the
 // isCanonicalTuple pre-filter — it exists purely so a test can compare
 // the fast and slow paths and prove the filter drops no distinct layout;
 // leave it off.
+//
+// `maxCorners` defaults to 8, not higher, for a concrete reason: a
+// 10-corner outline needs ten quarter-round mats, so it is never
+// affordable on fewer than two starter sets (one ships six) — and even at
+// two starter sets nothing 10-corner turned out to be affordable, with the
+// search burning 19,600 examined candidates to confirm it (see
+// test/generate.test.js). Ten sides is where the tuple space stops being
+// bounded in any useful way: corners=4/6/8 together finish in a few
+// hundred examined candidates, but corners=10 alone can exhaust the whole
+// default budget without completing. So exploring it by default costs
+// everything and returns nothing; `maxCorners` stays a plain option so
+// someone who deliberately wants to look can raise it, but a default
+// suggestion run should not spend a user's time on it. Whatever this
+// leaves unexplored is reported, never silently dropped — see
+// `unexploredCorners` below.
 //
 // `maxVariantsPerCharacter` bounds how many size/proportion variants of
 // the SAME character — the same (signature, cornerType) pair, i.e. the
@@ -410,16 +425,21 @@ function isCanonicalTuple(signature, sides) {
 // yields nothing" optimisation below — again purely for a test to verify
 // it against the unoptimised search; leave it off.
 //
-// Returns { results, examined, stopped, cappedCharacters }. `stopped` is
-// true, and `examined` reports how many candidates were checked, whenever
-// the budget is hit — so a caller can never mistake a truncated run for a
-// complete one. `cappedCharacters` counts how many (signature, cornerType)
-// characters hit `maxVariantsPerCharacter` — silence about that is exactly
-// what would misrepresent a capped run as exhaustive, so it's always
-// reported, never just implied by `stopped`.
+// Returns { results, examined, stopped, cappedCharacters, unexploredCorners }.
+// `stopped` is true, and `examined` reports how many candidates were
+// checked, whenever the budget is hit — so a caller can never mistake a
+// truncated run for a complete one. `cappedCharacters` counts how many
+// (signature, cornerType) characters hit `maxVariantsPerCharacter` —
+// silence about that is exactly what would misrepresent a capped run as
+// exhaustive, so it's always reported, never just implied by `stopped`.
+// `unexploredCorners` names the corner counts (per cornerType) that the
+// stock could afford by mat count alone but that `maxCorners` kept the
+// search from ever trying — as opposed to corner counts excluded because
+// the stock genuinely cannot pay for them, which are not "unexplored" in
+// this sense, just impossible regardless of `maxCorners`.
 export function generateLayouts(stock, opts = {}) {
   const {
-    maxCorners = 10, maxSide = 12, budget = 20000, room = null,
+    maxCorners = 8, maxSide = 12, budget = 20000, room = null,
     skipTupleDedup = false, maxVariantsPerCharacter = 50, skipCornerCountStop = false,
   } = opts;
   const totalMats = stock.mats.square + stock.mats.quarterRound + stock.mats.arcLarge;
@@ -430,6 +450,7 @@ export function generateLayouts(stock, opts = {}) {
   const seen = new Set();
   const variantCounts = new Map();
   const cappedCharacterKeys = new Set();
+  const unexploredCornersSet = new Set();
   let examined = 0;
   let stopped = false;
 
@@ -444,9 +465,15 @@ export function generateLayouts(stock, opts = {}) {
     // is the same category of bound as maxStraights above: inventory
     // arithmetic, not mat/area maths recomputed from geometry.
     const perCorner = computeMetrics(createLayout({ pieces: [{ type: cornerType, x: 0, y: 0, rot: 0 }] })).mats;
-    let maxAffordableCorners = maxCorners;
+    // Affordability by mat count alone, WITHOUT the maxCorners cap — used
+    // only to report what the cap hides, never to widen the search itself.
+    let trueAffordableCorners = Infinity;
     for (const [kind, needed] of Object.entries(perCorner)) {
-      if (needed > 0) maxAffordableCorners = Math.min(maxAffordableCorners, Math.floor((stock.mats[kind] ?? 0) / needed));
+      if (needed > 0) trueAffordableCorners = Math.min(trueAffordableCorners, Math.floor((stock.mats[kind] ?? 0) / needed));
+    }
+    const maxAffordableCorners = Math.min(maxCorners, trueAffordableCorners);
+    for (let corners = maxCorners + 2; corners <= trueAffordableCorners; corners += 2) {
+      unexploredCornersSet.add(corners);
     }
     for (let corners = 4; corners <= maxAffordableCorners; corners += 2) {
       const resultsBeforeThisCount = results.length;
@@ -509,5 +536,11 @@ export function generateLayouts(stock, opts = {}) {
     }
   }
 
-  return { results, examined, stopped, cappedCharacters: cappedCharacterKeys.size };
+  return {
+    results,
+    examined,
+    stopped,
+    cappedCharacters: cappedCharacterKeys.size,
+    unexploredCorners: [...unexploredCornersSet].sort((a, b) => a - b),
+  };
 }

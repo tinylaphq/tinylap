@@ -198,10 +198,37 @@ test('stopping corner-count climbs early loses no layouts', () => {
   // is an assumption, not a proof, so it gets the same treatment as the
   // tuple-dedup optimisation: run it against the unoptimised search and
   // require an identical set of layout keys.
+  //
+  // A tiny room (4x4) is what makes this fast AND meaningful: two starter
+  // sets afford up to 12 corners by mat count alone, but nothing bigger
+  // than the minimal 2x2 rectangle fits a 4x4 room, so corners=6 cleanly
+  // finds zero results and corners=8/10/12 should never be tried. That
+  // gives the two paths genuinely different amounts of work (examined 7
+  // vs 712 in manual measurement) rather than the trivial case of the
+  // stop never engaging -- while still finishing in milliseconds, unlike
+  // proving the equivalent at full scale (maxSide 10, no room), which
+  // took over ten seconds for no more confidence in the result.
   const stock = stockFromKits({ '87033': 2 });
-  const withStop = new Set(generateLayouts(stock, { maxSide: 10 }).results.map((r) => r.key));
-  const withoutStop = new Set(
-    generateLayouts(stock, { maxSide: 10, skipCornerCountStop: true }).results.map((r) => r.key),
+  const opts = { maxSide: 2, maxCorners: 10, room: { w: 4, h: 4 } };
+  const withStop = generateLayouts(stock, opts);
+  const withoutStop = generateLayouts(stock, { ...opts, skipCornerCountStop: true });
+  assert.ok(withStop.examined < withoutStop.examined, 'the stop should have skipped real work');
+  assert.deepEqual(
+    [...new Set(withStop.results.map((r) => r.key))].sort(),
+    [...new Set(withoutStop.results.map((r) => r.key))].sort(),
   );
-  assert.deepEqual([...withStop].sort(), [...withoutStop].sort());
+});
+
+test('unexploredCorners names counts skipped by the cap, not by unaffordability', () => {
+  // A single starter set only ever affords up to 6 corners (6 quarter-round
+  // mats), so nothing beyond that is "unexplored because of the cap" -- it
+  // is simply impossible regardless of maxCorners.
+  const single = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
+  assert.deepEqual(single.unexploredCorners, []);
+
+  // Two starter sets afford up to 12 corners (12 quarter-round mats) but
+  // the default maxCorners (8) stops the search well short of that --
+  // 10 and 12 must be named, not silently dropped.
+  const double = generateLayouts(stockFromKits({ '87033': 2 }), { maxSide: 10 });
+  assert.deepEqual(double.unexploredCorners, [10, 12]);
 });
