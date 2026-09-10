@@ -386,10 +386,11 @@ function isCanonicalTuple(signature, sides) {
 // area maths happens in this file.
 //
 // opts: { maxCorners = 10, maxSide = 12, budget = 20000, room = null,
-// skipTupleDedup = false, maxVariantsPerCharacter = 50 }. `skipTupleDedup`
-// disables the isCanonicalTuple pre-filter — it exists purely so a test
-// can compare the fast and slow paths and prove the filter drops no
-// distinct layout; leave it off.
+// skipTupleDedup = false, maxVariantsPerCharacter = 50,
+// skipCornerCountStop = false }. `skipTupleDedup` disables the
+// isCanonicalTuple pre-filter — it exists purely so a test can compare
+// the fast and slow paths and prove the filter drops no distinct layout;
+// leave it off.
 //
 // `maxVariantsPerCharacter` bounds how many size/proportion variants of
 // the SAME character — the same (signature, cornerType) pair, i.e. the
@@ -405,6 +406,10 @@ function isCanonicalTuple(signature, sides) {
 // their size variants past the cap — reported via `cappedCharacters` so a
 // caller can tell variants were trimmed rather than exhaustive.
 //
+// `skipCornerCountStop` disables the "stop climbing corner counts once one
+// yields nothing" optimisation below — again purely for a test to verify
+// it against the unoptimised search; leave it off.
+//
 // Returns { results, examined, stopped, cappedCharacters }. `stopped` is
 // true, and `examined` reports how many candidates were checked, whenever
 // the budget is hit — so a caller can never mistake a truncated run for a
@@ -415,7 +420,7 @@ function isCanonicalTuple(signature, sides) {
 export function generateLayouts(stock, opts = {}) {
   const {
     maxCorners = 10, maxSide = 12, budget = 20000, room = null,
-    skipTupleDedup = false, maxVariantsPerCharacter = 50,
+    skipTupleDedup = false, maxVariantsPerCharacter = 50, skipCornerCountStop = false,
   } = opts;
   const totalMats = stock.mats.square + stock.mats.quarterRound + stock.mats.arcLarge;
   // Each straight is 2 mats, so the straights alone cannot exceed this.
@@ -444,6 +449,7 @@ export function generateLayouts(stock, opts = {}) {
       if (needed > 0) maxAffordableCorners = Math.min(maxAffordableCorners, Math.floor((stock.mats[kind] ?? 0) / needed));
     }
     for (let corners = 4; corners <= maxAffordableCorners; corners += 2) {
+      const resultsBeforeThisCount = results.length;
       for (const signature of turnSignatures(corners)) {
         const sides = new Array(corners).fill(0);
         const characterKey = `${cornerType}:${signature}`;
@@ -483,7 +489,23 @@ export function generateLayouts(stock, opts = {}) {
           sides[i] = 0;
         };
         walk(0, 0);
+        if (stopped) break;
       }
+      if (stopped) break;
+      // Monotonicity assumption, not a proof: a loop with more corners
+      // always needs strictly more corner pieces (and so strictly more
+      // mats) than one with fewer, for the same cornerType — see
+      // maxAffordableCorners above, which already bounds corners on total
+      // mat cost alone. So if this corner count ran to completion within
+      // budget and still produced not one affordable result, no larger
+      // corner count can either; climbing further would only rediscover
+      // that same unaffordability, exactly the waste maxAffordableCorners
+      // already cuts for the coarser "too many mats overall" case. Only
+      // trusted when the count actually finished (not `stopped` — a
+      // budget cutoff mid-count means "didn't get far enough", not "zero
+      // exists"). skipCornerCountStop exists so a test can verify this
+      // against the unoptimised search rather than take it on trust.
+      if (!skipCornerCountStop && results.length === resultsBeforeThisCount) break;
     }
   }
 

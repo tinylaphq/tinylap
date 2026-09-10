@@ -191,3 +191,17 @@ test('generation uses regular corners only; large corners cannot tile a loop', (
   assert.ok(results.length > 0);
   assert.ok(results.every((r) => r.cornerType === 'cornerR30'));
 });
+
+test('stopping corner-count climbs early loses no layouts', () => {
+  // The monotonicity assumption -- more corners always costs strictly more
+  // mats, so an unaffordable corner count means every larger one is too --
+  // is an assumption, not a proof, so it gets the same treatment as the
+  // tuple-dedup optimisation: run it against the unoptimised search and
+  // require an identical set of layout keys.
+  const stock = stockFromKits({ '87033': 2 });
+  const withStop = new Set(generateLayouts(stock, { maxSide: 10 }).results.map((r) => r.key));
+  const withoutStop = new Set(
+    generateLayouts(stock, { maxSide: 10, skipCornerCountStop: true }).results.map((r) => r.key),
+  );
+  assert.deepEqual([...withStop].sort(), [...withoutStop].sort());
+});
