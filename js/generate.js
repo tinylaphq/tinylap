@@ -10,9 +10,9 @@
 // "no parallel geometry maths" constraint and the parent spec's section 13.2
 // for what happens when that rule is broken.
 
-import { ROTATIONS, placedCells, placedPorts } from './geometry.js';
+import { PIECES, PIECE_TYPES, ROTATIONS, placedCells, placedPorts } from './geometry.js';
 import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics } from './model.js';
-import { billOfMaterials, diffStock } from './inventory.js';
+import { billOfMaterials, diffStock, emptyStock, MAT_PARTS, BARRIER_PARTS } from './inventory.js';
 
 // Rotate a string left by n.
 const rotate = (s, n) => s.slice(n) + s.slice(0, n);
@@ -600,4 +600,100 @@ export function groupByCharacter(results) {
   // order would be the same latent gap as the untested half of the group key.
   characters.sort((a, b) => a.corners - b.corners || a.name.localeCompare(b.name) || a.feel.localeCompare(b.feel));
   return characters;
+}
+
+// A stock nothing realistic is ever short against. Used to ask "what is
+// constructible at all?" so that anything constructible-but-absent from
+// YOUR results is blocked by inventory, and anything absent from both is
+// blocked by geometry. diffStock's `used - owned` stays <= 0 against this
+// for any candidate generateLayouts can actually produce.
+//
+// This is a large FINITE number, not Infinity. Infinity was tried first and
+// breaks generateLayouts: `trueAffordableCorners` divides stock mat counts
+// by a corner's own mat cost, so Infinity/n stays Infinity, and the loop a
+// few lines later that walks from `maxCorners + 2` up to
+// `trueAffordableCorners` to populate `unexploredCorners` then never
+// reaches its own bound — confirmed by running it, which throws
+// `RangeError: Set maximum size exceeded` rather than looping forever
+// silently. 100,000 of each part is comfortably above anything
+// generateLayouts can spend within any maxCorners/maxSide a caller would
+// plausibly pass, while keeping that loop's iteration count in the tens of
+// thousands instead of unbounded.
+const ABUNDANT = 100_000;
+function abundantStock() {
+  const stock = emptyStock();
+  for (const part of MAT_PARTS) stock.mats[part] = ABUNDANT;
+  for (const part of BARRIER_PARTS) stock.barriers[part] = ABUNDANT;
+  stock.joints.a = ABUNDANT;
+  stock.joints.b = ABUNDANT;
+  return stock;
+}
+
+// What you cannot build, and why. Replaces a what-if panel: for each
+// character that generateLayouts(stock) does not reach, says whether a
+// purchase would unlock it (`reason: 'stock'`, with the largest real
+// shortfall from diffStock as `missing`) or whether no inventory ever could
+// (`reason: 'geometry'`, `missing: null`). Every 'stock' reason is
+// established by pricing a real built example through billOfMaterials +
+// diffStock — never by a formula — and every 'geometry' reason is read from
+// cornerTypesFor, the one place that owns which corner types are excluded
+// from generation at all.
+//
+// Both enumerations here (against `stock` and against the abundant stock)
+// share generateLayouts' own budget, so either can be truncated the same
+// way a direct generateLayouts call can. `stopped`/`examined` surface that
+// rather than silently shortening the blocked list — a truncated "what is
+// constructible" pass would otherwise read to the caller as "nothing else
+// is out of reach".
+export function outOfReach(stock, opts = {}) {
+  const mine = generateLayouts(stock, opts);
+  const reachable = new Set(groupByCharacter(mine.results).map((c) => c.key));
+
+  const everything = generateLayouts(abundantStock(), opts);
+
+  const blocked = [];
+
+  // 1. Constructible, but not with what you own. Price the cheapest variant
+  //    of each character — `best` is the largest, so take the last variant,
+  //    which is the smallest and therefore the easiest to afford.
+  for (const character of groupByCharacter(everything.results)) {
+    if (reachable.has(character.key)) continue;
+    const cheapest = character.variants[character.variants.length - 1];
+    const rows = diffStock(billOfMaterials(createLayout({ pieces: cheapest.pieces })), stock)
+      .filter((r) => r.short > 0)
+      .sort((a, b) => b.short - a.short);
+    if (rows.length === 0) continue;   // affordable after all; not blocked
+    blocked.push({
+      key: character.key,
+      name: character.name,
+      corners: character.corners,
+      feel: character.feel,
+      reason: 'stock',
+      missing: rows[0],
+    });
+  }
+
+  // 2. Corner families no inventory can close a loop with. Read the
+  //    exclusion from cornerTypesFor, the one place that owns it, rather
+  //    than restating which types those are.
+  const usable = new Set(cornerTypesFor(abundantStock()));
+  for (const type of PIECE_TYPES) {
+    if (usable.has(type) || !PIECES[type].label.startsWith('Corner')) continue;
+    const feel = CORNER_FEEL[type];
+    if (!feel || blocked.some((b) => b.feel === feel)) continue;
+    blocked.push({
+      key: `*|${feel}`,
+      name: 'Any outline',
+      corners: null,
+      feel,
+      reason: 'geometry',
+      missing: null,
+    });
+  }
+
+  return {
+    blocked,
+    stopped: mine.stopped || everything.stopped,
+    examined: mine.examined + everything.examined,
+  };
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter } from '../js/generate.js';
+import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach } from '../js/generate.js';
 import { createLayout, isClosedCircuit, findOverlaps, occupiedSet } from '../js/model.js';
 import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
 import { stockL } from '../js/presets.js';
@@ -288,4 +288,50 @@ test('same outline but different corner feel is two characters, not one', () => 
     assert.equal(c.name, 'Rectangle');
     assert.equal(c.variants.length, 1);
   }
+});
+
+test('a starter set cannot reach 8-corner shapes, and names the part that blocks it', () => {
+  const { blocked } = outOfReach(stockFromKits({ '87033': 1 }), { maxSide: 8 });
+  const eight = blocked.find((b) => b.corners === 8);
+  assert.ok(eight, 'expected 8-corner shapes to be reported as out of reach');
+  assert.equal(eight.reason, 'stock');
+  assert.ok(eight.missing.short > 0);
+  assert.match(eight.missing.label, /mat|barrier|joint/i);
+});
+
+test('what a starter set already builds is not reported as out of reach', () => {
+  const stock = stockFromKits({ '87033': 1 });
+  const reachable = new Set(
+    groupByCharacter(generateLayouts(stock, { maxSide: 8 }).results).map((c) => c.key),
+  );
+  assert.ok(reachable.size > 0, 'fixture is only meaningful if something is reachable');
+  for (const b of outOfReach(stock, { maxSide: 8 }).blocked) {
+    assert.ok(!reachable.has(b.key), `${b.key} is buildable but was reported blocked`);
+  }
+});
+
+test('sweeping corners are blocked by geometry, not by inventory', () => {
+  // Owning the large corner kit must NOT flip this to reachable: no closed
+  // loop of R60 corners exists at any inventory. See cornerTypesFor.
+  for (const kits of [{ '87033': 1 }, { '87033': 1, '87033-02': 1 }, { '87033': 4 }]) {
+    const sweeping = outOfReach(stockFromKits(kits), { maxSide: 8 }).blocked
+      .find((b) => b.feel === 'sweeping');
+    assert.ok(sweeping, `expected sweeping to be reported for ${JSON.stringify(kits)}`);
+    assert.equal(sweeping.reason, 'geometry');
+    assert.equal(sweeping.missing, null);
+  }
+});
+
+test('a stock-blocked shape becomes reachable once the missing part is owned', () => {
+  const one = stockFromKits({ '87033': 1 });
+  const blocked = outOfReach(one, { maxSide: 8 }).blocked.filter((b) => b.reason === 'stock');
+  assert.ok(blocked.length > 0, 'fixture is only meaningful if something is stock-blocked');
+  const rich = groupByCharacter(
+    generateLayouts(stockFromKits({ '87033': 4 }), { maxSide: 8 }).results,
+  );
+  const richKeys = new Set(rich.map((c) => c.key));
+  assert.ok(
+    blocked.some((b) => richKeys.has(b.key)),
+    'no stock-blocked character was unlocked by more kits — the reason is not actionable',
+  );
 });
