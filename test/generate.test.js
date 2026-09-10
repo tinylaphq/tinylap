@@ -335,3 +335,42 @@ test('a stock-blocked shape becomes reachable once the missing part is owned', (
     'no stock-blocked character was unlocked by more kits — the reason is not actionable',
   );
 });
+
+test('a stock-blocked shape reports the cheapest variant\'s shortfall, not any variant\'s', () => {
+  // outOfReach must price the character's cheapest-to-unlock variant. A
+  // regression that priced the most expensive variant instead would still
+  // satisfy every other test here (reason 'stock', missing.short > 0, a
+  // mat/barrier/joint label) while handing the UI a wildly inflated
+  // shopping number. Pin the actual value against an independent
+  // computation over every variant of the character, not just one.
+  const stock = stockFromKits({ '87033': 1 });
+  const blocked = outOfReach(stock, { maxSide: 8 }).blocked.filter((b) => b.reason === 'stock');
+  assert.ok(blocked.length > 0, 'fixture is only meaningful if something is stock-blocked');
+
+  // A stock rich enough to surface every variant of each blocked character
+  // (matching generateLayouts' own maxVariantsPerCharacter cap), so the
+  // comparison below is over the same variant set outOfReach itself sees.
+  const rich = groupByCharacter(generateLayouts(stockFromKits({ '87033': 20 }), { maxSide: 8 }).results);
+  const byKey = new Map(rich.map((c) => [c.key, c]));
+
+  for (const b of blocked) {
+    const character = byKey.get(b.key);
+    assert.ok(character, `${b.key} has no variants in the rich fixture to check against`);
+    const shortfalls = character.variants.map((variant) => {
+      const rows = diffStock(billOfMaterials(createLayout({ pieces: variant.pieces })), stock)
+        .filter((r) => r.short > 0)
+        .sort((a, c) => c.short - a.short);
+      return rows.length === 0 ? 0 : rows[0].short;
+    });
+    const min = Math.min(...shortfalls);
+    const max = Math.max(...shortfalls);
+    assert.notEqual(
+      min, max,
+      `${b.key}'s variants must discriminate (min vs. max shortfall) for this test to be able to fail`,
+    );
+    assert.equal(
+      b.missing.short, min,
+      `${b.key} reported missing.short=${b.missing.short}, but the true cheapest variant needs only ${min} (worst variant needs ${max})`,
+    );
+  }
+});

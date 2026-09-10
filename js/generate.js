@@ -657,6 +657,11 @@ export function outOfReach(stock, opts = {}) {
   //    of each character — `best` is the largest, so take the last variant,
   //    which is the smallest and therefore the easiest to afford.
   for (const character of groupByCharacter(everything.results)) {
+    // Defensive: in every scenario checked, a reachable character's
+    // cheapest-abundant variant was never itself short against the real
+    // stock, so `rows.length === 0` below already excludes it without this
+    // guard's help. Kept anyway as cheap insurance against ever reporting a
+    // buildable character as out of reach — no leak has been observed.
     if (reachable.has(character.key)) continue;
     const cheapest = character.variants[character.variants.length - 1];
     const rows = diffStock(billOfMaterials(createLayout({ pieces: cheapest.pieces })), stock)
