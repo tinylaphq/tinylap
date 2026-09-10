@@ -5,6 +5,7 @@ import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from '.
 import { exportHtml, importHtml } from './storage.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
+import { generateLayouts, groupByCharacter, outOfReach, outlineName } from './generate.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -24,6 +25,14 @@ const state = {
                      // text — never written into #status directly, since
                      // render() owns that field and repaints it on every call.
 };
+
+// Derived from generateLayouts(stockFromKits(state.kits)) every time the
+// presets dialog opens — never persisted (see storage.js: only version,
+// unit, room, pieces round-trip). `pool` is round-robined across characters
+// so paging shows spread, not five near-identical rectangles; `cursor`
+// advances by 5 with wraparound rather than reshuffling, so repeats never
+// show until the whole pool has been seen once.
+state.suggestions = { pool: [], cursor: 0, stopped: false };
 
 function renderPalette() {
   const list = document.querySelector('#palette-list');
@@ -533,6 +542,7 @@ function presetListItem(preset, stock) {
 
 document.querySelector('#btn-presets').addEventListener('click', () => {
   renderPresetsList();
+  renderSuggestions();
   presetsDialog.showModal();
 });
 
@@ -544,6 +554,134 @@ document.querySelector('#presets-list').addEventListener('click', (e) => {
   commit((l) => { l.pieces = structuredClone(preset.pieces); });
   // A loaded preset invalidates anything computed against the previous
   // layout — same clearing this file does on import (see loadFile below).
+  state.selected = null;
+  state.ghost = null;
+  state.pending = null;
+  state.hoverCell = null;
+  state.tool = null;
+  render();
+  presetsDialog.close();
+});
+
+// Suggestions: layouts generated from the owned inventory, offered
+// alongside the fixed presets above. Derived state — never written into
+// state.layout, so it never persists (see storage.js: only version, unit,
+// room, pieces round-trip) and never auto-loads onto the blank canvas.
+
+// Round-robin across characters so the first five show different shapes
+// rather than five rectangles differing by one mat.
+function suggestionPool(characters) {
+  const pool = [];
+  const queues = characters.map((c) => [...c.variants]);
+  while (queues.some((q) => q.length > 0)) {
+    for (const q of queues) if (q.length > 0) pool.push(q.shift());
+  }
+  return pool;
+}
+
+function renderSuggestions() {
+  const stock = stockFromKits(state.kits);
+  const generated = generateLayouts(stock, { room: state.layout.room });
+  const { results, stopped } = generated;
+  const characters = groupByCharacter(results);
+  state.suggestions = { pool: suggestionPool(characters), cursor: 0, stopped };
+
+  // `results.length` is a CAPPED count, not a total: generateLayouts keeps
+  // at most 50 size-variants per shape and reports how many shapes it
+  // capped. Printing it bare overstates coverage badly — two starter kits
+  // return 300 here out of 35,083 that actually exist. The shape count is
+  // exact; the layout count is not, and must not be presented as if it
+  // were. (Those 34,783 omitted are size-variants of shapes already shown,
+  // which is exactly what this feature sets out to collapse — so capping
+  // is right; silently rounding it off as a total is not.)
+  const { cappedCharacters = 0 } = generated;
+  document.querySelector('#suggestions-summary').textContent = results.length === 0
+    ? 'Nothing can be built with the current inventory.'
+    : `${characters.length} shape${characters.length === 1 ? '' : 's'}, `
+      + `${results.length} size${results.length === 1 ? '' : 's'} to choose from`
+      + (cappedCharacters > 0 ? ' (showing up to 50 sizes per shape)' : '')
+      + (stopped ? ' — search stopped early, there may be more' : '');
+
+  renderOutOfReach(stock);
+  renderSuggestionPage();
+}
+
+function renderSuggestionPage() {
+  const { pool, cursor } = state.suggestions;
+  const page = pool.slice(cursor, cursor + 5);
+  const list = document.querySelector('#suggestions-list');
+  list.replaceChildren(...page.map(suggestionListItem));
+
+  const more = document.querySelector('#btn-more-suggestions');
+  more.hidden = pool.length <= 5;
+  more.textContent = cursor + 5 >= pool.length ? 'Start again from the first' : 'Show 5 different';
+  document.querySelector('#suggestions-summary').dataset.page =
+    pool.length ? `showing ${cursor + 1}-${Math.min(cursor + 5, pool.length)} of ${pool.length}` : '';
+}
+
+document.querySelector('#btn-more-suggestions').addEventListener('click', () => {
+  const { pool, cursor } = state.suggestions;
+  state.suggestions.cursor = cursor + 5 >= pool.length ? 0 : cursor + 5;
+  renderSuggestionPage();
+});
+
+// One suggestion's row. Isolated in its own try/catch for the same reason
+// as presetListItem above: renderSuggestions runs before showModal(), so an
+// unguarded throw here would abort the whole .map() and the dialog would
+// never open.
+function suggestionListItem(result) {
+  const li = document.createElement('li');
+  try {
+    const layout = createLayout({ pieces: result.pieces });
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'preset-card';
+    button.dataset.suggestionKey = result.key;
+    button.innerHTML = `<span class="preset-thumb">${layoutToSvgString(layout, { pad: 0.6, theme: 'light' })}</span>
+      <span class="preset-info">
+        <span class="preset-name">${outlineName(result.signature)} ${result.bbox.w}×${result.bbox.h}</span>
+        <span class="preset-source">${result.matCount} mats · lap ${(result.lapMm / 1000).toFixed(2)} m</span>
+      </span>`;
+    li.append(button);
+  } catch (error) {
+    console.error(`Suggestion "${result.key}" could not be rendered:`, error);
+    const p = document.createElement('p');
+    p.className = 'preset-broken';
+    p.textContent = 'This suggestion could not be drawn.';
+    li.append(p);
+  }
+  return li;
+}
+
+function renderOutOfReach(stock) {
+  const { blocked, stopped } = outOfReach(stock);
+  const host = document.querySelector('#out-of-reach');
+  if (blocked.length === 0) { host.replaceChildren(); return; }
+  const seen = new Set();
+  const lines = blocked.filter((b) => !seen.has(b.name + b.feel) && seen.add(b.name + b.feel));
+  // Two reasons, two very different messages. 'stock' is actionable — a
+  // purchase unlocks it. 'geometry' is not, and must never be phrased as
+  // something to buy: no closed loop of large corners exists at any
+  // inventory, so telling the owner to buy the large-corner kit would be
+  // a lie the UI shows them. See outOfReach in js/generate.js.
+  host.innerHTML = `<hr class="divider"><h3 class="h3">Out of reach</h3><dl id="out-of-reach-list">`
+    + lines.map((b) => `<dt>${b.name}${b.feel === 'sweeping' ? ', sweeping' : ''}</dt>`
+      + `<dd>${b.reason === 'stock'
+          ? `needs ${b.missing.short} more ${b.missing.label.toLowerCase()}`
+          : 'not possible with these pieces, whatever you buy'}</dd>`).join('')
+    + `</dl>`
+    + (stopped ? `<p class="status">Search stopped early — there may be more.</p>` : '');
+}
+
+document.querySelector('#suggestions-list').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-suggestion-key]');
+  if (!button) return;
+  const chosen = state.suggestions.pool.find((r) => r.key === button.dataset.suggestionKey);
+  if (!chosen) return;
+  commit((l) => { l.pieces = chosen.pieces.map((p) => ({ ...p })); });
+  // A loaded suggestion is ordinary pieces. Clear the interaction state the
+  // same way the preset and file-open paths do — anything computed against
+  // the previous layout is meaningless now.
   state.selected = null;
   state.ghost = null;
   state.pending = null;

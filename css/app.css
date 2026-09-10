@@ -232,6 +232,17 @@ dialog menu .btn { flex: 1; }
 .preset-badge--bad { color: var(--p-error); }
 .preset-broken { color: var(--p-error); font-size: 12px; }
 
+#suggestions-list { list-style: none; padding: 0; margin: 0 0 var(--p-space-sm); }
+#suggestions-list li { margin-bottom: var(--p-space-sm); }
+#suggestions-list li:nth-child(3n+1) { --accent: var(--p-accent-1); }
+#suggestions-list li:nth-child(3n+2) { --accent: var(--p-accent-2); }
+#suggestions-list li:nth-child(3n+3) { --accent: var(--p-accent-3); }
+#suggestions-summary::after { content: attr(data-page); display: block; color: var(--p-text-faint); }
+#out-of-reach-list { display: grid; grid-template-columns: auto 1fr; gap: var(--p-space-xs) var(--p-space-md);
+                     margin: 0; font-size: 12px; }
+#out-of-reach-list dt { font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+#out-of-reach-list dd { margin: 0; color: var(--p-text-muted); }
+
 /* ── Narrow viewports ────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
