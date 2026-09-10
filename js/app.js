@@ -129,6 +129,13 @@ export function render() {
   renderStatus();
 }
 
+// The legend hard-codes the Mac modifier; correct it elsewhere.
+if (!/Mac|iP(hone|ad)/.test(navigator.platform)) {
+  for (const k of document.querySelectorAll('#shortcuts kbd')) {
+    if (k.textContent === '\u2318') k.textContent = 'Ctrl';
+  }
+}
+
 renderPalette();
 render();
 
