@@ -16,12 +16,15 @@ test('six corners give exactly one outline: the L', () => {
 
 test('eight corners give several distinct outlines', () => {
   const sigs = turnSignatures(8);
-  assert.ok(sigs.length >= 3, `expected several, got ${sigs.length}`);
+  // Confirmed independently by Burnside's lemma, not just by running this
+  // module: n=8 has exactly 4 classes, n=10 has exactly 8.
+  assert.equal(sigs.length, 4);
   for (const s of sigs) {
     assert.equal(s.length, 8);
     assert.equal([...s].filter((c) => c === 'R').length, 6);
   }
   assert.equal(new Set(sigs).size, sigs.length, 'no duplicates');
+  assert.equal(turnSignatures(10).length, 8);
 });
 
 test('odd or too-small corner counts yield nothing', () => {

@@ -13,11 +13,18 @@
 // Rotate a string left by n.
 const rotate = (s, n) => s.slice(n) + s.slice(0, n);
 
-// The same outline reflected, still walked clockwise. Reflection already
-// flips the handedness of every turn, so this is a plain reversal — NOT a
-// reversal plus an R/L swap, which would instead describe the same shape
-// walked backwards (turn sum -4) and collapse every signature onto its
-// counter-clockwise twin.
+// The same outline reflected, still walked clockwise. Reflecting a shape
+// flips the handedness of every turn — but walking the reflected shape
+// clockwise (rather than the counter-clockwise direction the reflection
+// left it facing) reverses the traversal order, which flips every turn's
+// handedness right back. The two flips cancel, so this is a plain reversal
+// — NOT a reversal plus an R/L swap.
+//
+// Worked example: a square walked clockwise is RRRR. Its reflection is
+// still a square, and walked clockwise it is still RRRR — the mirror
+// operation must map RRRR to itself. `reverse('RRRR')` does (RRRR). A
+// reversal-plus-swap would not (it gives LLLL, the same square walked
+// counter-clockwise, turn sum -4) — that is the bug this used to be.
 const reverse = (s) => [...s].reverse().join('');
 
 // Smallest representative of a signature under rotation and mirroring.
@@ -30,10 +37,23 @@ function canonicalSignature(s) {
   return forms.sort()[0];
 }
 
+// Cache of computed results, keyed by corner count. `outlineName`'s fallback
+// calls `turnSignatures` again for every shape it names, and Tasks 4 and 6
+// call it from nested loops — without this the enumeration below (already
+// combinatorial in `corners`) would be redone on every such call.
+const signatureCache = new Map();
+
 // Every distinct closed rectilinear outline with `corners` corners.
 // Clockwise traversal turns sum to +4, so rights - lefts = 4.
+// Returns a fresh copy each call — the array behind `corners` is cached and
+// shared, and a caller mutating it (sort, push, splice) would silently
+// corrupt every future call for that corner count.
 export function turnSignatures(corners) {
-  if (corners < 4 || corners % 2 !== 0) return [];
+  if (signatureCache.has(corners)) return [...signatureCache.get(corners)];
+  if (corners < 4 || corners % 2 !== 0) {
+    signatureCache.set(corners, []);
+    return [];
+  }
   const lefts = (corners - 4) / 2;
   const seen = new Set();
 
@@ -48,7 +68,9 @@ export function turnSignatures(corners) {
   };
   choose(0, lefts, []);
 
-  return [...seen].sort();
+  const result = [...seen].sort();
+  signatureCache.set(corners, result);
+  return [...result];
 }
 
 export const OUTLINE_NAMES = {
