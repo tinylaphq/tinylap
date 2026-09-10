@@ -76,13 +76,13 @@ export function layoutToSvgString(layout, { pad = 1 } = {}) {
   const vb = [g.bbox.x - pad, g.bbox.y - pad, g.bbox.w + pad * 2, g.bbox.h + pad * 2]
     .map((n) => assertFinite(n, 'viewBox component'));
   const mats = g.mats
-    .map((m) => `<rect x="${assertFinite(m.x, 'mat x')}" y="${assertFinite(m.y, 'mat y')}" width="1" height="1" fill="#2b2b2b" stroke="#3d3d3d" stroke-width="0.02"/>`)
+    .map((m) => `<rect x="${assertFinite(m.x, 'mat x')}" y="${assertFinite(m.y, 'mat y')}" width="1" height="1" fill="#262626" stroke="#3a3a3a" stroke-width="0.03"/>`)
     .join('');
   const lines = g.lines
-    .map((l) => `<line x1="${assertFinite(l.x1, 'line x1')}" y1="${assertFinite(l.y1, 'line y1')}" x2="${assertFinite(l.x2, 'line x2')}" y2="${assertFinite(l.y2, 'line y2')}" stroke="#f2f2f2" stroke-width="0.12" stroke-linecap="round"/>`)
+    .map((l) => `<line x1="${assertFinite(l.x1, 'line x1')}" y1="${assertFinite(l.y1, 'line y1')}" x2="${assertFinite(l.x2, 'line x2')}" y2="${assertFinite(l.y2, 'line y2')}" stroke="#ffffff" stroke-width="0.12" stroke-linecap="square"/>`)
     .join('');
   const arcs = g.arcs
-    .map((a) => `<path d="${a.d}" fill="none" stroke="#f2f2f2" stroke-width="0.12" stroke-linecap="round"/>`)
+    .map((a) => `<path d="${a.d}" fill="none" stroke="#ffffff" stroke-width="0.12" stroke-linecap="square"/>`)
     .join('');
   const width = assertFinite(vb[2] * MAT_PX, 'width');
   const height = assertFinite(vb[3] * MAT_PX, 'height');

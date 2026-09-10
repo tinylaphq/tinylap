@@ -4,29 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Circuit 30 Planner</title>
-  <!-- Inline so the page makes no external requests at all. -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231b1b1b'/%3E%3Crect x='3' y='3' width='10' height='10' rx='3' fill='none' stroke='%23f2f2f2' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="vendor/palace-ui/palace.css">
   <link rel="stylesheet" href="css/app.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0a0a'/%3E%3Crect x='3' y='3' width='10' height='10' fill='none' stroke='%23ff2d9b' stroke-width='2'/%3E%3C/svg%3E">
 </head>
 <body>
-  <header>
-    <h1>Circuit 30 Planner</h1>
-    <nav>
-      <button type="button" id="btn-open">Open…</button>
-      <button type="button" id="btn-save">Save</button>
-      <button type="button" id="btn-presets">Presets…</button>
-      <button type="button" id="btn-room">Room…</button>
-    </nav>
+  <nav class="navbar">
+    <span class="navbar-brand">Circuit 30 Planner</span>
+    <div class="navbar-right">
+      <button type="button" class="btn btn-sm btn-outline" id="btn-room">Room</button>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-presets">Presets</button>
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-open">Open</button>
+      <button type="button" class="btn btn-sm btn-primary" id="btn-save">Save</button>
+    </div>
     <input type="file" id="open-input" accept=".html,text/html" hidden>
-  </header>
+  </nav>
 
   <aside id="palette" aria-label="Track pieces">
-    <h2>Pieces</h2>
+    <h2 class="h3">Pieces</h2>
     <ul id="palette-list"></ul>
-    <button type="button" id="btn-inventory">Edit inventory…</button>
+    <button type="button" class="btn btn-sm btn-outline btn-block" id="btn-inventory">Edit inventory</button>
+
+    <hr class="divider">
 
     <section id="shortcuts" aria-labelledby="shortcuts-title">
-      <h2 id="shortcuts-title">Controls</h2>
+      <h2 class="h3" id="shortcuts-title">Controls</h2>
       <dl>
         <dt>Drag from here</dt><dd>add a piece</dd>
         <dt><kbd>R</kbd></dt><dd>rotate</dd>
@@ -43,43 +48,54 @@
 
   <main>
     <svg id="canvas" role="application" aria-label="Track layout" tabindex="0"></svg>
-    <p id="status" role="status"></p>
+    <p id="status" class="status" role="status"></p>
   </main>
 
   <aside id="bom" aria-label="Bill of materials">
-    <h2>Materials</h2>
-    <p id="bom-warning" role="alert"></p>
+    <h2 class="h3">Materials</h2>
+    <p id="bom-warning" class="status status-warning" role="alert" hidden></p>
     <table id="bom-table">
       <thead><tr><th scope="col">Part</th><th scope="col">Owned</th><th scope="col">Used</th></tr></thead>
       <tbody></tbody>
     </table>
-    <dl id="metrics">
-      <dt>Size</dt><dd><output id="out-size">—</output></dd>
-      <dt>Lap</dt><dd><output id="out-lap">—</output></dd>
-      <dt>Mats</dt><dd><output id="out-mats">—</output></dd>
-    </dl>
-    <p id="recommendation"></p>
+
+    <hr class="divider">
+
+    <div class="stat-row" id="metrics">
+      <div><div class="stat" id="out-size">—</div><div class="stat-label">Size</div></div>
+      <div><div class="stat" id="out-lap">—</div><div class="stat-label">Lap</div></div>
+      <div><div class="stat" id="out-mats">—</div><div class="stat-label">Mats</div></div>
+    </div>
+
+    <p id="recommendation" class="status" role="status"></p>
   </aside>
 
   <dialog id="inventory-dialog" aria-labelledby="inventory-dialog-title">
     <h2 id="inventory-dialog-title">Edit inventory</h2>
+    <p class="subtitle">Which Kyosho kits do you own?</p>
     <form method="dialog" id="inventory-form"></form>
   </dialog>
+
   <dialog id="room-dialog" aria-labelledby="room-dialog-title">
     <h2 id="room-dialog-title">Room boundary</h2>
+    <p class="subtitle">The floor you have to fit the track into.</p>
     <form method="dialog" id="room-form">
-      <p><label>Width (m) <input type="number" name="w" step="0.3" min="0"></label></p>
-      <p><label>Depth (m) <input type="number" name="h" step="0.3" min="0"></label></p>
+      <label for="room-w">Width (m)</label>
+      <input type="number" id="room-w" name="w" step="0.3" min="0">
+      <label for="room-h">Depth (m)</label>
+      <input type="number" id="room-h" name="h" step="0.3" min="0">
       <menu>
-        <button value="clear">No boundary</button>
-        <button value="set">Set</button>
+        <button class="btn btn-outline" value="clear">No boundary</button>
+        <button class="btn btn-primary" value="set">Set</button>
       </menu>
     </form>
   </dialog>
+
   <dialog id="presets-dialog" aria-labelledby="presets-dialog-title">
     <h2 id="presets-dialog-title">Presets</h2>
+    <p class="subtitle">Known layouts, checked against your inventory.</p>
     <ul id="presets-list"></ul>
-    <form method="dialog"><button>Close</button></form>
+    <form method="dialog"><button class="btn btn-outline btn-block">Close</button></form>
   </dialog>
 
   <script type="module" src="js/app.js"></script>

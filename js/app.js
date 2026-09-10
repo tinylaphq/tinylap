@@ -67,9 +67,11 @@ function renderBom() {
   // two overlapping straights report matCount 3 but mats.square 4. Flag it
   // rather than presenting numbers known to be off.
   const overlapCount = findOverlaps(state.layout).length;
-  document.querySelector('#bom-warning').textContent = overlapCount > 0
+  const warning = document.querySelector('#bom-warning');
+  warning.textContent = overlapCount > 0
     ? `${overlapCount} overlapping mat${overlapCount === 1 ? '' : 's'} — these figures are unreliable until the overlap is fixed.`
     : '';
+  warning.hidden = overlapCount === 0;
 
   // I3: recommendKit returns null both when nothing is short AND when
   // something is short but no single kit clears it — those are opposite
@@ -77,16 +79,18 @@ function renderBom() {
   // to mean "you're fine".
   const short = rows.some((r) => r.short > 0);
   const kit = short ? recommendKit(rows) : null;
-  document.querySelector('#recommendation').textContent = !short
+  const rec = document.querySelector('#recommendation');
+  rec.textContent = !short
     ? 'Everything you need is in stock.'
     : kit
       ? `Short on pieces — ${kit.name} (${kit.id}) covers it.`
       : 'Short on pieces — no single kit covers it.';
+  rec.className = `status ${!short ? 'status-success' : kit ? 'status-info' : 'status-warning'}`;
 
   const { bbox, matCount, lapMm } = computeMetrics(state.layout);
-  document.querySelector('#out-size').value = bbox ? `${metres(bbox.w)} × ${metres(bbox.h)} m` : '—';
-  document.querySelector('#out-lap').value = lapMm ? `${(lapMm / 1000).toFixed(2)} m` : '—';
-  document.querySelector('#out-mats').value = String(matCount);
+  document.querySelector('#out-size').textContent = bbox ? `${metres(bbox.w)} × ${metres(bbox.h)}` : '—';
+  document.querySelector('#out-lap').textContent = lapMm ? `${(lapMm / 1000).toFixed(2)} m` : '—';
+  document.querySelector('#out-mats').textContent = String(matCount);
 }
 
 // Renders the status line: error / overlap / empty / open-ends /
@@ -101,6 +105,7 @@ function renderStatus() {
   // by the very next repaint.
   if (state.error) {
     status.textContent = state.error;
+    status.className = 'status status-error';
     return;
   }
   // I2: an overlapping layout is invalid, not merely "has open ends" — say
@@ -109,13 +114,16 @@ function renderStatus() {
   const overlapCount = findOverlaps(state.layout).length;
   if (overlapCount > 0) {
     status.textContent = `${overlapCount} overlapping mat${overlapCount === 1 ? '' : 's'} — layout invalid`;
+    status.className = 'status status-error';
     return;
   }
   const open = openPorts(state.layout).length;
+  const closed = isClosedCircuit(state.layout);
   status.textContent =
-    state.layout.pieces.length === 0 ? 'Empty — drag a piece from the left.'
-    : isClosedCircuit(state.layout) ? 'Closed circuit ✓'
+    state.layout.pieces.length === 0 ? 'Empty — drag a piece from the left'
+    : closed ? 'Closed circuit'
     : `${open} open end${open === 1 ? '' : 's'}`;
+  status.className = `status ${closed ? 'status-success' : ''}`.trim();
 }
 
 export function render() {
@@ -420,13 +428,14 @@ document.querySelector('#btn-inventory').addEventListener('click', () => {
   const form = document.querySelector('#inventory-form');
   form.replaceChildren(
     ...Object.entries(KITS).map(([id, kit]) => {
-      const p = document.createElement('p');
-      p.innerHTML = `<label>${kit.name} (${id})
-        <input type="number" name="${id}" min="0" step="1" value="${state.kits[id] ?? 0}"></label>`;
-      return p;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `<label for="kit-${id}">${kit.name} (${id})</label>
+        <input type="number" id="kit-${id}" name="${id}" min="0" step="1" value="${state.kits[id] ?? 0}">`;
+      return wrap;
     }),
     Object.assign(document.createElement('menu'), {
-      innerHTML: '<button value="save">Save</button><button value="cancel" formnovalidate>Cancel</button>',
+      innerHTML: '<button class="btn btn-outline" value="cancel" formnovalidate>Cancel</button>'
+        + '<button class="btn btn-primary" value="save">Save</button>',
     }),
   );
   inventoryDialog.showModal();
