@@ -167,3 +167,14 @@ test('closes() never rejects a tuple that buildLoop can actually build', () => {
     }
   }
 });
+
+test('deduplicating tuples before building loses no layouts', () => {
+  // The tuple-level canonical filter is an optimisation. It must produce
+  // exactly the same set of layouts as building everything and collapsing
+  // afterwards -- if it ever prunes a distinct shape, the suggestion list
+  // silently loses options and nothing else would notice.
+  const stock = stockFromKits({ '87033': 1 });
+  const fast = new Set(generateLayouts(stock, { maxSide: 6 }).results.map((r) => r.key));
+  const slow = new Set(generateLayouts(stock, { maxSide: 6, skipTupleDedup: true }).results.map((r) => r.key));
+  assert.deepEqual([...fast].sort(), [...slow].sort());
+});

@@ -302,20 +302,90 @@ function cornerTypesFor(stock) {
   return types;
 }
 
+// Rotate an array left by n (mirrors the string `rotate` helper above, for
+// side-length tuples).
+const rotateArr = (arr, n) => arr.slice(n).concat(arr.slice(0, n));
+
+// Every alternate `sides` array that pairs with this EXACT `signature`
+// string (not a rotation or mirror of it — the one generateLayouts is
+// actually iterating over) and describes the same physical loop. Other
+// equivalent pairs exist under a rotated or mirrored signature string, but
+// those are never tried as `signature` by generateLayouts, so they need no
+// entry here — nothing would ever duplicate them.
+//
+// Two families, each derived by tracing what "start the walk at a
+// different corner" and "walk the mirror image clockwise" actually do to
+// the (length, turn) legs — not assumed:
+//   - Rotation: (rotate(signature, k), rotate(sides, k)) for any k, kept
+//     only when that rotation of the signature string equals the
+//     signature itself (e.g. every k, for the fully-symmetric rectangle;
+//     only k=0 for a generic asymmetric outline).
+//   - Mirror: reflecting the shape and re-walking it clockwise reverses
+//     the leg order. Because a leg's length sits *before* its turn, a
+//     backward walk reaches the *previous* turn first, so the reversed
+//     legs are (rotate(reverse(signature), 1), reverseArray(sides)) — a
+//     plain reversal of sides, paired with the turn string reversed AND
+//     rotated one further step so each length re-matches the correct
+//     turn. That pair is then subject to the same rotation freedom.
+// Verified against buildLoop + canonicalLayoutKey directly (grouping real
+// build results by canonical key and checking every group has exactly one
+// tuple this function calls canonical) before trusting it algebraically —
+// two similar derivations in this area were wrong before this one.
+function equivalentSidesFor(signature, sides) {
+  const n = signature.length;
+  const candidates = [];
+  for (let k = 0; k < n; k++) {
+    if (rotate(signature, k) === signature) candidates.push(rotateArr(sides, k));
+  }
+  const mirroredSignature = rotate(reverse(signature), 1);
+  const mirroredSides = [...sides].reverse();
+  for (let k = 0; k < n; k++) {
+    if (rotate(mirroredSignature, k) === signature) candidates.push(rotateArr(mirroredSides, k));
+  }
+  return candidates;
+}
+
+const lexLess = (a, b) => {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+};
+
+// True when `sides` is the lexicographically smallest of every equivalent
+// representation sharing this `signature` string — the one tuple among its
+// rotation/mirror family that generateLayouts should actually build.
+// Skipping the rest is a pure performance optimisation: canonicalLayoutKey
+// still dedupes the final results either way (see `seen` below), so this
+// only changes how many times buildLoop runs, never what it's allowed to
+// find. `sides` itself is always among its own candidates (k=0 rotation),
+// so this never rejects every candidate.
+function isCanonicalTuple(signature, sides) {
+  for (const candidate of equivalentSidesFor(signature, sides)) {
+    if (lexLess(candidate, sides)) return false;
+  }
+  return true;
+}
+
 // Enumerate every buildable, affordable layout the given stock can pay for.
 // Walks each distinct outline (turnSignatures) and every side-length tuple
 // up to maxSide, arithmetically pre-filtering with closes() before paying
-// the cost of actually building a candidate with buildLoop. Every survivor
-// is still built from real pieces, validated internally by buildLoop, and
+// the cost of actually building a candidate with buildLoop, and skipping
+// any tuple that isn't the canonical representative of its own
+// rotation/mirror family (isCanonicalTuple) before that. Every survivor is
+// still built from real pieces, validated internally by buildLoop, and
 // checked against stock via billOfMaterials/diffStock — no mat, barrier or
 // area maths happens in this file.
 //
-// opts: { maxCorners = 10, maxSide = 12, budget = 20000, room = null }.
+// opts: { maxCorners = 10, maxSide = 12, budget = 20000, room = null,
+// skipTupleDedup = false }. `skipTupleDedup` disables the isCanonicalTuple
+// pre-filter — it exists purely so a test can compare the fast and slow
+// paths and prove the filter drops no distinct layout; leave it off.
 // Returns { results, examined, stopped }. `stopped` is true, and `examined`
 // reports how many candidates were checked, whenever the budget is hit —
 // so a caller can never mistake a truncated run for a complete one.
 export function generateLayouts(stock, opts = {}) {
-  const { maxCorners = 10, maxSide = 12, budget = 20000, room = null } = opts;
+  const { maxCorners = 10, maxSide = 12, budget = 20000, room = null, skipTupleDedup = false } = opts;
   const totalMats = stock.mats.square + stock.mats.quarterRound + stock.mats.arcLarge;
   // Each straight is 2 mats, so the straights alone cannot exceed this.
   const maxStraights = Math.floor(totalMats / 2);
@@ -326,7 +396,21 @@ export function generateLayouts(stock, opts = {}) {
   let stopped = false;
 
   for (const cornerType of cornerTypesFor(stock)) {
-    for (let corners = 4; corners <= maxCorners; corners += 2) {
+    // Every corner costs exactly one of each mat kind the corner piece
+    // itself uses (e.g. one quarter-round per corner for cornerR30), no
+    // matter how long the sides are. A corner count needing more of any
+    // such mat than the stock has is unaffordable before a single tuple is
+    // tried — reading that cost from computeMetrics (rather than the
+    // piece's own mats table, which this file must not reach into
+    // directly) keeps this in step with the engine's own accounting. This
+    // is the same category of bound as maxStraights above: inventory
+    // arithmetic, not mat/area maths recomputed from geometry.
+    const perCorner = computeMetrics(createLayout({ pieces: [{ type: cornerType, x: 0, y: 0, rot: 0 }] })).mats;
+    let maxAffordableCorners = maxCorners;
+    for (const [kind, needed] of Object.entries(perCorner)) {
+      if (needed > 0) maxAffordableCorners = Math.min(maxAffordableCorners, Math.floor((stock.mats[kind] ?? 0) / needed));
+    }
+    for (let corners = 4; corners <= maxAffordableCorners; corners += 2) {
       for (const signature of turnSignatures(corners)) {
         const sides = new Array(corners).fill(0);
 
@@ -334,6 +418,7 @@ export function generateLayouts(stock, opts = {}) {
           if (stopped) return;
           if (i === corners) {
             if (!closes(signature, sides, cornerType)) return;
+            if (!skipTupleDedup && !isCanonicalTuple(signature, sides)) return;
             if (++examined > budget) { stopped = true; return; }
             const pieces = buildLoop({ signature, sides: [...sides], cornerType });
             if (!pieces) return;
