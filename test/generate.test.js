@@ -186,6 +186,52 @@ test('hitting the budget is reported, never silent', () => {
   assert.ok(out.examined >= 200);
 });
 
+// generateLayouts memoises by stock CONTENTS, not object identity (see the
+// cache comment in generate.js) — stockFromKits builds a fresh object every
+// call, so a cache keyed on identity would never hit for a real repeat open
+// of the presets dialog.
+test('the memo treats equal-but-not-identical stock objects as the same call', () => {
+  const a = stockFromKits({ '87033': 1 });
+  const b = stockFromKits({ '87033': 1 });
+  assert.notEqual(a, b, 'fixture is only meaningful if the two stocks are distinct objects');
+  const keysA = generateLayouts(a, { maxSide: 8 }).results.map((r) => r.key).sort();
+  const keysB = generateLayouts(b, { maxSide: 8 }).results.map((r) => r.key).sort();
+  assert.deepEqual(keysB, keysA);
+});
+
+// This is the half that actually matters: a cache bug here would show the
+// user suggestions for an inventory they no longer have. It is not enough
+// for a different stock to return a different-SIZED result — membership can
+// diverge while a count coincidentally matches (that has already bitten
+// this project once) — so this checks actual key membership, and then
+// specifically re-queries the SMALLER stock after the cache has already been
+// warmed by the LARGER one, to prove the smaller query doesn't leak the
+// larger one's (cached) answer.
+test('the memo never serves one stock\'s results for a different stock', () => {
+  const rich = stockFromKits({ '87033': 2 });
+  const poor = stockFromKits({ '87033': 1 });
+
+  // Warm the cache with the richer stock first.
+  const richKeys = new Set(generateLayouts(rich, { maxSide: 8 }).results.map((r) => r.key));
+
+  // Now query the poorer stock. If the cache ignored stock contents this
+  // could wrongly hand back the richer stock's (already-cached) answer.
+  const poorResults = generateLayouts(poor, { maxSide: 8 }).results;
+  const poorKeys = new Set(poorResults.map((r) => r.key));
+
+  assert.ok(richKeys.size > 0 && poorKeys.size > 0, 'fixture is only meaningful if both sides produce something');
+  assert.notDeepEqual([...poorKeys].sort(), [...richKeys].sort());
+  assert.ok([...richKeys].some((k) => !poorKeys.has(k)), 'two kits must unlock at least one layout one kit cannot build');
+
+  // Independently verify every "poor" result really is buildable from the
+  // poor stock — not merely different from rich's set by accident, but
+  // actually correct for the stock just queried.
+  for (const r of poorResults) {
+    const short = diffStock(billOfMaterials(createLayout({ pieces: r.pieces })), poor).filter((row) => row.short > 0);
+    assert.deepEqual(short, [], `${r.key} is not actually buildable from the poorer stock just queried`);
+  }
+});
+
 test('closes() never rejects a tuple that buildLoop can actually build', () => {
   // The pre-filter is a performance optimisation; it must never lose a
   // layout. This exhaustively cross-checks it against the builder for

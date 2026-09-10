@@ -5,7 +5,7 @@ import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from '.
 import { exportHtml, importHtml } from './storage.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
-import { generateLayouts, groupByCharacter, outOfReach, outlineName } from './generate.js';
+import { generateLayouts, groupByCharacter, outOfReach, outlineName, hasCachedLayouts } from './generate.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -541,9 +541,15 @@ function presetListItem(preset, stock) {
 }
 
 document.querySelector('#btn-presets').addEventListener('click', () => {
+  // The preset gallery is cheap and renders synchronously; the generated
+  // suggestions below are not, so showModal() happens FIRST and
+  // renderSuggestions (async) paints a skeleton and computes after — see
+  // its own comment. Getting this order backwards is exactly the bug being
+  // fixed here: computing before showModal() freezes the whole UI with no
+  // dialog visible at all for as long as generation takes.
   renderPresetsList();
-  renderSuggestions();
   presetsDialog.showModal();
+  renderSuggestions();
 });
 
 document.querySelector('#presets-list').addEventListener('click', (e) => {
@@ -579,11 +585,47 @@ function suggestionPool(characters) {
   return pool;
 }
 
-function renderSuggestions() {
+// Bumped on every renderSuggestions call, and checked before any of it
+// writes to the DOM. generateLayouts is synchronous and can run for
+// seconds on a cold cache, so this function awaits a couple of yields
+// first (to let the skeleton actually paint — see below) — and the dialog
+// can be closed and reopened, or the inventory can change, during that
+// wait. Whichever call is the last to start is the only one allowed to
+// write; an earlier, still-pending call that resumes afterward must find
+// itself superseded and bail out instead of overwriting newer results with
+// stale ones.
+let suggestionsRun = 0;
+
+async function renderSuggestions() {
   const stock = stockFromKits(state.kits);
-  const generated = generateLayouts(stock, { room: state.layout.room });
+  const opts = { room: state.layout.room };
+  const run = ++suggestionsRun;
+  const superseded = () => run !== suggestionsRun;
+
+  // Only pay for a skeleton when generateLayouts is actually about to do
+  // real work. hasCachedLayouts is a pure lookup — it costs nothing and
+  // runs no part of the enumeration — so checking it first is what lets a
+  // warm reopen skip straight to real content instead of flashing a
+  // placeholder for one frame and then replacing it, which would look
+  // broken rather than fast.
+  if (!hasCachedLayouts(stock, opts)) {
+    renderSuggestionsSkeleton();
+    // Yield to the browser so the skeleton just painted actually gets
+    // presented before the computation below blocks the main thread:
+    // one animation frame for layout/paint of what was just queued, then
+    // a task-boundary yield (setTimeout) so that frame is flushed rather
+    // than coalesced with the synchronous work that follows in the same
+    // microtask/frame.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (superseded()) return;
+  }
+
+  const generated = generateLayouts(stock, opts);
   const { results, stopped } = generated;
   const characters = groupByCharacter(results);
+  if (superseded()) return;
+
   state.suggestions = { pool: suggestionPool(characters), cursor: 0, stopped };
 
   // `results.length` is a CAPPED count, not a total: generateLayouts keeps
@@ -602,8 +644,58 @@ function renderSuggestions() {
       + (cappedCharacters > 0 ? ' (showing up to 50 sizes per shape)' : '')
       + (stopped ? ' — search stopped early, there may be more' : '');
 
+  document.querySelector('#suggestions-list').removeAttribute('aria-busy');
+  // Deliberately NOT passed `opts` here: renderOutOfReach has always called
+  // outOfReach(stock) with no options (room is never applied to the
+  // out-of-reach list, only to the suggestions above), and changing that
+  // now would change what "out of reach" reports under a room boundary —
+  // untested territory this task's profiling never measured. Left as-is;
+  // this means outOfReach's own internal owned-stock enumeration only
+  // shares generateCache with the call above when state.layout.room is
+  // null, which is the common case and the one the reported 5s/12.2s
+  // numbers were measured against. A room boundary being set is a
+  // pre-existing, unrelated case where this duplicate work still happens.
   renderOutOfReach(stock);
   renderSuggestionPage();
+}
+
+// Five placeholder rows shaped like a real suggestion card — not a spinner
+// or a "Loading…" line, per the design this dialog was given. Painted
+// immediately (before the compute below ever starts) and swapped out for
+// the real rows in renderSuggestions once results land. #suggestions-list
+// carries aria-busy while these are up; the rows themselves are
+// aria-hidden, since they carry no information — a screen reader should
+// hear the eventual real list, not five meaningless placeholders.
+function renderSuggestionsSkeleton() {
+  const list = document.querySelector('#suggestions-list');
+  list.setAttribute('aria-busy', 'true');
+  list.replaceChildren(...Array.from({ length: 5 }, suggestionSkeletonItem));
+  // Clear anything left over from a previous open rather than leaving it
+  // visible alongside/underneath the skeleton.
+  document.querySelector('#suggestions-summary').textContent = '';
+  delete document.querySelector('#suggestions-summary').dataset.page;
+  document.querySelector('#btn-more-suggestions').hidden = true;
+  document.querySelector('#out-of-reach').replaceChildren();
+}
+
+// One skeleton row. Its box model is the real .preset-card/.preset-thumb/
+// .preset-info rules (css/app.css, ~line 211) reused as-is via the
+// `preset-card--skeleton` / `preset-thumb--skeleton` modifiers — the same
+// flex layout, gap, padding, border and 4rem thumb footprint a real
+// suggestion row gets — so nothing jumps when suggestionListItem's real
+// markup replaces this. Two bars of different widths stand in for
+// .preset-name and .preset-source so it reads as a card, not a grey slab.
+function suggestionSkeletonItem() {
+  const li = document.createElement('li');
+  li.setAttribute('aria-hidden', 'true');
+  li.innerHTML = `<div class="preset-card preset-card--skeleton">
+      <span class="preset-thumb preset-thumb--skeleton"></span>
+      <span class="preset-info">
+        <span class="skeleton-bar skeleton-bar--name"></span>
+        <span class="skeleton-bar skeleton-bar--source"></span>
+      </span>
+    </div>`;
+  return li;
 }
 
 function renderSuggestionPage() {

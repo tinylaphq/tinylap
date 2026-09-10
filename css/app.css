@@ -180,6 +180,11 @@ dialog {
   background: var(--p-surface);
   border: var(--p-border-width) solid var(--p-text);
   box-shadow: var(--p-shadow-lg) var(--p-accent-2);
+  /* palace-ui's `*, *::before, *::after { margin: 0 }` reset (palace.css:94)
+     wipes out the UA stylesheet's `dialog { margin: auto }` — the rule
+     browsers use to centre a modal <dialog>. Without restoring it here every
+     dialog pins to the top-left corner instead of centring. Not redundant. */
+  margin: auto;
 }
 
 dialog::backdrop { background: var(--p-overlay); }
@@ -231,6 +236,54 @@ dialog menu .btn { flex: 1; }
 .preset-badge--ok { color: var(--p-accent-2); }
 .preset-badge--bad { color: var(--p-error); }
 .preset-broken { color: var(--p-error); font-size: 12px; }
+
+/* Skeleton rows for #suggestions-list while generateLayouts computes (see
+ * js/app.js's renderSuggestionsSkeleton). Not a spinner or "Loading…" text
+ * — five placeholders shaped like a real suggestion card, per the square
+ * thumb + two text-bar layout above: .preset-card/.preset-thumb/
+ * .preset-info are reused as-is for the box model (flex, gap, padding,
+ * border, the 4rem thumb footprint) so nothing jumps when the real
+ * markup (suggestionListItem) replaces these. Only what a skeleton needs
+ * is added: a fill instead of an <svg>, two bars instead of text, and a
+ * non-interactive modifier — these rows are not clickable yet. */
+.preset-card--skeleton { cursor: default; }
+.preset-card--skeleton:hover { transform: none; box-shadow: none; }
+
+.preset-thumb--skeleton { height: 4rem; } /* square: matches .preset-thumb's 4rem width above */
+
+.preset-thumb--skeleton, .skeleton-bar {
+  position: relative;
+  overflow: hidden;
+  background: var(--p-hover-bg);
+}
+
+/* .preset-name is 12px, .preset-source 11px (both above) — these sit at
+ * roughly those heights so the placeholder reads as text lines, not a
+ * slab. Different widths (60%/40%) are what makes it read as a card. */
+.skeleton-bar--name { width: 60%; height: 12px; }
+.skeleton-bar--source { width: 40%; height: 11px; }
+
+.preset-thumb--skeleton::after, .skeleton-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--p-disabled-bg), transparent);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* palace-ui already forces animation-duration/iteration-count to ~0 for
+ * every element under reduced motion (vendor/palace-ui/palace.css:994,
+ * `*, *::before, *::after`), which alone collapses the shimmer to a single
+ * near-instant pass — but that relies on inheriting a global rule silently.
+ * This makes the fallback explicit at the point of use, per house style. */
+@media (prefers-reduced-motion: reduce) {
+  .preset-thumb--skeleton::after, .skeleton-bar::after { animation: none; }
+}
 
 #suggestions-list { list-style: none; padding: 0; margin: 0 0 var(--p-space-sm); }
 #suggestions-list li { margin-bottom: var(--p-space-sm); }

@@ -375,6 +375,50 @@ function isCanonicalTuple(signature, sides) {
   return true;
 }
 
+// Bounded memo of generateLayouts, keyed by stock contents plus the options
+// that affect its result — not by object identity. stockFromKits and
+// abundantStock (below) each build a fresh object on every call, so keying
+// on identity would miss almost every real repeat call; the inventory
+// itself rarely changes between dialog opens, and the abundant stock is
+// byte-identical on every call (see abundantStock's own comment), so a
+// content key turns both into cache hits. JSON.stringify is a stable key
+// here specifically because every stock object in this codebase is built by
+// emptyStock() (fixed key order via MAT_PARTS/BARRIER_PARTS) plus in-place
+// value writes — callers never add or delete a key, so two stocks with
+// equal contents always serialize identically. opts is resolved to its
+// defaults before keying, so a caller that omits an option and one that
+// passes it explicitly at the default hit the same entry.
+//
+// Evicted oldest-first once GENERATE_CACHE_LIMIT entries exist. The
+// inventory changes rarely enough that a handful of entries covers a whole
+// session (current owned stock/opts + the one abundant configuration
+// outOfReach uses); an unbounded cache would otherwise grow with every
+// distinct (stock, opts) pair ever tried, including in tests.
+const GENERATE_CACHE_LIMIT = 8;
+const generateCache = new Map();
+
+function resolveGenerateOpts(opts) {
+  const {
+    maxCorners = 8, maxSide = 12, budget = 20000, room = null,
+    skipTupleDedup = false, maxVariantsPerCharacter = 50, skipCornerCountStop = false,
+  } = opts;
+  return { maxCorners, maxSide, budget, room, skipTupleDedup, maxVariantsPerCharacter, skipCornerCountStop };
+}
+
+function generateCacheKey(stock, resolvedOpts) {
+  return JSON.stringify([stock, resolvedOpts]);
+}
+
+// True when generateLayouts(stock, opts) is already cached and would return
+// without doing any real work. Exists so a caller (the presets dialog) can
+// decide whether to show a loading skeleton BEFORE paying for the
+// computation — timing the call itself would mean a cold call already ran
+// to completion by the time the caller learned it was slow, and the
+// skeleton would never get a chance to paint. Never mutates the cache.
+export function hasCachedLayouts(stock, opts = {}) {
+  return generateCache.has(generateCacheKey(stock, resolveGenerateOpts(opts)));
+}
+
 // Enumerate every buildable, affordable layout the given stock can pay for.
 // Walks each distinct outline (turnSignatures) and every side-length tuple
 // up to maxSide, arithmetically pre-filtering with closes() before paying
@@ -442,10 +486,14 @@ function isCanonicalTuple(signature, sides) {
 // has no cornerType suffix only because there is currently just the one
 // to report.)
 export function generateLayouts(stock, opts = {}) {
+  const resolvedOpts = resolveGenerateOpts(opts);
   const {
-    maxCorners = 8, maxSide = 12, budget = 20000, room = null,
-    skipTupleDedup = false, maxVariantsPerCharacter = 50, skipCornerCountStop = false,
-  } = opts;
+    maxCorners, maxSide, budget, room,
+    skipTupleDedup, maxVariantsPerCharacter, skipCornerCountStop,
+  } = resolvedOpts;
+  const cacheKey = generateCacheKey(stock, resolvedOpts);
+  if (generateCache.has(cacheKey)) return generateCache.get(cacheKey);
+
   const totalMats = stock.mats.square + stock.mats.quarterRound + stock.mats.arcLarge;
   // Each straight is 2 mats, so the straights alone cannot exceed this.
   const maxStraights = Math.floor(totalMats / 2);
@@ -511,6 +559,25 @@ export function generateLayouts(stock, opts = {}) {
             // than this file computing occupancy geometry itself (the "no
             // parallel geometry maths" rule). Checked first: unlike the
             // infield check below, it needs no flood fill.
+            //
+            // Investigated for Task 12 (perf): billOfMaterials above already
+            // calls computeBarriers -> boundaryEdges, which (since Task 11,
+            // commit 51ceffe) walls unjoined contacts too — so this call
+            // redoes occupancy()/matchPorts() a second time over the same
+            // layout. It was left as its own call rather than merged: this
+            // file is only allowed to read model.js's exported surface (the
+            // "no parallel geometry maths outside js/model.js" rule), and
+            // boundaryEdges returns one merged Set of walled edges with no
+            // way to tell, from here, which of those edges are outline and
+            // which are unjoined contacts without re-deriving occupancy
+            // ourselves — exactly the geometry maths this file must not do.
+            // Answering that would need a new signal exported from model.js
+            // (e.g. computeBarriers exposing a contacts flag), which is a
+            // model.js change outside this task's file list. The saving is
+            // small besides: this whole check measured at ~76µs of the
+            // ~700µs a candidate costs. Left alone — correctness (the exact
+            // 21-of-41-at-one-kit accept/reject behaviour, pinned in
+            // test/generate.test.js) outranks it.
             if (unjoinedContacts(layout).length > 0) return;
             // Port-closed and overlap-free is not enough: a solid block of
             // mats with a wall round the outside satisfies both while
@@ -557,13 +624,18 @@ export function generateLayouts(stock, opts = {}) {
     }
   }
 
-  return {
+  const output = {
     results,
     examined,
     stopped,
     cappedCharacters: cappedCharacterKeys.size,
     unexploredCorners: [...unexploredCornersSet].sort((a, b) => a - b),
   };
+  generateCache.set(cacheKey, output);
+  if (generateCache.size > GENERATE_CACHE_LIMIT) {
+    generateCache.delete(generateCache.keys().next().value);
+  }
+  return output;
 }
 
 // The single place the corner-type-to-feel mapping lives. cornerR60 is
@@ -663,10 +735,21 @@ function abundantStock() {
 // constructible" pass would otherwise read to the caller as "nothing else
 // is out of reach".
 export function outOfReach(stock, opts = {}) {
+  // The owned run stays on the caller's own opts (not a copy) so that a
+  // caller who already called generateLayouts(stock, opts) directly for the
+  // same reason hits generateCache here instead of paying for the same
+  // enumeration twice.
   const mine = generateLayouts(stock, opts);
   const reachable = new Set(groupByCharacter(mine.results).map((c) => c.key));
 
-  const everything = generateLayouts(abundantStock(), opts);
+  // The abundant run is forced to maxSide: 8 regardless of the caller's
+  // opts — it names which CHARACTERS (outlines) exist at all, not which
+  // sizes, and 8 finds the same six characters as 12 does (verified: at 6 it
+  // loses "8-corner shape 1"; at 12 it finds nothing extra). That cuts this
+  // call from ~4.3s to ~0.9s at two starter kits. Every other opt is still
+  // taken from the caller (maxCorners, budget, etc. all still matter to
+  // which characters even get explored).
+  const everything = generateLayouts(abundantStock(), { ...opts, maxSide: 8 });
 
   const blocked = [];
 
