@@ -122,15 +122,23 @@ test('four corners packed solid have curves but no caps', () => {
 // provisional piece (spec §13.1), and the Large Corner kit (87033-02) is
 // exactly the purchase this app's recommendation exists to advise on, so
 // getting computeBarriers right for it matters more than for any other
-// single piece. Verified headlessly against the model before asserting
-// (see final-fix-report.md): a lone R60 corner claims two arcLarge edges
-// per side (counts.curveLarge += 2 per wall, per computeBarriers) at its
-// one arcLarge wall, one concave cap at its inner vertex, and its
-// remaining four boundary edges as plain straights.
-test('a lone R60 corner counts two large-curve halves, one cap, four straights', () => {
+// single piece. R60 is the provisional piece (spec 13.1) and the Large
+// Corner kit is exactly the purchase this app advises, so it needs real
+// coverage.
+//
+// The zero-cap assertion is the load-bearing one. The large corner sweeps
+// the INSIDE of the turn: its two shaped mats flank the empty infield cell
+// and their cut corners form one continuous arc around it, leaving no
+// sharp apex to close. That is corroborated by the kit contents —
+// 87033-02 ships two shaped mats and two curve halves per corner and *no
+// corner caps at all*, which it would have to if the inner corner were a
+// capped apex. An earlier model put the arc on the outside and needed a
+// cap borrowed from the base set; if this assertion ever goes back to 1,
+// the geometry has regressed to that reading.
+test('a lone R60 corner sweeps its inside: two large-curve halves, no cap', () => {
   const l = createLayout({ pieces: [{ type: 'cornerR60', x: 0, y: 0, rot: 0 }] });
   const { counts } = computeBarriers(l);
-  assert.deepEqual(counts, { straight: 4, curve: 0, curveLarge: 2, cornerCap: 1 });
+  assert.deepEqual(counts, { straight: 6, curve: 0, curveLarge: 2, cornerCap: 0 });
 });
 
 // I6: the arc-skip branch (computeBarriers's `if (!claimed.every(...)) continue;`)

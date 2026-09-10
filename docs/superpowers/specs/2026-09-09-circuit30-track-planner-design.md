@@ -341,27 +341,41 @@ test with `node:test` and zero dependencies:
 
 ## 13. Provisional decisions and open questions
 
-### 13.1 Wide corner footprint — provisional
+### 13.1 Wide corner geometry — corrected
 
-The manual drawings establish the wide corner's arc spans two mats (R60) and that the
-kit supplies two shaped mats, one plain mat and two 45° barrier halves per corner. They
-do not resolve its bounding box; the plan renders are too low-resolution to count grid
-cells reliably.
+**The large corner sweeps the inside of the turn, not the outside.** Its two
+shaped mats flank the empty infield cell and their cut corners form one
+continuous arc around it; the outer corner stays square. `cornerR60` occupies a
+3 x 3 block with the inner cell empty (8 mats: 6 square + 2 shaped) and derives
+2 large curve halves, 6 straights and **no corner caps**.
 
-**Decision for this version:** `cornerR60` occupies a **3 × 3 block with the inner
-corner cell empty — eight mats**: two large-arc mats from the kit and six plain. The
-outer wall is an R60 arc swept across those two arc mats by the kit's two 45° barrier
-halves. The inside stays a sharp apex closed with a base-set corner cap, because a
-concave corner cannot be rounded by cutting a mat (§5).
+This was originally modelled the other way round — a large-radius arc on the
+*outer* wall with a sharp inner apex closed by a cap — which was wrong. The
+error was caught by the owner looking at the rendered piece against the real
+product, and confirmed from a photograph of an assembled corner.
 
-This reconciles with the kit contents: it ships three mats and two barrier halves per
-corner, so one plain mat plus the two arc mats come from the kit and the remaining five
-plain mats, the cap and the straights come from a base set. It also explains why the kit
-contains no caps and no straight barriers at all.
+Two pieces of evidence settle it:
 
-This is isolated to one object in `geometry.js`. Confirm by measuring a physical piece,
-or from a higher-resolution official layout sheet, before the BOM is used to justify
-buying a Large Corner kit.
+- **The kit ships no corner caps.** A cap exists to close a sharp inner apex.
+  87033-02 contains 4 plain mats, 8 shaped mats and 8 curve halves — and not a
+  single cap. Under the old model each corner needed a cap borrowed from the
+  base set to close the apex its outer arc left behind. Under the corrected
+  model no cap is required anywhere, which is why none is supplied.
+- **The two shaped mats are mirror images.** Two mirrored arcs joined end to
+  end make an S, not a quarter turn, so they cannot be two halves of one outer
+  arc as first assumed. They are the two mats either side of the infield cell,
+  each contributing half of the sweep around it.
+
+The 87031-02 assembly diagram was misread on the first pass: its exploded view
+shows the two curve halves offset above the mats before assembly, which reads
+as two parallel walls. They are one arc.
+
+No manual exists for 87033-02 — Kyosho publishes instruction sheets only for
+the older 87031 series — so the printed figures cannot resolve this. The
+physical piece is the authority.
+
+`test/model.test.js` pins the zero-cap count; if it ever returns to 1 the
+geometry has regressed to the old reading.
 
 ### 13.2 Reconciling the stock L against the 87033 contents
 
