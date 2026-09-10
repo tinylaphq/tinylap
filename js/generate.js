@@ -10,6 +10,9 @@
 // "no parallel geometry maths" constraint and the parent spec's section 13.2
 // for what happens when that rule is broken.
 
+import { ROTATIONS, placedCells, placedPorts } from './geometry.js';
+import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey } from './model.js';
+
 // Rotate a string left by n.
 const rotate = (s, n) => s.slice(n) + s.slice(0, n);
 
@@ -88,9 +91,6 @@ export function outlineName(signature) {
   return `${canonical.length}-corner shape ${index + 1}`;
 }
 
-import { ROTATIONS, placedPorts } from './geometry.js';
-import { createLayout, isClosedCircuit, findOverlaps, openPorts, placeAgainst } from './model.js';
-
 // Turn tables keyed by the direction currently being walked. Also used by
 // Task 4 — keep this the single copy so the two never drift apart.
 export const RIGHT_OF = { N: 'E', E: 'S', S: 'W', W: 'N' };
@@ -111,16 +111,25 @@ export const LEFT_OF = { N: 'W', W: 'S', S: 'E', E: 'N' };
 // just connected") is what lets a corner choose a right turn over a left
 // one when both are geometrically non-overlapping.
 //
-// Returns { pieces, tip } or null if no rotation both connects and exits
-// the right way without overlapping the chain so far.
-function append(pieces, tip, type, exitDir) {
+// `occupied` is a Set of cellKey strings covering every cell placed so far
+// — maintained by the caller across the whole chain rather than recomputed
+// here, so a trial only needs to check the *new* piece's own cells against
+// it instead of re-scanning the whole chain's occupancy from scratch. That
+// keeps a P-piece loop O(P) instead of O(P^2).
+//
+// Returns { pieces, occupied, tip } or null if no rotation both connects
+// and exits the right way without overlapping the chain so far.
+function append(pieces, occupied, tip, type, exitDir) {
   for (const rot of ROTATIONS) {
     const placed = placeAgainst(tip, type, rot);
     if (!placed) continue;
-    const grown = [...pieces, placed];
-    if (findOverlaps(createLayout({ pieces: grown })).length > 0) continue;
+    const cells = placedCells(placed);
+    if (cells.some((c) => occupied.has(cellKey(c)))) continue;
     const newTip = placedPorts(placed).find((p) => p.dir === exitDir);
-    if (newTip) return { pieces: grown, tip: newTip };
+    if (!newTip) continue;
+    const nextOccupied = new Set(occupied);
+    for (const c of cells) nextOccupied.add(cellKey(c));
+    return { pieces: [...pieces, placed], occupied: nextOccupied, tip: newTip };
   }
   return null;
 }
@@ -132,28 +141,29 @@ function append(pieces, tip, type, exitDir) {
 export function buildLoop({ signature, sides, cornerType = 'cornerR30' }) {
   if (sides.length !== signature.length) return null;
 
-  const pieces0 = [{ type: cornerType, x: 0, y: 0, rot: 0 }];
+  const first = { type: cornerType, x: 0, y: 0, rot: 0 };
+  let pieces = [first];
+  let occupied = new Set(placedCells(first).map(cellKey));
   // A single piece has two open ports and, with nothing else placed yet,
   // no ambiguity about which ports exist — but which of the two becomes
   // the starting tip is still a deliberate, consistent choice (the first
   // one openPorts reports), not a guess re-made on every later step.
-  let tip = openPorts(createLayout({ pieces: pieces0 })).map((o) => o.port)[0];
-  let pieces = pieces0;
+  let tip = openPorts(createLayout({ pieces })).map((o) => o.port)[0];
 
   for (let i = 0; i < signature.length; i++) {
     for (let s = 0; s < sides[i]; s++) {
-      const grown = append(pieces, tip, 'straight', tip.dir);
+      const grown = append(pieces, occupied, tip, 'straight', tip.dir);
       if (!grown) return null;
-      ({ pieces, tip } = grown);
+      ({ pieces, occupied, tip } = grown);
     }
     if (i === signature.length - 1) break; // the first piece is the last corner
     const exitDir = signature[i] === 'R' ? RIGHT_OF[tip.dir] : LEFT_OF[tip.dir];
-    const grown = append(pieces, tip, cornerType, exitDir);
+    const grown = append(pieces, occupied, tip, cornerType, exitDir);
     if (!grown) return null;
-    ({ pieces, tip } = grown);
+    ({ pieces, occupied, tip } = grown);
   }
 
-  const layout = createLayout({ pieces });
-  if (findOverlaps(layout).length > 0) return null;
-  return isClosedCircuit(layout) ? pieces : null;
+  // isClosedCircuit already checks overlaps internally (and returns false
+  // on them), so no separate findOverlaps scan is needed here.
+  return isClosedCircuit(createLayout({ pieces })) ? pieces : null;
 }

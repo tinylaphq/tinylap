@@ -67,3 +67,16 @@ test('zero-length sides are allowed: four corners butted together close', () => 
   assert.ok(pieces);
   assert.equal(occupiedSet(createLayout({ pieces })).size, 16);
 });
+
+test('an L outline (with its one left turn) closes', () => {
+  const pieces = buildLoop({
+    signature: turnSignatures(6)[0],
+    sides: [0, 0, 0, 3, 2, 1],
+    cornerType: 'cornerR30',
+  });
+  assert.ok(pieces, 'expected a closed loop');
+  const l = createLayout({ pieces });
+  assert.deepEqual(findOverlaps(l), []);
+  assert.equal(isClosedCircuit(l), true);
+  assert.equal(occupiedSet(l).size, 36);
+});
