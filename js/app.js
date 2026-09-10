@@ -667,7 +667,10 @@ function renderOutOfReach(stock) {
   host.innerHTML = `<hr class="divider"><h3 class="h3">Out of reach</h3><dl id="out-of-reach-list">`
     + lines.map((b) => `<dt>${b.name}${b.feel === 'sweeping' ? ', sweeping' : ''}</dt>`
       + `<dd>${b.reason === 'stock'
-          ? `needs ${b.missing.short} more ${b.missing.label.toLowerCase()}`
+          // "needs 2 more quarter-round mat" reads wrong, and naive
+          // pluralisation would give "joint as" for the Joint A/B labels.
+          // Naming the part and stating the shortfall sidesteps both.
+          ? `${b.missing.label}: ${b.missing.short} short`
           : 'not possible with these pieces, whatever you buy'}</dd>`).join('')
     + `</dl>`
     + (stopped ? `<p class="status">Search stopped early — there may be more.</p>` : '');
