@@ -432,11 +432,15 @@ function isCanonicalTuple(signature, sides) {
 // (signature, cornerType) characters hit `maxVariantsPerCharacter` —
 // silence about that is exactly what would misrepresent a capped run as
 // exhaustive, so it's always reported, never just implied by `stopped`.
-// `unexploredCorners` names the corner counts (per cornerType) that the
-// stock could afford by mat count alone but that `maxCorners` kept the
-// search from ever trying — as opposed to corner counts excluded because
-// the stock genuinely cannot pay for them, which are not "unexplored" in
-// this sense, just impossible regardless of `maxCorners`.
+// `unexploredCorners` names the corner counts that the stock could afford
+// by mat count alone but that `maxCorners` kept the search from ever
+// trying — as opposed to corner counts excluded because the stock
+// genuinely cannot pay for them, which are not "unexplored" in this
+// sense, just impossible regardless of `maxCorners`. (These counts are
+// for cornerR30, the only corner type the outer loop below ever tries —
+// see cornerTypesFor above for why cornerR60 is excluded. The field name
+// has no cornerType suffix only because there is currently just the one
+// to report.)
 export function generateLayouts(stock, opts = {}) {
   const {
     maxCorners = 8, maxSide = 12, budget = 20000, room = null,

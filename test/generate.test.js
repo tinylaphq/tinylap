@@ -199,17 +199,27 @@ test('stopping corner-count climbs early loses no layouts', () => {
   // tuple-dedup optimisation: run it against the unoptimised search and
   // require an identical set of layout keys.
   //
-  // A tiny room (4x4) is what makes this fast AND meaningful: two starter
-  // sets afford up to 12 corners by mat count alone, but nothing bigger
-  // than the minimal 2x2 rectangle fits a 4x4 room, so corners=6 cleanly
-  // finds zero results and corners=8/10/12 should never be tried. That
-  // gives the two paths genuinely different amounts of work (examined 7
-  // vs 712 in manual measurement) rather than the trivial case of the
-  // stop never engaging -- while still finishing in milliseconds, unlike
-  // proving the equivalent at full scale (maxSide 10, no room), which
-  // took over ten seconds for no more confidence in the result.
+  // This has to satisfy two things at once, or it proves nothing:
+  //  1. More than one corner count must actually contribute results.
+  //     Otherwise a stop firing anywhere at or after the first productive
+  //     count -- whether for the right reason (a later count truly empty)
+  //     or a wrong one (e.g. stopping unconditionally after any completed
+  //     count) -- yields the same result set, and the key-set assertion
+  //     below could not tell a correct stop from a broken one.
+  //  2. A later count must genuinely be empty, so the real stop actually
+  //     fires and skips real work -- otherwise the `examined` assertion
+  //     (which is what proves the optimisation engages at all, as opposed
+  //     to both runs coincidentally doing the same thing) would fail even
+  //     against correct code.
+  // Two starter sets afford up to 12 corners by mat count, and a 7x7 room
+  // is small enough that nothing past corners=6 ever fits, while both
+  // corners=4 and corners=6 do produce results (6 and 1 respectively,
+  // measured). So corners=8 cleanly finds zero and the real stop skips
+  // corners=10 for real (examined 127 vs 712, unoptimised, in manual
+  // measurement) -- while a stop that wrongly breaks after corners=4
+  // would lose the single corners=6 result, which this test would catch.
   const stock = stockFromKits({ '87033': 2 });
-  const opts = { maxSide: 2, maxCorners: 10, room: { w: 4, h: 4 } };
+  const opts = { maxSide: 2, maxCorners: 10, room: { w: 7, h: 7 } };
   const withStop = generateLayouts(stock, opts);
   const withoutStop = generateLayouts(stock, { ...opts, skipCornerCountStop: true });
   assert.ok(withStop.examined < withoutStop.examined, 'the stop should have skipped real work');
