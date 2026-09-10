@@ -11,7 +11,7 @@
 // for what happens when that rule is broken.
 
 import { PIECES, PIECE_TYPES, ROTATIONS, placedCells, placedPorts } from './geometry.js';
-import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields } from './model.js';
+import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, maxTrackDepth } from './model.js';
 import { billOfMaterials, diffStock, emptyStock, MAT_PARTS, BARRIER_PARTS } from './inventory.js';
 
 // Rotate a string left by n.
@@ -506,9 +506,18 @@ export function generateLayouts(stock, opts = {}) {
             // mats with a wall round the outside satisfies both while
             // enclosing nothing to drive around. A real track encloses
             // exactly one infield — the closed inner barrier that stops a
-            // car cutting the corner. Checked last because it is the one
-            // per-candidate flood fill among these checks.
+            // car cutting the corner. Checked here (rather than earlier)
+            // because it is a per-candidate flood fill, the most expensive
+            // of these checks.
             if (enclosedInfields(layout) !== 1) return;
+            // One infield is necessary but not sufficient: a loop that runs
+            // back alongside itself can enclose exactly one infield while
+            // being a thick slab several mats wide, not a two-mat-wide
+            // track. maxTrackDepth reuses the same flood fill internally
+            // rather than this file computing occupancy geometry itself
+            // (the "no parallel geometry maths" rule) — it is the one
+            // remaining per-candidate flood fill, so it stays last.
+            if (maxTrackDepth(layout) > 2) return;
             const key = canonicalLayoutKey(pieces);
             if (seen.has(key)) return;
             seen.add(key);

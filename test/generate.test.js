@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach } from '../js/generate.js';
-import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields } from '../js/model.js';
+import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields, maxTrackDepth } from '../js/model.js';
 import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
 import { stockL } from '../js/presets.js';
 
@@ -123,6 +123,21 @@ test('every generated layout is a real track, not a solid field of mats', () => 
     for (const r of results) {
       assert.equal(enclosedInfields(createLayout({ pieces: r.pieces })), 1,
         `${kits['87033']} kit(s): a result encloses the wrong number of infields`);
+    }
+  }
+});
+
+// This must discriminate: {'87033':1} alone does NOT catch the bug (all 41
+// of its results already pass), so it is included only to prove the check
+// doesn't reject a legitimate one-kit result. {'87033':2} is the case that
+// actually fails before the filter exists — 50 of 299 results.
+test('no generated layout is wider than two mats', () => {
+  for (const kits of [{ '87033': 1 }, { '87033': 2 }]) {
+    const { results } = generateLayouts(stockFromKits(kits), { maxSide: 10 });
+    assert.ok(results.length > 0, 'fixture is only meaningful if something generates');
+    for (const r of results) {
+      assert.ok(maxTrackDepth(createLayout({ pieces: r.pieces })) <= 2,
+        `${kits['87033']} kit(s): a result is wider than two mats`);
     }
   }
 });

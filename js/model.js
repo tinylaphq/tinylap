@@ -131,16 +131,15 @@ export function boundaryEdges(layout) {
   return edges;
 }
 
-// How many separate enclosed empty regions the occupied cells surround.
-// Port-closed and overlap-free is not enough to be a real track: a solid
-// block of mats with a wall round the outside satisfies both while
-// enclosing nothing to drive around. Flood-fill the complement of the
-// occupied cells from outside a one-cell margin around the bounding box;
-// every empty region the flood never reaches is cut off by the occupied
-// cells on all sides, i.e. an enclosed infield.
-export function enclosedInfields(layout) {
+// Shared setup for enclosedInfields and maxTrackDepth: flood-fill the empty
+// complement of the occupied cells outward from a corner of a one-cell
+// margin around the bounding box. Everything the flood reaches is "outside"
+// — connected to the open edge of the layout; everything empty it never
+// reaches is boxed in by occupied cells on every side. Returns null for an
+// empty layout (nothing to flood).
+function floodOutsideMargin(layout) {
   const cells = occupiedSet(layout);
-  if (cells.size === 0) return 0;
+  if (cells.size === 0) return null;
 
   const points = [...cells].map(parseCellKey);
   const minX = Math.min(...points.map(([x]) => x)) - 1;
@@ -167,6 +166,20 @@ export function enclosedInfields(layout) {
     }
   }
 
+  return { cells, minX, maxX, minY, maxY, outside, emptyNeighbours };
+}
+
+// How many separate enclosed empty regions the occupied cells surround.
+// Port-closed and overlap-free is not enough to be a real track: a solid
+// block of mats with a wall round the outside satisfies both while
+// enclosing nothing to drive around. Every empty region floodOutsideMargin's
+// flood never reaches is cut off by the occupied cells on all sides, i.e.
+// an enclosed infield.
+export function enclosedInfields(layout) {
+  const flood = floodOutsideMargin(layout);
+  if (!flood) return 0;
+  const { cells, minX, maxX, minY, maxY, outside, emptyNeighbours } = flood;
+
   // Count connected components among the empty cells the outside flood
   // never reached — each one is a distinct region walled off on every side.
   const visited = new Set();
@@ -190,6 +203,68 @@ export function enclosedInfields(layout) {
     }
   }
   return infields;
+}
+
+// The 8-neighbourhood (including diagonals) — Chebyshev-adjacent cells.
+const NEIGHBOURS8 = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1],
+];
+
+// How deep the thickest part of the track is, measured inward from the
+// edge of its own outline. Let R be the filled outline: the occupied cells
+// plus everything they enclose (the infield(s) floodOutsideMargin's flood
+// never reaches). Give every cell of R its Chebyshev distance to the
+// nearest cell outside R — 1 on the edge, 2 the next ring in, and so on.
+// A real two-mat-wide track is exactly the cells of R at depth 1 or 2; a
+// depth of 3 or more means the track is wider than two mats there. Two
+// non-consecutive straight runs sitting side by side pass the infield
+// check (there is still exactly one hole) but fail this one.
+export function maxTrackDepth(layout) {
+  const flood = floodOutsideMargin(layout);
+  if (!flood) return 0;
+  const { cells, minX, maxX, minY, maxY, outside } = flood;
+
+  // R = every cell in the margined bounding box that the outside flood
+  // never reached, i.e. occupied cells plus enclosed infield cells.
+  const R = new Set();
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      const key = cellKey([x, y]);
+      if (!outside.has(key)) R.add(key);
+    }
+  }
+
+  // Multi-source BFS inward, over the 8-neighbourhood, starting from every
+  // cell of R that touches a non-R cell (depth 1).
+  const depth = new Map();
+  const queue = [];
+  for (const key of R) {
+    const [x, y] = parseCellKey(key);
+    const onEdge = NEIGHBOURS8.some(([dx, dy]) => !R.has(cellKey([x + dx, y + dy])));
+    if (onEdge) {
+      depth.set(key, 1);
+      queue.push(key);
+    }
+  }
+  let head = 0;
+  while (head < queue.length) {
+    const key = queue[head++];
+    const d = depth.get(key);
+    const [x, y] = parseCellKey(key);
+    for (const [dx, dy] of NEIGHBOURS8) {
+      const nKey = cellKey([x + dx, y + dy]);
+      if (R.has(nKey) && !depth.has(nKey)) {
+        depth.set(nKey, d + 1);
+        queue.push(nKey);
+      }
+    }
+  }
+
+  let max = 0;
+  for (const key of cells) max = Math.max(max, depth.get(key) ?? 0);
+  return max;
 }
 
 export function arcEdgeIds(wall) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields } from '../js/model.js';
+import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields, maxTrackDepth } from '../js/model.js';
 import { MAT_MM } from '../js/geometry.js';
 import { stockL } from '../js/presets.js';
 import { fourCornerLoop, rectangularRing } from './fixtures.js';
@@ -255,4 +255,45 @@ test('a solid block of mats encloses no infield at all', () => {
   assert.equal(enclosedInfields(layout), 0);
   // It really is closed — this is precisely why isClosedCircuit is not enough.
   assert.equal(isClosedCircuit(layout), true);
+});
+
+test('a real track is exactly two mats wide', () => {
+  assert.equal(maxTrackDepth(createLayout({ pieces: stockL() })), 2);
+  assert.equal(maxTrackDepth(createLayout({ pieces: rectangularRing() })), 2);
+});
+
+// Task 9's enclosedInfields === 1 check is necessary but not sufficient: a
+// loop that runs back alongside itself can be four mats wide (a thick slab
+// with a small hole in it) and still enclose exactly one infield. This
+// fixture is a real generator output, not hand-invented geometry — pulled
+// from generateLayouts(stockFromKits({'87033':2}), { maxSide: 10 }).results
+// before the maxTrackDepth filter existed (it was 1 of 44 depth-4 results
+// out of 299, see test/generate.test.js and task-10-report.md).
+function fourMatSlab() {
+  return [
+    { type: 'cornerR30', x: 0, y: 0, rot: 0 },
+    { type: 'cornerR30', rot: 180, x: 0, y: -2 },
+    { type: 'cornerR30', rot: 90, x: -2, y: -2 },
+    { type: 'cornerR30', rot: 270, x: -2, y: 0 },
+    { type: 'cornerR30', rot: 0, x: -4, y: 0 },
+    { type: 'straight', rot: 0, x: -4, y: -1 },
+    { type: 'straight', rot: 0, x: -4, y: -2 },
+    { type: 'straight', rot: 0, x: -4, y: -3 },
+    { type: 'cornerR30', rot: 90, x: -4, y: -5 },
+    { type: 'straight', rot: 90, x: -2, y: -5 },
+    { type: 'straight', rot: 90, x: -1, y: -5 },
+    { type: 'straight', rot: 90, x: 0, y: -5 },
+    { type: 'straight', rot: 90, x: 1, y: -5 },
+    { type: 'cornerR30', rot: 180, x: 2, y: -5 },
+    { type: 'straight', rot: 0, x: 2, y: -3 },
+    { type: 'straight', rot: 0, x: 2, y: -2 },
+    { type: 'straight', rot: 0, x: 2, y: -1 },
+    { type: 'cornerR30', rot: 270, x: 2, y: 0 },
+  ];
+}
+
+test('a four-mat-wide slab with one hole passes the infield check but fails the width check', () => {
+  const layout = createLayout({ pieces: fourMatSlab() });
+  assert.equal(enclosedInfields(layout), 1);
+  assert.equal(maxTrackDepth(layout), 4);
 });
