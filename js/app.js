@@ -1,5 +1,5 @@
 import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR } from './model.js';
-import { drawLayout, layoutToSvgString } from './render.js';
+import { drawLayout, drawGhost, layoutToSvgString } from './render.js';
 import { PIECES, MAT_MM, placedCells, placedPorts } from './geometry.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
 import { exportHtml, importHtml } from './storage.js';
@@ -30,7 +30,17 @@ function renderPalette() {
     const li = document.createElement('li');
     li.draggable = true;
     li.dataset.type = type;
-    li.textContent = def.label;
+    const thumb = document.createElement('span');
+    thumb.className = 'piece-thumb';
+    try {
+      thumb.innerHTML = layoutToSvgString(createLayout({ pieces: [{ type, x: 0, y: 0, rot: 0 }] }), { pad: 0.25 });
+    } catch (error) {
+      console.error(`piece thumbnail failed for ${type}`, error);
+    }
+    const name = document.createElement('span');
+    name.className = 'piece-name';
+    name.textContent = def.label;
+    li.append(thumb, name);
     return li;
   }));
 }
@@ -195,17 +205,35 @@ document.querySelector('#palette-list').addEventListener('dragend', () => {
   render();
 });
 
+// A drop target must cancel dragenter as well as dragover. Without this
+// Chrome re-evaluates the target every time hit-testing moves between the
+// SVG's children and can end the drag without ever firing `drop`.
+canvas.addEventListener('dragenter', (e) => {
+  if (!state.tool) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+
 canvas.addEventListener('dragover', (e) => {
   if (!state.tool) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
   state.hoverCell = pointerCell(e);
   state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
-  drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selected, handles: true });
+  // Only the ghost layer is touched. Calling drawLayout here rebuilt every
+  // child of the SVG on each dragover, destroying the element under the
+  // pointer — Chrome then fired dragleave with a null relatedTarget and
+  // abandoned the drag, so `drop` never fired and nothing happened.
+  drawGhost(canvas, state.ghost);
 });
 
 canvas.addEventListener('dragleave', (e) => {
   if (canvas.contains(e.relatedTarget)) return;
+  // relatedTarget is null both when the pointer leaves the window and when
+  // the node under it was removed mid-drag. Confirm against the actual
+  // geometry rather than trusting the null.
+  const r = canvas.getBoundingClientRect();
+  if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return;
   state.ghost = null;
   state.hoverCell = null;
   render();

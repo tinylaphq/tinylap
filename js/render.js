@@ -96,68 +96,114 @@ const el = (name, attrs) => {
   return node;
 };
 
+// The visible world is a fixed extent in mats, not a window that snaps to
+// the current layout. Deriving the viewBox from the piece bbox meant an
+// empty canvas showed 8x8 mats and every placement rescaled the whole
+// scene — which also fed back into pointer mapping during a drag.
+// A floor on the visible area so an empty canvas still offers somewhere to
+// build, and a margin so the layout never touches the edge. The view fits
+// the content rather than being a fixed world, but it is only recomputed on
+// a real render — dragover touches the ghost layer alone — so it cannot
+// rescale under the pointer mid-drag.
+export const MIN_VIEW = { w: 14, h: 11 };
+const MARGIN = 2;
+
+function worldFor(layout, room) {
+  const { bbox } = computeMetrics(layout);
+  let x0 = 0, y0 = 0, x1 = MIN_VIEW.w, y1 = MIN_VIEW.h;
+  if (bbox) {
+    x0 = Math.min(x0, bbox.x - MARGIN);
+    y0 = Math.min(y0, bbox.y - MARGIN);
+    x1 = Math.max(x1, bbox.x + bbox.w + MARGIN);
+    y1 = Math.max(y1, bbox.y + bbox.h + MARGIN);
+  }
+  if (room) { x1 = Math.max(x1, room.w + MARGIN); y1 = Math.max(y1, room.h + MARGIN); }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+// Layers are created once and then updated in place. Rebuilding the SVG's
+// children wholesale is what broke native drag-and-drop: `dragover` fires
+// continuously, and replacing the element under the pointer makes Chrome
+// fire `dragleave` with a null relatedTarget and abandon the drop target,
+// so `drop` never arrives at all.
+const LAYERS = ['grid', 'room', 'mats', 'walls', 'handles', 'ghost'];
+
+function layers(svgEl) {
+  if (svgEl.dataset.layered !== 'yes') {
+    svgEl.replaceChildren(...LAYERS.map((name) => el('g', { class: name })));
+    svgEl.dataset.layered = 'yes';
+  }
+  return Object.fromEntries(LAYERS.map((name) => [name, svgEl.querySelector(`:scope > g.${name}`)]));
+}
+
+function drawGrid(layer, world) {
+  const want = `${world.x},${world.y},${world.w},${world.h}`;
+  if (layer.dataset.world === want) return;   // grid is static; skip the churn
+  layer.dataset.world = want;
+  layer.replaceChildren();
+  for (let x = world.x; x <= world.x + world.w; x++) {
+    layer.append(el('line', { x1: x, y1: world.y, x2: x, y2: world.y + world.h, class: 'gridline' }));
+  }
+  for (let y = world.y; y <= world.y + world.h; y++) {
+    layer.append(el('line', { x1: world.x, y1: y, x2: world.x + world.w, y2: y, class: 'gridline' }));
+  }
+}
+
+// Updates only the ghost layer. The dragover handler calls this instead of
+// drawLayout so nothing else in the SVG is touched mid-drag.
+export function drawGhost(svgEl, ghost) {
+  const layer = layers(svgEl).ghost;
+  layer.setAttribute('class', ghost ? `ghost ${ghost.valid ? 'valid' : 'invalid'}` : 'ghost');
+  layer.replaceChildren();
+  if (!ghost) return;
+  for (const [x, y] of ghost.cells) {
+    layer.append(el('rect', { x, y, width: 1, height: 1 }));
+  }
+}
+
 export function drawLayout(svgEl, layout, { room = null, ghost = null, selected = null, handles = false } = {}) {
   const g = layoutGeometry(layout);
-  svgEl.replaceChildren();
+  const L = layers(svgEl);
+  const world = worldFor(layout, room);
 
-  const pad = 4;
-  const w = Math.max(g.bbox.w, room?.w ?? 0) + pad * 2;
-  const h = Math.max(g.bbox.h, room?.h ?? 0) + pad * 2;
-  svgEl.setAttribute('viewBox', `${g.bbox.x - pad} ${g.bbox.y - pad} ${w} ${h}`);
+  svgEl.setAttribute('viewBox', `${world.x} ${world.y} ${world.w} ${world.h}`);
+  svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  drawGrid(L.grid, world);
 
-  const grid = el('g', { class: 'grid' });
-  for (let x = Math.floor(g.bbox.x - pad); x <= g.bbox.x + w; x++) {
-    grid.append(el('line', { x1: x, y1: g.bbox.y - pad, x2: x, y2: g.bbox.y + h, class: 'gridline' }));
-  }
-  for (let y = Math.floor(g.bbox.y - pad); y <= g.bbox.y + h; y++) {
-    grid.append(el('line', { x1: g.bbox.x - pad, y1: y, x2: g.bbox.x + w, y2: y, class: 'gridline' }));
-  }
-  svgEl.append(grid);
-
+  L.room.replaceChildren();
   if (room) {
-    svgEl.append(el('rect', { x: 0, y: 0, width: room.w, height: room.h, class: 'room' }));
+    L.room.append(el('rect', { x: 0, y: 0, width: room.w, height: room.h, class: 'room' }));
   }
 
-  const matsG = el('g', { class: 'mats' });
+  L.mats.replaceChildren();
   for (const m of g.mats) {
     const classes = ['mat'];
     if (m.overlapping) classes.push('overlap');
     if (m.pieceIndex === selected) classes.push('selected');
-    matsG.append(el('rect', {
+    L.mats.append(el('rect', {
       x: m.x, y: m.y, width: 1, height: 1,
       class: classes.join(' '),
       'data-piece': m.pieceIndex,
     }));
   }
-  svgEl.append(matsG);
 
-  const wallsG = el('g', { class: 'walls' });
-  for (const l of g.lines) wallsG.append(el('line', { ...l, class: 'wall' }));
-  for (const a of g.arcs) wallsG.append(el('path', { d: a.d, class: 'wall' }));
-  svgEl.append(wallsG);
+  L.walls.replaceChildren();
+  for (const l of g.lines) L.walls.append(el('line', { ...l, class: 'wall' }));
+  for (const a of g.arcs) L.walls.append(el('path', { d: a.d, class: 'wall' }));
 
+  L.handles.replaceChildren();
   if (handles) {
-    const handlesG = el('g', { class: 'handles' });
     openPorts(layout).forEach(({ port }) => {
       const [dx, dy] = { N: [0, -0.5], S: [0, 0.5], E: [0.5, 0], W: [-0.5, 0] }[port.dir];
       const cx = (port.cells[0][0] + port.cells[1][0]) / 2 + 0.5 + dx;
       const cy = (port.cells[0][1] + port.cells[1][1]) / 2 + 0.5 + dy;
-      // Keyed by portKey (its edge ids), not array index: openPorts' order
-      // is deterministic within one call, but keying by index would still
-      // require the array not to be re-sorted between render and
-      // pointerdown, which a stable string key avoids depending on at all.
-      handlesG.append(el('circle', { cx, cy, r: 0.22, class: 'port-handle', 'data-port': portKey(port) }));
+      // Keyed by portKey (its edge ids), not array index: a stable string
+      // key avoids depending on array order between render and pointerdown.
+      L.handles.append(el('circle', { cx, cy, r: 0.22, class: 'port-handle', 'data-port': portKey(port) }));
     });
-    svgEl.append(handlesG);
   }
 
-  if (ghost) {
-    const ghostG = el('g', { class: ghost.valid ? 'ghost valid' : 'ghost invalid' });
-    for (const [x, y] of ghost.cells) {
-      ghostG.append(el('rect', { x, y, width: 1, height: 1 }));
-    }
-    svgEl.append(ghostG);
-  }
+  drawGhost(svgEl, ghost);
 }
 
 export { MAT_MM };
