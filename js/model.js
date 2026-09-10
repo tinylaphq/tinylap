@@ -205,6 +205,48 @@ export function enclosedInfields(layout) {
   return infields;
 }
 
+// Every shared edge between two occupied cells belonging to different
+// pieces that is NOT a matched-port join. Barriers belong to the pieces
+// themselves — a straight carries a barrier down each long side — so where
+// two pieces are edge-adjacent without actually connecting through a
+// matched port, that edge should have carried a barrier but the outline
+// walk (boundaryEdges/computeBarriers) never sees it: both cells are
+// occupied, so the edge is interior, and the two lanes silently merge. A
+// loop that runs back alongside itself produces exactly this: it can still
+// enclose one infield and stay within two mats of its own edge in places,
+// while two of its own straights rest side by side with no wall between
+// them.
+//
+// Cells belonging to the SAME piece touching each other is normal (e.g. an
+// R30 corner's own two cells) and is never reported. Returns an empty
+// array for a valid track.
+export function unjoinedContacts(layout) {
+  const occ = occupancy(layout);
+  const { matched } = matchPorts(layout);
+  const legit = new Set();
+  layout.pieces.forEach((piece) => {
+    for (const port of placedPorts(piece)) {
+      if (!matched.has(portKey(port))) continue;
+      for (const id of portEdgeIds(port)) legit.add(id);
+    }
+  });
+
+  const contacts = new Set();
+  for (const [key, owners] of occ) {
+    const [x, y] = parseCellKey(key);
+    for (const dir of ['N', 'E', 'S', 'W']) {
+      const [dx, dy] = NEIGHBOUR[dir];
+      const nOwners = occ.get(cellKey([x + dx, y + dy]));
+      if (!nOwners) continue;
+      if (owners.some((o) => nOwners.includes(o))) continue; // same piece
+      const id = edgeId([x, y], dir);
+      if (legit.has(id)) continue;
+      contacts.add(id);
+    }
+  }
+  return [...contacts];
+}
+
 // The 8-neighbourhood (including diagonals) — Chebyshev-adjacent cells.
 const NEIGHBOURS8 = [
   [-1, -1], [0, -1], [1, -1],

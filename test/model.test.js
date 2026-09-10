@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields, maxTrackDepth } from '../js/model.js';
+import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields, maxTrackDepth, unjoinedContacts } from '../js/model.js';
 import { MAT_MM } from '../js/geometry.js';
 import { stockL } from '../js/presets.js';
 import { fourCornerLoop, rectangularRing } from './fixtures.js';
@@ -296,4 +296,19 @@ test('a four-mat-wide slab with one hole passes the infield check but fails the 
   const layout = createLayout({ pieces: fourMatSlab() });
   assert.equal(enclosedInfields(layout), 1);
   assert.equal(maxTrackDepth(layout), 4);
+});
+
+test('a real track has no unjoined piece contacts', () => {
+  assert.deepEqual(unjoinedContacts(createLayout({ pieces: stockL() })), []);
+  assert.deepEqual(unjoinedContacts(createLayout({ pieces: rectangularRing() })), []);
+});
+
+// Barriers belong to the pieces, not the outline: a straight carries a
+// barrier down each long side. Two of the slab's own straight runs sit
+// edge-adjacent without ever connecting through a matched port, so the
+// shared edge between them has no barrier at all — the same fixture the
+// width check catches, caught here for a different, more direct reason.
+test('the four-mat-wide slab has unjoined piece contacts', () => {
+  const layout = createLayout({ pieces: fourMatSlab() });
+  assert.ok(unjoinedContacts(layout).length > 0);
 });

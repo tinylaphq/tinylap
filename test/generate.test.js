@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach } from '../js/generate.js';
-import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields, maxTrackDepth } from '../js/model.js';
+import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields, unjoinedContacts, maxTrackDepth } from '../js/model.js';
 import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
 import { stockL } from '../js/presets.js';
 
@@ -127,14 +127,30 @@ test('every generated layout is a real track, not a solid field of mats', () => 
   }
 });
 
-// This must discriminate: {'87033':1} alone does NOT catch the bug (all 41
-// of its results already pass), so it is included only to prove the check
-// doesn't reject a legitimate one-kit result. {'87033':2} is the case that
-// actually fails before the filter exists — 50 of 299 results.
-test('no generated layout is wider than two mats', () => {
+// This must discriminate on its own, at a single kit even: before the
+// filter exists, 20 of 41 one-kit results and 170 of 299 two-kit results
+// have at least one unjoined contact (two different pieces edge-adjacent
+// without a matched-port join between them — no barrier, so a car could
+// cross freely from one lane into another that never actually connected).
+test('every piece contact between different pieces is a real connection', () => {
   for (const kits of [{ '87033': 1 }, { '87033': 2 }]) {
     const { results } = generateLayouts(stockFromKits(kits), { maxSide: 10 });
     assert.ok(results.length > 0, 'fixture is only meaningful if something generates');
+    for (const r of results) {
+      assert.deepEqual(unjoinedContacts(createLayout({ pieces: r.pieces })), [],
+        `${kits['87033']} kit(s): a result has an unjoined piece contact`);
+    }
+  }
+});
+
+// maxTrackDepth <= 2 is no longer its own filter — the contact rule above
+// is strictly stronger (every four-mat-wide slab the width rule used to
+// catch also has an unjoined contact, and nothing generated passes the
+// contact rule while failing this one). Kept as a pinning test so a future
+// change that weakens the contact rule fails loudly here too.
+test('every generated layout stays within the two-mat track width', () => {
+  for (const kits of [{ '87033': 1 }, { '87033': 2 }]) {
+    const { results } = generateLayouts(stockFromKits(kits), { maxSide: 10 });
     for (const r of results) {
       assert.ok(maxTrackDepth(createLayout({ pieces: r.pieces })) <= 2,
         `${kits['87033']} kit(s): a result is wider than two mats`);

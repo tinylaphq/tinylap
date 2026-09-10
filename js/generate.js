@@ -11,7 +11,7 @@
 // for what happens when that rule is broken.
 
 import { PIECES, PIECE_TYPES, ROTATIONS, placedCells, placedPorts } from './geometry.js';
-import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, maxTrackDepth } from './model.js';
+import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, unjoinedContacts } from './model.js';
 import { billOfMaterials, diffStock, emptyStock, MAT_PARTS, BARRIER_PARTS } from './inventory.js';
 
 // Rotate a string left by n.
@@ -502,22 +502,23 @@ export function generateLayouts(stock, opts = {}) {
             const { bbox, matCount, lapMm } = computeMetrics(layout);
             if (room && (bbox.w > room.w || bbox.h > room.h)) return;
             if (diffStock(billOfMaterials(layout), stock).some((r) => r.short > 0)) return;
+            // Barriers belong to the pieces, not the outline: a straight
+            // carries a barrier down each long side. Where a loop runs back
+            // alongside itself, two pieces can be edge-adjacent without
+            // ever connecting through a matched port — the shared edge
+            // never got a barrier, so a car crosses freely between lanes
+            // that never joined. unjoinedContacts reuses matchPorts rather
+            // than this file computing occupancy geometry itself (the "no
+            // parallel geometry maths" rule). Checked first: unlike the
+            // infield check below, it needs no flood fill.
+            if (unjoinedContacts(layout).length > 0) return;
             // Port-closed and overlap-free is not enough: a solid block of
             // mats with a wall round the outside satisfies both while
             // enclosing nothing to drive around. A real track encloses
             // exactly one infield — the closed inner barrier that stops a
-            // car cutting the corner. Checked here (rather than earlier)
-            // because it is a per-candidate flood fill, the most expensive
-            // of these checks.
+            // car cutting the corner. Checked last because it is the one
+            // per-candidate flood fill among these checks.
             if (enclosedInfields(layout) !== 1) return;
-            // One infield is necessary but not sufficient: a loop that runs
-            // back alongside itself can enclose exactly one infield while
-            // being a thick slab several mats wide, not a two-mat-wide
-            // track. maxTrackDepth reuses the same flood fill internally
-            // rather than this file computing occupancy geometry itself
-            // (the "no parallel geometry maths" rule) — it is the one
-            // remaining per-candidate flood fill, so it stays last.
-            if (maxTrackDepth(layout) > 2) return;
             const key = canonicalLayoutKey(pieces);
             if (seen.has(key)) return;
             seen.add(key);
