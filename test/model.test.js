@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts } from '../js/model.js';
+import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields } from '../js/model.js';
 import { MAT_MM } from '../js/geometry.js';
+import { stockL } from '../js/presets.js';
 import { fourCornerLoop, rectangularRing } from './fixtures.js';
 
 test('a new layout is empty and versioned', () => {
@@ -239,4 +240,19 @@ test('a rotation with no opposing port yields null', () => {
 
 test('a closed circuit has no open ports', () => {
   assert.equal(openPorts(createLayout({ pieces: rectangularRing() })).length, 0);
+});
+
+test('a real track encloses exactly one infield', () => {
+  assert.equal(enclosedInfields(createLayout({ pieces: stockL() })), 1);
+  assert.equal(enclosedInfields(createLayout({ pieces: rectangularRing() })), 1);
+});
+
+test('a solid block of mats encloses no infield at all', () => {
+  // Four corners butted together: port-closed and overlap-free, but a 4x4
+  // field with a wall round it — the case the user reported. This is the
+  // same fixture already proven closed and overlap-free above.
+  const layout = createLayout({ pieces: fourCornerLoop() });
+  assert.equal(enclosedInfields(layout), 0);
+  // It really is closed — this is precisely why isClosedCircuit is not enough.
+  assert.equal(isClosedCircuit(layout), true);
 });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach } from '../js/generate.js';
-import { createLayout, isClosedCircuit, findOverlaps, occupiedSet } from '../js/model.js';
+import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields } from '../js/model.js';
 import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
 import { stockL } from '../js/presets.js';
 
@@ -113,6 +113,17 @@ test('a starter set generates layouts, all of them buildable', () => {
     assert.equal(isClosedCircuit(l), true, `${r.key} is not closed`);
     const short = diffStock(billOfMaterials(l), stock).filter((row) => row.short > 0);
     assert.deepEqual(short, [], `${r.key} exceeds stock`);
+  }
+});
+
+test('every generated layout is a real track, not a solid field of mats', () => {
+  for (const kits of [{ '87033': 1 }, { '87033': 2 }]) {
+    const { results } = generateLayouts(stockFromKits(kits), { maxSide: 10 });
+    assert.ok(results.length > 0, 'fixture is only meaningful if something generates');
+    for (const r of results) {
+      assert.equal(enclosedInfields(createLayout({ pieces: r.pieces })), 1,
+        `${kits['87033']} kit(s): a result encloses the wrong number of infields`);
+    }
   }
 });
 

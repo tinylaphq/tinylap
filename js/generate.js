@@ -11,7 +11,7 @@
 // for what happens when that rule is broken.
 
 import { PIECES, PIECE_TYPES, ROTATIONS, placedCells, placedPorts } from './geometry.js';
-import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics } from './model.js';
+import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields } from './model.js';
 import { billOfMaterials, diffStock, emptyStock, MAT_PARTS, BARRIER_PARTS } from './inventory.js';
 
 // Rotate a string left by n.
@@ -502,6 +502,13 @@ export function generateLayouts(stock, opts = {}) {
             const { bbox, matCount, lapMm } = computeMetrics(layout);
             if (room && (bbox.w > room.w || bbox.h > room.h)) return;
             if (diffStock(billOfMaterials(layout), stock).some((r) => r.short > 0)) return;
+            // Port-closed and overlap-free is not enough: a solid block of
+            // mats with a wall round the outside satisfies both while
+            // enclosing nothing to drive around. A real track encloses
+            // exactly one infield — the closed inner barrier that stops a
+            // car cutting the corner. Checked last because it is the one
+            // per-candidate flood fill among these checks.
+            if (enclosedInfields(layout) !== 1) return;
             const key = canonicalLayoutKey(pieces);
             if (seen.has(key)) return;
             seen.add(key);

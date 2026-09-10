@@ -131,6 +131,67 @@ export function boundaryEdges(layout) {
   return edges;
 }
 
+// How many separate enclosed empty regions the occupied cells surround.
+// Port-closed and overlap-free is not enough to be a real track: a solid
+// block of mats with a wall round the outside satisfies both while
+// enclosing nothing to drive around. Flood-fill the complement of the
+// occupied cells from outside a one-cell margin around the bounding box;
+// every empty region the flood never reaches is cut off by the occupied
+// cells on all sides, i.e. an enclosed infield.
+export function enclosedInfields(layout) {
+  const cells = occupiedSet(layout);
+  if (cells.size === 0) return 0;
+
+  const points = [...cells].map(parseCellKey);
+  const minX = Math.min(...points.map(([x]) => x)) - 1;
+  const maxX = Math.max(...points.map(([x]) => x)) + 1;
+  const minY = Math.min(...points.map(([, y]) => y)) - 1;
+  const maxY = Math.max(...points.map(([, y]) => y)) + 1;
+  const inBounds = ([x, y]) => x >= minX && x <= maxX && y >= minY && y <= maxY;
+  const emptyNeighbours = ([x, y]) =>
+    Object.values(NEIGHBOUR)
+      .map(([dx, dy]) => [x + dx, y + dy])
+      .filter((n) => inBounds(n) && !cells.has(cellKey(n)));
+
+  // Flood outward from a corner of the margin — guaranteed empty, and
+  // guaranteed connected to every other margin cell round the outside.
+  const outside = new Set([cellKey([minX, minY])]);
+  const queue = [[minX, minY]];
+  while (queue.length > 0) {
+    const cell = queue.pop();
+    for (const n of emptyNeighbours(cell)) {
+      const key = cellKey(n);
+      if (outside.has(key)) continue;
+      outside.add(key);
+      queue.push(n);
+    }
+  }
+
+  // Count connected components among the empty cells the outside flood
+  // never reached — each one is a distinct region walled off on every side.
+  const visited = new Set();
+  let infields = 0;
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      const key = cellKey([x, y]);
+      if (cells.has(key) || outside.has(key) || visited.has(key)) continue;
+      infields += 1;
+      visited.add(key);
+      const componentQueue = [[x, y]];
+      while (componentQueue.length > 0) {
+        const cell = componentQueue.pop();
+        for (const n of emptyNeighbours(cell)) {
+          const nKey = cellKey(n);
+          if (outside.has(nKey) || visited.has(nKey)) continue;
+          visited.add(nKey);
+          componentQueue.push(n);
+        }
+      }
+    }
+  }
+  return infields;
+}
+
 export function arcEdgeIds(wall) {
   const ids = [];
   for (const [dir, [sx, sy]] of CORNER_EDGES[wall.corner]) {
