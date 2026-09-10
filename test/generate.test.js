@@ -178,3 +178,16 @@ test('deduplicating tuples before building loses no layouts', () => {
   const slow = new Set(generateLayouts(stock, { maxSide: 6, skipTupleDedup: true }).results.map((r) => r.key));
   assert.deepEqual([...fast].sort(), [...slow].sort());
 });
+
+test('generation uses regular corners only; large corners cannot tile a loop', () => {
+  // A large corner is a substitution into an otherwise-regular layout, not
+  // a family of its own: two R60 corners connect fine, but no closed
+  // R60-only loop exists -- none found across 16,250 tuples covering every
+  // 4- and 6-corner outline with sides to 4, nor any rectangle with sides
+  // to 14. Enumerating them only burns budget on candidates that can never
+  // close. Reinstating cornerR60 needs that result overturned first.
+  const stock = stockFromKits({ '87033': 1, '87033-02': 1 });
+  const { results } = generateLayouts(stock, { maxSide: 8 });
+  assert.ok(results.length > 0);
+  assert.ok(results.every((r) => r.cornerType === 'cornerR30'));
+});

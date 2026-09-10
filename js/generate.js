@@ -295,11 +295,19 @@ export function closes(signature, sides, cornerType) {
   return x === 0 && y === 0;
 }
 
+// cornerR60 is deliberately excluded. Two R60 corners connect fine
+// (placeAgainst succeeds at rot 90/180 with no overlap), but no closed
+// R60-only loop exists: checked exhaustively across 16,250 tuples spanning
+// every 4- and 6-corner outline with sides to 4, and every rectangle with
+// sides to 14 — zero closed. A large corner is a substitution into an
+// otherwise-regular layout (the kit supplies only the inside of one
+// corner, meant to drop into a base-set loop), not a family you can tile a
+// whole circuit from. Enumerating it anyway would only burn budget on
+// candidates closes() accepts arithmetically but that can never build.
+// Modelling substitution is a different feature and out of scope here; see
+// test/generate.test.js's pinning test for the evidence trail.
 function cornerTypesFor(stock) {
-  const types = [];
-  if (stock.mats.quarterRound > 0) types.push('cornerR30');
-  if (stock.mats.arcLarge > 0) types.push('cornerR60');
-  return types;
+  return stock.mats.quarterRound > 0 ? ['cornerR30'] : [];
 }
 
 // Rotate an array left by n (mirrors the string `rotate` helper above, for
@@ -378,20 +386,45 @@ function isCanonicalTuple(signature, sides) {
 // area maths happens in this file.
 //
 // opts: { maxCorners = 10, maxSide = 12, budget = 20000, room = null,
-// skipTupleDedup = false }. `skipTupleDedup` disables the isCanonicalTuple
-// pre-filter — it exists purely so a test can compare the fast and slow
-// paths and prove the filter drops no distinct layout; leave it off.
-// Returns { results, examined, stopped }. `stopped` is true, and `examined`
-// reports how many candidates were checked, whenever the budget is hit —
-// so a caller can never mistake a truncated run for a complete one.
+// skipTupleDedup = false, maxVariantsPerCharacter = 50 }. `skipTupleDedup`
+// disables the isCanonicalTuple pre-filter — it exists purely so a test
+// can compare the fast and slow paths and prove the filter drops no
+// distinct layout; leave it off.
+//
+// `maxVariantsPerCharacter` bounds how many size/proportion variants of
+// the SAME character — the same (signature, cornerType) pair, i.e. the
+// same outline and corner feel — are kept, not how many layouts overall
+// are kept. The UI groups by character and shows a handful at a time, so
+// unlike `budget` (a global, roughly-honest "stop somewhere" limit) this
+// is a real bound on what would otherwise be redundant near-duplicate
+// sizes of one shape: it prunes the search for that character as soon as
+// the cap is hit rather than continuing to examine (and discard) more of
+// its variants, which is what makes a larger inventory's much bigger
+// affordable space finish well inside the default budget instead of
+// trading truncation for a long wait. Characters are never dropped, only
+// their size variants past the cap — reported via `cappedCharacters` so a
+// caller can tell variants were trimmed rather than exhaustive.
+//
+// Returns { results, examined, stopped, cappedCharacters }. `stopped` is
+// true, and `examined` reports how many candidates were checked, whenever
+// the budget is hit — so a caller can never mistake a truncated run for a
+// complete one. `cappedCharacters` counts how many (signature, cornerType)
+// characters hit `maxVariantsPerCharacter` — silence about that is exactly
+// what would misrepresent a capped run as exhaustive, so it's always
+// reported, never just implied by `stopped`.
 export function generateLayouts(stock, opts = {}) {
-  const { maxCorners = 10, maxSide = 12, budget = 20000, room = null, skipTupleDedup = false } = opts;
+  const {
+    maxCorners = 10, maxSide = 12, budget = 20000, room = null,
+    skipTupleDedup = false, maxVariantsPerCharacter = 50,
+  } = opts;
   const totalMats = stock.mats.square + stock.mats.quarterRound + stock.mats.arcLarge;
   // Each straight is 2 mats, so the straights alone cannot exceed this.
   const maxStraights = Math.floor(totalMats / 2);
 
   const results = [];
   const seen = new Set();
+  const variantCounts = new Map();
+  const cappedCharacterKeys = new Set();
   let examined = 0;
   let stopped = false;
 
@@ -413,9 +446,15 @@ export function generateLayouts(stock, opts = {}) {
     for (let corners = 4; corners <= maxAffordableCorners; corners += 2) {
       for (const signature of turnSignatures(corners)) {
         const sides = new Array(corners).fill(0);
+        const characterKey = `${cornerType}:${signature}`;
 
         const walk = (i, used) => {
           if (stopped) return;
+          // Cheap check first: once this character has hit its variant
+          // cap, prune the whole remaining subtree for it immediately
+          // rather than continuing to enumerate (and discard) more sides
+          // tuples that would only ever be rejected at the very end.
+          if ((variantCounts.get(characterKey) ?? 0) >= maxVariantsPerCharacter) return;
           if (i === corners) {
             if (!closes(signature, sides, cornerType)) return;
             if (!skipTupleDedup && !isCanonicalTuple(signature, sides)) return;
@@ -430,6 +469,9 @@ export function generateLayouts(stock, opts = {}) {
             if (seen.has(key)) return;
             seen.add(key);
             results.push({ pieces, signature, cornerType, sides: [...sides], matCount, lapMm, bbox, key });
+            const count = (variantCounts.get(characterKey) ?? 0) + 1;
+            variantCounts.set(characterKey, count);
+            if (count >= maxVariantsPerCharacter) cappedCharacterKeys.add(characterKey);
             return;
           }
           for (let n = 0; n <= maxSide; n++) {
@@ -445,5 +487,5 @@ export function generateLayouts(stock, opts = {}) {
     }
   }
 
-  return { results, examined, stopped };
+  return { results, examined, stopped, cappedCharacters: cappedCharacterKeys.size };
 }
