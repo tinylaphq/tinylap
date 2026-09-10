@@ -548,3 +548,44 @@ export function generateLayouts(stock, opts = {}) {
     unexploredCorners: [...unexploredCornersSet].sort((a, b) => a - b),
   };
 }
+
+// The single place the corner-type-to-feel mapping lives. cornerR60 is
+// deliberately excluded from generation (see cornerTypesFor above), so in
+// practice every result's cornerType is 'cornerR30' and every feel comes
+// out 'tight' — but this stays a lookup table, not an inlined ternary,
+// because Task 6 needs the same mapping and must read it from here rather
+// than duplicating it.
+const CORNER_FEEL = { cornerR30: 'tight', cornerR60: 'sweeping' };
+
+export function cornerFeel(result) {
+  return CORNER_FEEL[result.cornerType];
+}
+
+const FEEL_LABEL = { tight: 'tight corners', sweeping: 'sweeping corners' };
+
+// Two layouts are the same character when they share both outline and
+// corner feel — size and proportion (the side-length tuple) are variants of
+// that character, not distinct characters. Sorted by corner count then
+// name; each character's variants are sorted by matCount descending so
+// `best` (the biggest, most mat-efficient build) is variants[0].
+export function groupByCharacter(results) {
+  const groups = new Map();
+  for (const r of results) {
+    const feel = cornerFeel(r);
+    const name = outlineName(r.signature);
+    const key = `${name}|${feel}`;
+    if (!groups.has(key)) {
+      groups.set(key, { key, name, feel, corners: r.signature.length, variants: [] });
+    }
+    groups.get(key).variants.push(r);
+  }
+
+  const characters = [...groups.values()];
+  for (const c of characters) {
+    c.variants.sort((a, b) => b.matCount - a.matCount || b.lapMm - a.lapMm);
+    c.best = c.variants[0];
+    c.label = `${c.name}, ${FEEL_LABEL[c.feel]}`;
+  }
+  characters.sort((a, b) => a.corners - b.corners || a.name.localeCompare(b.name));
+  return characters;
+}

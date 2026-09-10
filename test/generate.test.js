@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes } from '../js/generate.js';
+import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter } from '../js/generate.js';
 import { createLayout, isClosedCircuit, findOverlaps, occupiedSet } from '../js/model.js';
 import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
 import { stockL } from '../js/presets.js';
@@ -241,4 +241,31 @@ test('unexploredCorners names counts skipped by the cap, not by unaffordability'
   // 10 and 12 must be named, not silently dropped.
   const double = generateLayouts(stockFromKits({ '87033': 2 }), { maxSide: 10 });
   assert.deepEqual(double.unexploredCorners, [10, 12]);
+});
+
+test('a starter set yields exactly two characters: rectangle and L', () => {
+  const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
+  const chars = groupByCharacter(results);
+  assert.equal(chars.length, 2, chars.map((c) => c.name).join(', '));
+  assert.deepEqual(chars.map((c) => c.name).sort(), ['L-shape', 'Rectangle']);
+  for (const c of chars) assert.equal(c.feel, 'tight');
+});
+
+test('every character keeps its variants, best first by mat count', () => {
+  const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
+  for (const c of groupByCharacter(results)) {
+    assert.ok(c.variants.length >= 1);
+    assert.equal(c.best, c.variants[0]);
+    for (let i = 1; i < c.variants.length; i++) {
+      assert.ok(c.variants[i - 1].matCount >= c.variants[i].matCount);
+    }
+  }
+});
+
+test('variants and characters are different things: many variants, few characters', () => {
+  const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
+  const chars = groupByCharacter(results);
+  const variants = chars.reduce((n, c) => n + c.variants.length, 0);
+  assert.equal(variants, results.length);
+  assert.ok(variants > chars.length, 'expected size variants to outnumber characters');
 });
