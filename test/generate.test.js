@@ -269,3 +269,23 @@ test('variants and characters are different things: many variants, few character
   assert.equal(variants, results.length);
   assert.ok(variants > chars.length, 'expected size variants to outnumber characters');
 });
+
+test('same outline but different corner feel is two characters, not one', () => {
+  // cornerR60 is never actually generated (see cornerTypesFor), so this is
+  // untestable through generateLayouts -- every real result is 'tight'. But
+  // groupByCharacter takes plain result objects, so hand-construct two that
+  // share an outline (same signature, so same outlineName) and differ only
+  // in cornerType, and confirm the group key treats that as two characters.
+  // Guards the brief's headline rule -- "same outline AND corner feel" --
+  // which a key of `${name}` alone (dropping feel) would silently violate
+  // while still passing every other test in this file.
+  const rectA = { signature: 'RRRR', cornerType: 'cornerR30', matCount: 10, lapMm: 100, key: 'a' };
+  const rectB = { signature: 'RRRR', cornerType: 'cornerR60', matCount: 12, lapMm: 120, key: 'b' };
+  const chars = groupByCharacter([rectA, rectB]);
+  assert.equal(chars.length, 2);
+  assert.deepEqual(chars.map((c) => c.feel).sort(), ['sweeping', 'tight']);
+  for (const c of chars) {
+    assert.equal(c.name, 'Rectangle');
+    assert.equal(c.variants.length, 1);
+  }
+});

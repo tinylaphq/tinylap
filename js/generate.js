@@ -582,10 +582,22 @@ export function groupByCharacter(results) {
 
   const characters = [...groups.values()];
   for (const c of characters) {
-    c.variants.sort((a, b) => b.matCount - a.matCount || b.lapMm - a.lapMm);
+    // matCount/lapMm frequently tie among a character's variants (e.g. 19
+    // L-shape variants tied on both for a single starter set), so without a
+    // final tiebreak the order among ties would rest on Array.prototype.sort
+    // stability plus generateLayouts' internal search order — deterministic
+    // today, but an accident rather than a documented rule, and the UI pages
+    // through these. `key` is unique per result (see canonicalLayoutKey), so
+    // this makes the order a total, intentional one.
+    c.variants.sort((a, b) => b.matCount - a.matCount || b.lapMm - a.lapMm || a.key.localeCompare(b.key));
     c.best = c.variants[0];
     c.label = `${c.name}, ${FEEL_LABEL[c.feel]}`;
   }
-  characters.sort((a, b) => a.corners - b.corners || a.name.localeCompare(b.name));
+  // feel is a tiebreak after corners/name for the same reason: currently
+  // unreachable (cornerR60 never appears in real results, see
+  // cornerTypesFor above), but Task 6 makes feel a real discriminator, and
+  // leaving two same-corners/same-name characters to fall back on insertion
+  // order would be the same latent gap as the untested half of the group key.
+  characters.sort((a, b) => a.corners - b.corners || a.name.localeCompare(b.name) || a.feel.localeCompare(b.feel));
   return characters;
 }
