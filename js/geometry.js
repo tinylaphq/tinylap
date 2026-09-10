@@ -62,37 +62,30 @@ export const PIECES = {
     centrelineMm: QUARTER_TURN_MM,
   },
 
-  cornerR60: {                                         // enter N, exit E
+  cornerR60: {                                         // enter E, exit S
     label: 'Corner R60',
-    cells: [
-      [0, 0], [1, 0],                                  // 3x3 minus inner cell [2,0]
-      [0, 1], [1, 1], [2, 1],
-      [0, 2], [1, 2], [2, 2],
-    ],
-    ports: [
-      { cells: [[0, 0], [1, 0]], dir: 'N' },
-      { cells: [[2, 1], [2, 2]], dir: 'E' },
-    ],
-    // The large corner sweeps the INSIDE of the turn, not the outside: the
-    // two shaped mats flank the empty infield cell and their corners are
-    // cut away to form one continuous arc around it. The outer corner stays
-    // square.
+    // Three mats, not four: the large corner sweeps the inside of the turn
+    // away entirely. That is why 87033-02 gives exactly 4 plain + 8 shaped
+    // mats and 8 curve halves — one plain, two shaped and two halves per
+    // corner — and ships no caps, no straights and no quarter-rounds. The
+    // two shaped mats are their own curved shape, not squares with a
+    // corner clipped.
     //
-    // Confirmed against a photo of the assembled piece and against the kit
-    // contents, which reconcile exactly under this reading and did not
-    // under the previous one: 87033-02 ships 2 shaped mats and 2 curve
-    // halves per corner, and — decisively — *no corner caps*. A cap exists
-    // to close a sharp inner apex, so a kit containing none cannot have
-    // one. The earlier model put the arc on the outside and needed a cap
-    // borrowed from the base set to close the apex it left behind.
-    // Anchored on the empty infield cell [2,0]: its S and W edges are the
-    // two boundary edges lining the hole, and the arc replaces both with
-    // one continuous sweep across the two mats that flank it.
-    walls: [
-      { kind: 'arcLarge', r: 1, cell: [2, 0], corner: 'SW' },
+    // It uses FEWER mats than an R30 corner while being the faster corner:
+    // carving out the apex is what opens the racing line.
+    cells: [[1, 0], [0, 1], [1, 1]],
+    ports: [
+      { cells: [[1, 0], [1, 1]], dir: 'E' },
+      { cells: [[0, 1], [1, 1]], dir: 'S' },
     ],
-    mats: { square: 6, arcLarge: 2 },
-    centrelineMm: 2 * QUARTER_TURN_MM,
+    // Anchored on the swept-away inner cell [0,0]: its S and E edges are
+    // the two boundary edges lining the gap, and the arc replaces both
+    // with one continuous sweep across the two shaped mats.
+    walls: [
+      { kind: 'arcLarge', r: 1, cell: [0, 0], corner: 'SE' },
+    ],
+    mats: { square: 1, arcLarge: 2 },
+    centrelineMm: 1.5 * QUARTER_TURN_MM,
   },
 };
 

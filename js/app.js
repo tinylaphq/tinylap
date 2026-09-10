@@ -33,7 +33,7 @@ function renderPalette() {
     const thumb = document.createElement('span');
     thumb.className = 'piece-thumb';
     try {
-      thumb.innerHTML = layoutToSvgString(createLayout({ pieces: [{ type, x: 0, y: 0, rot: 0 }] }), { pad: 0.25 });
+      thumb.innerHTML = layoutToSvgString(createLayout({ pieces: [{ type, x: 0, y: 0, rot: 0 }] }), { pad: 0.35, theme: 'light' });
     } catch (error) {
       console.error(`piece thumbnail failed for ${type}`, error);
     }
@@ -512,7 +512,7 @@ function presetListItem(preset, stock) {
     button.type = 'button';
     button.className = 'preset-card';
     button.dataset.presetId = preset.id;
-    button.innerHTML = `<span class="preset-thumb">${layoutToSvgString(layout, { pad: 1 })}</span>
+    button.innerHTML = `<span class="preset-thumb">${layoutToSvgString(layout, { pad: 0.6, theme: 'light' })}</span>
       <span class="preset-info">
         <span class="preset-name">${preset.name}</span>
         <span class="preset-source">${preset.source}</span>

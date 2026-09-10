@@ -26,6 +26,23 @@ function assertFinite(value, label) {
   return value;
 }
 
+// The region a cut removes: corner vertex -> first endpoint -> along the
+// arc -> back to the vertex. Painted in the canvas colour over the mats so
+// a cut corner reads as cut. Without this every arc was drawn as a stroke
+// lying across an intact square, which is what made the large corner look
+// like it was missing a tile rather than swept.
+export function cutPath(wall) {
+  const { r, cell, corner } = wall;
+  const [vx, vy] = CORNER_VERTEX[corner](cell);
+  const [s1, s2] = CORNER_STEPS[corner];
+  const a = [vx + s1[0] * r, vy + s1[1] * r];
+  const b = [vx + s2[0] * r, vy + s2[1] * r];
+  const c = [vx + (s1[0] + s2[0]) * r, vy + (s1[1] + s2[1]) * r];
+  const cross = (a[0] - c[0]) * (b[1] - c[1]) - (a[1] - c[1]) * (b[0] - c[0]);
+  const sweep = cross > 0 ? 1 : 0;
+  return `M ${vx} ${vy} L ${a[0]} ${a[1]} A ${r} ${r} 0 0 ${sweep} ${b[0]} ${b[1]} Z`;
+}
+
 export function arcPath(wall) {
   const { r, cell, corner } = wall;
   const [vx, vy] = CORNER_VERTEX[corner](cell);
@@ -67,26 +84,40 @@ export function layoutGeometry(layout) {
     mats,
     lines: straightEdgeIds.map(edgeLine),
     arcs: arcs.map((w) => ({ d: arcPath(w), kind: w.kind })),
+    cuts: arcs.map((w) => cutPath(w)),
     bbox: bbox ?? { x: 0, y: 0, w: 0, h: 0 },
   };
 }
 
-export function layoutToSvgString(layout, { pad = 1 } = {}) {
+// Two palettes. `dark` matches the on-screen canvas and is what the
+// standalone export uses. `light` is for thumbnails, which sit on white
+// cards in the palette and preset gallery — dark-on-dark reads as mud at
+// 3rem, so those invert to palace's dark-on-light.
+const THEMES = {
+  dark:  { mat: '#262626', matEdge: '#3a3a3a', wall: '#ffffff', bg: '#0a0a0a' },
+  light: { mat: '#d9d9d9', matEdge: '#bdbdbd', wall: '#0a0a0a', bg: '#f7f7f7' },
+};
+
+export function layoutToSvgString(layout, { pad = 1, theme = 'dark' } = {}) {
+  const t = THEMES[theme] ?? THEMES.dark;
   const g = layoutGeometry(layout);
-  const vb = [g.bbox.x - pad, g.bbox.y - pad, g.bbox.w + pad * 2, g.bbox.h + pad * 2]
-    .map((n) => assertFinite(n, 'viewBox component'));
+  const vb = [
+    assertFinite(g.bbox.x - pad, 'viewBox x'),
+    assertFinite(g.bbox.y - pad, 'viewBox y'),
+    assertFinite(g.bbox.w + pad * 2, 'viewBox width'),
+    assertFinite(g.bbox.h + pad * 2, 'viewBox height'),
+  ];
   const mats = g.mats
-    .map((m) => `<rect x="${assertFinite(m.x, 'mat x')}" y="${assertFinite(m.y, 'mat y')}" width="1" height="1" fill="#262626" stroke="#3a3a3a" stroke-width="0.03"/>`)
+    .map((m) => `<rect x="${assertFinite(m.x, 'mat x')}" y="${assertFinite(m.y, 'mat y')}" width="1" height="1" fill="${t.mat}" stroke="${t.matEdge}" stroke-width="0.03"/>`)
     .join('');
   const lines = g.lines
-    .map((l) => `<line x1="${assertFinite(l.x1, 'line x1')}" y1="${assertFinite(l.y1, 'line y1')}" x2="${assertFinite(l.x2, 'line x2')}" y2="${assertFinite(l.y2, 'line y2')}" stroke="#ffffff" stroke-width="0.12" stroke-linecap="square"/>`)
+    .map((l) => `<line x1="${assertFinite(l.x1, 'line x1')}" y1="${assertFinite(l.y1, 'line y1')}" x2="${assertFinite(l.x2, 'line x2')}" y2="${assertFinite(l.y2, 'line y2')}" stroke="${t.wall}" stroke-width="0.16" stroke-linecap="square"/>`)
     .join('');
+  const cuts = g.cuts.map((d) => `<path d="${d}" fill="${t.bg}"/>`).join('');
   const arcs = g.arcs
-    .map((a) => `<path d="${a.d}" fill="none" stroke="#ffffff" stroke-width="0.12" stroke-linecap="square"/>`)
+    .map((a) => `<path d="${a.d}" fill="none" stroke="${t.wall}" stroke-width="0.16" stroke-linecap="square"/>`)
     .join('');
-  const width = assertFinite(vb[2] * MAT_PX, 'width');
-  const height = assertFinite(vb[3] * MAT_PX, 'height');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" width="${width}" height="${height}">${mats}${lines}${arcs}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" width="${vb[2] * MAT_PX}" height="${vb[3] * MAT_PX}"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="${t.bg}"/>${mats}${cuts}${lines}${arcs}</svg>`;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -126,7 +157,7 @@ function worldFor(layout, room) {
 // continuously, and replacing the element under the pointer makes Chrome
 // fire `dragleave` with a null relatedTarget and abandon the drop target,
 // so `drop` never arrives at all.
-const LAYERS = ['grid', 'room', 'mats', 'walls', 'handles', 'ghost'];
+const LAYERS = ['grid', 'room', 'mats', 'cuts', 'walls', 'handles', 'ghost'];
 
 function layers(svgEl) {
   if (svgEl.dataset.layered !== 'yes') {
@@ -186,6 +217,9 @@ export function drawLayout(svgEl, layout, { room = null, ghost = null, selected 
       'data-piece': m.pieceIndex,
     }));
   }
+
+  L.cuts.replaceChildren();
+  for (const d of g.cuts) L.cuts.append(el('path', { d, class: 'cut' }));
 
   L.walls.replaceChildren();
   for (const l of g.lines) L.walls.append(el('line', { ...l, class: 'wall' }));

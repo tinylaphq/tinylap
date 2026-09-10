@@ -61,13 +61,15 @@ main {
 
 /* Only mats and port handles are interactive. Letting the decorative layers
    take hit-tests made the drop target flicker during a drag. */
-.grid, .walls, .ghost, .room { pointer-events: none; }
+.grid, .walls, .ghost, .room, .cuts { pointer-events: none; }
 
 .gridline { stroke: #1f1f1f; stroke-width: 0.02; }
 .room { fill: none; stroke: var(--p-accent-3); stroke-width: 0.06; stroke-dasharray: 0.3 0.2; }
 .mat { fill: #262626; stroke: #3a3a3a; stroke-width: 0.03; transition: var(--p-transition); }
 .mat.selected { fill: var(--p-accent-2); }
 .mat.overlap { fill: var(--p-error); }
+/* Painted in the canvas colour so a cut mat corner reads as cut. */
+.cut { fill: var(--p-dark); }
 .wall { stroke: var(--p-surface); stroke-width: 0.12; fill: none;
         stroke-linecap: square; stroke-linejoin: miter; }
 .ghost rect { opacity: 0.55; }

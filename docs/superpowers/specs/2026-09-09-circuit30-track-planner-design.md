@@ -341,41 +341,46 @@ test with `node:test` and zero dependencies:
 
 ## 13. Provisional decisions and open questions
 
-### 13.1 Wide corner geometry — corrected
+### 13.1 Large corner geometry — corrected twice
 
-**The large corner sweeps the inside of the turn, not the outside.** Its two
-shaped mats flank the empty infield cell and their cut corners form one
-continuous arc around it; the outer corner stays square. `cornerR60` occupies a
-3 x 3 block with the inner cell empty (8 mats: 6 square + 2 shaped) and derives
-2 large curve halves, 6 straights and **no corner caps**.
+**The large corner is three mats, and it sweeps the inside of the turn away
+entirely.** `cornerR60` occupies a 2 x 2 area with the inner cell gone: two
+shaped mats — their own curved shape, not squares with a corner clipped — plus
+one plain mat. It derives 2 large curve halves, 2 straight barriers, no curves
+and **no corner caps**.
 
-This was originally modelled the other way round — a large-radius arc on the
-*outer* wall with a sharp inner apex closed by a cap — which was wrong. The
-error was caught by the owner looking at the rendered piece against the real
-product, and confirmed from a photograph of an assembled corner.
+It uses *fewer* mats than an R30 corner (3 against 4) while being the faster
+corner. Carving out the apex is precisely what opens the racing line; "large"
+refers to the radius the car can carry, not the floor area consumed.
 
-Two pieces of evidence settle it:
+**This decomposes to exactly a quarter of 87033-02.** The kit holds 4 plain
+mats, 8 shaped mats and 8 curve halves. Per corner that is 1 plain + 2 shaped
++ 2 halves — which is this piece, with nothing left over and nothing missing.
+No caps, no straights, no quarter-rounds are supplied because the corner needs
+none.
 
-- **The kit ships no corner caps.** A cap exists to close a sharp inner apex.
-  87033-02 contains 4 plain mats, 8 shaped mats and 8 curve halves — and not a
-  single cap. Under the old model each corner needed a cap borrowed from the
-  base set to close the apex its outer arc left behind. Under the corrected
-  model no cap is required anywhere, which is why none is supplied.
-- **The two shaped mats are mirror images.** Two mirrored arcs joined end to
-  end make an S, not a quarter turn, so they cannot be two halves of one outer
-  arc as first assumed. They are the two mats either side of the infield cell,
-  each contributing half of the sweep around it.
+Two earlier models were wrong and both were caught by the owner comparing the
+rendered piece against the real product:
 
-The 87031-02 assembly diagram was misread on the first pass: its exploded view
+1. *Outer arc, sharp inner apex closed by a cap.* Contradicted by the kit
+   shipping no caps at all — a cap exists to close a sharp apex, so a kit
+   containing none cannot have one.
+2. *Inner sweep across a 3 x 3 block with a rounded outer corner.* Right about
+   the inside, wrong about the size, and it invented a quarter-round the kit
+   does not supply.
+
+The 87031-02 assembly diagram was also misread at first: its exploded view
 shows the two curve halves offset above the mats before assembly, which reads
 as two parallel walls. They are one arc.
 
 No manual exists for 87033-02 — Kyosho publishes instruction sheets only for
-the older 87031 series — so the printed figures cannot resolve this. The
+the older 87031 series — so the printed figures cannot settle this. The
 physical piece is the authority.
 
-`test/model.test.js` pins the zero-cap count; if it ever returns to 1 the
-geometry has regressed to the old reading.
+Pinned in `test/geometry.test.js` (3 cells, `{square:1, arcLarge:2}`) and
+`test/model.test.js` (2 large curve halves, zero caps). The parts-list
+identity above is the reason those numbers are worth asserting: if any drifts,
+the piece no longer decomposes to a quarter of the kit.
 
 ### 13.2 Reconciling the stock L against the 87033 contents
 

@@ -62,9 +62,12 @@ test('rotating a corner carries its walls around with it', () => {
 test('the three piece types have the footprints the spec fixes', () => {
   assert.equal(PIECES.straight.cells.length, 2);
   assert.equal(PIECES.cornerR30.cells.length, 4);
-  assert.equal(PIECES.cornerR60.cells.length, 8);
+  assert.equal(PIECES.cornerR60.cells.length, 3);
   assert.deepEqual(PIECES.cornerR30.mats, { square: 3, quarterRound: 1 });
-  assert.deepEqual(PIECES.cornerR60.mats, { square: 6, arcLarge: 2 });
+  // Three mats, not four: the large corner sweeps its inner mat away
+  // entirely. One plain plus two shaped is exactly a quarter of what
+  // 87033-02 contains. See spec 13.1.
+  assert.deepEqual(PIECES.cornerR60.mats, { square: 1, arcLarge: 2 });
 });
 
 import { placedCells, placedPorts, placedWalls } from '../js/geometry.js';
@@ -89,8 +92,8 @@ test('ports and walls are placed in the same frame as cells', () => {
   assert.deepEqual(walls.find((w) => w.kind === 'arc').cell, [10, 11]);
 });
 
-test('an R60 corner occupies 3x3 minus its inner cell', () => {
+test('an R60 corner occupies 2x2 minus its swept-away inner cell', () => {
   const cells = placedCells({ type: 'cornerR60', x: 0, y: 0, rot: 0 });
-  assert.equal(cells.length, 8);
+  assert.equal(cells.length, 3);
   assert.ok(!cells.some(([x, y]) => x === 2 && y === 0), 'inner cell [2,0] is empty');
 });

@@ -135,10 +135,15 @@ test('four corners packed solid have curves but no caps', () => {
 // capped apex. An earlier model put the arc on the outside and needed a
 // cap borrowed from the base set; if this assertion ever goes back to 1,
 // the geometry has regressed to that reading.
-test('a lone R60 corner sweeps its inside: two large-curve halves, no cap', () => {
+test('a lone R60 corner sweeps its inside and rounds its outside, with no cap', () => {
   const l = createLayout({ pieces: [{ type: 'cornerR60', x: 0, y: 0, rot: 0 }] });
   const { counts } = computeBarriers(l);
-  assert.deepEqual(counts, { straight: 6, curve: 0, curveLarge: 2, cornerCap: 0 });
+  assert.deepEqual(counts, { straight: 2, curve: 0, curveLarge: 2, cornerCap: 0 });
+  // The split between kit and base set is the check that matters: the kit
+  // supplies only the two shaped mats and the two large curve halves, and
+  // 87033-02 ships exactly four corners' worth of those and nothing else.
+  const { mats } = computeMetrics(l);
+  assert.deepEqual(mats, { square: 1, arcLarge: 2 });
 });
 
 // I6: the arc-skip branch (computeBarriers's `if (!claimed.every(...)) continue;`)
