@@ -87,3 +87,73 @@ export function outlineName(signature) {
   const index = turnSignatures(canonical.length).indexOf(canonical);
   return `${canonical.length}-corner shape ${index + 1}`;
 }
+
+import { ROTATIONS, placedPorts } from './geometry.js';
+import { createLayout, isClosedCircuit, findOverlaps, openPorts, placeAgainst } from './model.js';
+
+// Turn tables keyed by the direction currently being walked. Also used by
+// Task 4 — keep this the single copy so the two never drift apart.
+export const RIGHT_OF = { N: 'E', E: 'S', S: 'W', W: 'N' };
+export const LEFT_OF = { N: 'W', W: 'S', S: 'E', E: 'N' };
+
+// Append one piece of `type` against the chain's current growing tip, so
+// that the piece's *other* port — the one not used to connect — faces
+// `exitDir`. Rotations are found by trial rather than derived: placeAgainst
+// already knows the connection rules, and re-deriving them by hand is how
+// orientation bugs get in.
+//
+// The caller must thread the returned tip through to the next call rather
+// than re-deriving it from openPorts(layout): a chain always has two open
+// ports (one at each end), and nothing guarantees openPorts orders the
+// growing tip last. Instead, the new tip is read straight off the piece
+// just placed via placedPorts — it can only be one of that piece's own
+// ports, and disambiguating by `exitDir` (rather than "whichever wasn't
+// just connected") is what lets a corner choose a right turn over a left
+// one when both are geometrically non-overlapping.
+//
+// Returns { pieces, tip } or null if no rotation both connects and exits
+// the right way without overlapping the chain so far.
+function append(pieces, tip, type, exitDir) {
+  for (const rot of ROTATIONS) {
+    const placed = placeAgainst(tip, type, rot);
+    if (!placed) continue;
+    const grown = [...pieces, placed];
+    if (findOverlaps(createLayout({ pieces: grown })).length > 0) continue;
+    const newTip = placedPorts(placed).find((p) => p.dir === exitDir);
+    if (newTip) return { pieces: grown, tip: newTip };
+  }
+  return null;
+}
+
+// Build a closed loop from a turn signature and the straight-piece counts
+// preceding each corner. sides[i] is how many `straight` pieces sit on the
+// run before corner i. Returns the piece array, or null if the chosen side
+// lengths don't actually bring the loop back to a closed circuit.
+export function buildLoop({ signature, sides, cornerType = 'cornerR30' }) {
+  if (sides.length !== signature.length) return null;
+
+  const pieces0 = [{ type: cornerType, x: 0, y: 0, rot: 0 }];
+  // A single piece has two open ports and, with nothing else placed yet,
+  // no ambiguity about which ports exist — but which of the two becomes
+  // the starting tip is still a deliberate, consistent choice (the first
+  // one openPorts reports), not a guess re-made on every later step.
+  let tip = openPorts(createLayout({ pieces: pieces0 })).map((o) => o.port)[0];
+  let pieces = pieces0;
+
+  for (let i = 0; i < signature.length; i++) {
+    for (let s = 0; s < sides[i]; s++) {
+      const grown = append(pieces, tip, 'straight', tip.dir);
+      if (!grown) return null;
+      ({ pieces, tip } = grown);
+    }
+    if (i === signature.length - 1) break; // the first piece is the last corner
+    const exitDir = signature[i] === 'R' ? RIGHT_OF[tip.dir] : LEFT_OF[tip.dir];
+    const grown = append(pieces, tip, cornerType, exitDir);
+    if (!grown) return null;
+    ({ pieces, tip } = grown);
+  }
+
+  const layout = createLayout({ pieces });
+  if (findOverlaps(layout).length > 0) return null;
+  return isClosedCircuit(layout) ? pieces : null;
+}

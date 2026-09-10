@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { turnSignatures, outlineName } from '../js/generate.js';
+import { turnSignatures, outlineName, buildLoop } from '../js/generate.js';
+import { createLayout, isClosedCircuit, findOverlaps, occupiedSet } from '../js/model.js';
 
 test('four corners give exactly one outline: the rectangle', () => {
   assert.deepEqual(turnSignatures(4), ['RRRR']);
@@ -42,4 +43,27 @@ test('larger outlines fall back to an honest generic name', () => {
   // We do not claim to know which 8-corner class is "the T" and which is
   // "the U" — naming them would be inventing knowledge we have not verified.
   assert.match(outlineName(turnSignatures(8)[0]), /8-corner shape/);
+});
+
+test('a rectangle outline with equal sides closes', () => {
+  const pieces = buildLoop({ signature: 'RRRR', sides: [3, 5, 3, 5], cornerType: 'cornerR30' });
+  assert.ok(pieces, 'expected a closed loop');
+  const l = createLayout({ pieces });
+  assert.deepEqual(findOverlaps(l), []);
+  assert.equal(isClosedCircuit(l), true);
+});
+
+test('the built rectangle is the 7x9 ring the rest of the suite already trusts', () => {
+  const pieces = buildLoop({ signature: 'RRRR', sides: [3, 5, 3, 5], cornerType: 'cornerR30' });
+  assert.equal(occupiedSet(createLayout({ pieces })).size, 48);
+});
+
+test('a rectangle outline with mismatched sides does not close', () => {
+  assert.equal(buildLoop({ signature: 'RRRR', sides: [3, 5, 4, 5], cornerType: 'cornerR30' }), null);
+});
+
+test('zero-length sides are allowed: four corners butted together close', () => {
+  const pieces = buildLoop({ signature: 'RRRR', sides: [0, 0, 0, 0], cornerType: 'cornerR30' });
+  assert.ok(pieces);
+  assert.equal(occupiedSet(createLayout({ pieces })).size, 16);
 });
