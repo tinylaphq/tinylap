@@ -1,4 +1,4 @@
-import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR } from './model.js';
+import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR } from './model.js';
 import { drawLayout, drawGhost, layoutToSvgString } from './render.js';
 import { PIECES, MAT_MM, placedCells, placedPorts } from './geometry.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
@@ -184,7 +184,64 @@ function ghostFor(type, rot, [x, y]) {
 // port left at its far end, so a run of identical pieces chains with
 // Space/Enter alone. Clears both state.pending and state.ghost together on
 // every "can't continue" branch so the two never disagree with each other.
-function advanceGhost() {
+// Every piece that could sit where the selected one sits, in a stable
+// order, so a key can walk them.
+//
+// The anchor is the join this piece already has: the neighbouring port it
+// is matched to. Swapping a straight for a corner keeps that join and
+// swings the rest of the piece around it, which is what "convert the last
+// tile I laid into a corner" means — replacing it in place at the same
+// x/y would leave the corner hanging off the chain.
+//
+// Rotations are enumerated too, not just types: from one incoming port a
+// corner can turn either way, and those are genuinely different choices
+// the cycle should offer. placeAgainst returns null for a rotation with no
+// port facing the anchor, which filters the impossible ones for free.
+function conversionCandidates(index) {
+  const piece = state.layout.pieces[index];
+  const others = state.layout.pieces.filter((_, i) => i !== index);
+  const taken = occupiedSet(createLayout({ pieces: others }));
+
+  const { matched } = matchPorts(state.layout);
+  const mine = new Set(placedPorts(piece).map(portKey));
+  let anchor = null;
+  for (const other of others) {
+    for (const port of placedPorts(other)) {
+      const key = portKey(port);
+      if (mine.has(key) && matched.has(key)) { anchor = port; break; }
+    }
+    if (anchor) break;
+  }
+
+  const seen = new Set();
+  const candidates = [];
+  for (const type of Object.keys(PIECES)) {
+    for (const rot of [0, 90, 180, 270]) {
+      // Unanchored (a piece joined to nothing): swap in place instead.
+      const cand = anchor
+        ? placeAgainst(anchor, type, rot)
+        : { type, rot, x: piece.x, y: piece.y };
+      if (!cand) continue;
+      if (placedCells(cand).some((c) => taken.has(cellKey(c)))) continue;
+      // Identity is the cells it fills plus the ports it offers — not the
+      // rotation number. A straight at 0 and at 180 fills the same cells
+      // and opens the same two ends, so it is one option, not two; a
+      // corner at 0 and at 180 opens different ends, so it is two.
+      const key = cand.type
+        + '|' + placedCells(cand).map(cellKey).sort().join(',')
+        + '|' + placedPorts(cand).map(portKey).sort().join(',');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push(cand);
+    }
+  }
+  return candidates;
+}
+
+// `nextType` overrides what gets armed: the conversion path uses it to go
+// back to a straight after turning a corner, because straights are the
+// default the mouse lays and a corner is a deliberate one-off.
+function advanceGhost(nextType = null) {
   const last = state.lastPlaced;
   if (!last) { state.pending = null; state.ghost = null; return; }
   const index = state.layout.pieces.length - 1;
@@ -196,7 +253,16 @@ function advanceGhost() {
   // "double back". Not proven for every piece type, just the working rule.
   const forward = stillOpen.at(-1);
   if (!forward) { state.pending = null; state.ghost = null; return; }
-  const next = placeAgainst(forward.port, last.type, last.rot);
+  // With an override, the previous piece's rotation is meaningless — a
+  // straight following a corner needs whichever rotation actually meets
+  // that port, so try them all and take the first that fits.
+  const type = nextType ?? last.type;
+  const rots = nextType ? [0, 90, 180, 270] : [last.rot];
+  let next = null;
+  for (const rot of rots) {
+    const candidate = placeAgainst(forward.port, type, rot);
+    if (candidate) { next = candidate; break; }
+  }
   if (!next) { state.pending = null; state.ghost = null; return; }
   state.pending = next;
   state.ghost = ghostFor(next.type, next.rot, [next.x, next.y]);
@@ -973,6 +1039,34 @@ document.addEventListener('keydown', (e) => {
         p.rot = (p.rot + 90) % 360;
       });
     }
+    return;
+  }
+
+  // Cycle the selected piece through everything that could sit there, so a
+  // run of straights can be turned into a corner without going back to the
+  // palette. Re-arms the auto-advance ghost, so the mouse carries straight
+  // on from the new piece's open end.
+  if (e.key.toLowerCase() === 'c') {
+    if (state.selected === null || state.dragging) return;
+    e.preventDefault();
+    const candidates = conversionCandidates(state.selected);
+    if (candidates.length <= 1) return;
+    const current = state.layout.pieces[state.selected];
+    const at = candidates.findIndex((c) => c.type === current.type && c.rot === current.rot
+      && c.x === current.x && c.y === current.y);
+    const next = candidates[(at + 1) % candidates.length];
+    const wasLast = state.selected === state.layout.pieces.length - 1;
+    state.pending = null;
+    state.ghost = null;
+    commit((l) => { l.pieces[state.selected] = next; });
+    // advanceGhost re-arms from the LAST piece, so only re-arm when the
+    // converted piece is the last one — which it is in the flow this
+    // serves: lay straights, convert the final one, carry on.
+    if (wasLast) {
+      state.lastPlaced = next;
+      advanceGhost('straight');
+    }
+    render();
     return;
   }
 
