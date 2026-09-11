@@ -5,6 +5,7 @@ import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from '.
 import { exportHtml, importHtml } from './storage.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
+import { loadLayout, saveLayout } from './session-store.js';
 import { generateLayouts, groupByCharacter, outOfReach, outlineName, hasCachedLayouts, scoreLayouts } from './generate.js';
 
 const canvas = document.querySelector('#canvas');
@@ -20,7 +21,9 @@ const DEFAULT_ROT = { straight: 90, cornerR30: 90, cornerR60: 180 };
 const defaultRot = (type) => DEFAULT_ROT[type] ?? 0;
 
 const state = {
-  layout: createLayout(),
+  // Whatever this tab was working on, if anything. sessionStorage, so a
+  // reload keeps your place but a new tab starts blank.
+  layout: loadLayout(sessionStorage) ?? createLayout(),
   kits: loadKits(localStorage),
   tool: null,     // { type, rot }
   ghost: null,    // { cells, valid }
@@ -157,6 +160,23 @@ function renderStatus() {
   status.className = `status ${closed ? 'status-success' : ''}`.trim();
 }
 
+// Saving from render() rather than from commit() is deliberate: the drag
+// paths mutate state.layout and push history themselves without going
+// through commit, so hooking commit would quietly miss them — and a
+// persistence gap that only affects dragging is exactly the kind nobody
+// notices until work is lost. Coalesced, because a drag renders on every
+// pointermove and this need not.
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveLayout(sessionStorage, state.layout), 300);
+}
+// A tab can go away inside the debounce window; take the last chance.
+addEventListener('pagehide', () => {
+  clearTimeout(saveTimer);
+  saveLayout(sessionStorage, state.layout);
+});
+
 export function render() {
   drawLayout(canvas, state.layout, {
     room: state.layout.room,
@@ -169,6 +189,7 @@ export function render() {
   });
   renderBom();
   renderStatus();
+  scheduleSave();
 }
 
 // The legend hard-codes the Mac modifier; correct it elsewhere.
@@ -812,6 +833,22 @@ function presetListItem(preset, stock) {
   }
   return li;
 }
+
+// Clear the canvas. Pieces only — the room is a constraint you set once
+// about your floor, not something you drew, so wiping it alongside the
+// track would be a second, unasked-for change. Goes through commit(), so
+// it is one undo step like any other edit and needs no confirmation.
+document.querySelector('#btn-clear').addEventListener('click', () => {
+  if (state.layout.pieces.length === 0) return;
+  state.selection = [];
+  state.pending = null;
+  state.ghost = null;
+  state.tool = null;
+  state.hoverCell = null;
+  state.lastPlaced = null;
+  commit((l) => { l.pieces = []; });
+  render();
+});
 
 document.querySelector('#btn-presets').addEventListener('click', () => {
   // The preset gallery is cheap and renders synchronously; the generated

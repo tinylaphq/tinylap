@@ -88,8 +88,13 @@ export function extractLayoutJson(html) {
   }
 }
 
-export function importHtml(html) {
-  const data = extractLayoutJson(html);
+// Validate and rebuild a layout from plain data in the persisted shape.
+// Split out of importHtml so the session store validates by exactly the
+// same rules — two copies of "is this piece type real, is this rotation
+// one of four, is this coordinate finite" is how the two paths drift, and
+// these particular checks are what stop a hand-edited payload reaching
+// the renderer.
+export function layoutFromData(data) {
 
   if (data.version !== SUPPORTED_VERSION) {
     throw new Error(
@@ -100,7 +105,11 @@ export function importHtml(html) {
     throw new Error('The layout data has no pieces array.');
   }
   for (const piece of data.pieces) {
-    if (!PIECES[piece.type]) throw new Error(`Unknown piece type: ${piece.type}`);
+    // Object.hasOwn, not a truthy lookup: PIECES['__proto__'] and
+    // PIECES['constructor'] are inherited and truthy, so a crafted file
+    // or a hand-edited session entry got a bogus piece type past this
+    // guard and threw deep in the renderer instead.
+    if (!Object.hasOwn(PIECES, piece.type)) throw new Error(`Unknown piece type: ${piece.type}`);
     if (![0, 90, 180, 270].includes(piece.rot)) {
       throw new Error(`Unknown rotation: ${piece.rot}`);
     }
@@ -121,4 +130,8 @@ export function importHtml(html) {
     room,
     pieces: data.pieces.map(({ type, x, y, rot }) => ({ type, x, y, rot })),
   });
+}
+
+export function importHtml(html) {
+  return layoutFromData(extractLayoutJson(html));
 }
