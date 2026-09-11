@@ -89,7 +89,11 @@ main {
    Save) and Clear neither creates, loads nor stores one. */
 #canvas-bar {
   display: flex;
-  align-items: stretch;
+  /* Centred, not stretched: a full-height button reads as a second panel
+     bolted to the status bar rather than as a control sitting in it. */
+  align-items: center;
+  gap: var(--p-space-md);
+  padding-right: var(--p-space-md);
   border-top: var(--p-border-width) solid var(--p-text);
   background: var(--p-surface);
 }
@@ -97,11 +101,6 @@ main {
   flex: 1;
   margin: 0;
   border: 0;
-}
-#canvas-bar #btn-clear {
-  border: 0;
-  border-left: var(--p-border-width) solid var(--p-text);
-  padding-inline: var(--p-space-lg);
 }
 
 /* ── Piece palette ───────────────────────────────────────────────── */
