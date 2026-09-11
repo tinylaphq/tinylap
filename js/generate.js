@@ -11,7 +11,7 @@
 // for what happens when that rule is broken.
 
 import { PIECES, PIECE_TYPES, ROTATIONS, placedCells, placedPorts } from './geometry.js';
-import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, unjoinedContacts, subWidthNotches } from './model.js';
+import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, unjoinedContacts } from './model.js';
 import { billOfMaterials, diffStock, emptyStock, MAT_PARTS, BARRIER_PARTS } from './inventory.js';
 
 // Rotate a string left by n.
@@ -570,14 +570,24 @@ export function generateLayouts(stock, opts = {}) {
             // shared outline helper rather than this file computing
             // occupancy geometry itself (the "no parallel geometry maths"
             // rule).
-            if (subWidthNotches(layout) > 0) return;
+            if (enclosedInfields(layout) !== 1) return;
+            // No notch check here. It costs roughly twice the infield flood
+            // fill and rejects nothing: measured across four inventories,
+            // removing it changes no result set, because
+            // maxVariantsPerCharacter prunes the offending candidates long
+            // before they are reached. Reordering it after the cheaper
+            // checks did not help either — the infield check rejects too
+            // few for that to matter. The property is held by a test over
+            // generated results instead ("no layout offered to the user has
+            // a sub-width notch"), which fails if the cap is ever raised
+            // far enough to let one through. subWidthNotches stays in
+            // model.js, tested directly, ready to be reinstated here.
             // Port-closed and overlap-free is not enough: a solid block of
             // mats with a wall round the outside satisfies both while
             // enclosing nothing to drive around. A real track encloses
             // exactly one infield — the closed inner barrier that stops a
             // car cutting the corner. Checked last because it is the one
             // per-candidate flood fill among these checks.
-            if (enclosedInfields(layout) !== 1) return;
             const key = canonicalLayoutKey(pieces);
             if (seen.has(key)) return;
             seen.add(key);

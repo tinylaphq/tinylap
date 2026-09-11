@@ -190,32 +190,25 @@ test('every generated layout has zero sub-width notches', () => {
 // The test above can't fail on its own at these two inventories' default
 // variant cap — the notch-bearing candidates the search finds happen to
 // sit past the cap. This pins one down directly instead: a real candidate
-// generateLayouts(stockFromKits({'87033':2})) reaches (LLRRRRRR,
-// sides [0,1,0,1,3,7,3,1], cornerR30 — an "8-corner shape 1"), closed,
-// one infield, ZERO unjoined contacts (the pimple bug is not the
-// doubled-back case), affordable, and with exactly one sub-width notch.
-// Confirmed by removing the filter on a scratch copy: with it gone this
-// exact key IS among the results; with it in place (here) it is not.
-test('a known sub-width-notch candidate is rejected, not merely rare', () => {
-  const pimple = buildLoop({
-    signature: 'LLRRRRRR',
-    sides: [0, 1, 0, 1, 3, 7, 3, 1],
-    cornerType: 'cornerR30',
-  });
-  assert.ok(pimple, 'expected this tuple to close');
-  const l = createLayout({ pieces: pimple });
-  assert.equal(isClosedCircuit(l), true, 'fixture must be a valid closed circuit');
-  assert.equal(enclosedInfields(l), 1, 'fixture must be a valid single-infield track');
-  assert.deepEqual(unjoinedContacts(l), [], 'fixture is the pimple case, not the doubled-back case');
-  assert.equal(subWidthNotches(l), 1, 'fixture must actually have the notch this test is about');
-  assert.ok(
-    diffStock(billOfMaterials(l), stockFromKits({ '87033': 2 })).every((row) => row.short === 0),
-    'fixture must be affordable, or its absence from results would be explained by stock, not the notch filter',
-  );
-
-  const { results } = generateLayouts(stockFromKits({ '87033': 2 }), { maxSide: 10 });
-  const key = canonicalLayoutKey(pimple);
-  assert.ok(!results.some((r) => r.key === key), 'the notch filter should have rejected this candidate');
+// The notch filter is a guard, not a workhorse. Measured: removing it
+// changes no result set at four inventories, because maxVariantsPerCharacter
+// prunes the offending candidates long before they are reached (the pimple
+// below is #836 of its signature, against a cap of 50). An earlier version
+// of this test asserted the filter rejected that candidate and passed for
+// the wrong reason — the cap explained its absence, not the filter.
+//
+// So test the property, not the mechanism: nothing that reaches the user
+// may carry a notch, however it came to be excluded. This fails if the cap
+// is raised without the filter still holding the line.
+test('no layout offered to the user has a sub-width notch', () => {
+  for (const kits of [{ '87033': 1 }, { '87033': 2 }]) {
+    const { results } = generateLayouts(stockFromKits(kits), { maxSide: 10 });
+    assert.ok(results.length > 0, 'fixture is only meaningful if something generates');
+    for (const r of results) {
+      assert.equal(subWidthNotches(createLayout({ pieces: r.pieces })), 0,
+        `${kits['87033']} kit(s): a result reached the user with a notch`);
+    }
+  }
 });
 
 test('results are deduplicated', () => {

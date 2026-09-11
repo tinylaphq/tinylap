@@ -196,6 +196,30 @@ test('a piece butted against a corner arc\'s outer edge now gets both edges wall
   assert.deepEqual(counts, { straight: 4, curve: 1, curveLarge: 0, cornerCap: 0 });
 });
 
+test('an arc takes one wall off a shared edge, not both', () => {
+  // The bug commit 56a9f68 was named for, which until now had no test that
+  // could fail: computeBarriers deleted an edge outright when an arc
+  // claimed it, so on an edge carrying TWO walls the neighbouring piece's
+  // straight wall vanished from both the count and straightEdgeIds — the
+  // gap the owner reported where a straight met a corner.
+  //
+  // The existing I6 fixture cannot catch it: there the shared edge carries
+  // only one wall, and deleting it is indistinguishable from decrementing
+  // it. This one needs an edge that is both an arc edge AND a two-wall
+  // contact, which is what the R30's SW arc against this straight gives.
+  const layout = createLayout({ pieces: [
+    { type: 'cornerR30', x: 0, y: 0, rot: 0 },
+    { type: 'straight', x: 0, y: 2, rot: 90 },
+  ] });
+  assert.deepEqual(findOverlaps(layout), []);
+  const { counts, straightEdgeIds } = computeBarriers(layout);
+  // The arc takes its side of H:0:2; the straight's own wall stays.
+  assert.ok(straightEdgeIds.includes(edgeId([0, 2], 'N')),
+    'the straight lost its wall on the edge the arc claimed');
+  assert.equal(counts.straight, 4);
+  assert.equal(counts.curve, 1);
+});
+
 test('the 7x9 rectangular ring matches its hand-derived figures', () => {
   const l = createLayout({ pieces: rectangularRing() });
   assert.deepEqual(findOverlaps(l), []);
