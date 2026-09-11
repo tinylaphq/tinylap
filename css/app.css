@@ -190,7 +190,9 @@ kbd {
            margin-bottom: var(--p-space-lg); }
 #metrics .stat { font-size: 15px; white-space: nowrap; }
 
-#recommendation { margin: 0; }
+/* Sat flush against the ROOM line above it. Everything else in this rail
+   is separated by --p-space-md; this was the one exception. */
+#recommendation { margin: var(--p-space-md) 0 0; }
 
 /* ── Dialogs ─────────────────────────────────────────────────────── */
 /* palace has no dialog pattern; these follow its card + border language. */
