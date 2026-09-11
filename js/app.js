@@ -184,8 +184,13 @@ function ghostFor(type, rot, [x, y]) {
 // port left at its far end, so a run of identical pieces chains with
 // Space/Enter alone. Clears both state.pending and state.ghost together on
 // every "can't continue" branch so the two never disagree with each other.
-// Every piece that could sit where the selected one sits, in a stable
-// order, so a key can walk them.
+// Every piece-and-rotation that could sit where the selected one sits, in
+// a stable order, so the keys can walk them.
+//
+// C walks the TYPES in this list (one entry per type) and R walks the
+// ROTATIONS of the current type. Keeping them separate matters: an earlier
+// version had C step through both corner directions, which made changing
+// the piece and changing its direction the same gesture and read as a bug.
 //
 // The anchor is the join this piece already has: the neighbouring port it
 // is matched to. Swapping a straight for a corner keeps that join and
@@ -197,7 +202,7 @@ function ghostFor(type, rot, [x, y]) {
 // corner can turn either way, and those are genuinely different choices
 // the cycle should offer. placeAgainst returns null for a rotation with no
 // port facing the anchor, which filters the impossible ones for free.
-function conversionCandidates(index) {
+function anchoredCandidates(index) {
   const piece = state.layout.pieces[index];
   const others = state.layout.pieces.filter((_, i) => i !== index);
   const taken = occupiedSet(createLayout({ pieces: others }));
@@ -1047,8 +1052,20 @@ document.addEventListener('keydown', (e) => {
       state.ghost = null;
       commit((l) => {
         for (const i of state.selection) {
-          const p = l.pieces[i];
-          p.rot = (p.rot + 90) % 360;
+          const current = l.pieces[i];
+          // Prefer the next orientation of this same type that still meets
+          // the piece's existing join — for a corner that is "turn the
+          // other way". A blind +90 would swing it off the end of the
+          // chain, which is never what rotating a connected piece means.
+          const sameType = anchoredCandidates(i).filter((c) => c.type === current.type);
+          if (sameType.length > 1) {
+            const at = sameType.findIndex((c) => c.rot === current.rot
+              && c.x === current.x && c.y === current.y);
+            l.pieces[i] = sameType[(at + 1) % sameType.length];
+            continue;
+          }
+          // Unconnected, or nothing else fits: turn it where it stands.
+          current.rot = (current.rot + 90) % 360;
         }
       });
     }
@@ -1073,12 +1090,17 @@ document.addEventListener('keydown', (e) => {
     state.ghost = null;
     commit((l) => {
       for (const i of state.selection) {
-        const candidates = conversionCandidates(i);
-        if (candidates.length <= 1) continue;
+        const candidates = anchoredCandidates(i);
         const current = l.pieces[i];
-        const at = candidates.findIndex((c) => c.type === current.type && c.rot === current.rot
-          && c.x === current.x && c.y === current.y);
-        const next = candidates[(at + 1) % candidates.length];
+        // One entry per type, in the palette's order, so C cycles pieces —
+        // straight, corner, large corner — and leaves which way a corner
+        // turns to R. Whichever orientation of the next type fits first
+        // is the one offered.
+        const types = [];
+        for (const c of candidates) if (!types.some((t) => t.type === c.type)) types.push(c);
+        if (types.length <= 1) continue;
+        const at = types.findIndex((c) => c.type === current.type);
+        const next = types[(at + 1) % types.length];
         l.pieces[i] = next;
         last = next;
         changed = true;
