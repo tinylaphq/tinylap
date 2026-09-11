@@ -1,0 +1,40 @@
+name: test and deploy
+
+# Deploys on a push to main. Pull requests run the tests but never deploy,
+# so a branch can be checked without touching the live site.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # No install step: the project has no dependencies, which is why the
+      # whole suite runs in about ten seconds and can gate every deploy.
+      - run: npm test
+
+  deploy:
+    # Only after the tests pass, and never from a pull request — a green
+    # suite is the point of having this in front of the deploy at all.
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      # Two pushes in quick succession would otherwise race, and the loser
+      # could overwrite the newer image with an older one.
+      group: deploy-production
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # --remote-only: build on Fly's builder rather than in the runner, so
+      # the workflow needs no Docker setup of its own.
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

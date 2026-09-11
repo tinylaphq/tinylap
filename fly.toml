@@ -1,0 +1,21 @@
+# Single static app, one region, scales to zero.
+app = 'circuit30-planner'
+primary_region = 'fra'
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Nobody is browsing this at 3am. The machine stops when idle and wakes
+  # on the next request, which costs a second or two of cold start and
+  # avoids paying for a VM that is doing nothing.
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  # The smallest thing Fly offers. It is Caddy serving 580 KB of static
+  # files; anything larger would be paying for idle memory.
+  size = 'shared-cpu-1x'
+  memory = '256mb'
