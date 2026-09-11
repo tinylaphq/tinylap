@@ -9,6 +9,16 @@ import { generateLayouts, groupByCharacter, outOfReach, outlineName, hasCachedLa
 
 const canvas = document.querySelector('#canvas');
 
+// Each piece is defined at whatever rotation suited its geometry, and those
+// disagree: cornerR30 opens north+east at rot 0, cornerR60 north+west. Shown
+// that way the palette looks arbitrary, and the two corners land facing
+// different directions when placed. Both are presented and placed opening
+// right and down, and the straight west-east, so the palette reads as one
+// set: a straight and a corner shown side by side share an opening, which
+// is how they will actually meet on the canvas.
+const DEFAULT_ROT = { straight: 90, cornerR30: 90, cornerR60: 180 };
+const defaultRot = (type) => DEFAULT_ROT[type] ?? 0;
+
 const state = {
   layout: createLayout(),
   kits: loadKits(localStorage),
@@ -43,7 +53,7 @@ function renderPalette() {
     const thumb = document.createElement('span');
     thumb.className = 'piece-thumb';
     try {
-      thumb.innerHTML = layoutToSvgString(createLayout({ pieces: [{ type, x: 0, y: 0, rot: 0 }] }), { pad: 0.35, theme: 'light' });
+      thumb.innerHTML = layoutToSvgString(createLayout({ pieces: [{ type, x: 0, y: 0, rot: defaultRot(type) }] }), { pad: 0.35, theme: 'light' });
     } catch (error) {
       console.error(`piece thumbnail failed for ${type}`, error);
     }
@@ -186,6 +196,31 @@ function pointerWorld(event) {
   return [pt.x, pt.y];
 }
 
+const OPPOSITE_DIR = { N: 'S', S: 'N', E: 'W', W: 'E' };
+
+// Which way round this piece wants to go at [x, y]: the rotation that joins
+// the most open ends without overlapping anything. Ties keep `preferred`,
+// so the ghost does not spin under the cursor when nothing is nearby to
+// connect to, and the piece lands the way the palette showed it.
+function bestRotAt(type, cell, preferred) {
+  const open = new Map();
+  for (const { port } of openPorts(state.layout)) open.set(portKey(port), port.dir);
+  if (open.size === 0) return preferred;
+
+  const taken = occupiedSet(state.layout);
+  let best = preferred;
+  let bestScore = -1;
+  // preferred first, so an equal score never displaces it
+  for (const rot of [preferred, ...[0, 90, 180, 270].filter((r) => r !== preferred)]) {
+    const piece = { type, x: cell[0], y: cell[1], rot };
+    if (placedCells(piece).some((c) => taken.has(cellKey(c)))) continue;
+    const joins = placedPorts(piece)
+      .filter((p) => open.get(portKey(p)) === OPPOSITE_DIR[p.dir]).length;
+    if (joins > bestScore) { bestScore = joins; best = rot; }
+  }
+  return bestScore > 0 ? best : preferred;
+}
+
 function ghostFor(type, rot, [x, y]) {
   const cells = placedCells({ type, x, y, rot });
   const taken = occupiedSet(state.layout);
@@ -294,7 +329,7 @@ function armGhostFrom(index, type, rot = null) {
 document.querySelector('#palette-list').addEventListener('dragstart', (e) => {
   const type = e.target.dataset.type;
   if (!type) return;
-  state.tool = { type, rot: 0 };
+  state.tool = { type, rot: defaultRot(type), turned: false };
   // A new palette drag supersedes any armed auto-advance pending: dragover
   // is about to start overwriting state.ghost with the tool preview, and
   // the invariant is state.pending is non-null only when state.ghost shows
@@ -333,6 +368,11 @@ canvas.addEventListener('dragover', (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
   state.hoverCell = pointerCell(e);
+  // Guess the orientation that connects, unless R has been pressed during
+  // this drag — once the user has turned it themselves, stop overriding.
+  if (!state.tool.turned) {
+    state.tool.rot = bestRotAt(state.tool.type, state.hoverCell, state.tool.rot);
+  }
   state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
   // Only the ghost layer is touched. Calling drawLayout here rebuilt every
   // child of the SVG on each dragover, destroying the element under the
@@ -1165,6 +1205,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 'r') {
     if (state.tool) {
       e.preventDefault();
+      // Turning by hand takes the wheel off the auto-guess for this drag.
+      state.tool.turned = true;
       state.tool.rot = (state.tool.rot + 90) % 360;
       if (state.hoverCell) {
         state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
