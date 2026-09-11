@@ -114,55 +114,60 @@ const CORNER_EDGES = {
   NW: [['N', [1, 0]], ['W', [0, 1]]],
 };
 
-// Edges that carry a wall: the outline of the occupied mats, minus open
-// ports, plus internal edges between two different pieces that touch
-// without joining through a matched port (see unjoinedContacts below —
-// barriers belong to the pieces, not just the outline, so an unjoined
-// contact must be walled too).
+// How many walls each edge carries, counted per piece-side.
 //
-// Built as one pass over one piece-ownership map (occupancy), rather than
-// the outline walk and unjoinedContacts each rebuilding their own —
-// boundaryEdges is called on every computeBarriers, which generate.js's
-// candidate search does a lot, so the per-cell work here matters.
-export function boundaryEdges(layout) {
+// Barriers belong to the PIECES, not to the outline of the mats. A piece
+// walls every side of itself that is not one of its own ports, whatever is
+// beyond it. So:
+//   - outline edge                  -> 1 (the one piece facing it)
+//   - two pieces joined by a port   -> 0 (both sides are openings)
+//   - two pieces merely touching    -> 2 (each mounts its own wall on its
+//                                        own tile; there is no shared
+//                                        barrier — see spec 2.1)
+//   - one piece's open port abutted
+//     by another piece's flank      -> 1 (an opening one side, wall the other)
+//
+// That last case is why this counts per side rather than testing "is this
+// a port edge" globally: the same edge can be an opening for one piece and
+// a wall for its neighbour. Getting it wrong swallowed real walls and
+// invented others.
+export function wallCounts(layout) {
   const occ = occupancy(layout);
-  const { matched } = matchPorts(layout);
 
-  // Partition every port's edges into "open" (unmatched — an opening, not
-  // a wall) and "legit" (matched — a real join, also not a wall) in one
-  // pass, rather than calling openEdgeIds and unjoinedContacts separately
-  // and each re-deriving this from matchPorts.
-  const openIds = new Set();
-  const legitIds = new Set();
-  layout.pieces.forEach((piece) => {
+  // Each piece's own port edges are openings in THAT piece's wall, whether
+  // the port is matched or not. Keeping them per piece is the whole point:
+  // an edge can be one piece's open port and another piece's plain outside
+  // wall at the same time, and then it carries exactly one wall, not none
+  // and not two. Treating "is a port edge" as a global property got this
+  // wrong in both directions.
+  const portIdsByPiece = layout.pieces.map((piece) => {
+    const ids = new Set();
     for (const port of placedPorts(piece)) {
-      const bucket = matched.has(portKey(port)) ? legitIds : openIds;
-      for (const id of portEdgeIds(port)) bucket.add(id);
+      for (const id of portEdgeIds(port)) ids.add(id);
     }
+    return ids;
   });
 
-  const edges = new Set();
-  for (const [key, owners] of occ) {
-    const [x, y] = parseCellKey(key);
-    for (const dir of ['N', 'E', 'S', 'W']) {
-      const [dx, dy] = NEIGHBOUR[dir];
-      const nKey = cellKey([x + dx, y + dy]);
-      const nOwners = occ.get(nKey);
-      const id = edgeId([x, y], dir);
-      if (!nOwners) {
-        // Nothing occupies the far side: the outline, unless it's an
-        // open port (an opening, not a wall).
-        if (!openIds.has(id)) edges.add(id);
-        continue;
+  const counts = new Map();
+  layout.pieces.forEach((piece, index) => {
+    const ownPorts = portIdsByPiece[index];
+    for (const cell of placedCells(piece)) {
+      const [x, y] = cell;
+      for (const dir of ['N', 'E', 'S', 'W']) {
+        const [dx, dy] = NEIGHBOUR[dir];
+        const nOwners = occ.get(cellKey([x + dx, y + dy]));
+        if (nOwners && nOwners.includes(index)) continue;  // inside this piece
+        const id = edgeId([x, y], dir);
+        if (ownPorts.has(id)) continue;                    // this piece's opening
+        counts.set(id, (counts.get(id) ?? 0) + 1);
       }
-      if (owners.some((o) => nOwners.includes(o))) continue; // same piece
-      // A different piece occupies the far side: walled, unless the two
-      // are actually joined here through a matched port.
-      if (legitIds.has(id)) continue;
-      edges.add(id);
     }
-  }
-  return edges;
+  });
+  return counts;
+}
+
+export function boundaryEdges(layout) {
+  return new Set(wallCounts(layout).keys());
 }
 
 // Shared setup for enclosedInfields and maxTrackDepth: flood-fill the empty
@@ -464,13 +469,17 @@ function isConcaveVertex(cells, [vx, vy]) {
 }
 
 export function computeBarriers(layout) {
-  const edges = boundaryEdges(layout);
   const cells = occupiedSet(layout);
-  // Which of boundaryEdges' edges are unjoined inter-piece contacts, as
-  // opposed to plain outline — see the doubling below.
-  const contactEdges = new Set(unjoinedContacts(layout));
   const counts = { straight: 0, curve: 0, curveLarge: 0, cornerCap: 0 };
   const arcs = [];
+
+  // How many walls each edge still needs, rather than whether it needs one.
+  // An arc takes ONE of them, leaving any wall the neighbouring piece owns
+  // on that same edge behind. Deleting the edge outright (as this did
+  // before) swallowed that second wall: it vanished from straightEdgeIds,
+  // so the track rendered with an open gap where a straight met a corner,
+  // and the count lost it too.
+  const wallsLeft = wallCounts(layout);
 
   for (const piece of layout.pieces) {
     for (const wall of placedWalls(piece)) {
@@ -479,8 +488,8 @@ export function computeBarriers(layout) {
         continue;
       }
       const claimed = arcEdgeIds(wall);
-      if (!claimed.every((id) => edges.has(id))) continue;
-      for (const id of claimed) edges.delete(id);
+      if (!claimed.every((id) => wallsLeft.get(id) > 0)) continue;
+      for (const id of claimed) wallsLeft.set(id, wallsLeft.get(id) - 1);
       if (wall.kind === 'arc') counts.curve += 1;
       else counts.curveLarge += 2;
       arcs.push(wall);
@@ -498,10 +507,14 @@ export function computeBarriers(layout) {
   // loop above (which only needs to know a wall exists there) — so the
   // doubling happens only in this count, not in the edge set itself.
   let straight = 0;
-  for (const id of edges) straight += contactEdges.has(id) ? 2 : 1;
+  const straightEdgeIds = [];
+  for (const [id, n] of wallsLeft) {
+    straight += n;
+    if (n > 0) straightEdgeIds.push(id);
+  }
   counts.straight = straight;
 
-  return { counts, straightEdgeIds: [...edges], arcs };
+  return { counts, straightEdgeIds, arcs };
 }
 
 export function computeMetrics(layout) {

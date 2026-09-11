@@ -186,7 +186,14 @@ test('a piece butted against a corner arc\'s outer edge now gets both edges wall
   assert.deepEqual(findOverlaps(l), []);
   assert.deepEqual(unjoinedContacts(l).sort(), ['H:0:2', 'H:1:2']);
   const { counts } = computeBarriers(l);
-  assert.deepEqual(counts, { straight: 5, curve: 1, curveLarge: 0, cornerCap: 0 });
+  // Four, not five. H:0:2 and H:1:2 are the STRAIGHT's own N port — an
+  // opening in its wall — so the straight contributes nothing there and
+  // only the corner's flank is walled. The arc then takes H:0:2, leaving
+  // H:1:2 plus the corner's V:0:0 and the straight's V:0:2 and V:2:2.
+  // An earlier revision counted these edges twice (treating any unjoined
+  // contact as two walls regardless of ports) and a still earlier one
+  // counted them zero times; both were wrong.
+  assert.deepEqual(counts, { straight: 4, curve: 1, curveLarge: 0, cornerCap: 0 });
 });
 
 test('the 7x9 rectangular ring matches its hand-derived figures', () => {
