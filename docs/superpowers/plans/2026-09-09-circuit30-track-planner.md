@@ -21,7 +21,9 @@
 - **Track width is fixed at two mats.** Nothing may be parameterised on width.
 - **Derived state is never persisted.** The only stored fields are `version`, `unit`, `room`, `pieces`.
 - **Barriers are counted in exactly one place** — the boundary walk in `model.js`. Piece definitions declare mats only.
-- **Node 20+** (for stable `node:test` and `structuredClone`).
+- **Node 20+** (for stable `node:test` and `structuredClone`). Note: since Node 22 the
+  `--test` positional arguments are globs/files, and Node 24 no longer expands a bare
+  directory — `node --test test/` throws. The glob form above is required.
 
 ---
 
@@ -71,7 +73,7 @@ The subtlety this task exists to get right: **a cell and a vertex do not rotate 
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test 'test/**/*.test.js'",
     "serve": "python3 -m http.server 8000"
   }
 }
@@ -311,7 +313,7 @@ export function rotatedDef(type, rot) {
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 8 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -399,7 +401,7 @@ export function placedWalls({ type, x, y, rot }) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 12 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -516,7 +518,7 @@ export function findOverlaps(layout) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 17 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -714,7 +716,7 @@ function isSingleComponent(layout) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 23 tests.
+Expected: PASS, 24 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -902,7 +904,7 @@ export function computeBarriers(layout) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 27 tests.
+Expected: PASS, 28 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1000,7 +1002,7 @@ Note: `matCount` counts occupied cells while `mats` sums declared mats. They dif
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 31 tests.
+Expected: PASS, 32 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1239,7 +1241,7 @@ export function recommendKit(rows, kits = KITS) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 39 tests.
+Expected: PASS, 40 tests.
 
 If `recommendKit` returns `87031` rather than `87033-01`, check `priceRank` ordering — lower is cheaper, and the expansion kit must outrank the 96-piece set.
 
@@ -1460,7 +1462,7 @@ export { MAT_MM };
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 44 tests. `drawLayout` is not exercised in Node and must not be imported at module top level by any test — it references `document` only inside the function body, which is safe.
+Expected: PASS, 45 tests. `drawLayout` is not exercised in Node and must not be imported at module top level by any test — it references `document` only inside the function body, which is safe.
 
 - [ ] **Step 5: Commit**
 
@@ -1644,7 +1646,7 @@ export function importHtml(html) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 51 tests.
+Expected: PASS, 52 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -2084,7 +2086,7 @@ export function placeAgainst(port, type, rot) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npm test`
-Expected: PASS, 56 tests.
+Expected: PASS, 57 tests.
 
 - [ ] **Step 5: Wire drag-to-extend and auto-advance into `js/app.js`**
 
@@ -2473,4 +2475,4 @@ git commit -m "test: reconcile the stock L against the 87033 contents"
 - The `arcLarge` geometry rests on spec §13.1, which is provisional. Task 1 keeps it to one object so a correction is a single edit plus a re-run of the suite.
 - `recommendKit` finds the cheapest **single** kit that clears every shortfall. It returns `null` when no one kit suffices rather than searching combinations. That is a real limitation and is the natural first extension.
 
-**Test count** rises to 61 across six suites by Task 16. Every task states the expected total so a mismatch surfaces immediately.
+**Test count** rises to 62 across six suites by Task 16. Every task states the expected total so a mismatch surfaces immediately.

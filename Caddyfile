@@ -1,0 +1,28 @@
+# Serves the planner as static files.
+#
+# The cache policy is the whole reason this is a server rather than a
+# static host: there is no bundler, so the browser fetches eleven separate
+# ES modules and caches each one independently. With a long cache lifetime
+# a returning visitor can end up holding some files from the new deploy and
+# some from the old — a combination that never existed as a working
+# version, and which fails as a blank page rather than as a visible error.
+#
+# no-cache does not mean "do not cache". It means "revalidate before
+# reusing", so the browser still stores everything and a reload costs a
+# handful of 304s rather than refetching 580 KB. Hashed filenames would let
+# us cache far more aggressively, but they need a build step, and this
+# project deliberately has none.
+:8080 {
+	root * /srv
+	file_server
+	encode gzip
+
+	header {
+		Cache-Control "no-cache"
+		# The planner is self-contained: no third-party scripts, no
+		# frames, no plugins. Say so.
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}

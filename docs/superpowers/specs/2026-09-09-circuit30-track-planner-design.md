@@ -24,6 +24,41 @@ corridor. The mats are the floor; the barriers are the walls.
 Track is **two mats wide**: 60 cm pitch, 47 cm clear between barrier faces. This is
 fixed for this project.
 
+A barrier sits **on** the tile it is mounted to and never extends past it, so it does
+not push the mats apart and does not change the width of a tile.
+
+**Every lane carries its own barriers. There is no such thing as a shared barrier.**
+Where two lanes run alongside each other, each mounts its own wall on its own tile and
+the two sit back to back at the seam. That still fits, and both lanes keep the standard
+corridor, because each barrier is inside its own lane's 60 cm:
+
+```
+lane A:  60 − 6.5 (outer wall) − 6.5 (own inner wall) = 47 cm
+lane B:  60 − 6.5 (own inner wall) − 6.5 (outer wall) = 47 cm
+```
+
+So an edge where two pieces touch without connecting carries **two** barriers, not one:
+two adjacent straights cost **four** straight barriers, and joints scale with them. This
+is the single most misunderstood fact in this model — it has been got wrong twice, first
+by emitting no barrier there at all, then by emitting one.
+
+It follows that barriers cannot be derived from the outline of the occupied mats alone.
+An edge interior to the mat region is still a wall — two walls — when the pieces either
+side of it do not connect. `boundaryEdges` in `js/model.js` decides which edges carry a
+wall; `computeBarriers` must charge the unjoined contacts twice.
+
+**What this model does and does not claim.** It tracks which edges carry a barrier and
+how many — that is what the bill of materials needs. It does not model barrier thickness,
+and no computed figure depends on one: mat counts and lap length come from the piece
+definitions, joints from the barrier count. The 6.5 cm above is derived from the 60 cm
+pitch and 47 cm clear width and is used for nothing in the code.
+
+The renderer draws a barrier as a stroked line centred on the mat edge, so it visually
+straddles the seam and two back-to-back barriers draw as one line. For an outer wall that
+makes the barrier look thicker than the real part. This is a drawing choice for visual
+consistency; it feeds no calculation, and it must not be read as a claim that two lanes
+share a wall.
+
 ### 2.2 Piece catalog
 
 | Kit | Mats | Barriers | Joints |
@@ -331,7 +366,9 @@ test with `node:test` and zero dependencies:
   every figure of which is derivable by hand: 48 mats (44 square + 4 quarter-round),
   48 boundary edges, 4 curves consuming 8 of them, so 40 straight barriers and 4 corner
   caps. If the walk disagrees with that, the walk is wrong.
-- The stock L is a **calibration** case, not a pass/fail one — see §13.2.
+- The stock L is a **hard pass/fail** case: its mat count, straight-barrier
+  count, bounding box and joint totals must equal the 87033 kit exactly, not just
+  its quarter-round/cap/curve counts — see §13.2.
 - lap length and bounding box
 - round-tripping a layout through export and import
 
@@ -339,31 +376,70 @@ test with `node:test` and zero dependencies:
 
 ## 13. Provisional decisions and open questions
 
-### 13.1 Wide corner footprint — provisional
+### 13.1 Large corner geometry
 
-The manual drawings establish the wide corner's arc spans two mats (R60) and that the
-kit supplies two shaped mats, one plain mat and two 45° barrier halves per corner. They
-do not resolve its bounding box; the plan renders are too low-resolution to count grid
-cells reliably.
+`cornerR60` is the **complete placeable corner**, not the kit's contribution.
+It occupies a 3 x 3 block with the inner cell swept away — 8 mats — and derives
+2 large curve halves, 1 curve, 4 straights and no corner caps.
 
-**Decision for this version:** `cornerR60` occupies a **3 × 3 block with the inner
-corner cell empty — eight mats**: two large-arc mats from the kit and six plain. The
-outer wall is an R60 arc swept across those two arc mats by the kit's two 45° barrier
-halves. The inside stays a sharp apex closed with a base-set corner cap, because a
-concave corner cannot be rounded by cutting a mat (§5).
+**87033-02 supplies only the inside of the turn.** Three mats per corner (two
+shaped, one plain) and two curve halves, with no outside barriers at all. Those
+three alone leave a corridor one mat wide, which is not a usable corner. The
+placeable piece is that inner assembly plus an outer layer of plain mats and
+barriers from a base set, restoring the fixed two-mat corridor. That is exactly
+why the kit's manual says it cannot be used alone.
 
-This reconciles with the kit contents: it ships three mats and two barrier halves per
-corner, so one plain mat plus the two arc mats come from the kit and the remaining five
-plain mats, the cap and the straights come from a base set. It also explains why the kit
-contains no caps and no straight barriers at all.
+Per corner: kit gives 2 shaped mats + 1 plain + 2 curve halves; the base set
+gives 4 plain, 1 quarter-round, 1 curve and 4 straights.
 
-This is isolated to one object in `geometry.js`. Confirm by measuring a physical piece,
-or from a higher-resolution official layout sheet, before the BOM is used to justify
-buying a Large Corner kit.
+The two walls curve in opposite senses and this matters:
 
-### 13.2 The stock L cannot be reconciled from the manual alone
+- the **inside** is *concave* — it hugs the swept gap, curving toward the
+  corner;
+- the **outside** is an ordinary *convex* quarter-round clip, as on any corner.
 
-The published figures for the 87033 layout do not describe a single 2-mat-wide L ring.
+A single arc routine that always assumed the convex case put the centre on the
+wrong side of the inner sweep, bulging the inside barrier outward into the
+track. `arcParts` in `render.js` now takes a `concave` flag; the endpoints are
+identical either way, only the centre differs, and with it which of the two
+possible arcs is drawn.
+
+Three earlier models were wrong, each caught by the owner against the real
+product and a photograph:
+
+1. *Outer large arc, sharp inner apex closed by a cap.* Contradicted by the
+   kit shipping no caps — a cap closes a sharp apex, so a kit with none has
+   none.
+2. *Inner sweep, but square outside.* The kit supplies no outside barriers, so
+   nothing about it implies a square outer corner; every other corner in
+   Kyosho's layouts is rounded.
+3. *Only the kit's three mats.* Correct about the kit, wrong as a placeable
+   piece — it yields a one-mat corridor.
+
+The 87031-02 exploded assembly view was also misread early on: it shows the two
+curve halves offset above the mats before assembly, which reads as two parallel
+walls. They are one arc.
+
+No manual exists for 87033-02 — Kyosho publishes instruction sheets only for
+the older 87031 series — so the printed figures cannot settle this. The
+physical piece is the authority.
+
+### 13.2 Reconciling the stock L against the 87033 contents
+
+**Correction (Task 16):** the original version of this section argued below that the
+87033 figures could not all hold in one 2-mat-wide L ring, concluding "at most two of
+{48 mats, 7 x 9 bounding box, 6 quarter-rounds} can hold." That conclusion was wrong.
+The **Task 16 result** further down built and verified, against the real model code
+rather than by hand, a ring that hits all three exactly — plus the straight-barrier
+and joint counts, with zero shortfall and zero surplus against the 87033 kit. The
+flaw was in the area argument below: it assumed a 2-wide ring's infield must be the
+*independent* sum of a base rectangular hole and a separately-eroded notch, but a
+fixed-distance erosion doesn't split apart like that near a corner. The original
+reasoning is kept below, clearly marked, because seeing why it looked sound and where
+it broke is more useful than deleting it.
+
+The published figures for the 87033 layout were originally thought not to describe a
+single 2-mat-wide L ring. **This turned out to be wrong — see the correction above.**
 
 Corner counts are consistent: an L ring has 5 convex plus 1 reflex corner on its outer
 boundary and the mirror on its infield hole, giving **6 quarter-round mats and 6 corner
@@ -377,15 +453,57 @@ Area is not. For an L inside a 7 x 9 box with an `a x b` notch, a 2-wide ring ho
 48 would require `a + b = 2`, i.e. no notch. A plain 7 x 9 rectangular ring does hold
 exactly 48, but has 4 corners and would need 4 quarter-rounds and 4 caps, not 6 and 6.
 
-So at most two of {48 mats, 7 x 9 bounding box, 6 quarter-rounds} can hold. The likely
-explanation is that the 2.1 m and 2.7 m leaders measure the L's legs rather than its
-bounding box, or that the set ships spare mats. The figure is too low-resolution to
-settle it.
+**Superseded conclusion — see the correction at the top of this section and the
+Task 16 result below.** The reasoning above concluded that at most two of {48 mats,
+7 x 9 bounding box, 6 quarter-rounds} could hold, and speculated that the 2.1 m and
+2.7 m leaders measure the L's legs rather than its bounding box, or that the set ships
+spare mats. That conclusion does not hold: a construction exists that satisfies all
+three simultaneously, and the box contents besides. It was the area estimate's own
+independence assumption that was too loose, not the published figures.
 
-**Consequence for the build:** the stock L is transcribed and checked, but only its
-certain invariants are asserted — closed circuit, 6 quarter-rounds, 6 caps. Mat and
-straight-barrier deltas against the 87033 contents are reported, not enforced. Resolve
-by counting the physical set, then tighten the test.
+**Consequence for the build:** the stock L is constructed and checked, and — now that
+the Task 16 result below has shown the 87033 figures are exactly achievable — its mat
+count, straight-barrier count, bounding box and joint totals are asserted as hard
+equalities in `test/stock-l.test.js`, alongside the quarter-round/cap/curve counts.
+If the boundary walk or the piece list ever drifts from the 87033 contents, that test
+fails.
+
+**Task 16 result — the area argument above undercounts.** The `a, b >= 2` / `52 - 2a -
+2b` estimate above treats the notch and the 2-mat erosion as independent: base
+rectangular hole plus a separately-eroded notch extension. They aren't independent —
+eroding a rectilinear region by a fixed distance measures each cell's distance to the
+*nearest* non-region cell in any direction, and near a corner notch that distance is
+already short, so the hole doesn't need to (and shouldn't) extend as far there as the
+additive estimate assumed. Eroding the actual 7 x 9-minus-2x2-notch shape precisely
+(Chebyshev distance to the nearest excluded cell, same rule the existing 3 x 5 hole in
+the plain 7 x 9 ring already uses) gives a smaller, L-shaped hole than the estimate,
+and the resulting ring holds more material than 44.
+
+Built and verified against `js/model.js` and `js/inventory.js` directly (`node -e`,
+not by hand), the `stock-l` preset — outer 7 x 9 box, 2x2 notch cut from one corner,
+infield hole eroded 2 mats in from every edge including the notch — produces:
+
+- bounding box **7 x 9 mats**
+- **42 square + 6 quarter-round mats (48 total)**
+- **36 straight barriers, 6 curves, 6 corner caps**
+- **90 joints of each type**
+
+Every one of these is an exact match to the 87033 box contents (`js/inventory.js`
+`KITS['87033']`), and `diffStock(billOfMaterials(stockL), stockFromKits({'87033':
+1}))` reports zero shortfall and zero surplus on every part. So a construction
+*does* exist that reconciles all three figures the earlier paragraph called mutually
+exclusive — the earlier area estimate was simply not tight enough to find it, not
+proof that no such ring exists.
+
+**This does not fully resolve the question.** It shows the published figures are
+jointly achievable by *some* 2-mat-wide L ring in a 7 x 9 box with a real (>= 2x2)
+notch — the notch that also happens to maximise mat count, per this task's brief. It
+does not prove this specific notch position, corner-cut corner, or piece layout is
+the one Kyosho actually drew in the 87032/87033 manual; a different notch placement,
+or the manual depicting a genuinely different shape (e.g. asymmetric leg widths), is
+still possible and would change which physical mats are marked "spare." Counting the
+physical set against this exact piece list is still how an owner would confirm it
+matches, not just that the totals happen to.
 
 ### 13.3 Deferred
 

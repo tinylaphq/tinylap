@@ -1,0 +1,12 @@
+# Only what the browser needs goes into the image. The tests, the specs and
+# the development server are not part of the site — serve.py in particular
+# disables caching deliberately for local work, and shipping it would invite
+# someone to mistake it for the production server.
+.git
+.superpowers
+test
+docs
+node_modules
+serve.py
+package.json
+README.md
