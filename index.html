@@ -101,8 +101,10 @@
     <h3 class="h3">Stock layout</h3>
     <ul id="presets-list"></ul>
     <hr class="divider">
-    <div class="rail-head">
-      <h3 class="h3">Suggestions</h3>
+    <h3 class="h3">Suggestions</h3>
+    <p class="subtitle" id="suggestions-summary"></p>
+    <div class="suggestions-bar">
+      <span id="suggestions-page"></span>
       <button type="button" class="btn btn-sm btn-outline btn-icon" id="btn-more-suggestions"
               hidden aria-label="Show five different" title="Show five different">
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -113,10 +115,8 @@
         </svg>
       </button>
     </div>
-    <p class="subtitle" id="suggestions-summary"></p>
     <ul id="suggestions-list"></ul>
     <div id="out-of-reach"></div>
-    <form method="dialog" class="dialog-foot"><button class="btn btn-outline btn-block">Close</button></form>
   </dialog>
 
   <script type="module" src="js/app.js"></script>

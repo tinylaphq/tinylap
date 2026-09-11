@@ -987,7 +987,7 @@ function renderSuggestionsSkeleton() {
   // Clear anything left over from a previous open rather than leaving it
   // visible alongside/underneath the skeleton.
   document.querySelector('#suggestions-summary').textContent = '';
-  delete document.querySelector('#suggestions-summary').dataset.page;
+  document.querySelector('#suggestions-page').textContent = '';
   document.querySelector('#btn-more-suggestions').hidden = true;
   document.querySelector('#out-of-reach').replaceChildren();
 }
@@ -1026,7 +1026,7 @@ function renderSuggestionPage() {
   const label = wraps ? 'Back to the first five' : 'Show five different';
   more.setAttribute('aria-label', label);
   more.title = label;
-  document.querySelector('#suggestions-summary').dataset.page =
+  document.querySelector('#suggestions-page').textContent =
     pool.length ? `showing ${cursor + 1}-${Math.min(cursor + 5, pool.length)} of ${pool.length}` : '';
 }
 
