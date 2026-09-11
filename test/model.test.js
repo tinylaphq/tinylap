@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields, maxTrackDepth, unjoinedContacts } from '../js/model.js';
+import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields, maxTrackDepth, unjoinedContacts, subWidthNotches } from '../js/model.js';
 import { MAT_MM } from '../js/geometry.js';
 import { stockL } from '../js/presets.js';
 import { fourCornerLoop, rectangularRing } from './fixtures.js';
@@ -166,6 +166,14 @@ test('a lone R60 corner sweeps its inside and rounds its outside, with no cap', 
 // mat regardless of whether its arc barrier was walled, which used to
 // disagree with a curve count of 0 here. Now mats and barriers agree.
 //
+// Task 13, revised again: H:1:2 is an unjoined CONTACT edge (both pieces
+// touch there without joining), not plain outline, so it now carries two
+// straight barriers rather than one — each piece mounts its own wall on
+// its own tile; there is no shared barrier (see computeBarriers). H:0:2 is
+// claimed by the arc instead and so never reaches the straight count at
+// all, doubled or not. straight is 5: three plain outline edges at 1 each,
+// plus H:1:2 at 2.
+//
 // The arc-skip branch itself is no longer exercised by any fixture in this
 // suite — the only way left to hit it is a matched port that happens to
 // coincide with one of an arc's own edges, which no piece definition
@@ -178,7 +186,7 @@ test('a piece butted against a corner arc\'s outer edge now gets both edges wall
   assert.deepEqual(findOverlaps(l), []);
   assert.deepEqual(unjoinedContacts(l).sort(), ['H:0:2', 'H:1:2']);
   const { counts } = computeBarriers(l);
-  assert.deepEqual(counts, { straight: 4, curve: 1, curveLarge: 0, cornerCap: 0 });
+  assert.deepEqual(counts, { straight: 5, curve: 1, curveLarge: 0, cornerCap: 0 });
 });
 
 test('the 7x9 rectangular ring matches its hand-derived figures', () => {
@@ -320,6 +328,67 @@ test('the four-mat-wide slab has unjoined piece contacts', () => {
   assert.ok(unjoinedContacts(layout).length > 0);
 });
 
+// Task 13: a real generator output with exactly one sub-width notch — the
+// "8-corner shape 1" candidate (signature LLRRRRRR, sides
+// [0,1,0,1,3,7,3,1], cornerR30) pulled from
+// generateLayouts(stockFromKits({'87033':2})).results before the notch
+// filter existed. Deliberately NOT the doubled-back case: zero unjoined
+// contacts, one enclosed infield, a valid closed circuit — this is the
+// "rectangle with a pimple" bug entirely on its own, a single loop whose
+// own outline pinches to one mat wide at one point. See
+// test/generate.test.js for the same fixture rebuilt via buildLoop and
+// proven rejected by generateLayouts.
+function eightCornerPimple() {
+  return [
+    { type: 'cornerR30', x: 0, y: 0, rot: 0 },
+    { type: 'cornerR30', rot: 180, x: 0, y: -2 },
+    { type: 'straight', rot: 90, x: -1, y: -2 },
+    { type: 'cornerR30', rot: 90, x: -3, y: -2 },
+    { type: 'cornerR30', rot: 270, x: -3, y: 0 },
+    { type: 'straight', rot: 90, x: -4, y: 0 },
+    { type: 'cornerR30', rot: 0, x: -6, y: 0 },
+    { type: 'straight', rot: 0, x: -6, y: -1 },
+    { type: 'straight', rot: 0, x: -6, y: -2 },
+    { type: 'straight', rot: 0, x: -6, y: -3 },
+    { type: 'cornerR30', rot: 90, x: -6, y: -5 },
+    { type: 'straight', rot: 90, x: -4, y: -5 },
+    { type: 'straight', rot: 90, x: -3, y: -5 },
+    { type: 'straight', rot: 90, x: -2, y: -5 },
+    { type: 'straight', rot: 90, x: -1, y: -5 },
+    { type: 'straight', rot: 90, x: 0, y: -5 },
+    { type: 'straight', rot: 90, x: 1, y: -5 },
+    { type: 'straight', rot: 90, x: 2, y: -5 },
+    { type: 'cornerR30', rot: 180, x: 3, y: -5 },
+    { type: 'straight', rot: 0, x: 3, y: -3 },
+    { type: 'straight', rot: 0, x: 3, y: -2 },
+    { type: 'straight', rot: 0, x: 3, y: -1 },
+    { type: 'cornerR30', rot: 270, x: 3, y: 0 },
+    { type: 'straight', rot: 90, x: 2, y: 0 },
+  ];
+}
+
+// Calibration (the brief's explicit requirement): both real, physically-
+// built layouts must score zero sub-width notches. Mutation-tested against
+// a scratch copy using morphological OPENING instead of CLOSING (the
+// disproved first attempt) — opening scores 0 on every one of these three
+// fixtures INCLUDING the pimple, since opening detects thin TRACK and this
+// track is two mats wide everywhere; only closing (detecting thin GAPS)
+// tells the pimple apart from the two real tracks. So this test can fail
+// two different ways: a regression to opening fails the third assertion,
+// and a broken closing (e.g. wrong structuring element, or missing the
+// origin so it stops being extensive) can just as easily fail the first two.
+test('a sub-width notch is detected; real tracks score zero', () => {
+  assert.equal(subWidthNotches(createLayout({ pieces: stockL() })), 0);
+  assert.equal(subWidthNotches(createLayout({ pieces: rectangularRing() })), 0);
+
+  const pimple = createLayout({ pieces: eightCornerPimple() });
+  assert.deepEqual(findOverlaps(pimple), []);
+  assert.equal(isClosedCircuit(pimple), true, 'fixture must be a valid closed circuit');
+  assert.equal(enclosedInfields(pimple), 1, 'fixture must be a valid single-infield track');
+  assert.deepEqual(unjoinedContacts(pimple), [], 'fixture is the pimple case, not the doubled-back case');
+  assert.equal(subWidthNotches(pimple), 1, 'expected exactly one sub-width notch');
+});
+
 // Task 11 safety property: both real tracks have zero unjoined contacts
 // (proven above), so walling unjoined contacts must not change their
 // barrier counts at all. Pinned to the exact figures measured on the code
@@ -335,16 +404,21 @@ test('walling unjoined contacts leaves both real tracks\' barrier counts untouch
 });
 
 // A straight is two mats wide and one long with N/S ports, so these sit
-// side by side and do not connect. Each walls its own E/W edge, and the
-// shared edge must carry one barrier serving both lanes.
-test('two pieces touching without a join still get a wall between them', () => {
+// side by side and do not connect. Each piece mounts its OWN wall on its
+// own tile at that seam — there is no shared barrier between two lanes
+// that merely touch without joining (real halves don't share hardware; the
+// user, who owns the physical kit, corrected an earlier "shared barrier"
+// assumption here). So the shared edge carries TWO barriers, not one: this
+// pair's own two long sides (2) plus both of the seam's own halves (2) is
+// 4, not the 3 a shared-barrier model would give.
+test('two pieces touching without a join get a wall on each side of the seam', () => {
   const layout = createLayout({ pieces: [
     { type: 'straight', x: 0, y: 0, rot: 0 },
     { type: 'straight', x: 2, y: 0, rot: 0 },
   ] });
   assert.equal(matchPorts(layout).matched.size, 0, 'fixture must be unjoined');
   assert.ok(boundaryEdges(layout).has(edgeId([1, 0], 'E')), 'shared edge must be walled');
-  assert.equal(computeBarriers(layout).counts.straight, 3);
+  assert.equal(computeBarriers(layout).counts.straight, 4);
 });
 
 // Stacked along the travel axis: these DO connect, so the shared edge

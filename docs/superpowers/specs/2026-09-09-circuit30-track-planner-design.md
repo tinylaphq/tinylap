@@ -24,6 +24,41 @@ corridor. The mats are the floor; the barriers are the walls.
 Track is **two mats wide**: 60 cm pitch, 47 cm clear between barrier faces. This is
 fixed for this project.
 
+A barrier sits **on** the tile it is mounted to and never extends past it, so it does
+not push the mats apart and does not change the width of a tile.
+
+**Every lane carries its own barriers. There is no such thing as a shared barrier.**
+Where two lanes run alongside each other, each mounts its own wall on its own tile and
+the two sit back to back at the seam. That still fits, and both lanes keep the standard
+corridor, because each barrier is inside its own lane's 60 cm:
+
+```
+lane A:  60 − 6.5 (outer wall) − 6.5 (own inner wall) = 47 cm
+lane B:  60 − 6.5 (own inner wall) − 6.5 (outer wall) = 47 cm
+```
+
+So an edge where two pieces touch without connecting carries **two** barriers, not one:
+two adjacent straights cost **four** straight barriers, and joints scale with them. This
+is the single most misunderstood fact in this model — it has been got wrong twice, first
+by emitting no barrier there at all, then by emitting one.
+
+It follows that barriers cannot be derived from the outline of the occupied mats alone.
+An edge interior to the mat region is still a wall — two walls — when the pieces either
+side of it do not connect. `boundaryEdges` in `js/model.js` decides which edges carry a
+wall; `computeBarriers` must charge the unjoined contacts twice.
+
+**What this model does and does not claim.** It tracks which edges carry a barrier and
+how many — that is what the bill of materials needs. It does not model barrier thickness,
+and no computed figure depends on one: mat counts and lap length come from the piece
+definitions, joints from the barrier count. The 6.5 cm above is derived from the 60 cm
+pitch and 47 cm clear width and is used for nothing in the code.
+
+The renderer draws a barrier as a stroked line centred on the mat edge, so it visually
+straddles the seam and two back-to-back barriers draw as one line. For an outer wall that
+makes the barrier look thicker than the real part. This is a drawing choice for visual
+consistency; it feeds no calculation, and it must not be read as a claim that two lanes
+share a wall.
+
 ### 2.2 Piece catalog
 
 | Kit | Mats | Barriers | Joints |

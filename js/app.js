@@ -5,7 +5,7 @@ import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from '.
 import { exportHtml, importHtml } from './storage.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
-import { generateLayouts, groupByCharacter, outOfReach, outlineName, hasCachedLayouts } from './generate.js';
+import { generateLayouts, groupByCharacter, outOfReach, outlineName, hasCachedLayouts, scoreLayouts } from './generate.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -576,9 +576,20 @@ document.querySelector('#presets-list').addEventListener('click', (e) => {
 
 // Round-robin across characters so the first five show different shapes
 // rather than five rectangles differing by one mat.
+//
+// Within a character, best-scoring first — so the round-robin draws each
+// shape's best example before any shape's second-best. Ordering by score
+// here rather than in groupByCharacter keeps that function's own contract
+// (variants by mat count, `best` = the largest) unchanged; `best` is not
+// read by this UI.
 function suggestionPool(characters) {
   const pool = [];
-  const queues = characters.map((c) => [...c.variants]);
+  const queues = characters
+    .map((c) => [...c.variants].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)))
+    // Strongest shape first, judged by its own best example, so the top of
+    // page one is the best thing on offer and not merely the shape with the
+    // fewest corners. The round-robin below still guarantees the spread.
+    .sort((a, b) => (b[0]?.score ?? 0) - (a[0]?.score ?? 0));
   while (queues.some((q) => q.length > 0)) {
     for (const q of queues) if (q.length > 0) pool.push(q.shift());
   }
@@ -623,7 +634,10 @@ async function renderSuggestions() {
 
   const generated = generateLayouts(stock, opts);
   const { results, stopped } = generated;
-  const characters = groupByCharacter(results);
+  // Score before grouping so every variant carries its score into the pool,
+  // which orders each character's variants by it. Scores are normalised
+  // within this one call, so they are only comparable inside this set.
+  const characters = groupByCharacter(scoreLayouts(results, { room: state.layout.room }));
   if (superseded()) return;
 
   state.suggestions = { pool: suggestionPool(characters), cursor: 0, stopped };

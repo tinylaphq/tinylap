@@ -11,7 +11,7 @@
 // for what happens when that rule is broken.
 
 import { PIECES, PIECE_TYPES, ROTATIONS, placedCells, placedPorts } from './geometry.js';
-import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, unjoinedContacts } from './model.js';
+import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, unjoinedContacts, subWidthNotches } from './model.js';
 import { billOfMaterials, diffStock, emptyStock, MAT_PARTS, BARRIER_PARTS } from './inventory.js';
 
 // Rotate a string left by n.
@@ -550,35 +550,27 @@ export function generateLayouts(stock, opts = {}) {
             const { bbox, matCount, lapMm } = computeMetrics(layout);
             if (room && (bbox.w > room.w || bbox.h > room.h)) return;
             if (diffStock(billOfMaterials(layout), stock).some((r) => r.short > 0)) return;
-            // Barriers belong to the pieces, not the outline: a straight
-            // carries a barrier down each long side. Where a loop runs back
-            // alongside itself, two pieces can be edge-adjacent without
-            // ever connecting through a matched port — the shared edge
-            // never got a barrier, so a car crosses freely between lanes
-            // that never joined. unjoinedContacts reuses matchPorts rather
-            // than this file computing occupancy geometry itself (the "no
-            // parallel geometry maths" rule). Checked first: unlike the
-            // infield check below, it needs no flood fill.
+            // Task 13: a loop that runs back alongside itself (an S-bend, an
+            // offset chicane) is allowed through now — it used to be banned
+            // outright by rejecting any unjoined piece contact, which also
+            // banned the only genuinely interesting tracks this generator
+            // can make. That ban is no longer needed: Task 11 (commit
+            // 51ceffe) made boundaryEdges wall every unjoined contact
+            // unconditionally, so billOfMaterials above already prices the
+            // wall between the two lanes correctly, and computeBarriers'
+            // rendering already draws it — the "4 wide, no barrier" bug this
+            // used to guard against cannot recur regardless of what this
+            // file filters. See test/generate.test.js's invariant test for
+            // the proof: every unjoined contact edge is in boundaryEdges,
+            // over every generated layout, both inventories.
             //
-            // Investigated for Task 12 (perf): billOfMaterials above already
-            // calls computeBarriers -> boundaryEdges, which (since Task 11,
-            // commit 51ceffe) walls unjoined contacts too — so this call
-            // redoes occupancy()/matchPorts() a second time over the same
-            // layout. It was left as its own call rather than merged: this
-            // file is only allowed to read model.js's exported surface (the
-            // "no parallel geometry maths outside js/model.js" rule), and
-            // boundaryEdges returns one merged Set of walled edges with no
-            // way to tell, from here, which of those edges are outline and
-            // which are unjoined contacts without re-deriving occupancy
-            // ourselves — exactly the geometry maths this file must not do.
-            // Answering that would need a new signal exported from model.js
-            // (e.g. computeBarriers exposing a contacts flag), which is a
-            // model.js change outside this task's file list. The saving is
-            // small besides: this whole check measured at ~76µs of the
-            // ~700µs a candidate costs. Left alone — correctness (the exact
-            // 21-of-41-at-one-kit accept/reject behaviour, pinned in
-            // test/generate.test.js) outranks it.
-            if (unjoinedContacts(layout).length > 0) return;
+            // What's rejected instead: sub-width notches — slots cut into
+            // the outline narrower than the two-mat track width, a 1-mat
+            // sliver no driver can use. subWidthNotches reuses model.js's
+            // shared outline helper rather than this file computing
+            // occupancy geometry itself (the "no parallel geometry maths"
+            // rule).
+            if (subWidthNotches(layout) > 0) return;
             // Port-closed and overlap-free is not enough: a solid block of
             // mats with a wall round the outside satisfies both while
             // enclosing nothing to drive around. A real track encloses
@@ -689,6 +681,60 @@ export function groupByCharacter(results) {
   // order would be the same latent gap as the untested half of the group key.
   characters.sort((a, b) => a.corners - b.corners || a.name.localeCompare(b.name) || a.feel.localeCompare(b.feel));
   return characters;
+}
+
+// Min-max normalise `values` (parallel to `results`) to 0..1. A candidate
+// set with no spread on this dimension (every value equal) normalises to a
+// flat 0.5 for everyone — not 0 or 1, either of which would silently bias
+// the overall score for a dimension that in truth discriminates nobody.
+function normalise(values) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (max === min) return values.map(() => 0.5);
+  return values.map((v) => (v - min) / (max - min));
+}
+
+// Three user-chosen, equally-weighted criteria (Task 13), each normalised
+// to 0..1 across THIS candidate set before summing:
+//   lapPerMat  — (lapMm / 1000) / matCount: metres of driving per mat spent.
+//   technical  — mean of two normalised parts: how many unjoined contact
+//                edges a layout has (chicanes — the track running back past
+//                itself) and how many 'L' turns its signature has (direction
+//                reversals). Both read "more of this shape's own character",
+//                not a defect — unjoinedContacts is safe to read here
+//                because Task 13 stopped treating it as a rejection signal,
+//                not because it stopped meaning what it always meant.
+//   fit        — how well bbox fits `room` if one is set (occupied area
+//                over room area — every candidate already satisfies
+//                bbox <= room, so this is a fraction of the room actually
+//                used); otherwise squareness, min(w,h)/max(w,h).
+// Returns `results` with each entry annotated { ...result, score,
+// components: { lapPerMat, technical, fit } }. Does not mutate `results`.
+//
+// The normalisation is relative to THIS candidate set, so a score is only
+// meaningful when comparing results from the SAME generateLayouts call —
+// never compare scores across separate calls (different stock, different
+// room, different inventory): a 0.8 in one set and a 0.8 in another do not
+// mean the same thing.
+export function scoreLayouts(results, { room = null } = {}) {
+  const lapPerMat = normalise(results.map((r) => (r.lapMm / 1000) / r.matCount));
+
+  const unjoinedCounts = results.map((r) => unjoinedContacts(createLayout({ pieces: r.pieces })).length);
+  const leftTurnCounts = results.map((r) => [...r.signature].filter((c) => c === 'L').length);
+  const normUnjoined = normalise(unjoinedCounts);
+  const normLeftTurns = normalise(leftTurnCounts);
+  const technical = results.map((_, i) => (normUnjoined[i] + normLeftTurns[i]) / 2);
+
+  const rawFit = results.map((r) => (room
+    ? (r.bbox.w * r.bbox.h) / (room.w * room.h)
+    : Math.min(r.bbox.w, r.bbox.h) / Math.max(r.bbox.w, r.bbox.h)));
+  const fit = normalise(rawFit);
+
+  return results.map((r, i) => ({
+    ...r,
+    score: lapPerMat[i] + technical[i] + fit[i],
+    components: { lapPerMat: lapPerMat[i], technical: technical[i], fit: fit[i] },
+  }));
 }
 
 // A stock nothing realistic is ever short against. Used to ask "what is

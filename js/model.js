@@ -203,6 +203,22 @@ function floodOutsideMargin(layout) {
   return { cells, minX, maxX, minY, maxY, outside, emptyNeighbours };
 }
 
+// The filled outline: every cell in the margined bounding box that
+// floodOutsideMargin's flood never reached, i.e. the occupied cells plus
+// everything they enclose (the infield). Shared by maxTrackDepth and
+// subWidthNotches — both reason about the SAME filled shape, one by
+// Chebyshev depth, the other by morphological closing.
+function filledOutline({ minX, maxX, minY, maxY, outside }) {
+  const R = new Set();
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      const key = cellKey([x, y]);
+      if (!outside.has(key)) R.add(key);
+    }
+  }
+  return R;
+}
+
 // How many separate enclosed empty regions the occupied cells surround.
 // Port-closed and overlap-free is not enough to be a real track: a solid
 // block of mats with a wall round the outside satisfies both while
@@ -300,17 +316,8 @@ const NEIGHBOURS8 = [
 export function maxTrackDepth(layout) {
   const flood = floodOutsideMargin(layout);
   if (!flood) return 0;
-  const { cells, minX, maxX, minY, maxY, outside } = flood;
-
-  // R = every cell in the margined bounding box that the outside flood
-  // never reached, i.e. occupied cells plus enclosed infield cells.
-  const R = new Set();
-  for (let x = minX; x <= maxX; x++) {
-    for (let y = minY; y <= maxY; y++) {
-      const key = cellKey([x, y]);
-      if (!outside.has(key)) R.add(key);
-    }
-  }
+  const { cells } = flood;
+  const R = filledOutline(flood);
 
   // Multi-source BFS inward, over the 8-neighbourhood, starting from every
   // cell of R that touches a non-R cell (depth 1).
@@ -343,6 +350,102 @@ export function maxTrackDepth(layout) {
   return max;
 }
 
+// Shift every cell of `cells` by each offset in `offsets` and union the
+// results — the set-based form of dilating `cells` by the structuring
+// element `offsets` (a Minkowski sum). Unbounded: callers never need to
+// pre-size a grid, since only cells that could plausibly be touched are
+// ever visited.
+function dilateBy(cells, offsets) {
+  const out = new Set();
+  for (const key of cells) {
+    const [x, y] = parseCellKey(key);
+    for (const [dx, dy] of offsets) out.add(cellKey([x + dx, y + dy]));
+  }
+  return out;
+}
+
+// Erode `cells` by the structuring element `offsets`: a point survives only
+// if every offset shift of it lands back in `cells`. Computed by counting,
+// for each candidate point, how many of the offsets it satisfies — cheaper
+// than testing every point of an unbounded plane against `cells` directly.
+function erodeBy(cells, offsets) {
+  const counts = new Map();
+  for (const key of cells) {
+    const [x, y] = parseCellKey(key);
+    for (const [dx, dy] of offsets) {
+      const point = cellKey([x - dx, y - dy]);
+      counts.set(point, (counts.get(point) ?? 0) + 1);
+    }
+  }
+  const out = new Set();
+  for (const [key, count] of counts) if (count === offsets.length) out.add(key);
+  return out;
+}
+
+// A 2x2 square, the structuring element subWidthNotches closes with. It
+// contains its own origin (0,0), which is what makes the closing below
+// extensive (R is always a subset of its own closing) — so "cells the
+// closing added" is always well-defined as closing \ R, never the reverse.
+const SQUARE_2X2 = [[0, 0], [1, 0], [0, 1], [1, 1]];
+
+// How many sub-width notches are cut into the outline: slots narrower than
+// the two-mat track width that a driver cannot actually use — what made an
+// "8-corner shape 3" suggestion look like a rectangle with a pimple.
+//
+// Measured as a morphological CLOSING (dilate then erode) of the filled
+// outline R — the same occupied-plus-enclosed-infield shape maxTrackDepth
+// computes — by a 2x2 square: closing fills in any gap too narrow for the
+// square to sit inside fully, so any cell the closing gains that R did not
+// already have was part of a gap narrower than two mats.
+//
+// Deliberately CLOSING, not opening. Opening (erode then dilate) detects
+// thin TRACK, and this track is exactly two mats wide everywhere by
+// construction — an earlier attempt at this filter used opening and it
+// passed 100% of generated layouts, calibration included, because nothing
+// here is ever thin FOREGROUND. Closing detects thin GAPS instead, which is
+// what a sub-width notch actually is: two lobes of the outline pinched
+// together across a gap too narrow to be real track.
+//
+// Counted as connected regions of the gained cells (4-connectivity), not a
+// raw cell count — the same "count regions, not cells" shape as
+// enclosedInfields — so one wide notch does not outweigh two separate
+// narrow ones purely by area.
+//
+// Calibration: both stockL() and rectangularRing() — real, physically-built
+// layouts — score 0. At two starter kits (stockFromKits({'87033':2})),
+// this catches 50 of the 300 layouts the contact rule alone used to let
+// through.
+export function subWidthNotches(layout) {
+  const flood = floodOutsideMargin(layout);
+  if (!flood) return 0;
+  const R = filledOutline(flood);
+
+  const closed = erodeBy(dilateBy(R, SQUARE_2X2), SQUARE_2X2);
+  const gained = new Set([...closed].filter((key) => !R.has(key)));
+
+  // Connected components of `gained`, 4-connectivity — the same
+  // flood-fill-and-count shape enclosedInfields uses for its regions.
+  const visited = new Set();
+  let notches = 0;
+  for (const start of gained) {
+    if (visited.has(start)) continue;
+    notches += 1;
+    visited.add(start);
+    const queue = [parseCellKey(start)];
+    while (queue.length > 0) {
+      const [x, y] = queue.pop();
+      for (const [dx, dy] of Object.values(NEIGHBOUR)) {
+        const nKey = cellKey([x + dx, y + dy]);
+        if (gained.has(nKey) && !visited.has(nKey)) {
+          visited.add(nKey);
+          queue.push([x + dx, y + dy]);
+        }
+      }
+    }
+  }
+  return notches;
+}
+
 export function arcEdgeIds(wall) {
   const ids = [];
   for (const [dir, [sx, sy]] of CORNER_EDGES[wall.corner]) {
@@ -363,6 +466,9 @@ function isConcaveVertex(cells, [vx, vy]) {
 export function computeBarriers(layout) {
   const edges = boundaryEdges(layout);
   const cells = occupiedSet(layout);
+  // Which of boundaryEdges' edges are unjoined inter-piece contacts, as
+  // opposed to plain outline — see the doubling below.
+  const contactEdges = new Set(unjoinedContacts(layout));
   const counts = { straight: 0, curve: 0, curveLarge: 0, cornerCap: 0 };
   const arcs = [];
 
@@ -381,7 +487,20 @@ export function computeBarriers(layout) {
     }
   }
 
-  counts.straight = edges.size;
+  // Every edge carries one straight barrier, except an unjoined inter-piece
+  // contact edge, which carries TWO: there is no shared barrier between two
+  // lanes that merely touch without joining — each piece mounts its own
+  // wall on its own tile, and the two sit back to back at the seam (spec
+  // 2.1; corrected from an earlier, wrong "shared barrier" assumption once
+  // the user, who owns the physical kit, pointed out that real halves don't
+  // share hardware). boundaryEdges stays a plain set of edges-that-carry-
+  // a-wall — right for rendering (one stroke per edge) and for the arc-claim
+  // loop above (which only needs to know a wall exists there) — so the
+  // doubling happens only in this count, not in the edge set itself.
+  let straight = 0;
+  for (const id of edges) straight += contactEdges.has(id) ? 2 : 1;
+  counts.straight = straight;
+
   return { counts, straightEdgeIds: [...edges], arcs };
 }
 

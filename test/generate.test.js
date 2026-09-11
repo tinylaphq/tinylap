@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach } from '../js/generate.js';
-import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields, unjoinedContacts, maxTrackDepth } from '../js/model.js';
+import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach, scoreLayouts } from '../js/generate.js';
+import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields, unjoinedContacts, maxTrackDepth, subWidthNotches, boundaryEdges } from '../js/model.js';
 import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
 import { stockL } from '../js/presets.js';
 
@@ -127,35 +127,95 @@ test('every generated layout is a real track, not a solid field of mats', () => 
   }
 });
 
-// This must discriminate on its own, at a single kit even: before the
-// filter exists, 20 of 41 one-kit results and 170 of 299 two-kit results
-// have at least one unjoined contact (two different pieces edge-adjacent
-// without a matched-port join between them — no barrier, so a car could
-// cross freely from one lane into another that never actually connected).
-test('every piece contact between different pieces is a real connection', () => {
+// Task 13 (user approved, "the suggestions are mostly garbage"): the ban on
+// any unjoined piece contact used to sit here and reject 20 of 41 one-kit
+// results and 180 of 300 two-kit results — including every S-bend and
+// offset chicane, the only genuinely interesting tracks this generator can
+// make. That ban is GONE. It is not replaced by weakening it or moving it
+// -- the two invariant tests below are what actually protects the user's
+// original complaint now: enclosedInfields === 1 (kept, above) and every
+// unjoined contact still carrying a wall (next test). Proving the ban is
+// really lifted, not just that this file stopped checking for it:
+test('layouts that run back past themselves are allowed through now', () => {
+  const { results } = generateLayouts(stockFromKits({ '87033': 2 }), { maxSide: 10 });
+  const withContact = results.filter(
+    (r) => unjoinedContacts(createLayout({ pieces: r.pieces })).length > 0,
+  );
+  assert.ok(withContact.length > 0,
+    'expected at least one chicane/double-back layout now the contact ban is gone');
+});
+
+// The replacement for the ban above: every unjoined inter-piece contact
+// edge must appear in boundaryEdges(layout). This is the actual guarantee
+// against the user's original two bug reports (a 4-wide open field with no
+// barrier down the middle) — it is a property of the barrier model
+// (Task 11, commit 51ceffe), not a restriction on which shapes the
+// generator offers, so it holds regardless of whether a given layout has
+// any contacts to begin with. Mutation-tested: reverting boundaryEdges to
+// its pre-Task-11 behaviour (stop walling unjoined contacts) makes this
+// fail on every one of the 776 contact edges across both inventories below
+// — verified against a scratch copy, not asserted on faith.
+test('every unjoined inter-piece contact carries a wall', () => {
   for (const kits of [{ '87033': 1 }, { '87033': 2 }]) {
     const { results } = generateLayouts(stockFromKits(kits), { maxSide: 10 });
     assert.ok(results.length > 0, 'fixture is only meaningful if something generates');
     for (const r of results) {
-      assert.deepEqual(unjoinedContacts(createLayout({ pieces: r.pieces })), [],
-        `${kits['87033']} kit(s): a result has an unjoined piece contact`);
+      const l = createLayout({ pieces: r.pieces });
+      const edges = boundaryEdges(l);
+      for (const id of unjoinedContacts(l)) {
+        assert.ok(edges.has(id),
+          `${kits['87033']} kit(s): ${r.key} has an unwalled unjoined contact at ${id}`);
+      }
     }
   }
 });
 
-// maxTrackDepth <= 2 is no longer its own filter — the contact rule above
-// is strictly stronger (every four-mat-wide slab the width rule used to
-// catch also has an unjoined contact, and nothing generated passes the
-// contact rule while failing this one). Kept as a pinning test so a future
-// change that weakens the contact rule fails loudly here too.
-test('every generated layout stays within the two-mat track width', () => {
+// maxTrackDepth <= 2 is no longer true of every generated layout, and
+// legitimately so: a doubled-back pair of lanes is four mats deep across
+// the pair, with a wall down the middle (see the invariant test above) —
+// not the unbarriered 4-wide slab the old bound was guarding against.
+// maxTrackDepth itself stays a useful MEASUREMENT (see model.js), just not
+// a bound enforced here any more.
+test('every generated layout has zero sub-width notches', () => {
   for (const kits of [{ '87033': 1 }, { '87033': 2 }]) {
     const { results } = generateLayouts(stockFromKits(kits), { maxSide: 10 });
+    assert.ok(results.length > 0, 'fixture is only meaningful if something generates');
     for (const r of results) {
-      assert.ok(maxTrackDepth(createLayout({ pieces: r.pieces })) <= 2,
-        `${kits['87033']} kit(s): a result is wider than two mats`);
+      assert.equal(subWidthNotches(createLayout({ pieces: r.pieces })), 0,
+        `${kits['87033']} kit(s): ${r.key} has a sub-width notch`);
     }
   }
+});
+
+// The test above can't fail on its own at these two inventories' default
+// variant cap — the notch-bearing candidates the search finds happen to
+// sit past the cap. This pins one down directly instead: a real candidate
+// generateLayouts(stockFromKits({'87033':2})) reaches (LLRRRRRR,
+// sides [0,1,0,1,3,7,3,1], cornerR30 — an "8-corner shape 1"), closed,
+// one infield, ZERO unjoined contacts (the pimple bug is not the
+// doubled-back case), affordable, and with exactly one sub-width notch.
+// Confirmed by removing the filter on a scratch copy: with it gone this
+// exact key IS among the results; with it in place (here) it is not.
+test('a known sub-width-notch candidate is rejected, not merely rare', () => {
+  const pimple = buildLoop({
+    signature: 'LLRRRRRR',
+    sides: [0, 1, 0, 1, 3, 7, 3, 1],
+    cornerType: 'cornerR30',
+  });
+  assert.ok(pimple, 'expected this tuple to close');
+  const l = createLayout({ pieces: pimple });
+  assert.equal(isClosedCircuit(l), true, 'fixture must be a valid closed circuit');
+  assert.equal(enclosedInfields(l), 1, 'fixture must be a valid single-infield track');
+  assert.deepEqual(unjoinedContacts(l), [], 'fixture is the pimple case, not the doubled-back case');
+  assert.equal(subWidthNotches(l), 1, 'fixture must actually have the notch this test is about');
+  assert.ok(
+    diffStock(billOfMaterials(l), stockFromKits({ '87033': 2 })).every((row) => row.short === 0),
+    'fixture must be affordable, or its absence from results would be explained by stock, not the notch filter',
+  );
+
+  const { results } = generateLayouts(stockFromKits({ '87033': 2 }), { maxSide: 10 });
+  const key = canonicalLayoutKey(pimple);
+  assert.ok(!results.some((r) => r.key === key), 'the notch filter should have rejected this candidate');
 });
 
 test('results are deduplicated', () => {
@@ -461,4 +521,100 @@ test('a stock-blocked shape reports the cheapest variant\'s shortfall, not any v
       `${b.key} reported missing.short=${b.missing.short}, but the true cheapest variant needs only ${min} (worst variant needs ${max})`,
     );
   }
+});
+
+// Task 13: the user chose three equally-weighted, 0..1-normalised criteria
+// (lapPerMat, technical, fit). Every component and the score itself must
+// stay in range, and score must actually BE the sum of the three
+// components — not an average or some other combination — since a caller
+// reading `components` and a caller reading `score` must agree on what the
+// number means.
+test('scoreLayouts keeps every component and the score in a sane, summed range', () => {
+  const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
+  const scored = scoreLayouts(results, {});
+  assert.equal(scored.length, results.length);
+  for (const r of scored) {
+    for (const [name, v] of Object.entries(r.components)) {
+      assert.ok(v >= 0 && v <= 1, `${name}=${v} is outside 0..1`);
+    }
+    const summed = r.components.lapPerMat + r.components.technical + r.components.fit;
+    assert.ok(Math.abs(summed - r.score) < 1e-9, 'score must be the sum of its components');
+  }
+  // The fixture is only meaningful if at least one component actually
+  // discriminates real candidates apart, rather than every value landing
+  // on the flat 0.5 a set with no spread would produce.
+  assert.ok(new Set(scored.map((r) => r.components.lapPerMat)).size > 1,
+    'expected lapPerMat to discriminate across a real one-kit candidate set');
+});
+
+// Independently rechecks scoreLayouts' output against a from-scratch
+// reimplementation of the stated formula (lapPerMat and fit: min-max
+// normalised raw values; technical: the MEAN of two separately normalised
+// parts), over a large, real, two-kit result set — not a synthetic
+// fixture, so this also proves the formula holds up across genuinely
+// different candidates, not just two hand-picked ones.
+test('scoreLayouts\' components match an independent recomputation of the stated formula', () => {
+  const { results } = generateLayouts(stockFromKits({ '87033': 2 }), { maxSide: 10 });
+  const scored = scoreLayouts(results, { room: null });
+
+  const normalise = (values) => {
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (max === min) return values.map(() => 0.5);
+    return values.map((v) => (v - min) / (max - min));
+  };
+
+  const rawLapPerMat = results.map((r) => (r.lapMm / 1000) / r.matCount);
+  const rawUnjoined = results.map((r) => unjoinedContacts(createLayout({ pieces: r.pieces })).length);
+  const rawLeftTurns = results.map((r) => [...r.signature].filter((c) => c === 'L').length);
+  const rawSquareness = results.map((r) => Math.min(r.bbox.w, r.bbox.h) / Math.max(r.bbox.w, r.bbox.h));
+
+  const nLap = normalise(rawLapPerMat);
+  const nUnjoined = normalise(rawUnjoined);
+  const nLeftTurns = normalise(rawLeftTurns);
+  const nFit = normalise(rawSquareness);
+
+  assert.ok(new Set(rawUnjoined).size > 1,
+    'expected the two-kit set to include both chicane and non-chicane layouts');
+
+  scored.forEach((r, i) => {
+    assert.ok(Math.abs(r.components.lapPerMat - nLap[i]) < 1e-9, `${r.key} lapPerMat`);
+    const expectedTechnical = (nUnjoined[i] + nLeftTurns[i]) / 2;
+    assert.ok(Math.abs(r.components.technical - expectedTechnical) < 1e-9, `${r.key} technical`);
+    assert.ok(Math.abs(r.components.fit - nFit[i]) < 1e-9, `${r.key} fit (no room -> squareness)`);
+  });
+});
+
+// Same recheck, with a room set: fit switches from squareness to how much
+// of the room's floor area the bbox actually uses.
+test('scoreLayouts\' fit rewards floor usage, not squareness, once a room is set', () => {
+  const room = { w: 8, h: 8 };
+  const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10, room });
+  assert.ok(results.length > 1, 'fixture needs more than one room-constrained result to discriminate');
+  const scored = scoreLayouts(results, { room });
+
+  const rawFit = results.map((r) => (r.bbox.w * r.bbox.h) / (room.w * room.h));
+  const min = Math.min(...rawFit);
+  const max = Math.max(...rawFit);
+  assert.notEqual(min, max, 'fixture is only meaningful if floor usage actually varies');
+  scored.forEach((r, i) => {
+    const expected = (rawFit[i] - min) / (max - min);
+    assert.ok(Math.abs(r.components.fit - expected) < 1e-9, `${r.key} room fit`);
+  });
+});
+
+// Validation the brief asked for by name: stockL() is a real, hand-built
+// Kyosho layout, not generator output. It doesn't have to score first —
+// it's small and a plain L — but if the score buries it in the bottom
+// quarter of a one-kit run, the score is measuring the wrong thing.
+test('stockL does not land in the bottom quarter of a one-kit score', () => {
+  const stock = stockFromKits({ '87033': 1 });
+  const { results } = generateLayouts(stock, { maxSide: 10 });
+  const scored = scoreLayouts(results, { room: null }).sort((a, b) => b.score - a.score);
+  const target = canonicalLayoutKey(stockL());
+  const rank = scored.findIndex((r) => r.key === target);
+  assert.ok(rank >= 0, 'stockL must actually be among the scored one-kit results');
+  const fromTop = rank / (scored.length - 1); // 0 = best, 1 = worst
+  assert.ok(fromTop <= 0.75,
+    `stockL ranked ${rank + 1} of ${scored.length} (bottom quarter) — the score likely favours the wrong thing`);
 });
