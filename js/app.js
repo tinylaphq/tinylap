@@ -624,7 +624,12 @@ canvas.addEventListener('pointerdown', (e) => {
       // of what was just laid without a click. Done here rather than in
       // onMove: during the drag the run is rebuilt repeatedly, and a
       // selection that flickered with it would be noise.
-      state.selection = [state.layout.pieces.length - 1];
+      const tail = state.layout.pieces.length - 1;
+      state.selection = [tail];
+      state.lastPlaced = state.layout.pieces[tail];
+      // Queue the next straight off the end of the run so the ghost shows
+      // where Space would continue, as it does after any other placement.
+      armGhostFrom(tail, 'straight');
       render();
     }
   };
@@ -1144,9 +1149,14 @@ document.addEventListener('keydown', (e) => {
     // no way to just cancel one. dialog[open] is already handled above, so
     // this Escape is free to mean "dismiss the ghost" without also being
     // asked to close a modal.
-    if (state.pending || state.ghost) {
+    // Also drop the selection. Space now derives its target from the
+    // selection rather than from a pre-armed queue, so clearing only the
+    // queue would let the very next Space re-derive it — Escape would
+    // cancel the preview and nothing else. Escape means stop.
+    if (state.pending || state.ghost || state.selection.length > 0) {
       state.pending = null;
       state.ghost = null;
+      state.selection = [];
       render();
     }
     return;
@@ -1254,7 +1264,16 @@ document.addEventListener('keydown', (e) => {
     // Guard on state.dragging too: commit() below pushes state.layout onto
     // history and mutates it, which must not race a port-handle drag that
     // is speculatively rebuilding state.layout on every pointermove.
-    if (!state.pending || state.dragging) return;
+    if (state.dragging) return;
+    // Derive the queued piece here rather than relying on every placement
+    // path to have armed one. Space kept breaking because each new path —
+    // the palette drop, the run drag, a click — had to remember to arm it,
+    // and any handler that cleared it silently disabled the key. The
+    // selection is the one thing every path does set, so ask for it now.
+    if (!state.pending && state.selection.length === 1) {
+      armGhostFrom(state.selection[0], 'straight');
+    }
+    if (!state.pending) return;
     // state.ghost.valid was computed by advanceGhost() at the moment
     // state.pending was armed — any later gesture that mutates
     // state.layout without touching ghost/pending (e.g. a drag-to-extend
