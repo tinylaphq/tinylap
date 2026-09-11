@@ -400,3 +400,9 @@ dialog menu .btn { flex: 1; }
     margin-bottom: var(--p-space-sm);
   }
 }
+
+/* Close used to be spaced by whatever sat above it — usually the
+   out-of-reach block and its divider. That block is hidden when nothing is
+   merely short, and Close then sat flush against the pager. Space it
+   itself rather than relying on a neighbour that may not be there. */
+.dialog-foot { margin-top: var(--p-space-lg); }
