@@ -140,8 +140,11 @@ main {
 /* Every entry corresponds to a binding that exists in the keydown handler
    in js/app.js. Check there before adding to it. */
 
-/* The heading sat hard against the first row. */
-#shortcuts h2 { margin-bottom: var(--p-space-md); }
+/* Every rail heading sat hard against its content. CONTROLS was spaced
+   first and on its own, which just moved the inconsistency to PIECES and
+   MATERIALS; this covers all three. Needs the .h3 class in the selector —
+   a bare element selector loses to palace's own .h3 rule. */
+aside h2.h3 { margin-bottom: var(--p-space-md); }
 
 /* Section headings in accent rather than plain white — the rails carry a
    lot of uppercase tracked text and this separates "what this block is"
