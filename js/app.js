@@ -395,18 +395,37 @@ canvas.addEventListener('pointerdown', (e) => {
   const piece = state.layout.pieces[index];
   const [cx, cy] = pointerCell(e);
   const grab = { dx: piece.x - cx, dy: piece.y - cy, index, moved: false };
-  let current = piece; // last-written position, so a round-trip back to the
-                        // start is still recognised as "no-op" correctly
+  // Drag the whole selection, not just the piece under the cursor. Their
+  // starting positions are captured once, up front, and every move writes
+  // origin + delta — accumulating per-move offsets would drift as soon as
+  // one piece was clamped or skipped.
+  //
+  // A modifier-click can deselect the very piece being grabbed; in that
+  // case move just that piece rather than the group it is no longer in.
+  const moving = state.selection.includes(index) ? [...state.selection] : [index];
+  const origins = moving.map((i) => {
+    const p = state.layout.pieces[i];
+    return { index: i, x: p.x, y: p.y };
+  });
+  let current = { x: piece.x, y: piece.y }; // last-written position of the
+                        // grabbed piece, so a round-trip back to the start
+                        // is still recognised as "no-op" correctly
   canvas.setPointerCapture(e.pointerId);
   state.dragging = true;
 
   const onMove = (ev) => {
     const [nx, ny] = pointerCell(ev);
-    const next = { ...piece, x: nx + grab.dx, y: ny + grab.dy };
-    if (next.x === current.x && next.y === current.y) return;
+    const x = nx + grab.dx;
+    const y = ny + grab.dy;
+    if (x === current.x && y === current.y) return;
     if (!grab.moved) { state.history.push(structuredClone(state.layout)); grab.moved = true; state.error = null; }
-    state.layout.pieces[grab.index] = next;
-    current = next;
+    const ddx = x - piece.x;
+    const ddy = y - piece.y;
+    for (const origin of origins) {
+      const p = state.layout.pieces[origin.index];
+      state.layout.pieces[origin.index] = { ...p, x: origin.x + ddx, y: origin.y + ddy };
+    }
+    current = { x, y };
     render();
   };
   const cleanup = () => {
