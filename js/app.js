@@ -397,10 +397,36 @@ canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
     state.dragging = true;
 
+    // Anything the band touches counts — a cell spans [x, x+1), so this is
+    // an overlap test, not containment. Requiring a piece to be fully
+    // enclosed makes big pieces frustrating to catch. Shared by the live
+    // preview and the commit on release, so what is highlighted while
+    // dragging is by construction what gets selected.
+    const hitPieces = (b) => state.layout.pieces.reduce((hits, piece, i) => {
+      const touches = placedCells(piece).some(([cx, cy]) =>
+        cx + 1 > b.x && cx < b.x + b.w && cy + 1 > b.y && cy < b.y + b.h);
+      if (touches) hits.push(i);
+      return hits;
+    }, []);
+
+    // Repaint just the mat classes, not the whole canvas: this runs on
+    // every pointermove, and drawLayout would rebuild the walls and arcs
+    // each time for no visual gain.
+    const showPreview = (hits) => {
+      const set = new Set(hits);
+      for (const r of canvas.querySelectorAll('rect.mat')) {
+        r.classList.toggle('will-select', set.has(Number(r.dataset.piece)));
+      }
+    };
+    const clearPreview = () => {
+      for (const r of canvas.querySelectorAll('rect.mat.will-select')) r.classList.remove('will-select');
+    };
+
     const bandMove = (ev) => {
       const [x, y] = pointerWorld(ev);
       band = { x: Math.min(ox, x), y: Math.min(oy, y), w: Math.abs(x - ox), h: Math.abs(y - oy) };
       drawMarquee(canvas, band);
+      showPreview(hitPieces(band));
     };
     const bandEnd = () => {
       try { canvas.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
@@ -409,22 +435,14 @@ canvas.addEventListener('pointerdown', (e) => {
       canvas.removeEventListener('pointercancel', bandCancel);
       state.dragging = false;
       drawMarquee(canvas, null);
+      clearPreview();
       // A band smaller than a tenth of a mat is a click, not a drag.
       if (band.w < 0.1 && band.h < 0.1) {
         state.selection = additive ? base : [];
         render();
         return;
       }
-      // Anything the band touches counts — a cell spans [x, x+1), so this
-      // is an overlap test, not containment. Requiring a piece to be fully
-      // enclosed makes big pieces frustrating to catch.
-      const hits = [];
-      state.layout.pieces.forEach((piece, i) => {
-        const touches = placedCells(piece).some(([cx, cy]) =>
-          cx + 1 > band.x && cx < band.x + band.w && cy + 1 > band.y && cy < band.y + band.h);
-        if (touches) hits.push(i);
-      });
-      state.selection = [...new Set([...base, ...hits])];
+      state.selection = [...new Set([...base, ...hitPieces(band)])];
       render();
     };
     const bandCancel = () => {
@@ -434,6 +452,7 @@ canvas.addEventListener('pointerdown', (e) => {
       canvas.removeEventListener('pointercancel', bandCancel);
       state.dragging = false;
       drawMarquee(canvas, null);
+      clearPreview();
       render();
     };
     canvas.addEventListener('pointermove', bandMove);

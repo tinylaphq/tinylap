@@ -67,6 +67,11 @@ main {
 .room { fill: none; stroke: var(--p-accent-3); stroke-width: 0.06; stroke-dasharray: 0.3 0.2; }
 .mat { fill: #262626; stroke: #3a3a3a; stroke-width: 0.03; transition: var(--p-transition); }
 .mat.selected { fill: var(--p-accent-2); }
+/* About to be caught by the rubber band. Same hue as a real selection so
+   the preview reads as "these ones", but dimmer so it is legible as not
+   committed yet. No transition: this tracks the cursor and easing it
+   would lag the band. */
+.mat.will-select { fill: var(--p-accent-2); fill-opacity: 0.45; transition: none; }
 .mat.overlap { fill: var(--p-error); }
 /* Painted in the canvas colour so a cut mat corner reads as cut. */
 .cut { fill: var(--p-dark); }
