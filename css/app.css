@@ -198,6 +198,7 @@ kbd {
 dialog {
   padding: var(--p-space-lg);
   max-width: var(--p-container-narrow);
+  width: 100%;
   background: var(--p-surface);
   border: var(--p-border-width) solid var(--p-text);
   box-shadow: var(--p-shadow-lg) var(--p-accent-2);
@@ -375,4 +376,21 @@ dialog menu .btn { flex: 1; }
   font-family: var(--p-font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--p-text);
+}
+
+/* The layouts dialog carries a stock layout, five suggestion cards, a pager
+   and an out-of-reach list — far more than the other two dialogs, which are
+   a handful of fields each. It gets the wider container and lays the cards
+   two-up, which roughly halves its height and brings the pager back into
+   view without scrolling. */
+#presets-dialog { max-width: var(--p-container-width); }
+
+@media (min-width: 900px) {
+  #suggestions-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--p-space-sm);
+  }
+  /* The grid owns the spacing now; the per-item margin would double it. */
+  #suggestions-list li { margin-bottom: 0; }
 }
