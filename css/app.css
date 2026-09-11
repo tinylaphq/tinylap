@@ -386,11 +386,17 @@ dialog menu .btn { flex: 1; }
 #presets-dialog { max-width: var(--p-container-width); }
 
 @media (min-width: 900px) {
+  /* Multi-column, not a grid. A grid aligns rows, so a card with a
+     two-line name stretched the one beside it and left a hole — the list
+     read as a table with empty cells. Columns let each card take only the
+     height it needs and flow on: fill the first column, continue in the
+     second. */
   #suggestions-list {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--p-space-sm);
+    columns: 2;
+    column-gap: var(--p-space-sm);
   }
-  /* The grid owns the spacing now; the per-item margin would double it. */
-  #suggestions-list li { margin-bottom: 0; }
+  #suggestions-list li {
+    break-inside: avoid;          /* never split a card across columns */
+    margin-bottom: var(--p-space-sm);
+  }
 }
