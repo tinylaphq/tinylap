@@ -1020,7 +1020,12 @@ function renderSuggestionPage() {
 
   const more = document.querySelector('#btn-more-suggestions');
   more.hidden = pool.length <= 5;
-  more.textContent = cursor + 5 >= pool.length ? 'Start again from the first' : 'Show 5 different';
+  // The control is an icon now, so what it is about to do has to live in
+  // its label rather than its face.
+  const wraps = cursor + 5 >= pool.length;
+  const label = wraps ? 'Back to the first five' : 'Show five different';
+  more.setAttribute('aria-label', label);
+  more.title = label;
   document.querySelector('#suggestions-summary').dataset.page =
     pool.length ? `showing ${cursor + 1}-${Math.min(cursor + 5, pool.length)} of ${pool.length}` : '';
 }

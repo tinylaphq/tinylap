@@ -406,3 +406,15 @@ dialog menu .btn { flex: 1; }
    merely short, and Close then sat flush against the pager. Space it
    itself rather than relying on a neighbour that may not be there. */
 .dialog-foot { margin-top: var(--p-space-lg); }
+
+/* Square icon button — a reroll beside its section heading, not a
+   full-width button stacked on Close. Sized to the heading, not to the
+   dialog. */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  line-height: 0;
+}
+.btn-icon svg { width: 14px; height: 14px; display: block; }

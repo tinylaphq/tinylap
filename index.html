@@ -48,7 +48,7 @@
   <aside id="bom" aria-label="Bill of materials">
     <div class="rail-head">
       <h2 class="h3">Materials</h2>
-      <button type="button" class="btn btn-sm btn-outline" id="btn-inventory">Edit inventory</button>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-inventory">Edit kits</button>
     </div>
     <p id="bom-warning" class="status status-warning" role="alert" hidden></p>
     <table id="bom-table">
@@ -74,7 +74,7 @@
   </aside>
 
   <dialog id="inventory-dialog" aria-labelledby="inventory-dialog-title">
-    <h2 id="inventory-dialog-title">Inventory</h2>
+    <h2 id="inventory-dialog-title">Your kits</h2>
     <p class="subtitle">Which Kyosho kits do you own?</p>
     <form method="dialog" id="inventory-form"></form>
   </dialog>
@@ -101,12 +101,20 @@
     <h3 class="h3">Stock layout</h3>
     <ul id="presets-list"></ul>
     <hr class="divider">
-    <h3 class="h3">Suggestions</h3>
+    <div class="rail-head">
+      <h3 class="h3">Suggestions</h3>
+      <button type="button" class="btn btn-sm btn-outline btn-icon" id="btn-more-suggestions"
+              hidden aria-label="Show five different" title="Show five different">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89" fill="none"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+          <path d="M13.6 1.6v3.2h-3.2" fill="none"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+        </svg>
+      </button>
+    </div>
     <p class="subtitle" id="suggestions-summary"></p>
     <ul id="suggestions-list"></ul>
-    <button type="button" class="btn btn-sm btn-outline btn-block" id="btn-more-suggestions" hidden>
-      Show 5 different
-    </button>
     <div id="out-of-reach"></div>
     <form method="dialog" class="dialog-foot"><button class="btn btn-outline btn-block">Close</button></form>
   </dialog>
