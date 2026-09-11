@@ -131,6 +131,9 @@ main {
 /* Every entry corresponds to a binding that exists in the keydown handler
    in js/app.js. Check there before adding to it. */
 
+/* The heading sat hard against the first row. */
+#shortcuts h2 { margin-bottom: var(--p-space-md); }
+
 #shortcuts dl {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -152,13 +155,6 @@ kbd {
   background: var(--p-surface-inset);
   font: 600 11px/1.5 var(--p-font-mono);
   text-transform: uppercase;
-}
-
-.legend-dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  background: var(--p-accent-1);
 }
 
 /* ── Materials panel ─────────────────────────────────────────────── */
