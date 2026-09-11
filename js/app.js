@@ -283,6 +283,9 @@ canvas.addEventListener('drop', (e) => {
   state.tool = null;
   state.hoverCell = null;
   state.lastPlaced = { type, rot, x, y };
+  // Select what you just placed, so R rotates it and Delete removes it
+  // without having to click it first. The piece just pushed is the last one.
+  state.selected = state.layout.pieces.length - 1;
   // As in the Space/Enter handler: advanceGhost() runs after commit()'s own
   // render(), so this trailing render() is what actually shows the newly
   // armed ghost — not a redundant second paint of the same state.
@@ -414,7 +417,16 @@ canvas.addEventListener('pointerdown', (e) => {
     cleanup();
     // One undo step for the whole run, matching the move-drag's pattern
     // of only recording history when something actually changed.
-    if (laid > 0) { state.history.push(baseline); state.error = null; }
+    if (laid > 0) {
+      state.history.push(baseline);
+      state.error = null;
+      // Select the last piece of the run, so R and Delete act on the end
+      // of what was just laid without a click. Done here rather than in
+      // onMove: during the drag the run is rebuilt repeatedly, and a
+      // selection that flickered with it would be noise.
+      state.selected = state.layout.pieces.length - 1;
+      render();
+    }
   };
   const onCancel = () => {
     // Abnormal termination, not a deliberate "keep what I built" signal
@@ -1006,6 +1018,8 @@ document.addEventListener('keydown', (e) => {
     const next = state.pending;
     commit((l) => l.pieces.push(next));
     state.lastPlaced = next;
+    // Same as the drop path: the piece you just placed is the selected one.
+    state.selected = state.layout.pieces.length - 1;
     // advanceGhost() runs after commit()'s own render(), so it mutates
     // ghost/pending state that render already drew — this trailing render
     // is what actually shows the freshly re-armed ghost; it is not
