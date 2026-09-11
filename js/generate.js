@@ -560,9 +560,18 @@ export function generateLayouts(stock, opts = {}) {
             // wall between the two lanes correctly, and computeBarriers'
             // rendering already draws it — the "4 wide, no barrier" bug this
             // used to guard against cannot recur regardless of what this
-            // file filters. See test/generate.test.js's invariant test for
-            // the proof: every unjoined contact edge is in boundaryEdges,
-            // over every generated layout, both inventories.
+            // file filters.
+            //
+            // That holds for what this generator produces, and is pinned by
+            // the invariant test in test/generate.test.js over every
+            // generated layout at both inventories. It is NOT a theorem
+            // about layouts in general: two straights offset diagonally,
+            // [{straight,0,0,rot 0},{straight,1,1,rot 0}], touch on an edge
+            // that is an open port of BOTH pieces, so neither walls it and
+            // the contact is genuinely unwalled. Nothing the generator
+            // builds looks like that — every piece it places is joined
+            // port-to-port — but a hand-built layout can, so do not read
+            // the invariant as a guarantee about arbitrary input.
             //
             // What's rejected instead: sub-width notches — slots cut into
             // the outline narrower than the two-mat track width, a 1-mat
@@ -742,7 +751,13 @@ function normalise(values) {
 export function scoreLayouts(results, { room = null } = {}) {
   const lapPerMat = normalise(results.map((r) => (r.lapMm / 1000) / r.matCount));
 
-  const unjoinedCounts = results.map((r) => unjoinedContacts(createLayout({ pieces: r.pieces })).length);
+  // Guarded like groupByCharacter, which documents that a caller may
+  // legitimately group results carrying no pieces: the two are called on
+  // the same data one after the other, so one throwing where the other
+  // shrugs is a trap rather than a contract.
+  const unjoinedCounts = results.map((r) => (Array.isArray(r.pieces)
+    ? unjoinedContacts(createLayout({ pieces: r.pieces })).length
+    : 0));
   const leftTurnCounts = results.map((r) => [...r.signature].filter((c) => c === 'L').length);
   const normUnjoined = normalise(unjoinedCounts);
   const normLeftTurns = normalise(leftTurnCounts);

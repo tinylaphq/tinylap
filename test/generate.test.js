@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach, scoreLayouts } from '../js/generate.js';
+import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach, scoreLayouts, hasCachedLayouts } from '../js/generate.js';
 import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields, unjoinedContacts, maxTrackDepth, subWidthNotches, boundaryEdges } from '../js/model.js';
 import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
 import { stockL } from '../js/presets.js';
@@ -211,6 +211,21 @@ test('no layout offered to the user has a sub-width notch', () => {
   }
 });
 
+test('scoring and grouping agree about results that carry no pieces', () => {
+  // They are called on the same data one after the other. groupByCharacter
+  // documents that a caller may legitimately group pieceless results;
+  // scoreLayouts used to throw on exactly that input, which made the pair
+  // a trap rather than a contract.
+  const pieceless = [{
+    signature: 'RRRR', cornerType: 'cornerR30',
+    matCount: 10, lapMm: 1000, bbox: { w: 4, h: 4 }, key: 'a',
+  }];
+  assert.doesNotThrow(() => groupByCharacter(pieceless));
+  assert.doesNotThrow(() => scoreLayouts(pieceless, { room: null }));
+  const [scored] = scoreLayouts(pieceless, { room: null });
+  assert.ok(Number.isFinite(scored.score), 'a pieceless result must still score finitely');
+});
+
 test('results are deduplicated', () => {
   const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
   const keys = results.map((r) => r.key);
@@ -248,8 +263,32 @@ test('the memo treats equal-but-not-identical stock objects as the same call', (
   const b = stockFromKits({ '87033': 1 });
   assert.notEqual(a, b, 'fixture is only meaningful if the two stocks are distinct objects');
   const keysA = generateLayouts(a, { maxSide: 8 }).results.map((r) => r.key).sort();
+
+  // Ask BEFORE computing with b. Comparing results alone cannot fail — an
+  // identity-keyed cache would simply miss, recompute, and return the same
+  // keys — and asking after generateLayouts(b) cannot fail either, because
+  // that call caches b under its own identity on the way past. Only the
+  // question "does b hit a cache warmed by a?" distinguishes the two, and
+  // hasCachedLayouts answers it without mutating anything.
+  assert.equal(hasCachedLayouts(b, { maxSide: 8 }), true,
+    'an equal-but-distinct stock missed the cache, so it is keyed on identity');
+
   const keysB = generateLayouts(b, { maxSide: 8 }).results.map((r) => r.key).sort();
   assert.deepEqual(keysB, keysA);
+});
+
+test('hasCachedLayouts reports what it is asked about, not just "something is cached"', () => {
+  // It decides whether the dialog pays for a skeleton, so a blanket true
+  // would mean never showing one and a blanket false always showing one.
+  const warmed = stockFromKits({ '87033': 1 });
+  generateLayouts(warmed, { maxSide: 8 });
+  assert.equal(hasCachedLayouts(warmed, { maxSide: 8 }), true, 'the call just made is not reported as cached');
+  // Different stock, same options.
+  assert.equal(hasCachedLayouts(stockFromKits({ '87033': 3 }), { maxSide: 8 }), false,
+    'an uncomputed stock is reported as cached');
+  // Same stock, different options — a different call, so a different answer.
+  assert.equal(hasCachedLayouts(warmed, { maxSide: 5 }), false,
+    'a different maxSide is reported as cached');
 });
 
 // This is the half that actually matters: a cache bug here would show the
