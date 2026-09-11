@@ -847,7 +847,11 @@ export function outOfReach(stock, opts = {}) {
     if (!feel || blocked.some((b) => b.feel === feel)) continue;
     blocked.push({
       key: `*|${feel}`,
-      name: 'Any outline',
+      // Named for the pieces, not for the internal feel word. "Any outline,
+      // sweeping" was accurate and meaningless to read: it takes knowing
+      // that "sweeping" is this codebase's word for the large corner and
+      // that "any outline" means "whatever shape you try".
+      name: `${PIECES[type].label} tracks`,
       corners: null,
       feel,
       reason: 'geometry',
