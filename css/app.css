@@ -101,6 +101,11 @@ main {
   margin-bottom: var(--p-space-sm);
   background: var(--p-surface);
   border: var(--p-border-width) solid var(--p-text);
+  /* The three-accent rotation was already declared below but only showed on
+     hover, leaving the rail monochrome at rest. Carrying it on a left edge
+     gives each piece a fixed identity and puts some of palace's colour into
+     the sidebar without touching the card's shape. */
+  border-left: var(--p-space-xs) solid var(--accent);
   cursor: grab;
   user-select: none;
   transition: var(--p-transition);
@@ -134,6 +139,13 @@ main {
 /* The heading sat hard against the first row. */
 #shortcuts h2 { margin-bottom: var(--p-space-md); }
 
+/* Section headings in accent rather than plain white — the rails carry a
+   lot of uppercase tracked text and this separates "what this block is"
+   from the content under it. Cyan reads as a label on this background
+   without competing with the pink port handles or the green in-stock
+   message. */
+aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
+
 #shortcuts dl {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -151,7 +163,8 @@ kbd {
   display: inline-block;
   padding: 1px 5px;
   border: var(--p-border-thin) solid var(--p-text);
-  box-shadow: 1px 1px 0 var(--p-text);
+  /* Hard offset shadow in accent — same shape as palace's, just coloured. */
+  box-shadow: 1px 1px 0 var(--p-accent-1);
   background: var(--p-surface-inset);
   font: 600 11px/1.5 var(--p-font-mono);
   text-transform: uppercase;
