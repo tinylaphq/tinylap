@@ -839,10 +839,46 @@ document.querySelector('#presets-list').addEventListener('click', (e) => {
 // here rather than in groupByCharacter keeps that function's own contract
 // (variants by mat count, `best` = the largest) unchanged; `best` is not
 // read by this UI.
+// Order one character's variants so consecutive picks look different.
+// Sorting by score alone put near-identical layouts next to each other —
+// at one starter kit every L-shape is 8x8 and 48 mats, so three rows read
+// "L-shape 8x8, 48 mats, lap 6.43 m" and the page looked duplicated even
+// though the tracks differed. Best-scoring first, then repeatedly whichever
+// remaining variant shares fewest mats with the ones already taken.
+function diverseOrder(variants) {
+  if (variants.length < 3) return [...variants];
+  const cells = new Map(variants.map((v) => [v, new Set(v.key.split(';'))]));
+  const overlap = (a, b) => {
+    const [x, y] = [cells.get(a), cells.get(b)];
+    let shared = 0;
+    for (const c of x) if (y.has(c)) shared += 1;
+    return shared / (x.size + y.size - shared);   // Jaccard similarity
+  };
+  const remaining = [...variants].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const ordered = [remaining.shift()];
+  while (remaining.length > 0) {
+    let bestAt = 0;
+    let bestScore = Infinity;
+    remaining.forEach((candidate, i) => {
+      // Compare against the last few only: the page shows five at a time,
+      // so looking further back costs time without changing what the user
+      // sees side by side.
+      const worst = Math.max(...ordered.slice(-4).map((taken) => overlap(taken, candidate)));
+      if (worst < bestScore) { bestScore = worst; bestAt = i; }
+    });
+    ordered.push(remaining.splice(bestAt, 1)[0]);
+  }
+  return ordered;
+}
+
 function suggestionPool(characters) {
+  // The row label has to name the CHARACTER, not just the outline: an
+  // "L-shape" and an "L-shape with chicane" are different tracks that both
+  // came out as "L-shape 8x8, 48 mats" and read as duplicates.
+  for (const c of characters) for (const v of c.variants) v.characterName = c.name;
   const pool = [];
   const queues = characters
-    .map((c) => [...c.variants].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)))
+    .map((c) => diverseOrder(c.variants))
     // Strongest shape first, judged by its own best example, so the top of
     // page one is the best thing on offer and not merely the shape with the
     // fewest corners. The round-robin below still guarantees the spread.
@@ -1002,7 +1038,7 @@ function suggestionListItem(result) {
     button.dataset.suggestionKey = result.key;
     button.innerHTML = `<span class="preset-thumb">${layoutToSvgString(layout, { pad: 0.6, theme: 'light' })}</span>
       <span class="preset-info">
-        <span class="preset-name">${outlineName(result.signature)} ${result.bbox.w}×${result.bbox.h}</span>
+        <span class="preset-name">${result.characterName ?? outlineName(result.signature)} ${result.bbox.w}×${result.bbox.h}</span>
         <span class="preset-source">${result.matCount} mats · lap ${(result.lapMm / 1000).toFixed(2)} m</span>
       </span>`;
     li.append(button);

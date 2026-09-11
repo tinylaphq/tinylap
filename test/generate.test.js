@@ -391,12 +391,22 @@ test('unexploredCorners names counts skipped by the cap, not by unaffordability'
   assert.deepEqual(double.unexploredCorners, [10, 12]);
 });
 
-test('a starter set yields exactly two characters: rectangle and L', () => {
+test('a starter set yields three characters: rectangle, L, and L with a chicane', () => {
+  // Three, not the two this asserted before doubling-back layouts were
+  // allowed. A plain L and one that runs back past itself are different
+  // tracks to drive and different tracks to build, so they are different
+  // characters — grouping them together put three rows reading
+  // "L-shape 8x8, 48 mats, lap 6.43 m" on one page, which is what the
+  // owner reported as duplicates.
   const { results } = generateLayouts(stockFromKits({ '87033': 1 }), { maxSide: 10 });
   const chars = groupByCharacter(results);
-  assert.equal(chars.length, 2, chars.map((c) => c.name).join(', '));
-  assert.deepEqual(chars.map((c) => c.name).sort(), ['L-shape', 'Rectangle']);
+  assert.equal(chars.length, 3, chars.map((c) => c.name).join(', '));
+  assert.deepEqual(chars.map((c) => c.name).sort(),
+    ['L-shape', 'L-shape with chicane', 'Rectangle']);
   for (const c of chars) assert.equal(c.feel, 'tight');
+  // The split is real: both L groups are non-empty, so this is two
+  // populated characters and not one plus an empty label.
+  for (const c of chars) assert.ok(c.variants.length > 0, `${c.name} is empty`);
 });
 
 test('every character keeps its variants, best first by mat count', () => {

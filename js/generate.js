@@ -653,10 +653,23 @@ export function groupByCharacter(results) {
   const groups = new Map();
   for (const r of results) {
     const feel = cornerFeel(r);
-    const name = outlineName(r.signature);
+    // Whether the track doubles back past itself is part of what a layout
+    // IS, not a size variant of it. Before this, a plain L and a
+    // serpentine L were one character with one label, so the list showed
+    // three rows reading "L-shape 8x8, 48 mats, lap 6.43 m" that were
+    // genuinely different tracks. It also nearly doubles the number of
+    // characters, which is what stops one page repeating a shape.
+    // Guarded: cornerFeel and outlineName need only signature/cornerType,
+    // so a caller can legitimately group results that carry no pieces.
+    // Without pieces there is nothing to detect a chicane in, which is not
+    // the same as asserting there is none — but it is the only honest
+    // answer available, and it keeps this function total.
+    const chicane = Array.isArray(r.pieces)
+      && unjoinedContacts(createLayout({ pieces: r.pieces })).length > 0;
+    const name = outlineName(r.signature) + (chicane ? ' with chicane' : '');
     const key = `${name}|${feel}`;
     if (!groups.has(key)) {
-      groups.set(key, { key, name, feel, corners: r.signature.length, variants: [] });
+      groups.set(key, { key, name, feel, chicane, corners: r.signature.length, variants: [] });
     }
     groups.get(key).variants.push(r);
   }
