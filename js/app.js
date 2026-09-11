@@ -16,7 +16,7 @@ const state = {
   ghost: null,    // { cells, valid }
   hoverCell: null, // [x, y] last cell hovered while dragging
   history: [],
-  selected: null, // index into layout.pieces, or null
+  selection: [], // indices into layout.pieces; empty when nothing is selected
   dragging: false, // true while a piece move-drag or port-handle drag is in flight
   lastPlaced: null, // { type, x, y, rot } of the most recently placed piece
   pending: null,    // { type, x, y, rot } the auto-advance ghost would place on Space/Enter
@@ -140,7 +140,7 @@ export function render() {
   drawLayout(canvas, state.layout, {
     room: state.layout.room,
     ghost: state.ghost,
-    selected: state.selected,
+    selected: state.selection,
     handles: true,
   });
   renderBom();
@@ -351,7 +351,7 @@ canvas.addEventListener('drop', (e) => {
   state.lastPlaced = { type, rot, x, y };
   // Select what you just placed, so R rotates it and Delete removes it
   // without having to click it first. The piece just pushed is the last one.
-  state.selected = state.layout.pieces.length - 1;
+  state.selection = [state.layout.pieces.length - 1];
   // As in the Space/Enter handler: advanceGhost() runs after commit()'s own
   // render(), so this trailing render() is what actually shows the newly
   // armed ghost — not a redundant second paint of the same state.
@@ -372,10 +372,21 @@ canvas.addEventListener('pointerdown', (e) => {
   state.ghost = null;
 
   const rect = e.target.closest('.mat');
-  if (!rect) { state.selected = null; render(); return; }
+  if (!rect) { state.selection = []; render(); return; }
 
   const index = Number(rect.dataset.piece);
-  state.selected = index;
+  // Shift or the platform modifier extends the selection; a plain click
+  // replaces it. A modifier-click on an already-selected piece removes it,
+  // which is the only way to undo an over-click without starting over.
+  if (e.shiftKey || e.metaKey || e.ctrlKey) {
+    state.selection = state.selection.includes(index)
+      ? state.selection.filter((i) => i !== index)
+      : [...state.selection, index];
+  } else if (!state.selection.includes(index)) {
+    // Grabbing a piece that is already part of a multi-selection keeps the
+    // group, so dragging one of them does not silently collapse it to one.
+    state.selection = [index];
+  }
   const piece = state.layout.pieces[index];
   const [cx, cy] = pointerCell(e);
   const grab = { dx: piece.x - cx, dy: piece.y - cy, index, moved: false };
@@ -490,7 +501,7 @@ canvas.addEventListener('pointerdown', (e) => {
       // of what was just laid without a click. Done here rather than in
       // onMove: during the drag the run is rebuilt repeatedly, and a
       // selection that flickered with it would be noise.
-      state.selected = state.layout.pieces.length - 1;
+      state.selection = [state.layout.pieces.length - 1];
       render();
     }
   };
@@ -638,7 +649,7 @@ document.querySelector('#presets-list').addEventListener('click', (e) => {
   commit((l) => { l.pieces = structuredClone(preset.pieces); });
   // A loaded preset invalidates anything computed against the previous
   // layout — same clearing this file does on import (see loadFile below).
-  state.selected = null;
+  state.selection = [];
   state.ghost = null;
   state.pending = null;
   state.hoverCell = null;
@@ -869,7 +880,7 @@ document.querySelector('#suggestions-list').addEventListener('click', (e) => {
   // A loaded suggestion is ordinary pieces. Clear the interaction state the
   // same way the preset and file-open paths do — anything computed against
   // the previous layout is meaningless now.
-  state.selected = null;
+  state.selection = [];
   state.ghost = null;
   state.pending = null;
   state.hoverCell = null;
@@ -937,7 +948,7 @@ async function loadFile(file) {
 
   state.history.push(structuredClone(state.layout));
   state.layout = imported;
-  state.selected = null;
+  state.selection = [];
   state.error = null;
   // The new layout invalidates anything computed against the old one:
   // a ghost/pending placement, a hovered cell, or an armed tool all
@@ -973,7 +984,7 @@ export function undo() {
   const previous = state.history.pop();
   if (previous) {
     state.layout = previous;
-    state.selected = null;
+    state.selection = [];
     // Any armed ghost/pending was computed against the layout that just
     // went away — reverting the layout invalidates both, or Space could
     // place an orphan piece computed against a state that no longer exists.
@@ -1024,19 +1035,21 @@ document.addEventListener('keydown', (e) => {
       state.tool.rot = (state.tool.rot + 90) % 360;
       if (state.hoverCell) {
         state.ghost = ghostFor(state.tool.type, state.tool.rot, state.hoverCell);
-        drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selected, handles: true });
+        drawLayout(canvas, state.layout, { room: state.layout.room, ghost: state.ghost, selected: state.selection, handles: true });
       }
       return;
     }
-    if (state.selected !== null && !state.dragging) {
+    if (state.selection.length > 0 && !state.dragging) {
       e.preventDefault();
       // I5: rotate is one of the paths that never dismissed an armed
       // auto-advance ghost.
       state.pending = null;
       state.ghost = null;
       commit((l) => {
-        const p = l.pieces[state.selected];
-        p.rot = (p.rot + 90) % 360;
+        for (const i of state.selection) {
+          const p = l.pieces[i];
+          p.rot = (p.rot + 90) % 360;
+        }
       });
     }
     return;
@@ -1047,23 +1060,36 @@ document.addEventListener('keydown', (e) => {
   // palette. Re-arms the auto-advance ghost, so the mouse carries straight
   // on from the new piece's open end.
   if (e.key.toLowerCase() === 'c') {
-    if (state.selected === null || state.dragging) return;
+    if (state.selection.length === 0 || state.dragging) return;
     e.preventDefault();
-    const candidates = conversionCandidates(state.selected);
-    if (candidates.length <= 1) return;
-    const current = state.layout.pieces[state.selected];
-    const at = candidates.findIndex((c) => c.type === current.type && c.rot === current.rot
-      && c.x === current.x && c.y === current.y);
-    const next = candidates[(at + 1) % candidates.length];
-    const wasLast = state.selected === state.layout.pieces.length - 1;
+    // Each selected piece advances to its own next option. Evaluated one
+    // at a time against the layout as it stands, so a conversion that
+    // frees or fills space is seen by the pieces cycled after it.
+    const wasLast = state.selection.length === 1
+      && state.selection[0] === state.layout.pieces.length - 1;
+    let last = null;
+    let changed = false;
     state.pending = null;
     state.ghost = null;
-    commit((l) => { l.pieces[state.selected] = next; });
+    commit((l) => {
+      for (const i of state.selection) {
+        const candidates = conversionCandidates(i);
+        if (candidates.length <= 1) continue;
+        const current = l.pieces[i];
+        const at = candidates.findIndex((c) => c.type === current.type && c.rot === current.rot
+          && c.x === current.x && c.y === current.y);
+        const next = candidates[(at + 1) % candidates.length];
+        l.pieces[i] = next;
+        last = next;
+        changed = true;
+      }
+    });
+    if (!changed) { render(); return; }
     // advanceGhost re-arms from the LAST piece, so only re-arm when the
     // converted piece is the last one — which it is in the flow this
     // serves: lay straights, convert the final one, carry on.
-    if (wasLast) {
-      state.lastPlaced = next;
+    if (wasLast && last) {
+      state.lastPlaced = last;
       advanceGhost('straight');
     }
     render();
@@ -1071,15 +1097,16 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (state.selected === null || state.dragging) return;
+    if (state.selection.length === 0 || state.dragging) return;
     e.preventDefault();
-    const index = state.selected;
-    state.selected = null;
+    // Descending, so each splice cannot shift an index still to be removed.
+    const doomed = [...state.selection].sort((a, b) => b - a);
+    state.selection = [];
     // I5: delete is one of the paths that never dismissed an armed
     // auto-advance ghost.
     state.pending = null;
     state.ghost = null;
-    commit((l) => l.pieces.splice(index, 1));
+    commit((l) => { for (const i of doomed) l.pieces.splice(i, 1); });
     return;
   }
 
@@ -1113,7 +1140,7 @@ document.addEventListener('keydown', (e) => {
     commit((l) => l.pieces.push(next));
     state.lastPlaced = next;
     // Same as the drop path: the piece you just placed is the selected one.
-    state.selected = state.layout.pieces.length - 1;
+    state.selection = [state.layout.pieces.length - 1];
     // advanceGhost() runs after commit()'s own render(), so it mutates
     // ghost/pending state that render already drew — this trailing render
     // is what actually shows the freshly re-armed ghost; it is not

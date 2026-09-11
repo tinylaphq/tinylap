@@ -209,7 +209,13 @@ export function drawGhost(svgEl, ghost) {
   }
 }
 
+// `selected` takes an index, an array of them, or null — the canvas passes
+// a list now that more than one piece can be selected at a time, while
+// thumbnail callers pass nothing.
 export function drawLayout(svgEl, layout, { room = null, ghost = null, selected = null, handles = false } = {}) {
+  const selectedSet = selected === null
+    ? null
+    : new Set(Array.isArray(selected) ? selected : [selected]);
   const g = layoutGeometry(layout);
   const L = layers(svgEl);
   const world = worldFor(layout, room);
@@ -227,7 +233,7 @@ export function drawLayout(svgEl, layout, { room = null, ghost = null, selected 
   for (const m of g.mats) {
     const classes = ['mat'];
     if (m.overlapping) classes.push('overlap');
-    if (m.pieceIndex === selected) classes.push('selected');
+    if (selectedSet?.has(m.pieceIndex)) classes.push('selected');
     L.mats.append(el('rect', {
       x: m.x, y: m.y, width: 1, height: 1,
       class: classes.join(' '),
