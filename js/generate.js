@@ -837,27 +837,12 @@ export function outOfReach(stock, opts = {}) {
     });
   }
 
-  // 2. Corner families no inventory can close a loop with. Read the
-  //    exclusion from cornerTypesFor, the one place that owns it, rather
-  //    than restating which types those are.
-  const usable = new Set(cornerTypesFor(abundantStock()));
-  for (const type of PIECE_TYPES) {
-    if (usable.has(type) || !PIECES[type].label.startsWith('Corner')) continue;
-    const feel = CORNER_FEEL[type];
-    if (!feel || blocked.some((b) => b.feel === feel)) continue;
-    blocked.push({
-      key: `*|${feel}`,
-      // Named for the pieces, not for the internal feel word. "Any outline,
-      // sweeping" was accurate and meaningless to read: it takes knowing
-      // that "sweeping" is this codebase's word for the large corner and
-      // that "any outline" means "whatever shape you try".
-      name: `${PIECES[type].label} tracks`,
-      corners: null,
-      feel,
-      reason: 'geometry',
-      missing: null,
-    });
-  }
+  // Shapes no inventory can reach at all are NOT reported. There is
+  // exactly one — a loop made only of large corners, which cannot close —
+  // and the owner judged the row not worth its space: it named a thing
+  // they had never tried to build and could not act on. The reasoning for
+  // the exclusion itself still lives on cornerTypesFor, which is where it
+  // belongs; this list is for shapes a purchase could unlock.
 
   return {
     blocked,

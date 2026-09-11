@@ -468,15 +468,18 @@ test('what a starter set already builds is not reported as out of reach', () => 
   }
 });
 
-test('sweeping corners are blocked by geometry, not by inventory', () => {
-  // Owning the large corner kit must NOT flip this to reachable: no closed
-  // loop of R60 corners exists at any inventory. See cornerTypesFor.
+test('out of reach lists only shapes a purchase could unlock', () => {
+  // Shapes that no inventory can reach are deliberately absent: the only
+  // one is a loop of large corners, which cannot close, and naming it told
+  // the owner about something they had never tried and could not act on.
+  // Every row here must therefore be actionable — a real shortfall of a
+  // real part. See cornerTypesFor for why large corners are excluded.
   for (const kits of [{ '87033': 1 }, { '87033': 1, '87033-02': 1 }, { '87033': 4 }]) {
-    const sweeping = outOfReach(stockFromKits(kits), { maxSide: 8 }).blocked
-      .find((b) => b.feel === 'sweeping');
-    assert.ok(sweeping, `expected sweeping to be reported for ${JSON.stringify(kits)}`);
-    assert.equal(sweeping.reason, 'geometry');
-    assert.equal(sweeping.missing, null);
+    const { blocked } = outOfReach(stockFromKits(kits), { maxSide: 8 });
+    for (const b of blocked) {
+      assert.equal(b.reason, 'stock', `${b.name} is not actionable`);
+      assert.ok(b.missing && b.missing.short > 0, `${b.name} has no real shortfall`);
+    }
   }
 });
 

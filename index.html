@@ -48,7 +48,7 @@
   <aside id="bom" aria-label="Bill of materials">
     <div class="rail-head">
       <h2 class="h3">Materials</h2>
-      <button type="button" class="btn btn-sm btn-outline" id="btn-inventory">Edit kits</button>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-inventory">Edit inventory</button>
     </div>
     <p id="bom-warning" class="status status-warning" role="alert" hidden></p>
     <table id="bom-table">
@@ -74,7 +74,7 @@
   </aside>
 
   <dialog id="inventory-dialog" aria-labelledby="inventory-dialog-title">
-    <h2 id="inventory-dialog-title">Your kits</h2>
+    <h2 id="inventory-dialog-title">Inventory</h2>
     <p class="subtitle">Which Kyosho kits do you own?</p>
     <form method="dialog" id="inventory-form"></form>
   </dialog>
@@ -88,7 +88,7 @@
       <label for="room-h">Depth (m)</label>
       <input type="number" id="room-h" name="h" step="0.3" min="0">
       <menu>
-        <button class="btn btn-outline" value="clear">No boundary</button>
+        <button class="btn btn-outline" value="clear">No limit</button>
         <button class="btn btn-primary" value="set">Set</button>
       </menu>
     </form>
