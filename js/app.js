@@ -1,5 +1,5 @@
 import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR } from './model.js';
-import { drawLayout, drawGhost, layoutToSvgString } from './render.js';
+import { drawLayout, drawGhost, drawMarquee, layoutToSvgString } from './render.js';
 import { PIECES, MAT_MM, placedCells, placedPorts } from './geometry.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
 import { exportHtml, importHtml } from './storage.js';
@@ -172,6 +172,14 @@ export function pointerCell(event) {
   const pt = new DOMPoint(event.clientX, event.clientY)
     .matrixTransform(canvas.getScreenCTM().inverse());
   return [Math.floor(pt.x), Math.floor(pt.y)];
+}
+
+// pointerCell floors to a whole mat; the marquee needs the exact point so
+// the band tracks the cursor instead of snapping.
+function pointerWorld(event) {
+  const pt = new DOMPoint(event.clientX, event.clientY)
+    .matrixTransform(canvas.getScreenCTM().inverse());
+  return [pt.x, pt.y];
 }
 
 function ghostFor(type, rot, [x, y]) {
@@ -377,7 +385,63 @@ canvas.addEventListener('pointerdown', (e) => {
   state.ghost = null;
 
   const rect = e.target.closest('.mat');
-  if (!rect) { state.selection = []; render(); return; }
+  if (!rect) {
+    // Empty canvas: rubber-band select. The selection is not cleared here
+    // — a plain click (a band of no size) clears it on release, so a drag
+    // that starts on empty space can still extend an existing selection
+    // with Shift rather than wiping it the moment the pointer goes down.
+    const [ox, oy] = pointerWorld(e);
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    const base = additive ? [...state.selection] : [];
+    let band = { x: ox, y: oy, w: 0, h: 0 };
+    canvas.setPointerCapture(e.pointerId);
+    state.dragging = true;
+
+    const bandMove = (ev) => {
+      const [x, y] = pointerWorld(ev);
+      band = { x: Math.min(ox, x), y: Math.min(oy, y), w: Math.abs(x - ox), h: Math.abs(y - oy) };
+      drawMarquee(canvas, band);
+    };
+    const bandEnd = () => {
+      try { canvas.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+      canvas.removeEventListener('pointermove', bandMove);
+      canvas.removeEventListener('pointerup', bandEnd);
+      canvas.removeEventListener('pointercancel', bandCancel);
+      state.dragging = false;
+      drawMarquee(canvas, null);
+      // A band smaller than a tenth of a mat is a click, not a drag.
+      if (band.w < 0.1 && band.h < 0.1) {
+        state.selection = additive ? base : [];
+        render();
+        return;
+      }
+      // Anything the band touches counts — a cell spans [x, x+1), so this
+      // is an overlap test, not containment. Requiring a piece to be fully
+      // enclosed makes big pieces frustrating to catch.
+      const hits = [];
+      state.layout.pieces.forEach((piece, i) => {
+        const touches = placedCells(piece).some(([cx, cy]) =>
+          cx + 1 > band.x && cx < band.x + band.w && cy + 1 > band.y && cy < band.y + band.h);
+        if (touches) hits.push(i);
+      });
+      state.selection = [...new Set([...base, ...hits])];
+      render();
+    };
+    const bandCancel = () => {
+      try { canvas.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+      canvas.removeEventListener('pointermove', bandMove);
+      canvas.removeEventListener('pointerup', bandEnd);
+      canvas.removeEventListener('pointercancel', bandCancel);
+      state.dragging = false;
+      drawMarquee(canvas, null);
+      render();
+    };
+    canvas.addEventListener('pointermove', bandMove);
+    canvas.addEventListener('pointerup', bandEnd);
+    canvas.addEventListener('pointercancel', bandCancel);
+    render();
+    return;
+  }
 
   const index = Number(rect.dataset.piece);
   // Shift or the platform modifier extends the selection; a plain click

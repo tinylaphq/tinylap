@@ -304,3 +304,14 @@ dialog menu .btn { flex: 1; }
   #bom { border-left: 0; }
   main { min-height: 60vh; }
 }
+
+/* Rubber-band selection. Square corners and a hard dashed edge, matching
+   the rest of the palace language; no radius anywhere in this design. */
+.marquee-band {
+  fill: var(--p-accent-1);
+  fill-opacity: 0.12;
+  stroke: var(--p-accent-1);
+  stroke-width: 0.04;
+  stroke-dasharray: 0.18 0.12;
+  pointer-events: none;
+}

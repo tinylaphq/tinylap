@@ -174,7 +174,7 @@ function worldFor(layout, room) {
 // continuously, and replacing the element under the pointer makes Chrome
 // fire `dragleave` with a null relatedTarget and abandon the drop target,
 // so `drop` never arrives at all.
-const LAYERS = ['grid', 'room', 'mats', 'cuts', 'walls', 'handles', 'ghost'];
+const LAYERS = ['grid', 'room', 'mats', 'cuts', 'walls', 'handles', 'ghost', 'marquee'];
 
 function layers(svgEl) {
   if (svgEl.dataset.layered !== 'yes') {
@@ -207,6 +207,16 @@ export function drawGhost(svgEl, ghost) {
   for (const [x, y] of ghost.cells) {
     layer.append(el('rect', { x, y, width: 1, height: 1 }));
   }
+}
+
+// Updates only the marquee layer, like drawGhost — the rubber-band band
+// changes on every pointermove and must not drag a full repaint with it.
+// `band` is world-coordinate {x, y, w, h}, or null to clear.
+export function drawMarquee(svgEl, band) {
+  const layer = layers(svgEl).marquee;
+  layer.replaceChildren();
+  if (!band) return;
+  layer.append(el('rect', { x: band.x, y: band.y, width: band.w, height: band.h, class: 'marquee-band' }));
 }
 
 // `selected` takes an index, an array of them, or null — the canvas passes
