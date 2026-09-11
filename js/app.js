@@ -151,6 +151,11 @@ function renderStatus() {
     status.className = 'status status-error';
     return;
   }
+  // Nothing to clear on an empty canvas, and the handler already refuses;
+  // offering a control that does nothing is the same fault as the green
+  // "everything in stock" over an empty canvas.
+  document.querySelector('#btn-clear').hidden = state.layout.pieces.length === 0;
+
   const open = openPorts(state.layout).length;
   const closed = isClosedCircuit(state.layout);
   status.textContent =

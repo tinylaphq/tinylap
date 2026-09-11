@@ -83,10 +83,25 @@ main {
 .port-handle { fill: var(--p-accent-1); cursor: grab; transition: var(--p-transition); }
 .port-handle:hover { fill: var(--p-accent-3); }
 
-#status {
+/* The canvas's own footer: what the layout is, and the one destructive
+   action on it. Clear lives here rather than in the navbar because it is
+   an edit, not a file action — the navbar is the document (Layouts, Open,
+   Save) and Clear neither creates, loads nor stores one. */
+#canvas-bar {
+  display: flex;
+  align-items: stretch;
+  border-top: var(--p-border-width) solid var(--p-text);
+  background: var(--p-surface);
+}
+#canvas-bar #status {
+  flex: 1;
   margin: 0;
   border: 0;
-  border-top: var(--p-border-width) solid var(--p-text);
+}
+#canvas-bar #btn-clear {
+  border: 0;
+  border-left: var(--p-border-width) solid var(--p-text);
+  padding-inline: var(--p-space-lg);
 }
 
 /* ── Piece palette ───────────────────────────────────────────────── */

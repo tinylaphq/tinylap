@@ -15,7 +15,6 @@
   <nav class="navbar">
     <span class="navbar-brand">Circuit 30 Planner</span>
     <div class="navbar-right">
-      <button type="button" class="btn btn-sm btn-outline" id="btn-clear">Clear</button>
       <button type="button" class="btn btn-sm btn-outline" id="btn-presets">Layouts</button>
       <button type="button" class="btn btn-sm btn-secondary" id="btn-open">Open</button>
       <button type="button" class="btn btn-sm btn-primary" id="btn-save">Save</button>
@@ -43,7 +42,10 @@
 
   <main>
     <svg id="canvas" role="application" aria-label="Track layout" tabindex="0"></svg>
-    <p id="status" class="status" role="status"></p>
+    <div id="canvas-bar">
+      <p id="status" class="status" role="status"></p>
+      <button type="button" class="btn btn-sm btn-danger" id="btn-clear">Clear</button>
+    </div>
   </main>
 
   <aside id="bom" aria-label="Bill of materials">
