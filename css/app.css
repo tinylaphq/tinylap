@@ -134,10 +134,14 @@ main {
 #shortcuts dl {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: var(--p-space-sm) var(--p-space-md);
+  /* Row gap tightened from --p-space-sm when the legend gained its three
+     group headings: at the old spacing the SELECT group fell below the fold,
+     which is the footnote position the grouping was meant to rescue rows
+     from. The column gap is unchanged. */
+  gap: var(--p-space-xs) var(--p-space-md);
   margin: 0;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.3;
   align-items: baseline;
 }
 
@@ -238,7 +242,7 @@ dialog menu .btn { flex: 1; }
 .preset-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
 .preset-source { font-size: 11px; color: var(--p-text-faint); }
 .preset-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-.preset-badge--ok { color: var(--p-accent-2); }
+.preset-badge--ok { color: var(--p-success); }
 .preset-badge--bad { color: var(--p-error); }
 .preset-broken { color: var(--p-error); font-size: 12px; }
 
@@ -320,3 +324,18 @@ dialog menu .btn { flex: 1; }
   stroke-dasharray: 0.18 0.12;
   pointer-events: none;
 }
+
+/* Legend groups. The rail has room to spare — #palette ends well above the
+   fold — so the headings buy scannability for three lines of height. */
+.legend-group {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--p-text-faint);
+  margin: var(--p-space-sm) 0 var(--p-space-xs);
+}
+.legend-group:first-of-type { margin-top: var(--p-space-sm); }
+
+/* Dismissal pinned to the dialog's top-right: the Close button at the foot
+   of the presets dialog sits past the suggestions and the out-of-reach
+   block, i.e. off-screen at this dialog's height. */
+.dialog-dismiss { float: right; margin: 0 0 var(--p-space-xs) var(--p-space-sm); }
+.dialog-dismiss .btn { padding: 2px 8px; line-height: 1; }

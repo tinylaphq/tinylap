@@ -90,6 +90,10 @@ function renderBom() {
   const short = rows.some((r) => r.short > 0);
   const kit = short ? recommendKit(rows) : null;
   const rec = document.querySelector('#recommendation');
+  // Nothing placed yet means nothing to be short of, so "everything you need
+  // is in stock" is true but says nothing — and it contradicts the canvas,
+  // which is telling the user the layout is empty. Say nothing instead.
+  rec.hidden = state.layout.pieces.length === 0;
   rec.textContent = !short
     ? 'Everything you need is in stock.'
     : kit
