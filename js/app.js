@@ -163,6 +163,9 @@ export function render() {
     ghost: state.ghost,
     selected: state.selection,
     handles: true,
+    // Hold the view still while dragging: recomputing it mid-drag moves
+    // the cursor-to-cell mapping and the piece runs away from the pointer.
+    freezeWorld: state.dragging,
   });
   renderBom();
   renderStatus();
@@ -581,8 +584,12 @@ canvas.addEventListener('pointerdown', (e) => {
     canvas.removeEventListener('pointercancel', onCancel);
     state.dragging = false;
   };
-  const onUp = () => cleanup();
-  const onCancel = () => cleanup();
+  // Render after cleanup, not before: cleanup clears state.dragging, and
+  // only then will drawLayout refit the view it held still for the drag.
+  // Without this a piece dragged past the old edge stays off-screen until
+  // something else happens to repaint.
+  const onUp = () => { cleanup(); render(); };
+  const onCancel = () => { cleanup(); render(); };
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
   canvas.addEventListener('pointercancel', onCancel);
@@ -677,8 +684,10 @@ canvas.addEventListener('pointerdown', (e) => {
       // Queue the next straight off the end of the run so the ghost shows
       // where Space would continue, as it does after any other placement.
       armGhostFrom(tail, 'straight');
-      render();
     }
+    // Always, not just when something was laid: the view was held still
+    // for the drag and has to be refitted once dragging is over.
+    render();
   };
   const onCancel = () => {
     // Abnormal termination, not a deliberate "keep what I built" signal

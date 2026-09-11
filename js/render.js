@@ -150,9 +150,17 @@ const el = (name, attrs) => {
 // scene — which also fed back into pointer mapping during a drag.
 // A floor on the visible area so an empty canvas still offers somewhere to
 // build, and a margin so the layout never touches the edge. The view fits
-// the content rather than being a fixed world, but it is only recomputed on
-// a real render — dragover touches the ghost layer alone — so it cannot
-// rescale under the pointer mid-drag.
+// the content rather than being a fixed world.
+//
+// That makes it a feedback loop during a pointer drag, which this comment
+// used to deny: the palette's dragover only touches the ghost layer, true,
+// but the move-drag and the port-handle run both call render() on every
+// pointermove. Dragging a piece outward grows the bbox, which widens the
+// view, which shrinks pixels-per-mat, which maps the same cursor position
+// to a further-out cell, which widens the view again. Measured before the
+// fix: a cursor moved 20 mats sent the piece 265 and the view from 16x13
+// to 271x76. Hence `freezeWorld` — callers hold the view still for the
+// duration of a drag.
 export const MIN_VIEW = { w: 14, h: 11 };
 const MARGIN = 2;
 
@@ -222,13 +230,18 @@ export function drawMarquee(svgEl, band) {
 // `selected` takes an index, an array of them, or null — the canvas passes
 // a list now that more than one piece can be selected at a time, while
 // thumbnail callers pass nothing.
-export function drawLayout(svgEl, layout, { room = null, ghost = null, selected = null, handles = false } = {}) {
+export function drawLayout(svgEl, layout, { room = null, ghost = null, selected = null, handles = false, freezeWorld = false } = {}) {
   const selectedSet = selected === null
     ? null
     : new Set(Array.isArray(selected) ? selected : [selected]);
   const g = layoutGeometry(layout);
   const L = layers(svgEl);
-  const world = worldFor(layout, room);
+  // Keep the view exactly as it is while a drag is in flight, so the
+  // mapping from cursor to cell cannot move under the pointer.
+  const held = freezeWorld && svgEl.getAttribute('viewBox');
+  const world = held
+    ? (([x, y, w, h]) => ({ x, y, w, h }))(held.split(/\s+/).map(Number))
+    : worldFor(layout, room);
 
   svgEl.setAttribute('viewBox', `${world.x} ${world.y} ${world.w} ${world.h}`);
   svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
