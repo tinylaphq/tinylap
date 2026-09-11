@@ -134,14 +134,10 @@ main {
 #shortcuts dl {
   display: grid;
   grid-template-columns: auto 1fr;
-  /* Row gap tightened from --p-space-sm when the legend gained its three
-     group headings: at the old spacing the SELECT group fell below the fold,
-     which is the footnote position the grouping was meant to rescue rows
-     from. The column gap is unchanged. */
-  gap: var(--p-space-xs) var(--p-space-md);
+  gap: var(--p-space-sm) var(--p-space-md);
   margin: 0;
   font-size: 12px;
-  line-height: 1.3;
+  line-height: 1.35;
   align-items: baseline;
 }
 
@@ -325,14 +321,7 @@ dialog menu .btn { flex: 1; }
   pointer-events: none;
 }
 
-/* Legend groups. The rail has room to spare — #palette ends well above the
-   fold — so the headings buy scannability for three lines of height. */
-.legend-group {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 1px; color: var(--p-text-faint);
-  margin: var(--p-space-sm) 0 var(--p-space-xs);
-}
-.legend-group:first-of-type { margin-top: var(--p-space-sm); }
+/* Legend group headings were removed with the shortened legend. */
 
 /* Dismissal pinned to the dialog's top-right: the Close button at the foot
    of the presets dialog sits past the suggestions and the out-of-reach

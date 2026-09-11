@@ -261,7 +261,14 @@ function anchoredCandidates(index) {
 function advanceGhost(nextType = null) {
   const last = state.lastPlaced;
   if (!last) { state.pending = null; state.ghost = null; return; }
-  const index = state.layout.pieces.length - 1;
+  armGhostFrom(state.layout.pieces.length - 1, nextType ?? last.type, nextType ? null : last.rot);
+}
+
+// Queue the next piece off `index`'s open end. Split out of advanceGhost so
+// it can arm from the SELECTED piece and not only the last placed one:
+// clicking used to clear the queue outright, which left Space working only
+// until the first click — in practice, not at all.
+function armGhostFrom(index, type, rot = null) {
   const stillOpen = openPorts(state.layout).filter((o) => o.pieceIndex === index);
   // Deliberate tie-break, inherited from the brief: when a piece has two
   // still-open ports (e.g. it was placed in open space, not against
@@ -270,11 +277,10 @@ function advanceGhost(nextType = null) {
   // "double back". Not proven for every piece type, just the working rule.
   const forward = stillOpen.at(-1);
   if (!forward) { state.pending = null; state.ghost = null; return; }
-  // With an override, the previous piece's rotation is meaningless — a
+  // Without a rotation to inherit, the previous piece's is meaningless — a
   // straight following a corner needs whichever rotation actually meets
   // that port, so try them all and take the first that fits.
-  const type = nextType ?? last.type;
-  const rots = nextType ? [0, 90, 180, 270] : [last.rot];
+  const rots = rot === null ? [0, 90, 180, 270] : [rot];
   let next = null;
   for (const rot of rots) {
     const candidate = placeAgainst(forward.port, type, rot);
@@ -381,10 +387,11 @@ canvas.addEventListener('pointerdown', (e) => {
   // on this same element; a click there must not fall through to selection.
   if (e.target.closest('.port-handle')) return;
 
-  // I5: selection (click on a mat or on empty canvas) is one of the paths
-  // that never dismissed an armed auto-advance ghost — clear it here so
-  // Space can no longer place a leftover piece behind whatever the user
-  // just selected instead.
+  // Clear the queued piece before re-deciding. A stale ghost left over from
+  // an earlier placement must never survive a click — Space would then put
+  // a piece somewhere the user is no longer looking. Where the click lands
+  // on a single piece, the queue is immediately re-armed from THAT piece
+  // below, so Space continues to mean "carry on from here".
   state.pending = null;
   state.ghost = null;
 
@@ -479,6 +486,11 @@ canvas.addEventListener('pointerdown', (e) => {
     // group, so dragging one of them does not silently collapse it to one.
     state.selection = [index];
   }
+  // Queue the next piece off whatever is now selected, so Space carries on
+  // from the piece just clicked. Straights are the default the mouse lays;
+  // C swaps the placed piece afterwards. Only for a single selection —
+  // "carry on from here" has no meaning for three pieces at once.
+  if (state.selection.length === 1) armGhostFrom(state.selection[0], 'straight');
   const piece = state.layout.pieces[index];
   const [cx, cy] = pointerCell(e);
   const grab = { dx: piece.x - cx, dy: piece.y - cy, index, moved: false };
