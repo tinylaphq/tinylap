@@ -106,6 +106,20 @@
     <hr class="divider">
     <h3 class="h3">Suggestions</h3>
     <p class="subtitle" id="suggestions-summary"></p>
+
+    <div class="chips" id="suggestion-filters" hidden>
+      <span class="chips-label">Shape</span>
+      <div class="chips-row" id="shape-chips" role="group" aria-label="Filter by shape"></div>
+      <label class="chips-toggle">
+        <input type="checkbox" id="chicane-toggle" checked>
+        include chicanes
+      </label>
+    </div>
+    <div class="chips" id="suggestion-sorts" hidden>
+      <span class="chips-label">Sort</span>
+      <div class="chips-row" id="sort-chips" role="group" aria-label="Sort order"></div>
+    </div>
+
     <div class="suggestions-bar">
       <span id="suggestions-page"></span>
       <button type="button" class="btn btn-sm btn-outline btn-icon" id="btn-more-suggestions"

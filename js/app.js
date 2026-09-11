@@ -6,7 +6,8 @@ import { exportHtml, importHtml } from './storage.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
 import { loadLayout, saveLayout } from './session-store.js';
-import { generateLayouts, groupByCharacter, outOfReach, outlineName, hasCachedLayouts, scoreLayouts } from './generate.js';
+import { generateLayouts, outOfReach, outlineName, hasCachedLayouts, scoreLayouts } from './generate.js';
+import { orderSuggestions, availableFamilies } from './suggestions.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -45,7 +46,9 @@ const state = {
 // so paging shows spread, not five near-identical rectangles; `cursor`
 // advances by 5 with wraparound rather than reshuffling, so repeats never
 // show until the whole pool has been seen once.
-state.suggestions = { pool: [], cursor: 0, stopped: false };
+// shape/chicanes/sort are how the user steers 300 results. Not persisted:
+// a browsing control, not a preference — reopening starts at ALL / BEST.
+state.suggestions = { pool: [], cursor: 0, stopped: false, results: [], shape: 'all', chicanes: true, sort: 'best' };
 
 function renderPalette() {
   const list = document.querySelector('#palette-list');
@@ -889,63 +892,78 @@ document.querySelector('#presets-list').addEventListener('click', (e) => {
 // state.layout, so it never persists (see storage.js: only version, unit,
 // room, pieces round-trip) and never auto-loads onto the blank canvas.
 
-// Round-robin across characters so the first five show different shapes
-// rather than five rectangles differing by one mat.
-//
-// Within a character, best-scoring first — so the round-robin draws each
-// shape's best example before any shape's second-best. Ordering by score
-// here rather than in groupByCharacter keeps that function's own contract
-// (variants by mat count, `best` = the largest) unchanged; `best` is not
-// read by this UI.
-// Order one character's variants so consecutive picks look different.
-// Sorting by score alone put near-identical layouts next to each other —
-// at one starter kit every L-shape is 8x8 and 48 mats, so three rows read
-// "L-shape 8x8, 48 mats, lap 6.43 m" and the page looked duplicated even
-// though the tracks differed. Best-scoring first, then repeatedly whichever
-// remaining variant shares fewest mats with the ones already taken.
-function diverseOrder(variants) {
-  if (variants.length < 3) return [...variants];
-  const cells = new Map(variants.map((v) => [v, new Set(v.key.split(';'))]));
-  const overlap = (a, b) => {
-    const [x, y] = [cells.get(a), cells.get(b)];
-    let shared = 0;
-    for (const c of x) if (y.has(c)) shared += 1;
-    return shared / (x.size + y.size - shared);   // Jaccard similarity
-  };
-  const remaining = [...variants].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  const ordered = [remaining.shift()];
-  while (remaining.length > 0) {
-    let bestAt = 0;
-    let bestScore = Infinity;
-    remaining.forEach((candidate, i) => {
-      // Compare against the last few only: the page shows five at a time,
-      // so looking further back costs time without changing what the user
-      // sees side by side.
-      const worst = Math.max(...ordered.slice(-4).map((taken) => overlap(taken, candidate)));
-      if (worst < bestScore) { bestScore = worst; bestAt = i; }
-    });
-    ordered.push(remaining.splice(bestAt, 1)[0]);
-  }
-  return ordered;
+const SORT_CHIPS = [
+  ['best', 'Best'],
+  ['lap', 'Longest lap'],
+  ['mats', 'Fewest mats'],
+  ['size', 'Smallest'],
+];
+
+function chip(label, value, active) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'chip';
+  b.dataset.value = value;
+  b.setAttribute('aria-pressed', String(active));
+  b.textContent = label;
+  return b;
 }
 
-function suggestionPool(characters) {
-  // The row label has to name the CHARACTER, not just the outline: an
-  // "L-shape" and an "L-shape with chicane" are different tracks that both
-  // came out as "L-shape 8x8, 48 mats" and read as duplicates.
-  for (const c of characters) for (const v of c.variants) v.characterName = c.name;
-  const pool = [];
-  const queues = characters
-    .map((c) => diverseOrder(c.variants))
-    // Strongest shape first, judged by its own best example, so the top of
-    // page one is the best thing on offer and not merely the shape with the
-    // fewest corners. The round-robin below still guarantees the spread.
-    .sort((a, b) => (b[0]?.score ?? 0) - (a[0]?.score ?? 0));
-  while (queues.some((q) => q.length > 0)) {
-    for (const q of queues) if (q.length > 0) pool.push(q.shift());
-  }
-  return pool;
+// Rebuilt whenever the results change, because which shape chips exist
+// depends on the inventory — one starter set can build no 8-corner shape,
+// and a chip that always returns nothing is worse than no chip.
+function renderSuggestionFilters() {
+  const { results, shape, sort, chicanes } = state.suggestions;
+  const families = availableFamilies(results);
+  const filters = document.querySelector('#suggestion-filters');
+  const sorts = document.querySelector('#suggestion-sorts');
+  // Nothing to steer with one shape and a handful of layouts.
+  const worthShowing = results.length > 5 && families.length > 1;
+  filters.hidden = !worthShowing;
+  sorts.hidden = !worthShowing;
+  if (!worthShowing) return;
+
+  document.querySelector('#shape-chips').replaceChildren(
+    chip('All', 'all', shape === 'all'),
+    ...families.map((f) => chip(f, f, shape === f)),
+  );
+  document.querySelector('#sort-chips').replaceChildren(
+    ...SORT_CHIPS.map(([value, label]) => chip(label, value, sort === value)),
+  );
+  document.querySelector('#chicane-toggle').checked = chicanes;
 }
+
+// Re-derive the visible pool from the results already in hand. No
+// regeneration: filtering 300 layouts is instant, generating them is not.
+// Always back to page one — leaving the cursor where it was would land
+// the user in the middle of a list they just changed the contents of.
+function applySuggestionControls() {
+  const { results, shape, chicanes, sort } = state.suggestions;
+  state.suggestions.pool = orderSuggestions(results, { shape, chicanes, sort });
+  state.suggestions.cursor = 0;
+  renderSuggestionPage();
+}
+
+document.querySelector('#shape-chips').addEventListener('click', (e) => {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  state.suggestions.shape = b.dataset.value;
+  renderSuggestionFilters();
+  applySuggestionControls();
+});
+
+document.querySelector('#sort-chips').addEventListener('click', (e) => {
+  const b = e.target.closest('.chip');
+  if (!b) return;
+  state.suggestions.sort = b.dataset.value;
+  renderSuggestionFilters();
+  applySuggestionControls();
+});
+
+document.querySelector('#chicane-toggle').addEventListener('change', (e) => {
+  state.suggestions.chicanes = e.target.checked;
+  applySuggestionControls();
+});
 
 // Bumped on every renderSuggestions call, and checked before any of it
 // writes to the DOM. generateLayouts is synchronous and can run for
@@ -988,10 +1006,14 @@ async function renderSuggestions() {
   // Score before grouping so every variant carries its score into the pool,
   // which orders each character's variants by it. Scores are normalised
   // within this one call, so they are only comparable inside this set.
-  const characters = groupByCharacter(scoreLayouts(results, { room: state.layout.room }));
+  const scored = scoreLayouts(results, { room: state.layout.room });
   if (superseded()) return;
 
-  state.suggestions = { pool: suggestionPool(characters), cursor: 0, stopped };
+  // Keep the scored results so the chips can re-derive the pool without
+  // regenerating — filtering 300 layouts is instant, generating them is not.
+  state.suggestions = { ...state.suggestions, results: scored, cursor: 0, stopped };
+  renderSuggestionFilters();
+  applySuggestionControls();
 
   // `results.length` is a CAPPED count, not a total: generateLayouts keeps
   // at most 50 size-variants per shape and reports how many shapes it
@@ -1002,9 +1024,10 @@ async function renderSuggestions() {
   // which is exactly what this feature sets out to collapse — so capping
   // is right; silently rounding it off as a total is not.)
   const { cappedCharacters = 0 } = generated;
+  const shapeCount = new Set(orderSuggestions(scored, {}).map((r) => r.characterName)).size;
   document.querySelector('#suggestions-summary').textContent = results.length === 0
     ? 'Nothing can be built with the current inventory.'
-    : `${characters.length} shape${characters.length === 1 ? '' : 's'}, `
+    : `${shapeCount} shape${shapeCount === 1 ? '' : 's'}, `
       + `${results.length} size${results.length === 1 ? '' : 's'} to choose from`
       + (cappedCharacters > 0 ? ' (showing up to 50 sizes per shape)' : '')
       + (stopped ? ' — search stopped early, there may be more' : '');
@@ -1077,8 +1100,14 @@ function renderSuggestionPage() {
   const label = wraps ? 'Back to the first five' : 'Show five different';
   more.setAttribute('aria-label', label);
   more.title = label;
-  document.querySelector('#suggestions-page').textContent =
-    pool.length ? `showing ${cursor + 1}-${Math.min(cursor + 5, pool.length)} of ${pool.length}` : '';
+  // Say when a filter is narrowing, or the summary above ("300 sizes to
+  // choose from") and this line ("of 120") read as a contradiction with
+  // nothing to explain the gap.
+  const total = state.suggestions.results.length;
+  const filtered = pool.length < total ? ` (filtered from ${total})` : '';
+  document.querySelector('#suggestions-page').textContent = pool.length
+    ? `showing ${cursor + 1}-${Math.min(cursor + 5, pool.length)} of ${pool.length}${filtered}`
+    : (total > 0 ? 'nothing matches those filters' : '');
 }
 
 document.querySelector('#btn-more-suggestions').addEventListener('click', () => {

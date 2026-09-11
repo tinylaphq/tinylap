@@ -442,3 +442,42 @@ dialog menu .btn { flex: 1; }
   line-height: 0;
 }
 .btn-icon svg { width: 14px; height: 14px; display: block; }
+
+/* Filter and sort chips. Square and bordered like everything else here;
+   the active one inverts rather than tinting, so which is selected reads
+   at a glance in a row of otherwise identical boxes. */
+.chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--p-space-sm);
+  margin-bottom: var(--p-space-sm);
+}
+.chips-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--p-text-faint);
+  flex: 0 0 3rem;
+}
+.chips-row { display: flex; flex-wrap: wrap; gap: var(--p-space-xs); }
+.chip {
+  font: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  background: transparent;
+  color: var(--p-text-muted);
+  border: var(--p-border-thin) solid var(--p-border);
+  cursor: pointer;
+  transition: var(--p-transition);
+}
+.chip:hover { color: var(--p-text); border-color: var(--p-text); }
+.chip[aria-pressed="true"] {
+  background: var(--p-text);
+  color: var(--p-bg);
+  border-color: var(--p-text);
+}
+.chips-toggle {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--p-text-muted); cursor: pointer;
+}
