@@ -111,6 +111,13 @@ function renderBom() {
       : 'Short on pieces — no single kit covers it.';
   rec.className = `status ${!short ? 'status-success' : kit ? 'status-info' : 'status-warning'}`;
 
+  // The room constrains SIZE exactly as OWNED constrains USED, so it is
+  // read here beside them rather than hidden behind a navbar button.
+  const { room } = state.layout;
+  document.querySelector('#out-room').textContent = room
+    ? `${metres(room.w)} × ${metres(room.h)} m`
+    : 'No limit';
+
   const { bbox, matCount, lapMm } = computeMetrics(state.layout);
   document.querySelector('#out-size').textContent = bbox ? `${metres(bbox.w)} × ${metres(bbox.h)}` : '—';
   document.querySelector('#out-lap').textContent = lapMm ? `${(lapMm / 1000).toFixed(2)} m` : '—';

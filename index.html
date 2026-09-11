@@ -15,8 +15,7 @@
   <nav class="navbar">
     <span class="navbar-brand">Circuit 30 Planner</span>
     <div class="navbar-right">
-      <button type="button" class="btn btn-sm btn-outline" id="btn-room">Room</button>
-      <button type="button" class="btn btn-sm btn-outline" id="btn-presets">Presets</button>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-presets">Layouts</button>
       <button type="button" class="btn btn-sm btn-secondary" id="btn-open">Open</button>
       <button type="button" class="btn btn-sm btn-primary" id="btn-save">Save</button>
     </div>
@@ -26,7 +25,6 @@
   <aside id="palette" aria-label="Track pieces">
     <h2 class="h3">Pieces</h2>
     <ul id="palette-list"></ul>
-    <button type="button" class="btn btn-sm btn-outline btn-block" id="btn-inventory">Edit inventory</button>
 
     <hr class="divider">
 
@@ -48,7 +46,10 @@
   </main>
 
   <aside id="bom" aria-label="Bill of materials">
-    <h2 class="h3">Materials</h2>
+    <div class="rail-head">
+      <h2 class="h3">Materials</h2>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-inventory">Edit kits</button>
+    </div>
     <p id="bom-warning" class="status status-warning" role="alert" hidden></p>
     <table id="bom-table">
       <thead><tr><th scope="col">Part</th><th scope="col">Owned</th><th scope="col">Used</th></tr></thead>
@@ -63,11 +64,17 @@
       <div><div class="stat" id="out-mats">—</div><div class="stat-label">Mats</div></div>
     </div>
 
+    <div class="rail-line">
+      <span class="rail-line-label">Room</span>
+      <span id="out-room" class="rail-line-value">—</span>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-room">Set</button>
+    </div>
+
     <p id="recommendation" class="status" role="status"></p>
   </aside>
 
   <dialog id="inventory-dialog" aria-labelledby="inventory-dialog-title">
-    <h2 id="inventory-dialog-title">Edit inventory</h2>
+    <h2 id="inventory-dialog-title">Your kits</h2>
     <p class="subtitle">Which Kyosho kits do you own?</p>
     <form method="dialog" id="inventory-form"></form>
   </dialog>
@@ -89,8 +96,9 @@
 
   <dialog id="presets-dialog" aria-labelledby="presets-dialog-title">
     <form method="dialog" class="dialog-dismiss"><button class="btn btn-sm btn-outline" aria-label="Close">&#10005;</button></form>
-    <h2 id="presets-dialog-title">Presets</h2>
-    <p class="subtitle">Known layouts, checked against your inventory.</p>
+    <h2 id="presets-dialog-title">Layouts</h2>
+    <p class="subtitle">Start from your stock layout, or from something built out of your kits.</p>
+    <h3 class="h3">Stock layout</h3>
     <ul id="presets-list"></ul>
     <hr class="divider">
     <h3 class="h3">Suggestions</h3>

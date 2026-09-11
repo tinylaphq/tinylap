@@ -70,16 +70,12 @@ export function stockL() {
   return pieces;
 }
 
+// Only the stock layout. The 7x9 ring used to sit here too, but it is a
+// hand-derived test fixture rather than a plan Kyosho published, and the
+// generator already enumerates rectangles sized to the owner's real stock —
+// so offering it as a "known layout" was both misleading and redundant.
+// rectangularRing() stays exported: the test suite leans on it heavily.
 export const PRESETS = [
-  {
-    id: 'ring-7x9',
-    name: '7×9 Rectangular Ring',
-    // Not an official Kyosho plan — this is the hand-derived reference
-    // layout used throughout the test suite. Labelled honestly so nobody
-    // later mistakes it for something Kyosho published.
-    source: 'derived reference layout',
-    pieces: rectangularRing(),
-  },
   {
     id: 'stock-l',
     name: 'Stock L (87033)',

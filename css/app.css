@@ -344,3 +344,35 @@ dialog menu .btn { flex: 1; }
    block, i.e. off-screen at this dialog's height. */
 .dialog-dismiss { float: right; margin: 0 0 var(--p-space-xs) var(--p-space-sm); }
 .dialog-dismiss .btn { padding: 2px 8px; line-height: 1; }
+
+/* A rail heading with its own action beside it — MATERIALS + Edit kits.
+   The button sits with the numbers it governs: the OWNED column IS the
+   inventory, and it used to be edited from the opposite rail. */
+.rail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--p-space-sm);
+  margin-bottom: var(--p-space-md);
+}
+.rail-head h2.h3 { margin-bottom: 0; }
+
+/* A labelled value with an action — ROOM. Same shape as .stat-row's
+   label/value pairing, but one line, because it is a constraint that is
+   read constantly and set rarely. */
+.rail-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--p-space-sm);
+  margin-top: var(--p-space-md);
+}
+.rail-line-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--p-text-faint);
+}
+.rail-line-value {
+  flex: 1;
+  font-family: var(--p-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--p-text);
+}
