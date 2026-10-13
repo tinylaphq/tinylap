@@ -35,8 +35,8 @@ Later sub-projects, each with its own spec:
 
 | Topic | Decision |
 | --- | --- |
-| Name | **TinyLap**: GitHub org `tinylap`, npm scope `@tinylap`, tinylap.com/.dev/.app (all free on 2026-10-12, none registered yet) |
-| Repo | This repo, renamed and moved to `tinylap/tinylap`; history kept |
+| Name | **TinyLap**: GitHub org `tinylaphq` (`tinylap` is blocked on GitHub), npm scope `@tinylap`, tinylap.com/.dev/.app (all free on 2026-10-12, none registered yet) |
+| Repo | This repo, renamed and moved to `tinylaphq/tinylap` (the `tinylap` org name is blocked on GitHub); history kept |
 | Workspaces | pnpm workspaces |
 | Task runner | Turborepo, from the start |
 | Releases | release-please, driven by conventional commits; squash merges; commitlint on pull request titles |
@@ -286,7 +286,7 @@ Each step leaves a working, deployable planner.
    rules, CI deploy from the new location.
 6. **Type checking**: `track-format` strict, planner non-strict.
 7. **Going public**: the user's own actions or explicit approval:
-   - create the `tinylap` GitHub org and move the repo to `tinylap/tinylap`
+   - create the `tinylaphq` GitHub org and move the repo to `tinylaphq/tinylap`
    - create the `@tinylap` npm org and configure trusted publishing
    - make the repository public
 
