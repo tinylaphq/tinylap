@@ -1,9 +1,19 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "agentGuidance": false,
+  "globalDependencies": ["tsconfig.base.json", "eslint.config.js", "commitlint.config.js"],
   "tasks": {
-    "test": {},
-    "lint": {},
-    "typecheck": {}
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    "test": {
+      "dependsOn": ["transit"]
+    },
+    "lint": {
+      "dependsOn": ["transit"]
+    },
+    "typecheck": {
+      "dependsOn": ["transit"]
+    }
   }
 }
