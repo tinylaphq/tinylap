@@ -14,9 +14,14 @@ importers:
 
   apps/track-planner:
     dependencies:
+      '@tinylap/track-format':
+        specifier: workspace:*
+        version: link:../../packages/track-format
       palace-ui:
         specifier: ^0.10.0
         version: 0.10.0
+
+  packages/track-format: {}
 
   tools: {}
 

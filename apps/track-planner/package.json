@@ -4,12 +4,17 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
-  "files": ["index.html", "css", "js"],
+  "files": [
+    "index.html",
+    "css",
+    "js"
+  ],
   "scripts": {
     "test": "node --test 'test/**/*.test.js'",
     "dev": "node ../../tools/dev-server.js . 8000"
   },
   "dependencies": {
+    "@tinylap/track-format": "workspace:*",
     "palace-ui": "^0.10.0"
   }
 }

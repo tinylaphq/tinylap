@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { PRESETS } from '../js/presets.js';
 import {
   createLayout, findOverlaps, isClosedCircuit, computeBarriers, computeMetrics,
-} from '../js/model.js';
+} from '@tinylap/track-format';
 import { KITS, billOfMaterials } from '../js/inventory.js';
 
 // Task 16: reconcile the stock L against the 87033 contents (spec 13.2).

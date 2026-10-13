@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout } from '../js/model.js';
+import { createLayout } from '@tinylap/track-format';
 import { exportHtml, importHtml, extractLayoutJson } from '../js/storage.js';
 import { rectangularRing } from './fixtures.js';
 

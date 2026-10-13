@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields, maxTrackDepth, unjoinedContacts, subWidthNotches } from '../js/model.js';
-import { MAT_MM } from '../js/geometry.js';
-import { stockL } from '../js/presets.js';
+import { createLayout, cellKey, parseCellKey, occupancy, findOverlaps, occupiedSet, edgeId, portKey, matchPorts, openEdgeIds, isClosedCircuit, boundaryEdges, arcEdgeIds, computeBarriers, computeMetrics, placeAgainst, openPorts, enclosedInfields, maxTrackDepth, unjoinedContacts, subWidthNotches } from '../model.js';
+import { MAT_MM } from '../geometry.js';
+import { stockL } from '../reference-layouts.js';
 import { fourCornerLoop, rectangularRing } from './fixtures.js';
 
 test('a new layout is empty and versioned', () => {

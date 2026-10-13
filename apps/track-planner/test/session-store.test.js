@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLayout, loadLayout, saveLayout, clearLayout, LAYOUT_STORAGE_KEY } from '../js/session-store.js';
-import { createLayout } from '../js/model.js';
+import { createLayout } from '@tinylap/track-format';
 
 const fakeStorage = (initial) => {
   const map = new Map(Object.entries(initial ?? {}));

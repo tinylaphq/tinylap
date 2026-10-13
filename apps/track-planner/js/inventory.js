@@ -1,4 +1,4 @@
-import { computeBarriers, computeMetrics } from './model.js';
+import { computeBarriers, computeMetrics } from '@tinylap/track-format';
 
 export const MAT_PARTS = ['square', 'quarterRound', 'arcLarge'];
 export const BARRIER_PARTS = ['straight', 'curve', 'curveLarge', 'cornerCap'];

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout } from '../js/model.js';
+import { createLayout } from '@tinylap/track-format';
 import {
   KITS, MOUNT_POINTS, emptyStock, stockFromKits,
   billOfMaterials, diffStock, recommendKit,

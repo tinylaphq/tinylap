@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAT_MM, PIECES, rotateCell, rotateVertex, rotateDir, rotateCorner, rotatedDef } from '../js/geometry.js';
+import { MAT_MM, PIECES, rotateCell, rotateVertex, rotateDir, rotateCorner, rotatedDef } from '../geometry.js';
 
 test('a mat is 300 mm', () => {
   assert.equal(MAT_MM, 300);
@@ -70,7 +70,7 @@ test('the three piece types have the footprints the spec fixes', () => {
   assert.deepEqual(PIECES.cornerR60.mats, { square: 5, quarterRound: 1, arcLarge: 2 });
 });
 
-import { placedCells, placedPorts, placedWalls } from '../js/geometry.js';
+import { placedCells, placedPorts, placedWalls } from '../geometry.js';
 
 test('placement translates a rotated footprint onto the grid', () => {
   const cells = placedCells({ type: 'straight', x: 5, y: 3, rot: 0 });

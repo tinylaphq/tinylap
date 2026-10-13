@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PRESETS } from '../js/presets.js';
-import { createLayout, findOverlaps, isClosedCircuit } from '../js/model.js';
+import { createLayout, findOverlaps, isClosedCircuit } from '@tinylap/track-format';
 
 test('every preset is a valid, closed, non-overlapping circuit', () => {
   // One entry, and it must be the stock L. The 7x9 ring was dropped from

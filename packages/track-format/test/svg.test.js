@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout } from '../js/model.js';
-import { arcPath, layoutGeometry, layoutToSvgString } from '../js/render.js';
+import { createLayout } from '../model.js';
+import { arcPath, layoutGeometry, layoutToSvgString } from '../svg.js';
 import { rectangularRing } from './fixtures.js';
 
 test('an R30 arc runs corner to corner of its mat', () => {

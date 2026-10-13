@@ -1,6 +1,5 @@
-import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR } from './model.js';
+import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR, PIECES, MAT_MM, placedCells, placedPorts } from '@tinylap/track-format';
 import { drawLayout, drawGhost, drawMarquee, layoutToSvgString } from './render.js';
-import { PIECES, MAT_MM, placedCells, placedPorts } from './geometry.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
 import { exportHtml, importHtml } from './storage.js';
 import { PRESETS } from './presets.js';
