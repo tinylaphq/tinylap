@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Circuit 30 Planner</title>
+  <script type="importmap">
+  { "imports": { "@tinylap/track-format": "./pkg/track-format/index.js" } }
+  </script>
+  <link rel="stylesheet" href="./pkg/palace-ui/palace.css">
+  <link rel="stylesheet" href="./pkg/design/design.css">
+  <link rel="stylesheet" href="./css/app.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0a0a'/%3E%3Crect x='3' y='3' width='10' height='10' fill='none' stroke='%23ff2d9b' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+  <nav class="navbar">
+    <span class="navbar-brand">Circuit 30 Planner</span>
+    <div class="navbar-right">
+      <button type="button" class="btn btn-sm btn-outline" id="btn-presets">Layouts</button>
+      <button type="button" class="btn btn-sm btn-secondary" id="btn-open">Open</button>
+      <button type="button" class="btn btn-sm btn-primary" id="btn-save">Save</button>
+    </div>
+    <input type="file" id="open-input" accept=".html,text/html" hidden>
+  </nav>
+
+  <aside id="palette" aria-label="Track pieces">
+    <h2 class="h3">Pieces</h2>
+    <ul id="palette-list"></ul>
+
+    <hr class="divider">
+
+    <section id="shortcuts" aria-labelledby="shortcuts-title">
+      <h2 class="h3" id="shortcuts-title">Controls</h2>
+      <dl>
+        <dt><kbd>Space</kbd></dt><dd>place next, keep going</dd>
+        <dt><kbd>R</kbd></dt><dd>turn the selected piece</dd>
+        <dt><kbd>C</kbd></dt><dd>swap for another that fits</dd>
+        <dt><kbd>Delete</kbd></dt><dd>remove the selection</dd>
+        <dt><kbd>Esc</kbd></dt><dd>cancel and deselect</dd>
+      </dl>
+    </section>
+  </aside>
+
+  <main>
+    <svg id="canvas" role="application" aria-label="Track layout" tabindex="0"></svg>
+    <div id="canvas-bar">
+      <p id="status" class="status" role="status"></p>
+      <button type="button" class="btn btn-sm btn-danger" id="btn-clear">Clear</button>
+    </div>
+  </main>
+
+  <aside id="bom" aria-label="Bill of materials">
+    <div class="rail-head">
+      <h2 class="h3">Materials</h2>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-inventory">Edit kits</button>
+    </div>
+    <p id="bom-warning" class="status status-warning" role="alert" hidden></p>
+    <table id="bom-table">
+      <thead><tr><th scope="col">Part</th><th scope="col">Owned</th><th scope="col">Used</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <hr class="divider">
+
+    <div class="stat-row" id="metrics">
+      <div><div class="stat" id="out-size">—</div><div class="stat-label">Size</div></div>
+      <div><div class="stat" id="out-lap">—</div><div class="stat-label">Lap</div></div>
+      <div><div class="stat" id="out-mats">—</div><div class="stat-label">Mats</div></div>
+    </div>
+
+    <div class="rail-line">
+      <span class="rail-line-label">Room</span>
+      <span id="out-room" class="rail-line-value">—</span>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-room">Set</button>
+    </div>
+
+    <p id="recommendation" class="status" role="status"></p>
+  </aside>
+
+  <dialog id="inventory-dialog" aria-labelledby="inventory-dialog-title">
+    <h2 id="inventory-dialog-title">Your kits</h2>
+    <p class="subtitle">Which Kyosho kits do you own?</p>
+    <form method="dialog" id="inventory-form"></form>
+  </dialog>
+
+  <dialog id="room-dialog" aria-labelledby="room-dialog-title">
+    <h2 id="room-dialog-title">Room</h2>
+    <p class="subtitle">The floor you have to fit the track into.</p>
+    <form method="dialog" id="room-form">
+      <label for="room-w">Width (m)</label>
+      <input type="number" id="room-w" name="w" step="0.3" min="0">
+      <label for="room-h">Depth (m)</label>
+      <input type="number" id="room-h" name="h" step="0.3" min="0">
+      <menu>
+        <button class="btn btn-outline" value="clear">No limit</button>
+        <button class="btn btn-primary" value="set">Set</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="presets-dialog" aria-labelledby="presets-dialog-title">
+    <form method="dialog" class="dialog-dismiss"><button class="btn btn-sm btn-outline" aria-label="Close">&#10005;</button></form>
+    <h2 id="presets-dialog-title">Layouts</h2>
+    <p class="subtitle">Start from your stock layout, or from something built out of your kits.</p>
+    <h3 class="h3">Stock layout</h3>
+    <ul id="presets-list"></ul>
+    <hr class="divider">
+    <h3 class="h3">Suggestions</h3>
+    <p class="subtitle" id="suggestions-summary"></p>
+
+    <div class="chips" id="suggestion-filters" hidden>
+      <span class="chips-label">Shape</span>
+      <div class="chips-row" id="shape-chips" role="group" aria-label="Filter by shape"></div>
+      <label class="chips-toggle">
+        <input type="checkbox" id="chicane-toggle" checked>
+        include chicanes
+      </label>
+    </div>
+    <div class="chips" id="suggestion-sorts" hidden>
+      <span class="chips-label">Sort</span>
+      <div class="chips-row" id="sort-chips" role="group" aria-label="Sort order"></div>
+    </div>
+
+    <div class="suggestions-bar">
+      <span id="suggestions-page"></span>
+      <button type="button" class="btn btn-sm btn-outline btn-icon" id="btn-more-suggestions"
+              hidden aria-label="Show five different" title="Show five different">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89" fill="none"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+          <path d="M13.6 1.6v3.2h-3.2" fill="none"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/>
+        </svg>
+      </button>
+    </div>
+    <ul id="suggestions-list"></ul>
+    <div id="out-of-reach"></div>
+  </dialog>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

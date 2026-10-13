@@ -392,17 +392,16 @@ why the kit's manual says it cannot be used alone.
 Per corner: kit gives 2 shaped mats + 1 plain + 2 curve halves; the base set
 gives 4 plain, 1 quarter-round, 1 curve and 4 straights.
 
-The two walls curve in opposite senses and this matters:
+Both walls are ordinary convex quarter-round arcs:
 
-- the **inside** is *concave* — it hugs the swept gap, curving toward the
-  corner;
-- the **outside** is an ordinary *convex* quarter-round clip, as on any corner.
+- the **inside** is the kit's large sweep, concentric with the corridor's
+  centreline (radius 2 about the turn's centre), and tangent to the adjoining straights;
+- the **outside** is an ordinary quarter-round clip from the base set, as on
+  any corner.
 
-A single arc routine that always assumed the convex case put the centre on the
-wrong side of the inner sweep, bulging the inside barrier outward into the
-track. `arcParts` in `render.js` now takes a `concave` flag; the endpoints are
-identical either way, only the centre differs, and with it which of the two
-possible arcs is drawn.
+An earlier "concave" model of the inside sweep (commit 32a766b) never reached
+rendering and was removed on 2026-10-13, after a review showed it would kink
+the barrier by 90 degrees against both adjoining straights.
 
 Three earlier models were wrong, each caught by the owner against the real
 product and a photograph:

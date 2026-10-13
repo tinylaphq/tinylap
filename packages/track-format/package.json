@@ -1,0 +1,14 @@
+{
+  "name": "@tinylap/track-format",
+  "version": "0.1.0",
+  "description": "Read, validate and draw Kyosho Mini-Z Grand Prix Circuit 30 track layouts.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/tinylap/tinylap.git", "directory": "packages/track-format" },
+  "exports": {
+    ".": { "source": "./index.js", "types": "./dist/index.d.ts", "default": "./index.js" },
+    "./types": { "types": "./types.d.ts" }
+  },
+  "files": ["*.js", "types.d.ts", "dist"],
+  "scripts": { "test": "node --test 'test/**/*.test.js'", "typecheck": "tsc -p tsconfig.json", "lint": "eslint .", "prepack": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('types.d.ts', 'dist/types.d.ts')\" && node -e \"require('node:fs').copyFileSync('../../LICENSES/MPL-2.0.txt', 'LICENSE')\"" }
+}

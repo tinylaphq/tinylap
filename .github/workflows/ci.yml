@@ -1,0 +1,96 @@
+name: ci
+
+# Pull requests run the checks but never deploy. A push to main runs the same
+# checks and then deploys the planner, but only if the push touched it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # --affected compares against the base branch, which needs history.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - if: github.event_name == 'pull_request'
+        run: pnpm turbo run test lint typecheck --affected
+      - if: github.event_name == 'push'
+        run: pnpm turbo run test lint typecheck
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/track-planner/Dockerfile --build-arg GIT_SHA=${{ github.sha }} -t planner .
+      - run: docker run -d -p 8080:8080 planner && sleep 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/smoke.js http://localhost:8080/
+
+  reuse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: fsfe/reuse-action@v5
+
+  commit-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Squash merges make the pull request title the commit message.
+      - run: echo "$TITLE" | pnpm commitlint
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+
+  deploy:
+    needs: [check, smoke]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      # Deploys queue instead of cancelling: a newer push could otherwise cancel a deploy whose change it doesn't contain itself, and runs in order still leave the newest image live.
+      group: deploy-track-planner
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: changed
+        run: |
+          # Fail open: if the range can't be diffed (first push, force-push),
+          # deploy rather than silently skip.
+          if ! files=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null); then
+            echo "planner=true" >> "$GITHUB_OUTPUT"
+          elif grep -qE '^(apps/track-planner|packages|tools)/|^(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.dockerignore)$' <<< "$files"; then
+            echo "planner=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.planner == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+      # Build context is the repo root (the image needs packages and tools);
+      # the positional "." makes that explicit rather than relying on
+      # flyctl's default of the config file's folder.
+      - if: steps.changed.outputs.planner == 'true'
+        run: >
+          flyctl deploy . --remote-only
+          --config apps/track-planner/fly.toml
+          --dockerfile apps/track-planner/Dockerfile
+          --build-arg GIT_SHA=${{ github.sha }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
