@@ -306,6 +306,89 @@ Tasks 4 and later depend on `palace-ui@0.10.0` being on npm from Task 5 on.
 
 ---
 
+### Task 3b: palace-ui releases through CI from now on
+
+The hand publish in Task 3 is the only one. Every later palace-ui release goes through release-please and trusted publishing, exactly like the TinyLap packages (Task 11).
+
+**Files (`~/repos/palace-ui`):**
+- Create: `release-please-config.json`, `.release-please-manifest.json`, `.github/workflows/release.yml`
+- Modify: `package.json` (`repository` field: npm provenance checks it against the publishing repo)
+
+- [ ] **Step 1: Config**
+
+`release-please-config.json`:
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "packages": { ".": {} }
+}
+```
+
+`.release-please-manifest.json`:
+```json
+{ ".": "0.10.0" }
+```
+
+In `package.json`, add:
+```json
+"repository": { "type": "git", "url": "git+https://github.com/jostsg/palace-ui.git" },
+```
+
+- [ ] **Step 2: Workflow**
+
+`.github/workflows/release.yml`:
+```yaml
+name: release
+
+# release-please keeps a release pull request open with the next version and
+# changelog, computed from conventional commits. Nothing is published until a
+# person merges it.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write   # npm trusted publishing and provenance, no stored token
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - if: steps.rp.outputs.release_created == 'true'
+        uses: actions/checkout@v4
+      - if: steps.rp.outputs.release_created == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - if: steps.rp.outputs.release_created == 'true'
+        run: npm install -g npm@latest && npm publish --provenance --access public
+```
+
+- [ ] **Step 3: Verify and commit**
+
+Run: `for f in .github/workflows/release.yml; do npx --yes yaml@2 valid < "$f" || echo "INVALID $f"; done; node -e "JSON.parse(require('fs').readFileSync('release-please-config.json'));JSON.parse(require('fs').readFileSync('.release-please-manifest.json'));console.log('json ok')"; npm pack --dry-run 2>&1 | grep -cE "release|\.github"`
+Expected: no `INVALID` lines, then `json ok`, then `0`: the release files are not shipped, because `files` limits the package.
+
+```bash
+git add -A && git commit -s -m "build: release with release-please and npm trusted publishing"
+```
+
+- [ ] **Step 4: USER GATE**
+
+1. Push to `jostsg/palace-ui` `main`; ask first.
+2. On npmjs.com, the user configures trusted publishing for `palace-ui`: repository `jostsg/palace-ui`, workflow `release.yml`.
+
+---
+
 ### Task 4: Monorepo skeleton and the planner moved into `apps/track-planner`
 
 Pure move plus workspace wiring. No source file content changes.
@@ -1911,7 +1994,10 @@ In `packages/track-format/package.json`:
   "./types": { "types": "./types.d.ts" }
 },
 "files": ["*.js", "types.d.ts", "dist"],
+"repository": { "type": "git", "url": "git+https://github.com/tinylap/tinylap.git", "directory": "packages/track-format" },
 ```
+
+Add the matching `repository` field to `packages/design/package.json`, with `"directory": "packages/design"`. npm provenance checks `repository` against the repo that publishes.
 
 Add the script `"prepack": "tsc -p tsconfig.build.json"`.
 
