@@ -8,7 +8,7 @@
 import { rotateCell, rotateCorner, rotateVertex } from './geometry.js';
 import { isClosedCircuit, occupiedSet, parseCellKey, wallCounts, computeBarriers, capVertices } from './model.js';
 
-/** @import { Track, Layout, Cell } from './types.js' */
+/** @import { Track, Direction, Layout, Cell } from './types.js' */
 
 // crypto.randomUUID() emits lowercase RFC 4122 version 4 ids.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -68,4 +68,32 @@ export function shapeOf(layout) {
     ].sort().join(';');
   });
   return SHAPE_PREFIX + forms.sort()[0];
+}
+
+// The identity rules, in one place so every app applies them alike: a closed
+// layout carries a track; changed geometry means a new track; an open or
+// overlapping layout carries none. Runs where a layout leaves or enters as a
+// file (planner export, timing-app import), never on every edit.
+/** @param {Layout} layout @returns {Layout} */
+export function assignTrack(layout) {
+  const shape = shapeOf(layout);
+  const { track, ...rest } = layout;
+  if (shape === null) return /** @type {Layout} */ (rest);
+  if (track && track.shape === shape) return { ...rest, track: { ...track } };
+  return { ...rest, track: { id: crypto.randomUUID(), shape } };
+}
+
+// Seen from above in the planner's coordinates (x right, y down). Direction is
+// not part of a track: one build is raced either way, and the timing app
+// remembers the chosen direction per track.
+/** @type {readonly Direction[]} */
+export const DIRECTIONS = Object.freeze(['cw', 'ccw']);
+
+// Times from the two directions never share a leaderboard. A timing app must
+// still scope this key by its own venue: a shared, unmodified layout file
+// carries the same id to every venue that builds it.
+/** @param {Track} track @param {Direction} direction @returns {string} */
+export function leaderboardKey(track, direction) {
+  if (!DIRECTIONS.includes(direction)) throw new Error(`Unknown direction: ${String(direction)}`);
+  return `${track.id}:${direction}`;
 }
