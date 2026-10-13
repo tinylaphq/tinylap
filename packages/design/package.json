@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "The TinyLap design layer on top of palace-ui.",
   "license": "MPL-2.0",
+  "repository": { "type": "git", "url": "git+https://github.com/tinylap/tinylap.git", "directory": "packages/design" },
   "style": "design.css",
   "exports": { "./design.css": "./design.css" },
   "files": ["design.css"],
