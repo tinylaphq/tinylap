@@ -1,13 +1,21 @@
 import { placedCells, placedPorts, placedWalls, rotatedDef } from './geometry.js';
 
+/** @import { Dir, Corner, Rotation, Cell, PieceType, Port, ArcWall, PlacedPiece, Layout, Metrics, Barriers, BarrierCounts } from './types.js' */
+/** @typedef {{ pieceIndex: number, port: Port }} PortEntry */
+
+/** @param {Partial<Layout>} [overrides] @returns {Layout} */
 export function createLayout(overrides = {}) {
   return { version: 1, unit: 'mat', room: null, pieces: [], ...overrides };
 }
 
+/** @param {Cell} cell @returns {string} */
 export const cellKey = ([x, y]) => `${x},${y}`;
-export const parseCellKey = (k) => k.split(',').map(Number);
+/** @param {string} k @returns {Cell} */
+export const parseCellKey = (k) => /** @type {Cell} */ (k.split(',').map(Number));
 
+/** @param {Layout} layout @returns {Map<string, number[]>} */
 export function occupancy(layout) {
+  /** @type {Map<string, number[]>} */
   const map = new Map();
   layout.pieces.forEach((piece, index) => {
     for (const cell of placedCells(piece)) {
@@ -20,16 +28,19 @@ export function occupancy(layout) {
   return map;
 }
 
+/** @param {Layout} layout @returns {Set<string>} */
 export function occupiedSet(layout) {
   return new Set(occupancy(layout).keys());
 }
 
+/** @param {Layout} layout @returns {string[]} */
 export function findOverlaps(layout) {
   return [...occupancy(layout)]
     .filter(([, owners]) => owners.length > 1)
     .map(([key]) => key);
 }
 
+/** @param {Cell} cell @param {Dir} dir @returns {string} */
 export function edgeId([x, y], dir) {
   switch (dir) {
     case 'N': return `H:${x}:${y}`;
@@ -40,12 +51,17 @@ export function edgeId([x, y], dir) {
   }
 }
 
+/** @param {Port} port @returns {string[]} */
 export const portEdgeIds = (port) => port.cells.map((c) => edgeId(c, port.dir));
+/** @param {Port} port @returns {string} */
 export const portKey = (port) => portEdgeIds(port).slice().sort().join('|');
 
+/** @type {Record<Dir, Dir>} */
 const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E' };
 
+/** @param {Layout} layout @returns {{ matched: Set<string>, open: PortEntry[] }} */
 export function matchPorts(layout) {
+  /** @type {Map<string, PortEntry[]>} */
   const byKey = new Map();
   layout.pieces.forEach((piece, pieceIndex) => {
     for (const port of placedPorts(piece)) {
@@ -56,7 +72,9 @@ export function matchPorts(layout) {
     }
   });
 
+  /** @type {Set<string>} */
   const matched = new Set();
+  /** @type {PortEntry[]} */
   const open = [];
   for (const [key, entries] of byKey) {
     const paired =
@@ -69,7 +87,9 @@ export function matchPorts(layout) {
 
 // Edges of unmatched ports. These are openings, not walls, so the
 // boundary walk must not put a barrier on them.
+/** @param {Layout} layout @returns {Set<string>} */
 export function openEdgeIds(layout) {
+  /** @type {Set<string>} */
   const ids = new Set();
   for (const { port } of matchPorts(layout).open) {
     for (const id of portEdgeIds(port)) ids.add(id);
@@ -77,6 +97,7 @@ export function openEdgeIds(layout) {
   return ids;
 }
 
+/** @param {Layout} layout @returns {boolean} */
 export function isClosedCircuit(layout) {
   if (layout.pieces.length === 0) return false;
   if (findOverlaps(layout).length > 0) return false;
@@ -84,6 +105,7 @@ export function isClosedCircuit(layout) {
   return isSingleComponent(layout);
 }
 
+/** @param {Layout} layout @returns {boolean} */
 function isSingleComponent(layout) {
   const cells = occupiedSet(layout);
   const first = cells.values().next().value;
@@ -91,7 +113,7 @@ function isSingleComponent(layout) {
   const seen = new Set([first]);
   const queue = [parseCellKey(first)];
   while (queue.length > 0) {
-    const [x, y] = queue.pop();
+    const [x, y] = /** @type {Cell} */ (queue.pop());
     for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
       const key = cellKey([nx, ny]);
       if (cells.has(key) && !seen.has(key)) {
@@ -103,10 +125,12 @@ function isSingleComponent(layout) {
   return seen.size === cells.size;
 }
 
+/** @type {Record<Dir, Cell>} */
 export const NEIGHBOUR = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
 
 // For each corner, the two edges meeting there and the direction each
 // one runs as you walk away from the corner.
+/** @type {Record<Corner, [Dir, Cell][]>} */
 const CORNER_EDGES = {
   NE: [['N', [-1, 0]], ['E', [0, 1]]],
   SE: [['S', [-1, 0]], ['E', [0, -1]]],
@@ -131,6 +155,7 @@ const CORNER_EDGES = {
 // a port edge" globally: the same edge can be an opening for one piece and
 // a wall for its neighbour. Getting it wrong swallowed real walls and
 // invented others.
+/** @param {Layout} layout @returns {Map<string, number>} */
 export function wallCounts(layout) {
   const occ = occupancy(layout);
 
@@ -141,6 +166,7 @@ export function wallCounts(layout) {
   // and not two. Treating "is a port edge" as a global property got this
   // wrong in both directions.
   const portIdsByPiece = layout.pieces.map((piece) => {
+    /** @type {Set<string>} */
     const ids = new Set();
     for (const port of placedPorts(piece)) {
       for (const id of portEdgeIds(port)) ids.add(id);
@@ -148,12 +174,13 @@ export function wallCounts(layout) {
     return ids;
   });
 
+  /** @type {Map<string, number>} */
   const counts = new Map();
   layout.pieces.forEach((piece, index) => {
     const ownPorts = portIdsByPiece[index];
     for (const cell of placedCells(piece)) {
       const [x, y] = cell;
-      for (const dir of ['N', 'E', 'S', 'W']) {
+      for (const dir of /** @type {Dir[]} */ (['N', 'E', 'S', 'W'])) {
         const [dx, dy] = NEIGHBOUR[dir];
         const nOwners = occ.get(cellKey([x + dx, y + dy]));
         if (nOwners && nOwners.includes(index)) continue;  // inside this piece
@@ -166,6 +193,7 @@ export function wallCounts(layout) {
   return counts;
 }
 
+/** @param {Layout} layout @returns {Set<string>} */
 export function boundaryEdges(layout) {
   return new Set(wallCounts(layout).keys());
 }
@@ -176,6 +204,7 @@ export function boundaryEdges(layout) {
 // — connected to the open edge of the layout; everything empty it never
 // reaches is boxed in by occupied cells on every side. Returns null for an
 // empty layout (nothing to flood).
+/** @param {Layout} layout */
 function floodOutsideMargin(layout) {
   const cells = occupiedSet(layout);
   if (cells.size === 0) return null;
@@ -185,18 +214,21 @@ function floodOutsideMargin(layout) {
   const maxX = Math.max(...points.map(([x]) => x)) + 1;
   const minY = Math.min(...points.map(([, y]) => y)) - 1;
   const maxY = Math.max(...points.map(([, y]) => y)) + 1;
+  /** @param {Cell} cell */
   const inBounds = ([x, y]) => x >= minX && x <= maxX && y >= minY && y <= maxY;
+  /** @param {Cell} cell @returns {Cell[]} */
   const emptyNeighbours = ([x, y]) =>
     Object.values(NEIGHBOUR)
-      .map(([dx, dy]) => [x + dx, y + dy])
+      .map(([dx, dy]) => /** @type {Cell} */ ([x + dx, y + dy]))
       .filter((n) => inBounds(n) && !cells.has(cellKey(n)));
 
   // Flood outward from a corner of the margin — guaranteed empty, and
   // guaranteed connected to every other margin cell round the outside.
   const outside = new Set([cellKey([minX, minY])]);
+  /** @type {Cell[]} */
   const queue = [[minX, minY]];
   while (queue.length > 0) {
-    const cell = queue.pop();
+    const cell = /** @type {Cell} */ (queue.pop());
     for (const n of emptyNeighbours(cell)) {
       const key = cellKey(n);
       if (outside.has(key)) continue;
@@ -213,7 +245,9 @@ function floodOutsideMargin(layout) {
 // everything they enclose (the infield). Shared by maxTrackDepth and
 // subWidthNotches — both reason about the SAME filled shape, one by
 // Chebyshev depth, the other by morphological closing.
+/** @param {{ minX: number, maxX: number, minY: number, maxY: number, outside: Set<string> }} flood @returns {Set<string>} */
 function filledOutline({ minX, maxX, minY, maxY, outside }) {
+  /** @type {Set<string>} */
   const R = new Set();
   for (let x = minX; x <= maxX; x++) {
     for (let y = minY; y <= maxY; y++) {
@@ -230,6 +264,7 @@ function filledOutline({ minX, maxX, minY, maxY, outside }) {
 // enclosing nothing to drive around. Every empty region floodOutsideMargin's
 // flood never reaches is cut off by the occupied cells on all sides, i.e.
 // an enclosed infield.
+/** @param {Layout} layout @returns {number} */
 export function enclosedInfields(layout) {
   const flood = floodOutsideMargin(layout);
   if (!flood) return 0;
@@ -237,6 +272,7 @@ export function enclosedInfields(layout) {
 
   // Count connected components among the empty cells the outside flood
   // never reached — each one is a distinct region walled off on every side.
+  /** @type {Set<string>} */
   const visited = new Set();
   let infields = 0;
   for (let x = minX; x <= maxX; x++) {
@@ -245,9 +281,10 @@ export function enclosedInfields(layout) {
       if (cells.has(key) || outside.has(key) || visited.has(key)) continue;
       infields += 1;
       visited.add(key);
+      /** @type {Cell[]} */
       const componentQueue = [[x, y]];
       while (componentQueue.length > 0) {
-        const cell = componentQueue.pop();
+        const cell = /** @type {Cell} */ (componentQueue.pop());
         for (const n of emptyNeighbours(cell)) {
           const nKey = cellKey(n);
           if (outside.has(nKey) || visited.has(nKey)) continue;
@@ -275,9 +312,11 @@ export function enclosedInfields(layout) {
 // Cells belonging to the SAME piece touching each other is normal (e.g. an
 // R30 corner's own two cells) and is never reported. Returns an empty
 // array for a valid track.
+/** @param {Layout} layout @returns {string[]} */
 export function unjoinedContacts(layout) {
   const occ = occupancy(layout);
   const { matched } = matchPorts(layout);
+  /** @type {Set<string>} */
   const legit = new Set();
   layout.pieces.forEach((piece) => {
     for (const port of placedPorts(piece)) {
@@ -286,10 +325,11 @@ export function unjoinedContacts(layout) {
     }
   });
 
+  /** @type {Set<string>} */
   const contacts = new Set();
   for (const [key, owners] of occ) {
     const [x, y] = parseCellKey(key);
-    for (const dir of ['N', 'E', 'S', 'W']) {
+    for (const dir of /** @type {Dir[]} */ (['N', 'E', 'S', 'W'])) {
       const [dx, dy] = NEIGHBOUR[dir];
       const nOwners = occ.get(cellKey([x + dx, y + dy]));
       if (!nOwners) continue;
@@ -303,6 +343,7 @@ export function unjoinedContacts(layout) {
 }
 
 // The 8-neighbourhood (including diagonals) — Chebyshev-adjacent cells.
+/** @type {Cell[]} */
 const NEIGHBOURS8 = [
   [-1, -1], [0, -1], [1, -1],
   [-1, 0], [1, 0],
@@ -318,6 +359,7 @@ const NEIGHBOURS8 = [
 // depth of 3 or more means the track is wider than two mats there. Two
 // non-consecutive straight runs sitting side by side pass the infield
 // check (there is still exactly one hole) but fail this one.
+/** @param {Layout} layout @returns {number} */
 export function maxTrackDepth(layout) {
   const flood = floodOutsideMargin(layout);
   if (!flood) return 0;
@@ -326,7 +368,9 @@ export function maxTrackDepth(layout) {
 
   // Multi-source BFS inward, over the 8-neighbourhood, starting from every
   // cell of R that touches a non-R cell (depth 1).
+  /** @type {Map<string, number>} */
   const depth = new Map();
+  /** @type {string[]} */
   const queue = [];
   for (const key of R) {
     const [x, y] = parseCellKey(key);
@@ -339,7 +383,7 @@ export function maxTrackDepth(layout) {
   let head = 0;
   while (head < queue.length) {
     const key = queue[head++];
-    const d = depth.get(key);
+    const d = /** @type {number} */ (depth.get(key));
     const [x, y] = parseCellKey(key);
     for (const [dx, dy] of NEIGHBOURS8) {
       const nKey = cellKey([x + dx, y + dy]);
@@ -360,7 +404,9 @@ export function maxTrackDepth(layout) {
 // element `offsets` (a Minkowski sum). Unbounded: callers never need to
 // pre-size a grid, since only cells that could plausibly be touched are
 // ever visited.
+/** @param {Set<string>} cells @param {Cell[]} offsets @returns {Set<string>} */
 function dilateBy(cells, offsets) {
+  /** @type {Set<string>} */
   const out = new Set();
   for (const key of cells) {
     const [x, y] = parseCellKey(key);
@@ -373,7 +419,9 @@ function dilateBy(cells, offsets) {
 // if every offset shift of it lands back in `cells`. Computed by counting,
 // for each candidate point, how many of the offsets it satisfies — cheaper
 // than testing every point of an unbounded plane against `cells` directly.
+/** @param {Set<string>} cells @param {Cell[]} offsets @returns {Set<string>} */
 function erodeBy(cells, offsets) {
+  /** @type {Map<string, number>} */
   const counts = new Map();
   for (const key of cells) {
     const [x, y] = parseCellKey(key);
@@ -382,6 +430,7 @@ function erodeBy(cells, offsets) {
       counts.set(point, (counts.get(point) ?? 0) + 1);
     }
   }
+  /** @type {Set<string>} */
   const out = new Set();
   for (const [key, count] of counts) if (count === offsets.length) out.add(key);
   return out;
@@ -391,6 +440,7 @@ function erodeBy(cells, offsets) {
 // contains its own origin (0,0), which is what makes the closing below
 // extensive (R is always a subset of its own closing) — so "cells the
 // closing added" is always well-defined as closing \ R, never the reverse.
+/** @type {Cell[]} */
 const SQUARE_2X2 = [[0, 0], [1, 0], [0, 1], [1, 1]];
 
 // How many sub-width notches are cut into the outline: slots narrower than
@@ -420,6 +470,7 @@ const SQUARE_2X2 = [[0, 0], [1, 0], [0, 1], [1, 1]];
 // layouts — score 0. At two starter kits (stockFromKits({'87033':2})),
 // this catches 50 of the 300 layouts the contact rule alone used to let
 // through.
+/** @param {Layout} layout @returns {number} */
 export function subWidthNotches(layout) {
   const flood = floodOutsideMargin(layout);
   if (!flood) return 0;
@@ -430,6 +481,7 @@ export function subWidthNotches(layout) {
 
   // Connected components of `gained`, 4-connectivity — the same
   // flood-fill-and-count shape enclosedInfields uses for its regions.
+  /** @type {Set<string>} */
   const visited = new Set();
   let notches = 0;
   for (const start of gained) {
@@ -438,7 +490,7 @@ export function subWidthNotches(layout) {
     visited.add(start);
     const queue = [parseCellKey(start)];
     while (queue.length > 0) {
-      const [x, y] = queue.pop();
+      const [x, y] = /** @type {Cell} */ (queue.pop());
       for (const [dx, dy] of Object.values(NEIGHBOUR)) {
         const nKey = cellKey([x + dx, y + dy]);
         if (gained.has(nKey) && !visited.has(nKey)) {
@@ -451,7 +503,9 @@ export function subWidthNotches(layout) {
   return notches;
 }
 
+/** @param {ArcWall} wall @returns {string[]} */
 export function arcEdgeIds(wall) {
+  /** @type {string[]} */
   const ids = [];
   for (const [dir, [sx, sy]] of CORNER_EDGES[wall.corner]) {
     for (let i = 0; i < wall.r; i++) {
@@ -463,14 +517,19 @@ export function arcEdgeIds(wall) {
 
 // A cap belongs at a concave corner: three of the four cells around the
 // vertex occupied, one empty.
+/** @param {Set<string>} cells @param {Cell} vertex @returns {boolean} */
 function isConcaveVertex(cells, [vx, vy]) {
+  /** @type {Cell[]} */
   const around = [[vx - 1, vy - 1], [vx, vy - 1], [vx - 1, vy], [vx, vy]];
   return around.filter((c) => cells.has(cellKey(c))).length === 3;
 }
 
+/** @param {Layout} layout @returns {Barriers} */
 export function computeBarriers(layout) {
   const cells = occupiedSet(layout);
+  /** @type {BarrierCounts} */
   const counts = { straight: 0, curve: 0, curveLarge: 0, cornerCap: 0 };
+  /** @type {ArcWall[]} */
   const arcs = [];
 
   // How many walls each edge still needs, rather than whether it needs one.
@@ -488,8 +547,8 @@ export function computeBarriers(layout) {
         continue;
       }
       const claimed = arcEdgeIds(wall);
-      if (!claimed.every((id) => wallsLeft.get(id) > 0)) continue;
-      for (const id of claimed) wallsLeft.set(id, wallsLeft.get(id) - 1);
+      if (!claimed.every((id) => /** @type {number} */ (wallsLeft.get(id)) > 0)) continue;
+      for (const id of claimed) wallsLeft.set(id, /** @type {number} */ (wallsLeft.get(id)) - 1);
       if (wall.kind === 'arc') counts.curve += 1;
       else counts.curveLarge += 2;
       arcs.push(wall);
@@ -507,6 +566,7 @@ export function computeBarriers(layout) {
   // loop above (which only needs to know a wall exists there) — so the
   // doubling happens only in this count, not in the edge set itself.
   let straight = 0;
+  /** @type {string[]} */
   const straightEdgeIds = [];
   for (const [id, n] of wallsLeft) {
     straight += n;
@@ -517,6 +577,7 @@ export function computeBarriers(layout) {
   return { counts, straightEdgeIds, arcs };
 }
 
+/** @param {Layout} layout @returns {Metrics} */
 export function computeMetrics(layout) {
   const cells = [...occupiedSet(layout)].map(parseCellKey);
 
@@ -528,6 +589,7 @@ export function computeMetrics(layout) {
     return { x, y, w: Math.max(...xs) - x + 1, h: Math.max(...ys) - y + 1 };
   })();
 
+  /** @type {Record<string, number>} */
   const mats = {};
   let lapMm = 0;
   for (const piece of layout.pieces) {
@@ -541,12 +603,15 @@ export function computeMetrics(layout) {
   return { bbox, matCount: cells.length, mats, lapMm };
 }
 
+/** @param {Layout} layout @returns {PortEntry[]} */
 export const openPorts = (layout) => matchPorts(layout).open;
 
+/** @param {Cell[]} cells @returns {Cell[]} */
 const sortCells = (cells) => [...cells].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 
 // Where a piece of `type`/`rot` must sit so its opposite-facing port meets
 // `port`. Returns null if that rotation has no port facing the right way.
+/** @param {Port} port @param {PieceType} type @param {Rotation} rot @returns {PlacedPiece | null} */
 export function placeAgainst(port, type, rot) {
   const want = OPPOSITE[port.dir];
   const mate = rotatedDef(type, rot).ports.find((p) => p.dir === want);

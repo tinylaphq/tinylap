@@ -11,6 +11,8 @@
     "check": "turbo run test lint typecheck"
   },
   "devDependencies": {
-    "turbo": "^2.11.7"
+    "@types/node": "^26.6.5",
+    "turbo": "^2.11.7",
+    "typescript": "^7.0.2"
   }
 }

@@ -14,6 +14,8 @@ import { PIECES, PIECE_TYPES, ROTATIONS, placedCells, placedPorts } from '@tinyl
 import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, unjoinedContacts } from '@tinylap/track-format';
 import { billOfMaterials, diffStock, emptyStock, MAT_PARTS, BARRIER_PARTS } from './inventory.js';
 
+/** @import { PieceType, PlacedPiece } from '@tinylap/track-format/types' */
+
 // Rotate a string left by n.
 const rotate = (s, n) => s.slice(n) + s.slice(0, n);
 
@@ -139,9 +141,11 @@ function append(pieces, occupied, tip, type, exitDir) {
 // preceding each corner. sides[i] is how many `straight` pieces sit on the
 // run before corner i. Returns the piece array, or null if the chosen side
 // lengths don't actually bring the loop back to a closed circuit.
+/** @param {{ signature: string, sides: number[], cornerType?: PieceType }} options @returns {PlacedPiece[] | null} */
 export function buildLoop({ signature, sides, cornerType = 'cornerR30' }) {
   if (sides.length !== signature.length) return null;
 
+  /** @type {PlacedPiece} */
   const first = { type: cornerType, x: 0, y: 0, rot: 0 };
   let pieces = [first];
   let occupied = new Set(placedCells(first).map(cellKey));
@@ -306,6 +310,7 @@ export function closes(signature, sides, cornerType) {
 // candidates closes() accepts arithmetically but that can never build.
 // Modelling substitution is a different feature and out of scope here; see
 // test/generate.test.js's pinning test for the evidence trail.
+/** @returns {PieceType[]} */
 function cornerTypesFor(stock) {
   return stock.mats.quarterRound > 0 ? ['cornerR30'] : [];
 }

@@ -9,6 +9,9 @@ export const SUPPORTED_VERSION = 1;
 // one of four, is this coordinate finite" is how the two paths drift, and
 // these particular checks are what stop a hand-edited payload reaching
 // the renderer.
+/** @import { Layout, PlacedPiece, Room } from './types.js' */
+
+/** @param {{ version: unknown, room?: Room | null, pieces: PlacedPiece[] }} data Unvalidated, in the persisted shape. @returns {Layout} */
 export function layoutFromData(data) {
 
   if (data.version !== SUPPORTED_VERSION) {

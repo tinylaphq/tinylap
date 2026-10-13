@@ -2,31 +2,42 @@
 // Cells are [col, row] with row increasing downward, matching SVG.
 // Rotation is clockwise on screen: 0, 90, 180, 270.
 
+/** @import { Dir, Corner, Rotation, Cell, PieceType, PieceDef, PlacedPiece, Port, Wall } from './types.js' */
+
 export const MAT_MM = 300;
 
+/** @type {Dir[]} */
 const DIRS = ['N', 'E', 'S', 'W'];
+/** @type {Corner[]} */
 const CORNERS = ['NE', 'SE', 'SW', 'NW'];
 
+/** @param {number} rot */
 const steps = (rot) => (((rot / 90) % 4) + 4) % 4;
 
+/** @param {Dir} dir @param {number} rot @returns {Dir} */
 export function rotateDir(dir, rot) {
   return DIRS[(DIRS.indexOf(dir) + steps(rot)) % 4];
 }
 
+/** @param {Corner} corner @param {number} rot @returns {Corner} */
 export function rotateCorner(corner, rot) {
   return CORNERS[(CORNERS.indexOf(corner) + steps(rot)) % 4];
 }
 
 // A vertex is a point: (x, y) -> (-y, x) per quarter turn.
+/** @param {Cell} vertex @param {number} rot @returns {Cell} */
 export function rotateVertex([x, y], rot) {
+  /** @type {Cell} */
   let p = [x, y];
   for (let i = steps(rot); i > 0; i--) p = [-p[1], p[0]];
-  return p.map(v => v === 0 ? 0 : v);
+  return /** @type {Cell} */ (p.map(v => v === 0 ? 0 : v));
 }
 
 // A cell is the unit square (x, y)..(x+1, y+1). Rotating those corners
 // yields the square indexed (-y-1, x).
+/** @param {Cell} cell @param {number} rot @returns {Cell} */
 export function rotateCell([x, y], rot) {
+  /** @type {Cell} */
   let p = [x, y];
   for (let i = steps(rot); i > 0; i--) p = [-p[1] - 1, p[0]];
   return p;
@@ -34,6 +45,7 @@ export function rotateCell([x, y], rot) {
 
 const QUARTER_TURN_MM = (Math.PI / 2) * MAT_MM;
 
+/** @type {Record<PieceType, PieceDef>} */
 export const PIECES = {
   straight: {
     label: 'Straight',
@@ -95,12 +107,15 @@ export const PIECES = {
   },
 };
 
-export const PIECE_TYPES = Object.keys(PIECES);
+export const PIECE_TYPES = /** @type {PieceType[]} */ (Object.keys(PIECES));
+/** @type {Rotation[]} */
 export const ROTATIONS = [0, 90, 180, 270];
 
+/** @type {Map<string, PieceDef>} */
 const cache = new Map();
 
 // Rotate a definition and translate it so its footprint starts at [0, 0].
+/** @param {PieceType} type @param {number} rot @returns {PieceDef} */
 export function rotatedDef(type, rot) {
   const key = `${type}:${steps(rot) * 90}`;
   const hit = cache.get(key);
@@ -112,8 +127,10 @@ export function rotatedDef(type, rot) {
   const spun = def.cells.map((c) => rotateCell(c, rot));
   const dx = -Math.min(...spun.map((c) => c[0]));
   const dy = -Math.min(...spun.map((c) => c[1]));
+  /** @type {(cell: Cell) => Cell} */
   const shift = ([x, y]) => [x + dx, y + dy];
 
+  /** @type {PieceDef} */
   const out = {
     label: def.label,
     mats: def.mats,
@@ -139,10 +156,12 @@ export function rotatedDef(type, rot) {
   return out;
 }
 
+/** @param {PlacedPiece} piece @returns {Cell[]} */
 export function placedCells({ type, x, y, rot }) {
   return rotatedDef(type, rot).cells.map(([cx, cy]) => [cx + x, cy + y]);
 }
 
+/** @param {PlacedPiece} piece @returns {Port[]} */
 export function placedPorts({ type, x, y, rot }) {
   return rotatedDef(type, rot).ports.map((p) => ({
     cells: p.cells.map(([cx, cy]) => [cx + x, cy + y]),
@@ -150,6 +169,7 @@ export function placedPorts({ type, x, y, rot }) {
   }));
 }
 
+/** @param {PlacedPiece} piece @returns {Wall[]} */
 export function placedWalls({ type, x, y, rot }) {
   return rotatedDef(type, rot).walls.map((w) =>
     w.kind === 'cap'

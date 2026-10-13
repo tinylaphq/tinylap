@@ -4,7 +4,11 @@
 // Outer 7x9, hole 3x5, corridor 2 mats wide, 48 mats.
 // Corner rotations: rot 0 exits N and E, so each corner is rotated to face
 // the two neighbours it must meet.
+/** @import { PlacedPiece } from './types.js' */
+
+/** @returns {PlacedPiece[]} */
 export function rectangularRing() {
+  /** @type {PlacedPiece[]} */
   const pieces = [
     { type: 'cornerR30', x: 0, y: 0, rot: 90 },   // top-left,  ports E + S
     { type: 'cornerR30', x: 5, y: 0, rot: 180 },  // top-right, ports S + W
@@ -44,7 +48,9 @@ export function rectangularRing() {
 // off right next to the notch (the "elbow"). That sixth corner is what
 // supplies the extra quarter-round mat, curve barrier and corner cap the
 // 87033 box ships beyond a plain rectangular ring's four.
+/** @returns {PlacedPiece[]} */
 export function stockL() {
+  /** @type {PlacedPiece[]} */
   const pieces = [
     { type: 'cornerR30', x: 0, y: 0, rot: 90 },   // outer top-left,     ports E + S
     { type: 'cornerR30', x: 3, y: 0, rot: 180 },  // outer top-right,    ports S + W
