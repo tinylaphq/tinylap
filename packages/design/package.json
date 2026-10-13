@@ -1,12 +1,26 @@
 {
   "name": "@tinylap/design",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The TinyLap design layer on top of palace-ui.",
   "license": "MPL-2.0",
-  "repository": { "type": "git", "url": "git+https://github.com/tinylaphq/tinylap.git", "directory": "packages/design" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tinylaphq/tinylap.git",
+    "directory": "packages/design"
+  },
   "style": "design.css",
-  "exports": { "./design.css": "./design.css" },
-  "files": ["design.css"],
-  "dependencies": { "palace-ui": "^0.10.0" },
-  "scripts": { "test": "node -e \"process.exit(/--tl-track-mat:/.test(require('fs').readFileSync('design.css','utf8'))?0:1)\"", "lint": "true", "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSES/MPL-2.0.txt', 'LICENSE')\"" }
+  "exports": {
+    "./design.css": "./design.css"
+  },
+  "files": [
+    "design.css"
+  ],
+  "dependencies": {
+    "palace-ui": "^0.10.0"
+  },
+  "scripts": {
+    "test": "node -e \"process.exit(/--tl-track-mat:/.test(require('fs').readFileSync('design.css','utf8'))?0:1)\"",
+    "lint": "true",
+    "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSES/MPL-2.0.txt', 'LICENSE')\""
+  }
 }
