@@ -6,6 +6,8 @@
 // broken promise the versioned layout makes: the page revalidates, every
 // asset is immutable, and every URL the page can reach (stylesheets, fonts,
 // the module graph through the import map) answers 200.
+import { stripComments } from './js-source.js';
+
 const base = new URL(process.argv[2] ?? 'http://localhost:8080/');
 const failures = [];
 const fail = (msg) => failures.push(msg);
@@ -39,7 +41,8 @@ while (queue.length) {
   seen.add(url.href);
   const res = await get(url);
   if (!/immutable/.test(res.headers.get('cache-control') ?? '')) fail(`${url.pathname} is not immutable`);
-  const text = url.pathname.endsWith('.js') || url.pathname.endsWith('.css') ? await res.text() : '';
+  const raw = url.pathname.endsWith('.js') || url.pathname.endsWith('.css') ? await res.text() : '';
+  const text = url.pathname.endsWith('.js') ? stripComments(raw) : raw;
   if (url.pathname.endsWith('.css')) {
     for (const m of text.matchAll(/url\(['"]?([^'")]+)['"]?\)/g)) if (!m[1].startsWith('data:')) queue.push(new URL(m[1], url));
   }

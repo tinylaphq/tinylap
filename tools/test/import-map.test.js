@@ -11,6 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packageRoots, jsEntry } from '../serve-map.js';
+import { stripComments } from '../js-source.js';
 
 const APPS = fileURLToPath(new URL('../../apps/', import.meta.url));
 const apps = readdirSync(APPS, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(APPS, d.name));
@@ -50,7 +51,12 @@ for (const app of apps) {
   // gone, so any module fetched later would 404. Everything loads up front.
   test(`${app}: no dynamic import()`, () => {
     for (const file of jsFiles(join(app, 'js'))) {
-      assert.doesNotMatch(readFileSync(file, 'utf8'), /\bimport\s*\(/, file);
+      assert.doesNotMatch(stripComments(readFileSync(file, 'utf8')), /\bimport\s*\(/, file);
     }
   });
 }
+
+test('a commented import() does not count as a dynamic import', () => {
+  assert.doesNotMatch(stripComments('// lazy: import(x)\n/* import("y") */\nconst a = 1;'), /\bimport\s*\(/);
+  assert.match(stripComments("const m = await import('./x.js');"), /\bimport\s*\(/);
+});
