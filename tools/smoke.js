@@ -20,6 +20,12 @@ if (!baseHref?.startsWith('/v/')) fail(`base href is not versioned: ${baseHref}`
 const root = new URL(baseHref ?? '/', base);
 const imports = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)?.[1] ?? '{"imports":{}}').imports;
 
+// A missing asset must never be cached: during a rolling deploy a request can
+// reach a machine that lacks the file, and a cached 404 would stick for a year.
+const missing = await fetch(new URL('does-not-exist.js', root));
+if (missing.status !== 404) fail(`missing asset answered ${missing.status}, expected 404`);
+if (/immutable/.test(missing.headers.get('cache-control') ?? '')) fail(`a 404 under ${root.pathname} is cacheable: ${missing.headers.get('cache-control')}`);
+
 const seen = new Set();
 const queue = [...html.matchAll(/<(?:link[^>]+href|script[^>]+src)="(\.\/[^"]+)"/g)].map((m) => new URL(m[1], root));
 

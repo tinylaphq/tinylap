@@ -1100,8 +1100,8 @@ function renderSuggestionPage() {
   const label = wraps ? 'Back to the first five' : 'Show five different';
   more.setAttribute('aria-label', label);
   more.title = label;
-  // Say when a filter is narrowing, or the summary above ("300 sizes to
-  // pick") and this line ("of 120") read as a contradiction with
+  // Say when a filter is narrowing, or the summary above (a count of sizes
+  // on offer) and this line ("of 120") read as a contradiction with
   // nothing to explain the gap.
   const total = state.suggestions.results.length;
   const filtered = pool.length < total ? ` (filtered from ${total})` : '';

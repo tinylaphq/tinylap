@@ -23,4 +23,10 @@
 	}
 
 	file_server
+
+	# The immutable header above also lands on error responses. A 404 cached
+	# for a year would outlive the deploy that is merely still rolling out.
+	handle_errors {
+		header Cache-Control "no-store"
+	}
 }
