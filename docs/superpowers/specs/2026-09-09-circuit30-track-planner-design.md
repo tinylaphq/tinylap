@@ -394,8 +394,8 @@ gives 4 plain, 1 quarter-round, 1 curve and 4 straights.
 
 Both walls are ordinary convex quarter-round arcs:
 
-- the **inside** is the kit's large sweep, concentric with the outer wall and
-  with the corridor's centreline, and tangent to the adjoining straights;
+- the **inside** is the kit's large sweep, concentric with the corridor's
+  centreline (radius 2 about the turn's centre), and tangent to the adjoining straights;
 - the **outside** is an ordinary quarter-round clip from the base set, as on
   any corner.
 

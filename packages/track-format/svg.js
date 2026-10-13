@@ -32,11 +32,6 @@ function assertFinite(value, label) {
   return value;
 }
 
-// The region a cut removes: corner vertex -> first endpoint -> along the
-// arc -> back to the vertex. Painted in the canvas colour over the mats so
-// a cut corner reads as cut. Without this every arc was drawn as a stroke
-// lying across an intact square, which is what made the large corner look
-// like it was missing a tile rather than swept.
 // Corner vertex, endpoints and sweep flag for a wall's arc.
 //
 // Every arc wall is a convex quarter-round: its centre sits diagonally
@@ -57,6 +52,11 @@ function arcParts(wall) {
   return { v, a, b, r, sweep: cross > 0 ? 1 : 0 };
 }
 
+// The region a cut removes: corner vertex -> first endpoint -> along the
+// arc -> back to the vertex. Painted in the canvas colour over the mats so
+// a cut corner reads as cut. Without this every arc was drawn as a stroke
+// lying across an intact square, which is what made the large corner look
+// like it was missing a tile rather than swept.
 /** @param {ArcWall} wall @returns {string} */
 export function cutPath(wall) {
   const { v, a, b, r, sweep } = arcParts(wall);
