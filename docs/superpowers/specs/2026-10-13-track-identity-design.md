@@ -41,13 +41,13 @@ Types (`types.d.ts`):
 ```ts
 export interface Track { id: string; shape: string }
 export type Direction = 'cw' | 'ccw';
-// Layout gains: track?: Track; version becomes 1 | 2 when read, and is always 2 when created.
+// Layout gains: track?: Track; version is always 2 in memory (created or read).
 ```
 
 ## 4. The shape fingerprint
 
 `shapeOf(layout): string | null` returns `null` for a layout that isn't a closed
-circuit.
+circuit, or that has overlapping pieces (it can't physically be built).
 
 **Source.** The fingerprint is computed from **what is physically built**, not
 from the piece list:
@@ -66,7 +66,9 @@ builds always match, whatever pieces described them.
 2. Each rotated set is translated so that its minimum cell sits at the origin.
 3. Each element is serialised to a fixed text form; the list is sorted and joined.
 4. The lexicographically smallest of the four results is the shape.
-5. Mirroring is deliberately **not** applied.
+5. Mirroring is deliberately **not** applied. A layout that is itself mirror
+   symmetric (the rectangular ring, for example) naturally has the same shape as
+   its mirror image. That is correct: it is the same build.
 
 The result is prefixed with `c30:1:`. It is plain, readable text, with no hash,
 so it is deterministic, synchronous, and inspectable when a comparison looks
@@ -83,18 +85,21 @@ through the cells they border, so there is one source of rotation maths.
 
 | Situation | Result |
 | --- | --- |
-| Not a closed circuit | no `track`; any existing block is removed |
+| Not a closed circuit, or overlapping | no `track`; any existing block is removed |
 | Closed, no `track` | new id, current shape |
 | Closed, `track.shape` equals current shape | unchanged |
 | Closed, `track.shape` differs | new id, current shape |
 
-Every place a layout **enters** runs `assignTrack`:
-- planner export (`exportHtml`)
-- planner session save
-- the future timing-app import
+`assignTrack` runs where a layout **leaves or enters** as a file:
+- **Planner export.** The planner keeps the result. Its current layout
+  carries the `track` block in state and in the session store, so the next
+  export compares against it. Edits never touch `track`, and session saves
+  store it as it is. Opening a file adopts the file's `track`.
+- **The future timing-app import.**
 
 That implements "changed geometry is a new track" without the editor tracking
-edits. Moving the whole layout, rotating it, or changing `room` keeps the id,
+edits. Moving a piece away and back before the next export keeps the id, because
+the shape matches again. Moving the whole layout, rotating it, or changing `room` keeps the id,
 because none of those changes the shape.
 
 `crypto.randomUUID()` exists only in secure contexts: HTTPS, or `localhost`.
@@ -162,7 +167,7 @@ documents what `layoutFromData` reads.
 - **Shape sensitivity.**
   - the mirrored stock L gets a different shape
   - swapping one straight pair for a corner gets a different shape
-  - an open layout gives `null`
+  - an open layout, and an overlapping one, give `null`
 - **Piece symmetry.** A ring whose straights are placed at 0° and the same
   ring with them at 180° get the same shape.
 - **Identity rules.** Each row of the §5 table, plus:
@@ -179,6 +184,9 @@ documents what `layoutFromData` reads.
   - an export of a closed layout contains a `track` block
   - exporting twice without changes keeps the id
   - exporting after a change issues a new one
+  - a change reverted before the next export keeps the id
+  - the session store keeps the `track` block across a reload
+  - opening a file adopts its `track`
 - All existing tests pass unchanged, except where they assert `version: 1`.
   Those change to 2, because created and read layouts are both version 2. This
   includes the golden-file test: its file stays a v1 file byte for byte, and
