@@ -21,6 +21,22 @@ const svg = layoutToSvgString(layout, { theme: 'light' });
 
 The data model types are exported too: `import type { Layout } from '@tinylap/track-format'`.
 
+## Track identity
+
+Format version 2 adds an optional `track: { id, shape }` block. `shape` fingerprints the built geometry of a closed, single-loop layout (the same for any position or quarter turn, not for a mirror image); `id` is a UUID that stays while the shape does.
+
+- `assignTrack(layout)` settles the block. Run it when a layout leaves or enters as a file, not on every edit: unchanged shape keeps the id, changed shape gets a new one, an open or overlapping layout gets none.
+- `shapeOf(layout)` returns the fingerprint, or `null` if the layout is not one closed loop.
+- `DIRECTIONS` (`'cw'`, `'ccw'`) and `leaderboardKey(track, direction)` key a leaderboard per direction. A timing app must prefix the key with its own venue, because a shared unchanged file carries the same id everywhere.
+- `layoutFromHtml(html)` reads a layout from a planner export.
+
+```js
+import { layoutFromHtml, assignTrack, leaderboardKey } from '@tinylap/track-format';
+
+const { track } = assignTrack(layoutFromHtml(html));
+const key = track && `${venue}:${leaderboardKey(track, 'cw')}`;
+```
+
 ## License
 
 MPL-2.0. See `LICENSE`.

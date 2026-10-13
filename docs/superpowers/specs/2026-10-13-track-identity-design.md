@@ -76,7 +76,7 @@ wrong.
 
 Rotation must use the existing helpers in `geometry.js` (`rotateCell`,
 `rotateCorner`, `rotateVertex`). Edge ids (`H:x:y` / `V:x:y`) are rotated
-through the cells they border, so there is one source of rotation maths.
+through their two end vertices, so there is one source of rotation maths.
 
 ## 5. Identity rules
 
