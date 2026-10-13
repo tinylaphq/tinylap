@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLayout } from '@tinylap/track-format';
-import { prepareExport, importHtml } from '../js/storage.js';
+import { prepareExport, importHtml, carryTrack } from '../js/storage.js';
 import { buildLoop } from '../js/generate.js';
 import { stockL } from '../js/presets.js';
 
@@ -42,4 +42,24 @@ test('opening a file adopts its track, and re-exporting keeps it', () => {
   const { layout, html } = prepareExport(closed());
   const opened = importHtml(html);
   assert.equal(prepareExport(opened).layout.track.id, layout.track.id);
+});
+
+test('undo past an export, carried over, keeps the id when the shape is rebuilt', () => {
+  const before = closed();
+  const exported = prepareExport(before).layout;
+  const carried = carryTrack(before, exported);
+  assert.equal(prepareExport(carried).layout.track.id, exported.track.id);
+});
+
+test('carryTrack keeps the snapshot\'s own track', () => {
+  const exported = prepareExport(closed()).layout;
+  const other = prepareExport(createLayout({ pieces: buildLoop({ signature: 'RRRR', sides: [3, 5, 3, 5] }) })).layout;
+  assert.equal(carryTrack(exported, other), exported);
+});
+
+test('a carried track on a different shape issues a new id at the next export', () => {
+  const exported = prepareExport(closed()).layout;
+  const other = createLayout({ pieces: buildLoop({ signature: 'RRRR', sides: [3, 5, 3, 5] }) });
+  const carried = carryTrack(other, exported);
+  assert.notEqual(prepareExport(carried).layout.track.id, exported.track.id);
 });

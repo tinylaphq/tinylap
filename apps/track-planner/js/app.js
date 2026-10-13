@@ -6,7 +6,7 @@
 import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR, PIECES, MAT_MM, placedCells, placedPorts } from '@tinylap/track-format';
 import { drawLayout, drawGhost, drawMarquee, layoutToSvgString } from './render.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
-import { prepareExport, importHtml } from './storage.js';
+import { prepareExport, importHtml, carryTrack } from './storage.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
 import { loadLayout, saveLayout } from './session-store.js';
@@ -1287,7 +1287,7 @@ export function undo() {
                                // under an in-flight drag would corrupt it
   const previous = state.history.pop();
   if (previous) {
-    state.layout = previous;
+    state.layout = carryTrack(previous, state.layout);
     state.selection = [];
     // Any armed ghost/pending was computed against the layout that just
     // went away — reverting the layout invalidates both, or Space could

@@ -20,6 +20,14 @@ export function prepareExport(layout) {
   return { layout: settled, html: exportHtml(settled) };
 }
 
+// Undo restores a snapshot that may predate the last export. Carry the
+// current track over, so re-building the exported shape keeps its id;
+// assignTrack re-checks the shape at the next export, so a stale track is
+// never wrongly kept.
+export function carryTrack(previous, current) {
+  return previous.track || !current.track ? previous : { ...previous, track: current.track };
+}
+
 export function exportHtml(layout) {
   const { bbox, matCount, lapMm } = computeMetrics(layout);
   const bom = billOfMaterials(layout);
