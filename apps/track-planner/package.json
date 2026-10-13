@@ -7,6 +7,9 @@
   "files": ["index.html", "css", "js"],
   "scripts": {
     "test": "node --test 'test/**/*.test.js'",
-    "serve": "python3 serve.py 8000"
+    "dev": "node ../../tools/dev-server.js . 8000"
+  },
+  "dependencies": {
+    "palace-ui": "^0.10.0"
   }
 }

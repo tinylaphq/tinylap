@@ -1,6 +1,6 @@
 /* Circuit 30 Planner — app-specific layout on top of palace-ui.
  *
- * palace-ui is the design source of truth (vendor/palace-ui/SPEC.md). This
+ * palace-ui is the design source of truth (palace-ui's SPEC.md). This
  * file only adds what palace has no pattern for: a full-viewport three-pane
  * tool shell, the SVG track canvas, and the piece palette. Every colour,
  * space and border here comes from a --p-* token. No border-radius, no
@@ -9,13 +9,6 @@
  * Deliberate divergence: palace caps content at 640px, which suits document
  * pages. A drafting tool needs the full viewport, so the shell is full-bleed.
  */
-
-:root {
-  /* palace-ui is a light system with no dark-scheme block. Without this,
-     a browser set to dark renders UA widgets (number inputs, scrollbars)
-     dark against palace's white surfaces. */
-  color-scheme: light;
-}
 
 /* ── Shell ───────────────────────────────────────────────────────── */
 
@@ -180,17 +173,6 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 #shortcuts dt { white-space: nowrap; color: var(--p-text); }
 #shortcuts dd { margin: 0; color: var(--p-text-muted); }
 
-kbd {
-  display: inline-block;
-  padding: 1px 5px;
-  border: var(--p-border-thin) solid var(--p-text);
-  /* Hard offset shadow in accent — same shape as palace's, just coloured. */
-  box-shadow: 1px 1px 0 var(--p-accent-1);
-  background: var(--p-surface-inset);
-  font: 600 11px/1.5 var(--p-font-mono);
-  text-transform: uppercase;
-}
-
 /* ── Materials panel ─────────────────────────────────────────────── */
 
 #bom table { width: 100%; }
@@ -207,38 +189,6 @@ kbd {
 /* Sat flush against the ROOM line above it. Everything else in this rail
    is separated by --p-space-md; this was the one exception. */
 #recommendation { margin: var(--p-space-md) 0 0; }
-
-/* ── Dialogs ─────────────────────────────────────────────────────── */
-/* palace has no dialog pattern; these follow its card + border language. */
-
-dialog {
-  padding: var(--p-space-lg);
-  max-width: var(--p-container-narrow);
-  width: 100%;
-  background: var(--p-surface);
-  border: var(--p-border-width) solid var(--p-text);
-  box-shadow: var(--p-shadow-lg) var(--p-accent-2);
-  /* palace-ui's `*, *::before, *::after { margin: 0 }` reset (palace.css:94)
-     wipes out the UA stylesheet's `dialog { margin: auto }` — the rule
-     browsers use to centre a modal <dialog>. Without restoring it here every
-     dialog pins to the top-left corner instead of centring. Not redundant. */
-  margin: auto;
-}
-
-dialog::backdrop { background: var(--p-overlay); }
-dialog h2 { margin-bottom: var(--p-space-xs); }
-dialog .subtitle { margin-bottom: var(--p-space-lg); }
-dialog p { margin-bottom: var(--p-space-sm); }
-
-dialog menu {
-  display: flex;
-  gap: var(--p-space-sm);
-  padding: 0;
-  margin: var(--p-space-lg) 0 0;
-  list-style: none;
-}
-
-dialog menu .btn { flex: 1; }
 
 #inventory-form label { display: block; margin-bottom: var(--p-space-xs); }
 #inventory-form input { margin-bottom: var(--p-space-md); }

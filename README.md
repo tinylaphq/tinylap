@@ -5,7 +5,7 @@ pieces you own.
 
     pnpm install
     pnpm test                                    # every package
-    pnpm --filter @tinylap/track-planner serve   # then open http://localhost:8000
+    pnpm --filter @tinylap/track-planner dev     # then open http://localhost:8000
 
 The planner lives in `apps/track-planner/`.
 

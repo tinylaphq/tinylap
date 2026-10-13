@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { assemble } from '../assemble.js';
+
+const SHA = 'a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0';
+
+function fixture(indexHtml = '<head><base href="/"><link href="./css/a.css"></head>') {
+  const root = mkdtempSync(join(tmpdir(), 'assemble-'));
+  const app = join(root, 'app');
+  const pkg = join(root, 'pkg');
+  mkdirSync(join(app, 'css'), { recursive: true });
+  mkdirSync(join(app, 'test'), { recursive: true });
+  mkdirSync(join(app, 'node_modules', '@tinylap'), { recursive: true });
+  mkdirSync(join(pkg, 'test'), { recursive: true });
+  writeFileSync(join(app, 'package.json'), JSON.stringify({ files: ['index.html', 'css'], dependencies: { '@tinylap/fmt': 'workspace:*' } }));
+  writeFileSync(join(app, 'index.html'), indexHtml);
+  writeFileSync(join(app, 'css', 'a.css'), 'a{}');
+  writeFileSync(join(app, 'test', 'x.test.js'), '');
+  writeFileSync(join(pkg, 'package.json'), JSON.stringify({ exports: { '.': './index.js' } }));
+  writeFileSync(join(pkg, 'index.js'), 'export {};');
+  writeFileSync(join(pkg, 'test', 'y.test.js'), '');
+  symlinkSync(pkg, join(app, 'node_modules', '@tinylap', 'fmt'));
+  return { app, out: join(root, 'out') };
+}
+
+test('the page points at the versioned tree and everything is copied under it', () => {
+  const { app, out } = fixture();
+  assemble(app, out, SHA);
+  assert.match(readFileSync(join(out, 'index.html'), 'utf8'), new RegExp(`<base href="/v/${SHA}/">`));
+  assert.ok(existsSync(join(out, 'v', SHA, 'css', 'a.css')));
+  assert.ok(existsSync(join(out, 'v', SHA, 'pkg', 'fmt', 'index.js')));
+});
+
+test('tests and node_modules are not shipped', () => {
+  const { app, out } = fixture();
+  assemble(app, out, SHA);
+  assert.ok(!existsSync(join(out, 'v', SHA, 'test')));
+  assert.ok(!existsSync(join(out, 'v', SHA, 'pkg', 'fmt', 'test')));
+});
+
+test('a missing or malformed sha fails instead of serving /v//', () => {
+  for (const sha of ['', undefined, 'main', '../x', 'A1B2C3D']) {
+    const { app, out } = fixture();
+    assert.throws(() => assemble(app, out, sha), /sha/i, String(sha));
+  }
+});
+
+test('an index without exactly one <base href="/"> fails loudly', () => {
+  for (const html of ['<head></head>', '<base href="/"><base href="/">', '<base href="/app/">']) {
+    const { app, out } = fixture(html);
+    assert.throws(() => assemble(app, out, SHA), /base/i, html);
+  }
+});

@@ -877,7 +877,7 @@ document.querySelector('#presets-list').addEventListener('click', (e) => {
   if (!preset) return;
   commit((l) => { l.pieces = structuredClone(preset.pieces); });
   // A loaded preset invalidates anything computed against the previous
-  // layout — same clearing this file does on import (see loadFile below).
+  // layout — same clearing this file does when a file is opened (see loadFile below).
   state.selection = [];
   state.ghost = null;
   state.pending = null;
@@ -1101,7 +1101,7 @@ function renderSuggestionPage() {
   more.setAttribute('aria-label', label);
   more.title = label;
   // Say when a filter is narrowing, or the summary above ("300 sizes to
-  // choose from") and this line ("of 120") read as a contradiction with
+  // pick") and this line ("of 120") read as a contradiction with
   // nothing to explain the gap.
   const total = state.suggestions.results.length;
   const filtered = pool.length < total ? ` (filtered from ${total})` : '';

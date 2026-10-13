@@ -12,7 +12,13 @@ importers:
         specifier: ^2.11.7
         version: 2.11.7
 
-  apps/track-planner: {}
+  apps/track-planner:
+    dependencies:
+      palace-ui:
+        specifier: ^0.10.0
+        version: 0.10.0
+
+  tools: {}
 
 packages:
 
@@ -46,6 +52,9 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  palace-ui@0.10.0:
+    resolution: {integrity: sha512-l/b4R9dVvvkyPwgkL/W+FhBPlkabrZ6FdkiAUQ6MDDAT9Ev1OxK531xughryd1BihvHAMOFnuQ4BmCLnYmngJA==}
+
   turbo@2.11.7:
     resolution: {integrity: sha512-RhXHbqfvY6o3xt/zSHCwSNwLrZlXiqHzewi4eAj9PtZ1T1CqgMJ2yIDb7SKPTG9IikTm925mfzL6hldQVdyNWw==}
     hasBin: true
@@ -69,6 +78,8 @@ snapshots:
 
   '@turbo/windows-arm64@2.11.7':
     optional: true
+
+  palace-ui@0.10.0: {}
 
   turbo@2.11.7:
     optionalDependencies:

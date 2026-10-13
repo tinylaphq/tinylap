@@ -26,8 +26,19 @@ jobs:
       - if: github.event_name == 'push'
         run: pnpm turbo run test lint typecheck
 
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/track-planner/Dockerfile --build-arg GIT_SHA=${{ github.sha }} -t planner .
+      - run: docker run -d -p 8080:8080 planner && sleep 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node tools/smoke.js http://localhost:8080/
+
   deploy:
-    needs: [check]
+    needs: [check, smoke]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     concurrency:
@@ -49,9 +60,14 @@ jobs:
           fi
       - if: steps.changed.outputs.planner == 'true'
         uses: superfly/flyctl-actions/setup-flyctl@master
-      # Until Task 5 the image is built from the app folder alone.
+      # Build context is the repo root (the image needs packages and tools);
+      # the positional "." makes that explicit rather than relying on
+      # flyctl's default of the config file's folder.
       - if: steps.changed.outputs.planner == 'true'
-        working-directory: apps/track-planner
-        run: flyctl deploy --remote-only
+        run: >
+          flyctl deploy . --remote-only
+          --config apps/track-planner/fly.toml
+          --dockerfile apps/track-planner/Dockerfile
+          --build-arg GIT_SHA=${{ github.sha }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
