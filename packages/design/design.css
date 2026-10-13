@@ -1,0 +1,18 @@
+/* TinyLap design layer. Load after palace-ui's palace.css.
+ *
+ * palace-ui is the design system; this file only adds what TinyLap apps
+ * share and palace has no business knowing: the look of a race track.
+ * Generic improvements belong upstream in palace-ui, and single-app styling
+ * in that app's own CSS.
+ */
+
+:root {
+  /* The track surface: the dark canvas every TinyLap track is drawn on.
+     packages/track-format/svg.js repeats the mat and edge values for
+     standalone SVG exports, which cannot read CSS custom properties. */
+  --tl-track-bg: var(--p-dark);
+  --tl-track-mat: #262626;
+  --tl-track-mat-edge: #3a3a3a;
+  --tl-track-grid: #1f1f1f;
+  --tl-track-wall: var(--p-surface);
+}

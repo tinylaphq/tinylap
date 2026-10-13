@@ -1,0 +1,11 @@
+{
+  "name": "@tinylap/design",
+  "version": "0.1.0",
+  "description": "The TinyLap design layer on top of palace-ui.",
+  "license": "MPL-2.0",
+  "style": "design.css",
+  "exports": { "./design.css": "./design.css" },
+  "files": ["design.css"],
+  "dependencies": { "palace-ui": "^0.10.0" },
+  "scripts": { "test": "node -e \"process.exit(/--tl-track-mat:/.test(require('fs').readFileSync('design.css','utf8'))?0:1)\"" }
+}

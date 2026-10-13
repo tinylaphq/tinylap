@@ -110,6 +110,7 @@ export function layoutGeometry(layout) {
 // standalone export uses. `light` is for thumbnails, which sit on white
 // cards in the palette and preset gallery — dark-on-dark reads as mud at
 // 3rem, so those invert to palace's dark-on-light.
+// dark repeats @tinylap/design's --tl-track-* values; SVG exports cannot read CSS variables.
 const THEMES = {
   dark:  { mat: '#262626', matEdge: '#3a3a3a', wall: '#ffffff', bg: '#0a0a0a' },
   light: { mat: '#d9d9d9', matEdge: '#bdbdbd', wall: '#0a0a0a', bg: '#f7f7f7' },
