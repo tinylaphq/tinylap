@@ -23,7 +23,7 @@
 - **Commits:**
   - Conventional commit messages, made with `git commit -s` (DCO sign-off).
   - Author email `1009814+jostsg@users.noreply.github.com`. Never the gmail address: check `git config user.email` in every repo you commit to.
-  - End every commit message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+  - No AI attribution: never add `Co-Authored-By` trailers or "Generated with" lines to commits or pull requests.
 - **Branch:** all monorepo work happens on `feat/tinylap-monorepo`, created from `docs/tinylap-monorepo-spec`. Never commit to or push `main`.
 - **USER GATE steps** are public or irreversible: creating repos, publishing to npm, Fly deploys, making things public. Stop and ask the user. Do not run them yourself.
 - **Dependencies:** browser code may only use plain ES modules. Never add a dependency that needs a bundler.
@@ -132,7 +132,7 @@ Expected: no output.
 ```bash
 cd ~/repos/palace-ui && git add -A
 GIT_AUTHOR_DATE=2026-03-06T16:52:44+01:00 GIT_COMMITTER_DATE=2026-03-06T16:52:44+01:00 \
-  git commit -s -m "chore: initial commit" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  git commit -s -m "chore: initial commit"
 git tag v0.9.0
 git log --format='%ae %ce %ad %s'
 ```
@@ -285,8 +285,7 @@ Then run `python3 -m http.server 8123` in `~/repos/palace-ui`, open `http://loca
 
 ```bash
 git add -A && git commit -s -m "feat: self-host fonts, add dialog and kbd, set color-scheme" \
-  -m "Google Fonts sent visitors' IP addresses to Google. The dialog, kbd and color-scheme rules were written in an app because palace lacked them; they are generic, so they live here now." \
-  -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  -m "Google Fonts sent visitors' IP addresses to Google. The dialog, kbd and color-scheme rules were written in an app because palace lacked them; they are generic, so they live here now."
 git tag v0.10.0
 ```
 
@@ -494,8 +493,7 @@ Expected: more than 1.
 
 ```bash
 git add -A && git commit -s -m "build: move the planner into an apps/ workspace" \
-  -m "pnpm workspaces and Turborepo; the planner's files are moved, not changed." \
-  -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  -m "pnpm workspaces and Turborepo; the planner's files are moved, not changed."
 ```
 
 ---
@@ -1095,8 +1093,7 @@ Expected: the planner reports `tests 153`, `pass 153`. Tools: all pass.
 
 ```bash
 git add -A && git commit -s -m "build: serve versioned paths through an import map, palace-ui from npm" \
-  -m "Assets live under /v/<git-sha>/ and are immutable; only index.html revalidates. Fonts are self-hosted by palace-ui 0.10.0, so the page makes no third-party requests." \
-  -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  -m "Assets live under /v/<git-sha>/ and are immutable; only index.html revalidates. Fonts are self-hosted by palace-ui 0.10.0, so the page makes no third-party requests."
 ```
 
 - [ ] **Step 13: USER GATE: confirm the Fly build context**
@@ -1168,7 +1165,7 @@ Run: `pnpm --filter @tinylap/track-planner test`
 Expected: `tests 154`, `pass 154`. Commit this alone:
 
 ```bash
-git add apps/track-planner/test && git commit -s -m "test(storage): pin a pre-split export as a golden file" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git add apps/track-planner/test && git commit -s -m "test(storage): pin a pre-split export as a golden file"
 ```
 
 - [ ] **Step 2: Move the files**
@@ -1376,8 +1373,7 @@ Then rebuild the Docker image and run `node tools/smoke.js` as in Task 5 Step 10
 
 ```bash
 git add -A && git commit -s -m "refactor: extract @tinylap/track-format from the planner" \
-  -m "Geometry, model, data validation and SVG export move unchanged; the editor-only DOM drawing stays in the planner." \
-  -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  -m "Geometry, model, data validation and SVG export move unchanged; the editor-only DOM drawing stays in the planner."
 ```
 
 ---
@@ -1464,7 +1460,7 @@ Rebuild the image and run the smoke test. Expected: `exit 0`, including `pkg/des
 - [ ] **Step 4: Commit**
 
 ```bash
-git add -A && git commit -s -m "feat(design): add @tinylap/design with the shared track surface tokens" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git add -A && git commit -s -m "feat(design): add @tinylap/design with the shared track surface tokens"
 ```
 
 ---
@@ -1616,8 +1612,7 @@ Expected: all clean, and the test counts are unchanged.
 
 ```bash
 git add -A && git commit -s -m "build: type-check every package with tsc --checkJs" \
-  -m "track-format is strict, with its data model in types.d.ts; the planner starts non-strict. JSDoc only, no runtime change." \
-  -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  -m "track-format is strict, with its data model in types.d.ts; the planner starts non-strict. JSDoc only, no runtime change."
 ```
 
 ---
@@ -1793,8 +1788,7 @@ Expected: all green, compliant.
 
 ```bash
 git add -A && git commit -s -m "docs: license TinyLap share-alike and document how to contribute" \
-  -m "AGPL-3.0-or-later for apps and tools, MPL-2.0 for packages, CC-BY-SA-4.0 for docs; REUSE-compliant, DCO, trademark policy." \
-  -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  -m "AGPL-3.0-or-later for apps and tools, MPL-2.0 for packages, CC-BY-SA-4.0 for docs; REUSE-compliant, DCO, trademark policy."
 ```
 
 ---
@@ -1881,7 +1875,7 @@ The title goes through `env`, never interpolated into the script, so a crafted t
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A && git commit -s -m "build: lint code with ESLint and pull request titles with commitlint" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git add -A && git commit -s -m "build: lint code with ESLint and pull request titles with commitlint"
 ```
 
 ---
@@ -2008,8 +2002,7 @@ Expected: no `INVALID` lines.
 
 ```bash
 git add -A && git commit -s -m "build: release the shared packages with release-please" \
-  -m "A merged release pull request publishes to npm with trusted publishing and provenance; track-format ships generated declarations." \
-  -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+  -m "A merged release pull request publishes to npm with trusted publishing and provenance; track-format ships generated declarations."
 ```
 
 - [ ] **Step 5: Final verification of the whole branch**
