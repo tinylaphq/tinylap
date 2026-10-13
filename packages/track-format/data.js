@@ -4,8 +4,11 @@
 
 import { createLayout } from './model.js';
 import { PIECES } from './geometry.js';
+import { isTrack } from './identity.js';
 
-export const SUPPORTED_VERSION = 1;
+export const SUPPORTED_VERSION = 2;
+/** Every format version layoutFromData reads. Older ones are upgraded in memory. */
+export const SUPPORTED_VERSIONS = [1, 2];
 
 // Validate and rebuild a layout from plain data in the persisted shape.
 // Split out of importHtml so the session store validates by exactly the
@@ -15,10 +18,10 @@ export const SUPPORTED_VERSION = 1;
 // the renderer.
 /** @import { Layout, PlacedPiece, Room } from './types.js' */
 
-/** @param {{ version: unknown, room?: Room | null, pieces: PlacedPiece[] }} data Unvalidated, in the persisted shape. @returns {Layout} */
+/** @param {{ version: unknown, room?: Room | null, pieces: PlacedPiece[], track?: unknown }} data Unvalidated, in the persisted shape. @returns {Layout} */
 export function layoutFromData(data) {
 
-  if (data.version !== SUPPORTED_VERSION) {
+  if (!SUPPORTED_VERSIONS.includes(/** @type {number} */ (data.version))) {
     throw new Error(
       `This file was saved by a newer planner (version ${data.version}); this build reads version ${SUPPORTED_VERSION}.`,
     );
@@ -48,8 +51,34 @@ export function layoutFromData(data) {
     room = { w, h };
   }
 
-  return createLayout({
+  const layout = createLayout({
     room,
     pieces: data.pieces.map(({ type, x, y, rot }) => ({ type, x, y, rot })),
   });
+  // A damaged track block costs only a re-issued id, never a file that won't open.
+  if (isTrack(data.track)) layout.track = { id: data.track.id, shape: data.track.shape };
+  return layout;
+}
+
+export const LAYOUT_SCRIPT_ID = 'layout';
+
+const BLOCK = new RegExp(
+  `<script[^>]*id=["']${LAYOUT_SCRIPT_ID}["'][^>]*>([\\s\\S]*?)</script>`,
+  'i',
+);
+
+/** @param {string} html @returns {unknown} */
+export function extractLayoutJson(html) {
+  const match = BLOCK.exec(html);
+  if (!match) throw new Error('This file has no layout data in it.');
+  try {
+    return JSON.parse(match[1]);
+  } catch (cause) {
+    throw new Error('The layout data in this file is not valid JSON.', { cause });
+  }
+}
+
+/** @param {string} html @returns {Layout} */
+export function layoutFromHtml(html) {
+  return layoutFromData(/** @type {any} */ (extractLayoutJson(html)));
 }

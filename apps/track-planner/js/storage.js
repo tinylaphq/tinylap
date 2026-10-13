@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { layoutToSvgString } from './render.js';
-import { computeMetrics, layoutFromData, SUPPORTED_VERSION, MAT_MM } from '@tinylap/track-format';
+import { computeMetrics, layoutFromData, layoutFromHtml, extractLayoutJson, LAYOUT_SCRIPT_ID, SUPPORTED_VERSION, MAT_MM } from '@tinylap/track-format';
 import { billOfMaterials, PART_LABELS } from './inventory.js';
 
-export { layoutFromData, SUPPORTED_VERSION };
-
-export const LAYOUT_SCRIPT_ID = 'layout';
+export { layoutFromData, SUPPORTED_VERSION, extractLayoutJson, LAYOUT_SCRIPT_ID };
+// Kept under its planner name; the package calls it layoutFromHtml.
+export const importHtml = layoutFromHtml;
 
 const metres = (mats) => ((mats * MAT_MM) / 1000).toFixed(2);
 
@@ -75,23 +75,4 @@ ${JSON.stringify(layout, null, 2).replace(/</g, '\\u003c')}
 </script>
 </html>
 `;
-}
-
-const BLOCK = new RegExp(
-  `<script[^>]*id=["']${LAYOUT_SCRIPT_ID}["'][^>]*>([\\s\\S]*?)</script>`,
-  'i',
-);
-
-export function extractLayoutJson(html) {
-  const match = BLOCK.exec(html);
-  if (!match) throw new Error('This file has no layout data in it.');
-  try {
-    return JSON.parse(match[1]);
-  } catch (cause) {
-    throw new Error('The layout data in this file is not valid JSON.', { cause });
-  }
-}
-
-export function importHtml(html) {
-  return layoutFromData(extractLayoutJson(html));
 }

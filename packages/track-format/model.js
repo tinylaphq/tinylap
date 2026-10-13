@@ -9,7 +9,7 @@ import { placedCells, placedPorts, placedWalls, rotatedDef } from './geometry.js
 
 /** @param {Partial<Layout>} [overrides] @returns {Layout} */
 export function createLayout(overrides = {}) {
-  return { version: 1, unit: 'mat', room: null, pieces: [], ...overrides };
+  return { version: 2, unit: 'mat', room: null, pieces: [], ...overrides };
 }
 
 /** @param {Cell} cell @returns {string} */
