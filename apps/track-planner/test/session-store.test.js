@@ -48,6 +48,7 @@ test('a corrupt or hostile payload gives a blank canvas, never a throw', () => {
   // would otherwise reach the renderer through this door.
   assert.equal(parseLayout(JSON.stringify({ version: 1, pieces: [{ type: '__proto__', x: 0, y: 0, rot: 0 }] })), null);
   assert.equal(parseLayout(JSON.stringify({ version: 1, pieces: [{ type: 'straight', x: 0, y: 0, rot: 45 }] })), null);
+  // eslint-disable-next-line no-loss-of-precision -- deliberately non-finite: 1e999 overflows to Infinity
   assert.equal(parseLayout(JSON.stringify({ version: 1, pieces: [{ type: 'straight', x: 1e999, y: 0, rot: 0 }] })), null);
 });
 

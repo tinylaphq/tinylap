@@ -6,5 +6,5 @@
   "type": "module",
   "exports": { ".": "./index.js", "./types": { "types": "./types.d.ts" } },
   "files": ["*.js", "types.d.ts"],
-  "scripts": { "test": "node --test 'test/**/*.test.js'", "typecheck": "tsc -p tsconfig.json" }
+  "scripts": { "test": "node --test 'test/**/*.test.js'", "typecheck": "tsc -p tsconfig.json", "lint": "eslint ." }
 }

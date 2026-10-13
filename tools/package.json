@@ -3,5 +3,5 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
-  "scripts": { "test": "node --test 'test/**/*.test.js'", "typecheck": "tsc -p tsconfig.json" }
+  "scripts": { "test": "node --test 'test/**/*.test.js'", "typecheck": "tsc -p tsconfig.json", "lint": "eslint ." }
 }

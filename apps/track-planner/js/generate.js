@@ -14,7 +14,7 @@
 // "no parallel geometry maths" constraint and the parent spec's section 13.2
 // for what happens when that rule is broken.
 
-import { PIECES, PIECE_TYPES, ROTATIONS, placedCells, placedPorts } from '@tinylap/track-format';
+import { ROTATIONS, placedCells, placedPorts } from '@tinylap/track-format';
 import { createLayout, isClosedCircuit, openPorts, placeAgainst, cellKey, computeMetrics, enclosedInfields, unjoinedContacts } from '@tinylap/track-format';
 import { billOfMaterials, diffStock, emptyStock, MAT_PARTS, BARRIER_PARTS } from './inventory.js';
 

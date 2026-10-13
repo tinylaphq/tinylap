@@ -7,5 +7,5 @@
   "exports": { "./design.css": "./design.css" },
   "files": ["design.css"],
   "dependencies": { "palace-ui": "^0.10.0" },
-  "scripts": { "test": "node -e \"process.exit(/--tl-track-mat:/.test(require('fs').readFileSync('design.css','utf8'))?0:1)\"" }
+  "scripts": { "test": "node -e \"process.exit(/--tl-track-mat:/.test(require('fs').readFileSync('design.css','utf8'))?0:1)\"", "lint": "true" }
 }

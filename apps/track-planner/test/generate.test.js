@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { turnSignatures, outlineName, buildLoop, canonicalLayoutKey, generateLayouts, closes, groupByCharacter, outOfReach, scoreLayouts, hasCachedLayouts } from '../js/generate.js';
-import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields, unjoinedContacts, maxTrackDepth, subWidthNotches, boundaryEdges } from '@tinylap/track-format';
+import { createLayout, isClosedCircuit, findOverlaps, occupiedSet, enclosedInfields, unjoinedContacts, subWidthNotches, boundaryEdges } from '@tinylap/track-format';
 import { stockFromKits, billOfMaterials, diffStock } from '../js/inventory.js';
 import { stockL } from '../js/presets.js';
 
