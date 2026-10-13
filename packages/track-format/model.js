@@ -581,6 +581,21 @@ export function computeBarriers(layout) {
   return { counts, straightEdgeIds, arcs };
 }
 
+// Where the corner caps actually go: the same rule computeBarriers counts by,
+// returned as positions so the shape fingerprint can include them.
+/** @param {Layout} layout @returns {Cell[]} */
+export function capVertices(layout) {
+  const cells = occupiedSet(layout);
+  /** @type {Cell[]} */
+  const out = [];
+  for (const piece of layout.pieces) {
+    for (const wall of placedWalls(piece)) {
+      if (wall.kind === 'cap' && isConcaveVertex(cells, wall.vertex)) out.push(wall.vertex);
+    }
+  }
+  return out;
+}
+
 /** @param {Layout} layout @returns {Metrics} */
 export function computeMetrics(layout) {
   const cells = [...occupiedSet(layout)].map(parseCellKey);
