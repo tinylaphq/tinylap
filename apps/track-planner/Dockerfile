@@ -1,4 +1,5 @@
-# Built from the repository root: docker build -f apps/track-planner/Dockerfile .
+# Built from the repository root:
+#   docker build -f apps/track-planner/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEAD) .
 # The first stage only lays files out (tools/assemble.js); nothing is compiled.
 FROM node:24-alpine AS assemble
 RUN corepack enable
