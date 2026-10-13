@@ -1,0 +1,55 @@
+name: ci
+
+# Pull requests run the checks but never deploy. A push to main runs the same
+# checks and then deploys the planner, but only if the push touched it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # --affected compares against the base branch, which needs history.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - if: github.event_name == 'pull_request'
+        run: pnpm turbo run test lint typecheck --affected
+      - if: github.event_name == 'push'
+        run: pnpm turbo run test lint typecheck
+
+  deploy:
+    needs: [check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      # Two pushes in quick succession would otherwise race, and the loser
+      # could overwrite the newer image with an older one.
+      group: deploy-track-planner
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: changed
+        run: |
+          if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" \
+              | grep -qE '^(apps/track-planner|packages|tools)/|^pnpm-lock\.yaml$'; then
+            echo "planner=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.planner == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+      # Until Task 5 the image is built from the app folder alone.
+      - if: steps.changed.outputs.planner == 'true'
+        working-directory: apps/track-planner
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

@@ -1,0 +1,12 @@
+{
+  "name": "@tinylap/track-planner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "files": ["index.html", "css", "js"],
+  "scripts": {
+    "test": "node --test 'test/**/*.test.js'",
+    "serve": "python3 serve.py 8000"
+  }
+}
