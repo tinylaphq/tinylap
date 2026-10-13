@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { layoutToSvgString } from './render.js';
-import { computeMetrics, layoutFromData, layoutFromHtml, extractLayoutJson, LAYOUT_SCRIPT_ID, SUPPORTED_VERSION, MAT_MM } from '@tinylap/track-format';
+import { assignTrack, computeMetrics, layoutFromData, layoutFromHtml, extractLayoutJson, LAYOUT_SCRIPT_ID, SUPPORTED_VERSION, MAT_MM } from '@tinylap/track-format';
 import { billOfMaterials, PART_LABELS } from './inventory.js';
 
 export { layoutFromData, SUPPORTED_VERSION, extractLayoutJson, LAYOUT_SCRIPT_ID };
@@ -11,6 +11,14 @@ export { layoutFromData, SUPPORTED_VERSION, extractLayoutJson, LAYOUT_SCRIPT_ID 
 export const importHtml = layoutFromHtml;
 
 const metres = (mats) => ((mats * MAT_MM) / 1000).toFixed(2);
+
+// The track identity is settled when a layout leaves as a file. The caller
+// keeps the returned layout, so the next export compares against the id this
+// file carries; edits in between never touch it.
+export function prepareExport(layout) {
+  const settled = assignTrack(layout);
+  return { layout: settled, html: exportHtml(settled) };
+}
 
 export function exportHtml(layout) {
   const { bbox, matCount, lapMm } = computeMetrics(layout);

@@ -6,7 +6,7 @@
 import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR, PIECES, MAT_MM, placedCells, placedPorts } from '@tinylap/track-format';
 import { drawLayout, drawGhost, drawMarquee, layoutToSvgString } from './render.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
-import { exportHtml, importHtml } from './storage.js';
+import { prepareExport, importHtml } from './storage.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
 import { loadLayout, saveLayout } from './session-store.js';
@@ -1203,7 +1203,10 @@ document.querySelector('#suggestions-list').addEventListener('click', (e) => {
 // returns immediately without touching state. There is no conflict to
 // prevent, so no stopPropagation() is added.
 document.querySelector('#btn-save').addEventListener('click', () => {
-  const blob = new Blob([exportHtml(state.layout)], { type: 'text/html' });
+  const { layout, html } = prepareExport(state.layout);
+  state.layout = layout;
+  saveLayout(sessionStorage, state.layout);
+  const blob = new Blob([html], { type: 'text/html' });
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(blob),
     download: 'circuit30-layout.html',
