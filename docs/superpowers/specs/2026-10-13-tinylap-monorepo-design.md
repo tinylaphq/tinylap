@@ -62,7 +62,7 @@ tinylap/
 │  └─ design/                 @tinylap/design         MPL-2.0
 ├─ docs/                      existing specs and plans
 ├─ LICENSES/                  one full text per license used
-├─ LICENSE                    AGPL-3.0-or-later, with a note on per-folder licenses
+├─ LICENSE                    AGPL-3.0-or-later, unmodified (README.md notes per-folder licenses)
 ├─ CONTRIBUTING.md            DCO, how to run things
 ├─ TRADEMARKS.md
 ├─ pnpm-workspace.yaml
@@ -260,8 +260,9 @@ Mechanics:
   `license`.
 <!-- REUSE-IgnoreEnd -->
 - `reuse lint` (FSFE REUSE) runs in CI and fails on any file without a license.
-- The root `LICENSE` is AGPL-3.0-or-later, with a note naming the folders that
-  use other licenses.
+- The root `LICENSE` is the unmodified AGPL-3.0-or-later text, so GitHub
+  detects it. The note naming the folders that use other licenses lives in
+  `README.md`.
 - `TRADEMARKS.md`: use, modify and self-host freely; a public service run by
   someone else must use its own name.
 - `CONTRIBUTING.md` explains the DCO sign-off (`git commit -s`). The DCO GitHub

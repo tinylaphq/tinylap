@@ -1,6 +1,6 @@
 # TinyLap
 
-TinyLap is a suite of small, framework-free web tools for slot-car and Mini-Z
+TinyLap is a suite of small, framework-free web tools for Kyosho Mini-Z RC
 racing, built as plain ES modules on a shared design layer.
 
 - `apps/track-planner`: design Kyosho Mini-Z Grand Prix Circuit 30 layouts and

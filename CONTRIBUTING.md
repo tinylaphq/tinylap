@@ -28,7 +28,9 @@ checks it. Releases and changelogs are generated from these messages.
   modules.
 - **Types are JSDoc**, checked by `tsc --checkJs`. Shared types live in `.d.ts` files.
 - **Apps must not load modules lazily** (`import()`): an open tab would request
-  files from a deploy that no longer exists.
+  files from a deploy that no longer exists. Fonts are the exception: browsers
+  fetch them on first use, so after a deploy an open tab may fall back to a
+  system font until reload. That's harmless.
 - **No fragment links or other `<base>`-sensitive URLs** in app pages: assets
   are served from `/v/<sha>/`.
 
