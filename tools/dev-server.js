@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Serves an app from source under the same URL layout as production
 // (see serve-map.js), and refuses to let the browser cache anything:
 // Chrome happily reuses a cached ES module across reloads, which silently

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseKits, loadKits, saveKits, DEFAULT_KITS, KITS_STORAGE_KEY } from '../js/kits-store.js';

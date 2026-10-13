@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: MPL-2.0
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLayout } from '../model.js';

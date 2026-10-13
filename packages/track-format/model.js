@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: MPL-2.0
+
 import { placedCells, placedPorts, placedWalls, rotatedDef } from './geometry.js';
 
 /** @import { Dir, Corner, Rotation, Cell, PieceType, Port, ArcWall, PlacedPiece, Layout, Metrics, Barriers, BarrierCounts } from './types.js' */

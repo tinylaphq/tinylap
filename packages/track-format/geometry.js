@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: MPL-2.0
+
 // Kyosho Mini-Z Grand Prix Circuit 30 geometry.
 // Cells are [col, row] with row increasing downward, matching SVG.
 // Rotation is clockwise on screen: 0, 90, 180, 270.

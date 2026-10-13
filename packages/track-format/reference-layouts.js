@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: MPL-2.0
+
 // Reference layouts: hand-derived, verified against the model, and shared by
 // every app's tests. stockL is the layout printed in the 87033 manual.
 

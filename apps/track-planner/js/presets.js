@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { rectangularRing, stockL } from '@tinylap/track-format';
 
 // Re-exported: the planner's tests and the gallery reach them through here.

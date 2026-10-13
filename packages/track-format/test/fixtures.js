@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: MPL-2.0
+
 // Four R30 corners packed into a 4x4 block. rot 0 exits N and E, so each
 // corner is turned to face the two neighbours it must meet.
 export function fourCornerLoop() {

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: MPL-2.0
+
 import { placedCells } from './geometry.js';
 import { computeBarriers, computeMetrics, findOverlaps } from './model.js';
 

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // The browser resolves @tinylap/* through each app's import map; Node (the
 // tests) resolves it through pnpm links and package exports. This keeps the
 // two in agreement, and checks the rules the versioned deploy depends on.

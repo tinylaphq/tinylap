@@ -37,6 +37,12 @@ jobs:
           node-version: '24'
       - run: node tools/smoke.js http://localhost:8080/
 
+  reuse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: fsfe/reuse-action@v5
+
   deploy:
     needs: [check, smoke]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

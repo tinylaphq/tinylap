@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Lays an app out for production: /index.html points its <base> at
 // /v/<sha>/, and everything it loads lives under that path. A deploy changes
 // every asset URL at once, so assets can be cached forever and a visitor can

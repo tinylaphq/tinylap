@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // @ts-nocheck: DOM glue; typed incrementally later, see docs/superpowers/specs/2026-10-13-tinylap-monorepo-design.md §6
 import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR, PIECES, MAT_MM, placedCells, placedPorts } from '@tinylap/track-format';
 import { drawLayout, drawGhost, drawMarquee, layoutToSvgString } from './render.js';

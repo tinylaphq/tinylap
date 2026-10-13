@@ -253,10 +253,12 @@ spread while the apps stay fully AGPL.
 
 Mechanics:
 
+<!-- REUSE-IgnoreStart -->
 - Every source file carries an SPDX header, e.g.
   `// SPDX-License-Identifier: AGPL-3.0-or-later`.
 - Full texts live in `LICENSES/<SPDX-ID>.txt`. Each `package.json` declares its
   `license`.
+<!-- REUSE-IgnoreEnd -->
 - `reuse lint` (FSFE REUSE) runs in CI and fails on any file without a license.
 - The root `LICENSE` is AGPL-3.0-or-later, with a note naming the folders that
   use other licenses.

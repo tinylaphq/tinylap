@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // The URL space every TinyLap app is served under, in dev and in prod:
 //   /                 the app folder
 //   /pkg/<segment>/   one of the app's dependencies, by name without scope

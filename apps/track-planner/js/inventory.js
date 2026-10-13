@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { computeBarriers, computeMetrics } from '@tinylap/track-format';
 
 export const MAT_PARTS = ['square', 'quarterRound', 'arcLarge'];

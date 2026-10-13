@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { layoutToSvgString } from './render.js';
 import { computeMetrics, layoutFromData, SUPPORTED_VERSION, MAT_MM } from '@tinylap/track-format';
 import { billOfMaterials, PART_LABELS } from './inventory.js';

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Crawls a running deployment the way a browser would and fails on any
 // broken promise the versioned layout makes: the page revalidates, every
 // asset is immutable, and every URL the page can reach (stylesheets, fonts,

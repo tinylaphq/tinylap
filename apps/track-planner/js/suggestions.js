@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Turning generated layouts into the list the dialog shows: which shapes
 // are on offer, which of them the user asked for, and in what order.
 //

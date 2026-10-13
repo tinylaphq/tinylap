@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Layout generation for the Circuit 30 planner.
 //
 // Outlines are enumerated as turn signatures rather than by searching the

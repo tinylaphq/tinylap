@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // The work-in-progress layout, kept for the life of the tab.
 //
 // sessionStorage rather than localStorage on purpose: this is the thing

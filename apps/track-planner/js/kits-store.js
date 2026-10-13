@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // The owned inventory, persisted across reloads.
 //
 // It stays out of the exported layout file on purpose: the inventory is the
