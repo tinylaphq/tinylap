@@ -11,7 +11,7 @@ export type PieceType = 'straight' | 'cornerR30' | 'cornerR60';
 export interface Port { cells: Cell[]; dir: Dir }
 
 export interface CapWall { kind: 'cap'; vertex: Cell }
-export interface ArcWall { kind: 'arc' | 'arcLarge'; r: number; cell: Cell; corner: Corner; concave?: boolean }
+export interface ArcWall { kind: 'arc' | 'arcLarge'; r: number; cell: Cell; corner: Corner }
 export type Wall = CapWall | ArcWall;
 
 export interface MatCounts { square?: number; quarterRound?: number; arcLarge?: number }

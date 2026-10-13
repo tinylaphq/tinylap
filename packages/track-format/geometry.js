@@ -95,9 +95,10 @@ export const PIECES = {
       { cells: [[0, 1], [0, 2]], dir: 'W' },
     ],
     walls: [
-      // Inside: the kit's sweep, hugging the gap. Concave — it curves
-      // toward the corner, not away from it.
-      { kind: 'arcLarge', r: 1, cell: [0, 0], corner: 'SE', concave: true },
+      // Inside: the kit's large sweep. An ordinary quarter-circle arc centred
+      // on the turn's centre, concentric with the corridor's centreline and
+      // tangent to the adjoining straights.
+      { kind: 'arcLarge', r: 1, cell: [0, 0], corner: 'SE' },
       // Outside: an ordinary quarter-round from the base set, as on any
       // other corner. The kit supplies nothing for this edge.
       { kind: 'arc', r: 1, cell: [2, 2], corner: 'SE' },
