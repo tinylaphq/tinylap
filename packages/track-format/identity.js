@@ -6,7 +6,7 @@
 // docs/superpowers/specs/2026-10-13-track-identity-design.md.
 
 import { rotateCell, rotateCorner, rotateVertex } from './geometry.js';
-import { isClosedCircuit, occupiedSet, parseCellKey, wallCounts, computeBarriers, capVertices } from './model.js';
+import { isClosedCircuit, isSingleLoop, occupiedSet, parseCellKey, wallCounts, computeBarriers, capVertices } from './model.js';
 
 /** @import { Track, Direction, Layout, Cell } from './types.js' */
 
@@ -43,7 +43,7 @@ function edgeKey(a, b) {
 // because a mirrored layout turns the other way and is a different track.
 /** @param {Layout} layout @returns {string | null} */
 export function shapeOf(layout) {
-  if (!isClosedCircuit(layout)) return null;
+  if (!isClosedCircuit(layout) || !isSingleLoop(layout)) return null;
   const cells = [...occupiedSet(layout)].map(parseCellKey);
   const edges = [...wallCounts(layout)].filter(([, n]) => n > 0).map(([id, n]) => ({ ends: edgeEnds(id), n }));
   const { arcs } = computeBarriers(layout);

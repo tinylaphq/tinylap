@@ -166,3 +166,13 @@ test('leaderboard keys split by direction', () => {
     assert.throws(() => leaderboardKey(track, bad), /direction/i, String(bad));
   }
 });
+
+test('two touching rings are not one loop', () => {
+  const a = rectangularRing();
+  const dx = Math.max(...a.flatMap((p) => placedCells(p).map((c) => c[0]))) + 1;
+  const b = rectangularRing().map((p) => ({ ...p, x: p.x + dx }));
+  const layout = createLayout({ pieces: [...a, ...b] });
+  assert.equal(isClosedCircuit(layout), true);
+  assert.equal(shapeOf(layout), null);
+  assert.equal(assignTrack(layout).track, undefined);
+});
