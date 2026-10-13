@@ -2,11 +2,13 @@
   "name": "tinylap",
   "private": true,
   "type": "module",
+  "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.34.7",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
+    "dev": "pnpm --filter @tinylap/track-planner dev",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
