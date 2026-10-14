@@ -22,7 +22,7 @@
   },
   "files": [
     "*.js",
-    "*.json",
+    "layout.schema.json",
     "types.d.ts",
     "dist"
   ],
