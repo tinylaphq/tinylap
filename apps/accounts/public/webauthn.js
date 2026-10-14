@@ -110,6 +110,17 @@ export function authorizeUrl() {
 }
 
 /**
+ * Where to go after signing in or up when no app sent the person here:
+ * the `next` query parameter, if it is one of TinyLap's own pages (an
+ * invite or a club). Anything else is ignored, so a link cannot send
+ * someone off-site.
+ */
+export function nextPath() {
+  const next = new URLSearchParams(location.search).get('next') ?? '';
+  return /^\/(invite\/[A-Za-z0-9_-]+|clubs(\/[A-Za-z0-9_-]+)?)$/.test(next) ? next : null;
+}
+
+/**
  * Shows a message in a status line: kind is 'error', 'success', 'info' or ''.
  * @param {HTMLElement} el
  * @param {string} text

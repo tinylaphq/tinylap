@@ -135,3 +135,194 @@ input[type="text"].accounts-mono {
 .accounts [hidden] {
   display: none;
 }
+
+/* ── Clubs (/clubs, /clubs/:id, /invite/:token) ─────────────────────────
+ * Palace's 640px container. Workspaces and members are rows with a 2px
+ * frame; the workspace rows take palace's pink/purple/cyan list rotation as
+ * a thick left edge, like a lane colour. */
+
+.accounts-wide .accounts-links {
+  list-style: none;
+  padding: 0;
+  margin-top: var(--p-space-lg);
+}
+
+.accounts-wide .accounts-links li {
+  font-size: 13px;
+  color: var(--p-text-muted);
+}
+
+.accounts-back {
+  margin-bottom: var(--p-space-lg);
+  font-size: 13px;
+}
+
+.accounts .accounts-list {
+  display: grid;
+  gap: var(--p-space-sm);
+  list-style: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+
+.accounts .accounts-list > li {
+  margin: 0;
+}
+
+.accounts-workspace,
+.accounts-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--p-space-sm) var(--p-space-md);
+  padding: 12px var(--p-space-md);
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text);
+}
+
+.accounts-workspace {
+  border-left-width: 8px;
+}
+
+.accounts-workspace:nth-child(3n+1) { border-left-color: var(--p-accent-1); }
+.accounts-workspace:nth-child(3n+2) { border-left-color: var(--p-accent-2); }
+.accounts-workspace:nth-child(3n+3) { border-left-color: var(--p-accent-3); }
+
+.accounts-workspace-name,
+.accounts-row-main {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.accounts-workspace-meta,
+.accounts-row-sub,
+.accounts-you {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--p-text-muted);
+}
+
+.accounts-row-sub {
+  display: block;
+}
+
+.accounts-row-main time {
+  font-weight: 700;
+}
+
+.accounts-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--p-space-sm);
+}
+
+/* Roles: the owner's tag is solid, an admin's carries the purple. */
+.accounts-role-owner {
+  color: #fff;
+  background: var(--p-dark);
+  border-color: var(--p-dark);
+}
+
+.accounts-role-admin {
+  border-color: var(--p-accent-2);
+  color: var(--p-accent-2);
+  background: var(--p-surface);
+}
+
+.accounts-count {
+  color: var(--p-text-faint);
+  font-weight: 400;
+}
+
+.accounts-subhead {
+  font-size: 15px;
+  margin-bottom: 0;
+}
+
+.accounts-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--p-space-md) var(--p-space-lg);
+}
+
+.accounts-field label {
+  display: block;
+}
+
+.accounts select {
+  padding: 10px 12px;
+  border: var(--p-border-width) solid var(--p-text);
+  border-radius: var(--p-radius);
+  font-family: var(--p-font);
+  font-size: 1rem;
+  background: var(--p-surface);
+  color: var(--p-text);
+  max-width: 100%;
+  transition: var(--p-transition);
+}
+
+.accounts select:focus-visible {
+  outline: none;
+  border-color: var(--p-accent-2);
+  box-shadow: var(--p-shadow-md) var(--p-accent-2);
+}
+
+.accounts select:disabled {
+  background: var(--p-disabled-bg);
+  color: var(--p-disabled-text);
+  border-color: var(--p-disabled-border);
+}
+
+/* The new invite link, shown once: palace's dark reveal. */
+.accounts-reveal:focus {
+  outline: none;
+  box-shadow: var(--p-shadow-lg) var(--p-accent-3);
+}
+
+.accounts-reveal-note {
+  font-weight: 700;
+  color: var(--p-accent-3);
+  margin-bottom: 10px;
+}
+
+.accounts-reveal-meta {
+  font-size: 13px;
+  color: var(--p-code-text);
+  margin-bottom: 12px;
+}
+
+.accounts-reveal .status {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+/* The confirm dialog for remove, transfer, delete and leave. */
+.accounts-dialog {
+  width: min(420px, calc(100vw - 32px));
+  margin: auto;
+  color: var(--p-text);
+  box-shadow: var(--p-shadow-lg) var(--p-error);
+}
+
+.accounts-dialog::backdrop {
+  background: var(--p-overlay);
+}
+
+.accounts-dialog p {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.accounts-dialog .accounts-actions {
+  justify-content: flex-end;
+}
+
+/* A club's name is a link only as wide as its text; its role tag sits right. */
+a.accounts-workspace-name {
+  flex: 0 1 auto;
+  margin-right: auto;
+}

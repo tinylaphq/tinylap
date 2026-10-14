@@ -19,6 +19,8 @@ export type Action =
 export interface WorkspaceClaim {
   id: string;
   role: Role;
+  /** The workspace's display name, as accounts issues it. */
+  name?: string;
 }
 
 export interface AccessClaims {
@@ -39,7 +41,8 @@ export function verifyAccessToken(
   }
 ): Promise<AccessClaims>;
 
-export function can(claims: AccessClaims, workspaceId: string, action: Action): boolean;
+/** Takes verified claims, or any `{ workspaces }` (accounts passes live memberships). */
+export function can(claims: Pick<AccessClaims, 'workspaces'>, workspaceId: string, action: Action): boolean;
 
 export const ROLES: readonly Role[];
 export const ACTIONS: readonly Action[];

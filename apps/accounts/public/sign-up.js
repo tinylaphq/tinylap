@@ -4,7 +4,7 @@
 
 // /sign-up: display name, passkey (which creates the account and signs in),
 // then the recovery codes, shown once. Continuing needs "I've saved them".
-import { api, authorizeUrl, onSubmit, PageError, registerPasskey, show, stepTo } from './webauthn.js';
+import { api, authorizeUrl, nextPath, onSubmit, PageError, registerPasskey, show, stepTo } from './webauthn.js';
 
 const $ = (id) => /** @type {any} */ (document.getElementById(id));
 
@@ -75,7 +75,7 @@ codesForm.addEventListener('submit', (event) => {
   if (!$('saved').checked) return;
   codes = [];
   $('code-list').replaceChildren();
-  const next = authorizeUrl();
+  const next = authorizeUrl() ?? nextPath();
   if (next) {
     location.assign(next);
     return;

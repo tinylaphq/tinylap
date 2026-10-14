@@ -19,9 +19,11 @@ export const escapeHtml = (text) =>
 export const carry = (url) => (url.search.length > 1 ? url.search : '');
 
 /**
- * @param {{ title: string, heading?: string, lede?: string, body: string, script?: string, data?: Record<string, string> }} page
+ * `wide` pages (clubs) use palace's 640px container instead of the 420px
+ * auth column.
+ * @param {{ title: string, heading?: string, lede?: string, body: string, script?: string, data?: Record<string, string>, wide?: boolean }} page
  */
-export function layout({ title, heading = title, lede = '', body, script, data = {} }) {
+export function layout({ title, heading = title, lede = '', body, script, data = {}, wide = false }) {
   const attrs = Object.entries(data).map(([k, v]) => ` data-${k}="${escapeHtml(v)}"`).join('');
   return `<!doctype html>
 <html lang="en">
@@ -36,7 +38,7 @@ export function layout({ title, heading = title, lede = '', body, script, data =
 <link rel="icon" href="/public/mark.svg" type="image/svg+xml">
 ${script ? `<script type="module" src="/public/${script}"></script>\n` : ''}</head>
 <body${attrs}>
-<main class="container-narrow page-header accounts">
+<main class="${wide ? 'container accounts-wide' : 'container-narrow'} page-header accounts">
 <p class="brand-lockup accounts-brand"><img src="/public/mark.svg" alt="" width="32" height="32"><span class="brand">TinyLap</span></p>
 <h1>${escapeHtml(heading)}</h1>
 ${lede ? `<p class="subtitle">${lede}</p>\n` : ''}${body}

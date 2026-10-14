@@ -14,6 +14,7 @@ import { jwt } from 'better-auth/plugins';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { passkey } from '@better-auth/passkey';
 import { spendRecoveryCode } from './recovery.js';
+import { createPersonalWorkspace, listMemberships } from './workspaces.js';
 
 const DAY = 24 * 60 * 60;
 
@@ -26,20 +27,6 @@ export function displayNameOf(value) {
   const name = value.normalize('NFC').trim().replace(/\s+/g, ' ');
   // eslint-disable-next-line no-control-regex
   return name.length >= 1 && [...name].length <= 40 && !/[\u0000-\u001f\u007f]/.test(name) ? name : null;
-}
-
-/**
- * The personal workspace every user gets at sign-up (spec §4), with the user
- * as its owner. Task 4 moves this into workspaces.js.
- * @param {import('node:sqlite').DatabaseSync} db
- * @param {string} userId
- * @param {string} name
- */
-export function createPersonalWorkspace(db, userId, name) {
-  const id = randomBytes(12).toString('base64url');
-  db.prepare("INSERT INTO workspace (id, kind, name, created_at) VALUES (?, 'personal', ?, ?)").run(id, name, new Date().toISOString());
-  db.prepare("INSERT INTO membership (workspace_id, user_id, role) VALUES (?, ?, 'owner')").run(id, userId);
-  return id;
 }
 
 const refuse = (message) => new APIError('BAD_REQUEST', { message });
@@ -203,8 +190,11 @@ export function authOptions(config, db = null) {
         resourceSeedMode: 'overwrite',
         enforcePerClientResources: true,
         storeClientSecret: { hash: hashClientSecret },
-        // Task 4 fills this from the user's memberships.
-        customAccessTokenClaims: () => ({ workspaces: [] }),
+        // Every workspace the user is in, read live at each issuance, so
+        // a refresh picks up role changes (spec §3).
+        customAccessTokenClaims: ({ user }) => ({
+          workspaces: user && db ? listMemberships(db, user.id).map(({ id, role, name }) => ({ id, role, name })) : [],
+        }),
       }),
       passkeyPlugin(config, db),
       recoveryPlugin(db),

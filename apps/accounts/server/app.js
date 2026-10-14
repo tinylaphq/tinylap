@@ -5,20 +5,27 @@
 // The request handler: TinyLap's pages, styles and scripts first, then
 // everything else to Better Auth at the root, so the issuer is the origin.
 // Security headers go on every response, whoever writes it.
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isAPIError } from 'better-auth/api';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
-import { clientBucket, rateLimiter } from '@tinylap/auth';
+import { can, clientBucket, rateLimiter } from '@tinylap/auth';
 import { packageRoots, within } from '../../../tools/serve-map.js';
 import { createAuth, authOptions, seedClients } from './auth.js';
 import { openDb } from './db.js';
 import { createRecoveryCodes, lookupIdOf } from './recovery.js';
+import { handleApi } from './api.js';
+import { readDeletions } from './deletions.js';
+import { claimsOf, inspectInvite, listInvites, listMembers, listMemberships, WorkspaceError } from './workspaces.js';
 import { escapeHtml, layout } from './pages/layout.js';
 import { signInPage } from './pages/sign-in.js';
 import { signUpPage } from './pages/sign-up.js';
 import { recoverPage } from './pages/recover.js';
+import { clubsPage } from './pages/clubs.js';
+import { clubPage } from './pages/club.js';
+import { invitePage } from './pages/invite.js';
 
 const APP_DIR = fileURLToPath(new URL('..', import.meta.url));
 
@@ -45,7 +52,7 @@ const TYPES = {
 const isFile = (path) => stat(path).then((s) => s.isFile(), () => false);
 
 // Spec §9: per client (IPv6 per /64), an hour each.
-const LIMITS = { signUp: 10, signIn: 30, recovery: 10, recoveryLookup: 5 };
+const LIMITS = { signUp: 10, signIn: 30, recovery: 10, recoveryLookup: 5, invite: 20 };
 
 // What a recovery session may still do (spec §6): add a passkey, manage its
 // recovery codes, see the recovery page, or sign out. Everything else,
@@ -64,6 +71,8 @@ const PROBLEMS = {
   unauthorized: { status: 401, title: 'Sign in first' },
   'recovery-only': { status: 403, title: 'Add a passkey first' },
   'cross-site': { status: 403, title: 'Cross-site request refused' },
+  'not-found': { status: 404, title: 'Not found' },
+  'method-not-allowed': { status: 405, title: 'Method not allowed' },
   'rate-limited': { status: 429, title: 'Too many requests' },
 };
 
@@ -78,6 +87,16 @@ const errorPage = (url) => layout({
   <p class="status status-error" role="alert"><code>${escapeHtml(url.searchParams.get('error') ?? 'unknown_error')}</code></p>
   <p>${escapeHtml(url.searchParams.get('error_description') ?? '')}</p>
   <p><a href="/sign-in">Back to sign-in</a></p>
+</div>`,
+});
+
+/** A signed-in page's 404: a club that does not exist, or not for you. */
+const notFoundPage = () => layout({
+  title: 'Not found',
+  body: `
+<div class="card-static stack-md">
+  <p>There is no such club, or you are not a member of it.</p>
+  <p><a href="/clubs">Your clubs</a></p>
 </div>`,
 });
 
@@ -100,15 +119,26 @@ function send(req, res, status, headers, body) {
 const html = (req, res, body, status = 200) =>
   send(req, res, status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, 'Cache-Control': 'no-store' }, body);
 
-const json = (req, res, status, value, headers = {}) =>
-  send(req, res, status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }, JSON.stringify(value));
+const json = (req, res, status, value, headers = {}) => (status === 204
+  ? send(req, res, 204, { 'Cache-Control': 'no-store', ...headers }, undefined)
+  : send(req, res, status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }, JSON.stringify(value)));
 
 /** RFC 9457 Problem Details, as the planner sends them. */
 function problem(req, res, issuer, name, detail, headers = {}) {
   const { status, title } = PROBLEMS[name];
-  send(req, res, status, { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store', ...headers },
-    JSON.stringify({ type: `${issuer}/problems/${name}`, title, status, detail }));
+  problemBody(req, res, { type: `${issuer}/problems/${name}`, title, status, detail }, headers);
 }
+
+/** @param {{ type: string, title: string, status: number, detail: string }} body */
+function problemBody(req, res, body, headers = {}) {
+  send(req, res, body.status, { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store', ...headers }, JSON.stringify(body));
+}
+
+/** Where a signed-out visitor to a signed-in page goes: sign-in, then back. */
+const toSignIn = (req, res, pathname) =>
+  send(req, res, 303, { Location: `/sign-in?next=${encodeURIComponent(pathname)}`, 'Cache-Control': 'no-store' }, '');
+
+const sha256 = (text) => createHash('sha256').update(text).digest();
 
 /** A small JSON body, or undefined if it is missing, too big or not JSON. */
 async function readJson(req, max = 4096) {
@@ -173,6 +203,57 @@ export async function createAccounts(config) {
     const value = config.clientIpHeader && req.headers[config.clientIpHeader];
     return clientBucket(typeof value === 'string' && value ? value : req.socket.remoteAddress ?? 'unknown');
   };
+
+  // The deletions feed's consumers (spec §7), compared as SHA-256 digests in
+  // constant time: neither a token's content nor its length leaks.
+  const feedDigests = config.feedTokens.map(sha256);
+  const feedAllowed = (req) => {
+    const match = /^Bearer ([^\s]+)$/.exec(req.headers.authorization ?? '');
+    if (!match) return false;
+    const given = sha256(match[1]);
+    let ok = false;
+    for (const digest of feedDigests) ok = timingSafeEqual(given, digest) || ok;
+    return ok;
+  };
+
+  /** GET /deletions?after=<seq>, bearer-token authenticated. */
+  function deletions(req, res, url) {
+    if (!feedAllowed(req)) return problem(req, res, issuer, 'unauthorized', 'Send a feed token as Authorization: Bearer <token>.', { 'WWW-Authenticate': 'Bearer realm="deletions"' });
+    const after = url.searchParams.get('after') ?? '0';
+    if (!/^\d{1,15}$/.test(after)) return problem(req, res, issuer, 'bad-request', 'after must be a whole number, the last seq you processed.');
+    return json(req, res, 200, readDeletions(db, Number(after)));
+  }
+
+  /** The signed-in pages: /clubs, /clubs/:id, /invite/:token. Null if none of them. */
+  function page(req, res, pathname, session) {
+    const invite = /^\/invite\/([^/]+)$/.exec(pathname);
+    if (invite) {
+      const found = inspectInvite(db, invite[1]);
+      const member = Boolean(session && found && listMemberships(db, session.user.id).some((w) => w.id === found.workspace.id));
+      const status = !found ? 404 : found.problem ? 410 : 200;
+      return html(req, res, invitePage({ token: invite[1], found, user: session && { name: session.user.name }, member }), status);
+    }
+    if (pathname === '/clubs') {
+      if (!session) return toSignIn(req, res, pathname);
+      return html(req, res, clubsPage({ user: session.user, workspaces: listMemberships(db, session.user.id) }));
+    }
+    const club = /^\/clubs\/([A-Za-z0-9_-]+)$/.exec(pathname);
+    if (club) {
+      if (!session) return toSignIn(req, res, pathname);
+      const userId = session.user.id;
+      const workspace = listMemberships(db, userId).find((w) => w.id === club[1] && w.kind === 'club');
+      if (!workspace) return html(req, res, notFoundPage(), 404);
+      const claims = claimsOf(db, userId);
+      try {
+        const invites = can(claims, workspace.id, 'invite.manage') ? listInvites(db, userId, workspace.id) : null;
+        return html(req, res, clubPage({ user: session.user, claims, workspace, members: listMembers(db, userId, workspace.id), invites }));
+      } catch (error) {
+        if (error instanceof WorkspaceError) return html(req, res, notFoundPage(), 404);
+        throw error;
+      }
+    }
+    return null;
+  }
 
   /** True if the limiter let it through; otherwise the 429 has been sent. */
   const allow = (req, res, limiter, key) => {
@@ -243,17 +324,28 @@ export async function createAccounts(config) {
       return problem(req, res, issuer, 'recovery-only', 'You signed in with a recovery code. Add a passkey at /recover first.');
     }
 
+    if (pathname.startsWith('/api/')) {
+      return handleApi(req, pathname, {
+        db,
+        issuer,
+        session,
+        json: (status, value, headers) => json(req, res, status, value, headers),
+        problem: (name, detail, headers) => problem(req, res, issuer, name, detail, headers),
+        problemBody: (body) => problemBody(req, res, body),
+        readJson: () => readJson(req),
+        sameOrigin: sameOrigin(req),
+        allowRedeem: () => allow(req, res, 'invite', clientOf(req)),
+      });
+    }
+
     if (readOnly) {
+      if (pathname === '/deletions') return deletions(req, res, url);
+      if (page(req, res, pathname, session) !== null) return;
       if (pathname === '/sign-in') return html(req, res, signInPage(url));
       if (pathname === '/sign-up') return html(req, res, signUpPage(url, session && { name: session.user.name }));
       if (pathname === '/recover') return html(req, res, recoverPage(url, session?.session.recovery ? { name: session.user.name } : null));
       if (pathname === '/consent') return html(req, res, consentPage());
       if (pathname === '/error') return html(req, res, errorPage(url));
-      // A stub of the account API (Task 5), to show the recovery restriction.
-      if (pathname === '/api/me') {
-        if (!session) return problem(req, res, issuer, 'unauthorized', 'Sign in first.');
-        return json(req, res, 200, { id: session.user.id, name: session.user.name });
-      }
       if (pathname === '/passkey/generate-register-options' && !allow(req, res, 'signUp', clientOf(req))) return;
       if (pathname === '/passkey/generate-authenticate-options' && !allow(req, res, 'signIn', clientOf(req))) return;
     } else if (req.method === 'POST') {
