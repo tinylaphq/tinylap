@@ -4,7 +4,9 @@
 
 // The URL space every TinyLap app is served under, in dev and in prod:
 //   /                 the app folder
-//   /pkg/<segment>/   one of the app's dependencies, by name without scope
+//   /pkg/<segment>/   one of the app's dependencies, by name without scope,
+//                     unless its package.json says "tinylap": { "serve": false }
+//                     (server-only code, such as @tinylap/auth)
 // Shared by the dev server and the assemble step so the two cannot disagree.
 import { readFileSync, realpathSync } from 'node:fs';
 import { join, normalize, resolve, sep } from 'node:path';
@@ -19,7 +21,9 @@ export function packageRoots(appDir) {
   const { dependencies = {} } = readJson(join(appDir, 'package.json'));
   const roots = new Map();
   for (const name of Object.keys(dependencies)) {
-    roots.set(packageSegment(name), realpathSync(join(appDir, 'node_modules', ...name.split('/'))));
+    const root = realpathSync(join(appDir, 'node_modules', ...name.split('/')));
+    if (readJson(join(root, 'package.json')).tinylap?.serve === false) continue;
+    roots.set(packageSegment(name), root);
   }
   return roots;
 }

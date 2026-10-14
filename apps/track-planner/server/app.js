@@ -7,7 +7,7 @@
 // once: security headers on everything, CORS and the service-desc link on
 // the API, Problem Details for every API error.
 import { problem } from './responses.js';
-import { rateLimiter } from './rate-limit.js';
+import { rateLimiter } from '@tinylap/auth';
 import { staticFiles } from './static.js';
 import { layoutRoutes } from './layouts.js';
 import { discoveryRoutes } from './discovery.js';

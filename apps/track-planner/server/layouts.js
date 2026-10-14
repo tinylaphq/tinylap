@@ -8,7 +8,7 @@ import { exportHtml } from '../js/storage.js';
 import { problem, json, html } from './responses.js';
 import { prefersHtml, mediaType, matchesEtag } from './negotiate.js';
 import { shapePage } from './pages.js';
-import { clientBucket } from './rate-limit.js';
+import { clientBucket } from '@tinylap/auth';
 
 const MAX_BODY = 512 * 1024;
 const MAX_LAYOUT = 64 * 1024;

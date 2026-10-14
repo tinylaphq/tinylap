@@ -4,3 +4,4 @@
 
 export { verifyAccessToken, AuthError } from './verify.js';
 export { can, ACTIONS, ROLES } from './permissions.js';
+export { clientBucket, rateLimiter } from './ratelimit.js';

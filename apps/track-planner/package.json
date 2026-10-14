@@ -17,6 +17,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@tinylap/auth": "workspace:*",
     "@tinylap/design": "workspace:*",
     "@tinylap/track-format": "workspace:*",
     "palace-ui": "^0.10.0"

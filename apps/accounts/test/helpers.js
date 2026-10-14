@@ -17,16 +17,17 @@ export const PLANNER_CLIENT_SECRET = 's3cret-planner-test';
 /**
  * Starts accounts with TINYLAP_DEV=1, an in-memory database and one trusted
  * confidential client, `planner-test`, whose redirect URI and resource are
- * on `plannerPort`.
- * @param {{ plannerPort?: number, env?: Record<string, string> }} [overrides]
+ * on `plannerPort`. `hostname` names the issuer: browser tests need
+ * `localhost`, because a WebAuthn RP ID can't be an IP address.
+ * @param {{ plannerPort?: number, hostname?: string, env?: Record<string, string> }} [overrides]
  */
-export async function startAccounts({ plannerPort = 9, env = {} } = {}) {
+export async function startAccounts({ plannerPort = 9, hostname = '127.0.0.1', env = {} } = {}) {
   /** @type {(req: any, res: any) => void} */
   let handler = (_req, res) => res.writeHead(503).end();
   const server = createServer((req, res) => handler(req, res));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
   const address = /** @type {import('node:net').AddressInfo} */ (server.address());
-  const issuer = `http://127.0.0.1:${address.port}`;
+  const issuer = `http://${hostname}:${address.port}`;
   const planner = `http://127.0.0.1:${plannerPort}`;
   const client = {
     clientId: PLANNER_CLIENT_ID,
@@ -90,20 +91,21 @@ export class Jar {
 }
 
 /**
- * Creates a user the way sign-up will (Task 3): a display name and the
+ * Creates a user the way passkey sign-up does: a display name and the
  * placeholder email. TEST-ONLY: passkey sign-up replaces this in real use.
  * @param {any} auth
  * @param {string} name
  */
 export async function createTestUser(auth, name) {
   const ctx = await auth.$context;
-  const id = randomBytes(12).toString('base64url');
+  const id = randomBytes(16).toString('hex');
   return ctx.internalAdapter.createUser({ id, name, email: `${id}@users.invalid`, emailVerified: false });
 }
 
 /**
  * TEST-ONLY. Mints a signed Better Auth session cookie for `userId` through
- * the internal adapter, standing in for a passkey sign-in until Task 3. Never
+ * the internal adapter, standing in for a passkey sign-in, which needs a real
+ * browser (test/browser/passkeys.test.js drives that, OIDC login included). Never
  * import this from server code. Returns the jar it put the cookie in.
  * @param {any} auth
  * @param {string} userId

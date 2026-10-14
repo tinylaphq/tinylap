@@ -13,13 +13,16 @@
 //                       postLogoutRedirectUris, resource }], all trusted
 //   TINYLAP_FEED_TOKENS comma-separated bearer tokens for /deletions
 //   TINYLAP_ACCESS_TTL  access token seconds, dev mode only (tests)
+//   TINYLAP_CLIENT_IP_HEADER  the header a trusted proxy puts the client's
+//                       address in (Fly-Client-IP on Fly), for rate limits
 //   PORT                default 4100
 
 /**
  * @typedef {{ clientId: string, clientSecret: string, redirectUris: string[],
  *   postLogoutRedirectUris: string[], resource: string, trusted: true }} ClientConfig
  * @typedef {{ issuer: string, dev: boolean, dbPath: string, secret: string, port: number,
- *   clients: ClientConfig[], feedTokens: string[], accessTtlSeconds: number }} Config
+ *   clients: ClientConfig[], feedTokens: string[], accessTtlSeconds: number,
+ *   clientIpHeader: string | null }} Config
  */
 
 const isLoopback = (hostname) =>
@@ -115,5 +118,6 @@ export function readConfig(env) {
     clients: readClients(env.TINYLAP_CLIENTS, dev),
     feedTokens: (env.TINYLAP_FEED_TOKENS ?? '').split(',').map((t) => t.trim()).filter(Boolean),
     accessTtlSeconds,
+    clientIpHeader: env.TINYLAP_CLIENT_IP_HEADER?.trim().toLowerCase() || null,
   };
 }

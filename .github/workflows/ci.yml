@@ -26,6 +26,11 @@ jobs:
         run: pnpm turbo run test lint typecheck --affected
       - if: github.event_name == 'push'
         run: pnpm turbo run test lint typecheck
+      # Passkeys in a real browser (apps/accounts/test/browser). GitHub's
+      # ubuntu-latest image ships Google Chrome, which is playwright-core's
+      # 'chrome' channel, so nothing is downloaded.
+      - run: google-chrome --version
+      - run: pnpm --filter @tinylap/accounts test:browser
 
   smoke:
     runs-on: ubuntu-latest

@@ -39,6 +39,11 @@ test('defaults: port 4100, the volume database, no feed tokens', () => {
   assert.equal(config.port, 4100);
   assert.equal(config.dbPath, '/data/accounts.sqlite');
   assert.deepEqual(config.feedTokens, []);
+  assert.equal(config.clientIpHeader, null);
+});
+
+test('the client address header is read in lower case', () => {
+  assert.equal(readConfig(env({ TINYLAP_CLIENT_IP_HEADER: 'Fly-Client-IP' })).clientIpHeader, 'fly-client-ip');
 });
 
 test('dev mode allows loopback redirect URIs and defaults to an in-memory database', () => {

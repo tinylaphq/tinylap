@@ -28,5 +28,8 @@
   "dependencies": {
     "jose": "^6",
     "openid-client": "^6.8.8"
+  },
+  "tinylap": {
+    "serve": false
   }
 }

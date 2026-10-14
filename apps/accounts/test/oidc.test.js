@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // accounts as any relying party sees it: standard endpoints only, driven
-// through openid-client. The session comes from testSession until passkey
-// sign-in exists (Task 3).
+// through openid-client. The session comes from the test-only testSession:
+// a passkey sign-in needs a real browser, and test/browser/passkeys.test.js
+// runs the same OIDC login through the passkey sign-in page.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as oidc from 'openid-client';

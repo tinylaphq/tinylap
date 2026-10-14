@@ -47,3 +47,19 @@ export const ACTIONS: readonly Action[];
 export class AuthError extends Error {
   code: 'invalid_token' | 'unavailable';
 }
+
+export function clientBucket(address: string): string;
+
+export interface RateLimiter {
+  /** 0 when allowed, else seconds until it is again. */
+  take(client: string): number;
+  readonly size: number;
+  stop(): void;
+}
+
+export function rateLimiter(options: {
+  limit: number;
+  windowMs?: number;
+  now?: () => number;
+  sweepMs?: number;
+}): RateLimiter;

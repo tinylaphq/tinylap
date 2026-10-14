@@ -1,0 +1,137 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The TinyLap contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/* accounts pages: palace-ui's narrow auth layout (palace SPEC "Auth
+ * Pages"), plus the few pieces palace has no pattern for: a step
+ * indicator, the recovery code sheet and a checkbox row. Every value is a
+ * --p-* token; no radius, no blurred shadows, transitions 0.1s. */
+
+.accounts-brand {
+  gap: var(--p-space-sm);
+  margin-bottom: var(--p-space-lg);
+}
+
+.accounts-brand img {
+  width: 32px;
+  height: 32px;
+}
+
+.accounts-brand .brand {
+  color: var(--p-text);
+}
+
+/* Where you are in sign-up or recovery. */
+.container-narrow .accounts-progress {
+  display: flex;
+  gap: var(--p-space-md);
+  list-style: none;
+  padding: 0;
+  margin-bottom: var(--p-space-md);
+}
+
+.accounts-progress li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--p-text-faint);
+}
+
+.accounts-progress .step-num {
+  width: auto;
+  font-size: 18px;
+}
+
+.accounts-progress [aria-current="step"] {
+  color: var(--p-text);
+}
+
+.accounts-progress [aria-current="step"] .step-num {
+  color: var(--p-accent-1);
+}
+
+.accounts-hint {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--p-text-muted);
+}
+
+.accounts-mono,
+input[type="text"].accounts-mono {
+  font-family: var(--p-font-mono);
+}
+
+/* The recovery code sheet: ten codes, one per line, on palace's dark reveal. */
+.container-narrow .accounts-codes {
+  display: grid;
+  gap: var(--p-space-sm);
+  list-style: none;
+  padding: 0;
+  margin-bottom: var(--p-space-md);
+}
+
+.container-narrow .accounts-codes li {
+  margin: 0;
+  font-family: var(--p-font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--p-code-highlight);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.accounts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--p-space-sm);
+}
+
+.btn-outline.accounts-on-dark {
+  color: #fff;
+  border-color: #fff;
+}
+
+.btn-outline.accounts-on-dark:hover {
+  border-color: var(--p-accent-3);
+  box-shadow: var(--p-shadow-md) var(--p-accent-3);
+}
+
+.accounts-check {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-sm);
+  margin-bottom: 0;
+  font-size: 13px;
+  color: var(--p-text);
+  cursor: pointer;
+}
+
+.accounts-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--p-accent-1);
+}
+
+.container-narrow .accounts-links {
+  list-style: none;
+  padding: 0;
+  margin-top: var(--p-space-lg);
+}
+
+.container-narrow .accounts-links li {
+  font-size: 13px;
+  color: var(--p-text-muted);
+  margin-bottom: var(--p-space-sm);
+}
+
+.accounts [hidden] {
+  display: none;
+}
