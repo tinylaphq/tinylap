@@ -1,0 +1,32 @@
+{
+  "name": "@tinylap/auth",
+  "version": "0.0.0",
+  "description": "Access token verification and permission checks for the TinyLap suite.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tinylaphq/tinylap.git",
+    "directory": "packages/auth"
+  },
+  "exports": {
+    ".": {
+      "source": "./index.js",
+      "types": "./types.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "*.js",
+    "types.d.ts"
+  ],
+  "scripts": {
+    "test": "node --test 'test/**/*.test.js'",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "jose": "^6",
+    "openid-client": "^6.8.8"
+  }
+}
