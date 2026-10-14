@@ -1,0 +1,1 @@
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "strict": false }, "include": ["server/**/*.js", "test/**/*.js"] }

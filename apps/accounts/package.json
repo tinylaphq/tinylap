@@ -1,0 +1,25 @@
+{
+  "name": "@tinylap/accounts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test 'test/*.test.js'",
+    "dev": "TINYLAP_DEV=1 TINYLAP_ISSUER=http://localhost:4100 BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-dev-only-0f3c9a7e5b1d4c2a8e6f0b9d7c5a3e1f} node --disable-warning=ExperimentalWarning server/main.js",
+    "start": "node --disable-warning=ExperimentalWarning server/main.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@better-auth/oauth-provider": "1.7.7",
+    "@tinylap/design": "workspace:*",
+    "better-auth": "1.7.7",
+    "palace-ui": "^0.10.0"
+  },
+  "devDependencies": {
+    "@tinylap/auth": "workspace:*",
+    "jose": "^6",
+    "openid-client": "^6.8.8"
+  }
+}
