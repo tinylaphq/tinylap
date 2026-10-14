@@ -266,7 +266,9 @@ export function createAuth(config, db) {
  * RP-initiated logout allowed, linked to their one resource. Better Auth's
  * registration endpoints generate client ids and refuse loopback web
  * redirect URIs, so the rows are written through its adapter instead;
- * readConfig has already checked the URIs.
+ * readConfig has already checked the URIs. A client no longer configured
+ * is disabled (kept, so its id is never handed out again): its refresh
+ * tokens and logins stop working.
  * @param {ReturnType<typeof createAuth>} auth
  * @param {import('./config.js').ClientConfig[]} clients
  */
@@ -306,6 +308,13 @@ export async function seedClients(auth, clients) {
     }
     if (!links.some((link) => link.resourceId === c.resource)) {
       await adapter.create({ model: 'oauthClientResource', data: { clientId: c.clientId, resourceId: c.resource, createdAt: now } });
+    }
+  }
+  const configured = new Set(clients.map((c) => c.clientId));
+  for (const row of await adapter.findMany({ model: 'oauthClient', where: [{ field: 'disabled', value: false }] })) {
+    const { clientId } = /** @type {{ clientId: string }} */ (row);
+    if (!configured.has(clientId)) {
+      await adapter.update({ model: 'oauthClient', where: [{ field: 'clientId', value: clientId }], update: { disabled: true, updatedAt: new Date() } });
     }
   }
 }

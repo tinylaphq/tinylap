@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import * as oidc from 'openid-client';
 import { decodeJwt, decodeProtectedHeader } from 'jose';
 import { verifyAccessToken } from '@tinylap/auth';
+import { seedClients } from '../server/auth.js';
 import { createTestUser, driveAuthorize, Jar, startAccounts, testSession } from './helpers.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
@@ -150,4 +151,39 @@ test('@tinylap/auth accepts the token for its resource and rejects it for anothe
     verifyAccessToken(tokens.access_token, { issuer: accounts.issuer, audience: 'http://127.0.0.1:1' }),
     (/** @type {any} */ error) => error.code === 'invalid_token',
   );
+});
+
+test('a client no longer in TINYLAP_CLIENTS is disabled at the next start: its refresh tokens and logins stop working', async () => {
+  const retired = {
+    clientId: 'retired-test', clientSecret: 's3cret-retired', redirectUris: ['http://127.0.0.1:8124/auth/callback'],
+    postLogoutRedirectUris: [], resource: accounts.client.resource, trusted: /** @type {const} */ (true),
+  };
+  await seedClients(accounts.auth, [...accounts.config.clients, retired]);
+  const rp = await oidc.discovery(new URL(accounts.issuer), retired.clientId, undefined,
+    oidc.ClientSecretBasic(retired.clientSecret), { execute: [oidc.allowInsecureRequests] });
+  const user = await createTestUser(accounts.auth, 'Retired');
+  const jar = await testSession(accounts.auth, user.id);
+  const pkceCodeVerifier = oidc.randomPKCECodeVerifier();
+  const url = oidc.buildAuthorizationUrl(rp, {
+    redirect_uri: retired.redirectUris[0], scope: 'openid profile offline_access', resource: retired.resource,
+    code_challenge: await oidc.calculatePKCECodeChallenge(pkceCodeVerifier), code_challenge_method: 'S256',
+  });
+  const res = await driveAuthorize(url, jar);
+  const tokens = await oidc.authorizationCodeGrant(rp, new URL(res.headers.get('location')), { pkceCodeVerifier }, { resource: retired.resource });
+  assert.ok(tokens.refresh_token);
+
+  // The next start's configuration no longer has it.
+  await seedClients(accounts.auth, accounts.config.clients);
+  const row = accounts.db.prepare('SELECT disabled FROM oauthClient WHERE clientId = ?').get(retired.clientId);
+  assert.equal(Number(row?.disabled), 1, 'the row is disabled');
+  await assert.rejects(
+    oidc.refreshTokenGrant(rp, tokens.refresh_token, { resource: retired.resource }),
+    // invalid_client, as a 401 with a WWW-Authenticate challenge.
+    (/** @type {any} */ error) => error.status === 401,
+  );
+  const again = await driveAuthorize(url, jar);
+  assert.equal(new URL(again.headers.get('location'), accounts.issuer).searchParams.get('code'), null, 'no code for a disabled client');
+  // The configured client is untouched.
+  const { tokens: planner } = await login();
+  assert.ok(await oidc.refreshTokenGrant(config, planner.refresh_token, { resource: accounts.client.resource }));
 });
