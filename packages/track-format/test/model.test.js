@@ -11,7 +11,7 @@ import { fourCornerLoop, rectangularRing } from './fixtures.js';
 
 test('a new layout is empty and versioned', () => {
   const l = createLayout();
-  assert.equal(l.version, 1);
+  assert.equal(l.version, 2);
   assert.equal(l.unit, 'mat');
   assert.equal(l.room, null);
   assert.deepEqual(l.pieces, []);

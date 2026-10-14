@@ -16,5 +16,6 @@ test('a layout exported before the package split still imports', () => {
   const layout = importHtml(html);
   assert.deepEqual(layout.room, { w: 10, h: 12 });
   assert.deepEqual(layout.pieces, stockL());
-  assert.equal(layout.version, 1);
+  assert.equal(layout.version, 2);
+  assert.equal('track' in layout, false);
 });

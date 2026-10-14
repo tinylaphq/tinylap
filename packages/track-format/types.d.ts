@@ -28,12 +28,20 @@ export interface PieceDef {
 export interface PlacedPiece { type: PieceType; x: number; y: number; rot: Rotation }
 export interface Room { w: number; h: number }
 
-/** The persisted layout, format version 1. */
+/** A concrete track: one closed build. See shapeOf / assignTrack. */
+export interface Track { id: string; shape: string }
+
+/** Driving direction, seen from above in the planner's coordinates (x right, y down). */
+export type Direction = 'cw' | 'ccw';
+
+/** A layout in memory, format version 2. Version 1 files are upgraded on read. */
 export interface Layout {
-  version: 1;
+  version: 2;
   unit: 'mat';
   room: Room | null;
   pieces: PlacedPiece[];
+  /** Present only for closed circuits; see assignTrack. */
+  track?: Track;
 }
 
 export interface BBox { x: number; y: number; w: number; h: number }

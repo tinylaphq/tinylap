@@ -6,6 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLayout, loadLayout, saveLayout, clearLayout, LAYOUT_STORAGE_KEY } from '../js/session-store.js';
 import { createLayout } from '@tinylap/track-format';
+import { prepareExport } from '../js/storage.js';
+import { stockL } from '../js/presets.js';
 
 const fakeStorage = (initial) => {
   const map = new Map(Object.entries(initial ?? {}));
@@ -69,4 +71,11 @@ test('clearing removes the entry so a reload starts blank', () => {
   assert.ok(loadLayout(s));
   clearLayout(s);
   assert.equal(loadLayout(s), null);
+});
+
+test('the session keeps a layout\'s track across a reload', () => {
+  const storage = fakeStorage();
+  const { layout } = prepareExport(createLayout({ pieces: stockL() }));
+  saveLayout(storage, layout);
+  assert.deepEqual(loadLayout(storage).track, layout.track);
 });

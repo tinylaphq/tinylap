@@ -11,10 +11,10 @@
 // half-finished track with no obvious way back to a blank canvas — Save
 // and Open are how a layout is meant to outlive a session.
 //
-// Only the layout is stored: version, unit, room, pieces. Selection,
-// ghosts and the inventory are not part of a layout and are not persisted
-// here (the inventory has its own store, and belongs to the owner rather
-// than to any one track).
+// Only the layout is stored: version, unit, room, pieces, and its track when it
+// has one. Selection, ghosts and the inventory are not part of a layout and
+// are not persisted here (the inventory has its own store, and belongs to the
+// owner rather than to any one track).
 
 import { layoutFromData } from './storage.js';
 
@@ -45,8 +45,8 @@ export function loadLayout(storage) {
 
 export function saveLayout(storage, layout) {
   try {
-    const { version, unit, room, pieces } = layout;
-    storage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ version, unit, room, pieces }));
+    const { version, unit, room, pieces, track } = layout;
+    storage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(track ? { version, unit, room, pieces, track } : { version, unit, room, pieces }));
   } catch {
     /* Denied or full. The layout still works for this session; Save is
        the durable path and it does not depend on this. */

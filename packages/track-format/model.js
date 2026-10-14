@@ -9,7 +9,7 @@ import { placedCells, placedPorts, placedWalls, rotatedDef } from './geometry.js
 
 /** @param {Partial<Layout>} [overrides] @returns {Layout} */
 export function createLayout(overrides = {}) {
-  return { version: 1, unit: 'mat', room: null, pieces: [], ...overrides };
+  return { version: 2, unit: 'mat', room: null, pieces: [], ...overrides };
 }
 
 /** @param {Cell} cell @returns {string} */
@@ -63,7 +63,7 @@ export const portKey = (port) => portEdgeIds(port).slice().sort().join('|');
 /** @type {Record<Dir, Dir>} */
 const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E' };
 
-/** @param {Layout} layout @returns {{ matched: Set<string>, open: PortEntry[] }} */
+/** @param {Layout} layout @returns {{ matched: Set<string>, open: PortEntry[], links: [number, number][] }} */
 export function matchPorts(layout) {
   /** @type {Map<string, PortEntry[]>} */
   const byKey = new Map();
@@ -80,13 +80,42 @@ export function matchPorts(layout) {
   const matched = new Set();
   /** @type {PortEntry[]} */
   const open = [];
+  /** @type {[number, number][]} */
+  const links = [];
   for (const [key, entries] of byKey) {
     const paired =
       entries.length === 2 && entries[0].port.dir === OPPOSITE[entries[1].port.dir];
-    if (paired) matched.add(key);
-    else open.push(...entries);
+    if (paired) {
+      matched.add(key);
+      links.push([entries[0].pieceIndex, entries[1].pieceIndex]);
+    } else open.push(...entries);
   }
-  return { matched, open };
+  return { matched, open, links };
+}
+
+// True when the matched ports join every piece into one chain. With every port
+// matched and two ports per piece, that chain is a single loop.
+/** @param {Layout} layout @returns {boolean} */
+export function isSingleLoop(layout) {
+  const n = layout.pieces.length;
+  if (n === 0) return false;
+  /** @type {number[][]} */
+  const next = Array.from({ length: n }, () => []);
+  for (const [a, b] of matchPorts(layout).links) {
+    next[a].push(b);
+    next[b].push(a);
+  }
+  const seen = new Set([0]);
+  const stack = [0];
+  while (stack.length > 0) {
+    for (const j of next[/** @type {number} */ (stack.pop())]) {
+      if (!seen.has(j)) {
+        seen.add(j);
+        stack.push(j);
+      }
+    }
+  }
+  return seen.size === n;
 }
 
 // Edges of unmatched ports. These are openings, not walls, so the
@@ -579,6 +608,21 @@ export function computeBarriers(layout) {
   counts.straight = straight;
 
   return { counts, straightEdgeIds, arcs };
+}
+
+// Where the corner caps actually go: the same rule computeBarriers counts by,
+// returned as positions so the shape fingerprint can include them.
+/** @param {Layout} layout @returns {Cell[]} */
+export function capVertices(layout) {
+  const cells = occupiedSet(layout);
+  /** @type {Cell[]} */
+  const out = [];
+  for (const piece of layout.pieces) {
+    for (const wall of placedWalls(piece)) {
+      if (wall.kind === 'cap' && isConcaveVertex(cells, wall.vertex)) out.push(wall.vertex);
+    }
+  }
+  return out;
 }
 
 /** @param {Layout} layout @returns {Metrics} */

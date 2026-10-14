@@ -37,12 +37,12 @@ test('the layout json rides along and survives a round trip', () => {
 
 test('the json block is found without a DOM', () => {
   const data = extractLayoutJson(exportHtml(ring()));
-  assert.equal(data.version, 1);
+  assert.equal(data.version, 2);
   assert.equal(data.pieces.length, 20);
 });
 
 test('a future version is rejected outright', () => {
-  const html = exportHtml(ring()).replace('"version": 1', '"version": 99');
+  const html = exportHtml(ring()).replace('"version": 2', '"version": 99');
   assert.throws(() => importHtml(html), /version 99/);
 });
 

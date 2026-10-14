@@ -3,14 +3,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { layoutToSvgString } from './render.js';
-import { computeMetrics, layoutFromData, SUPPORTED_VERSION, MAT_MM } from '@tinylap/track-format';
+import { assignTrack, computeMetrics, layoutFromData, layoutFromHtml, extractLayoutJson, LAYOUT_SCRIPT_ID, SUPPORTED_VERSION, MAT_MM } from '@tinylap/track-format';
 import { billOfMaterials, PART_LABELS } from './inventory.js';
 
-export { layoutFromData, SUPPORTED_VERSION };
-
-export const LAYOUT_SCRIPT_ID = 'layout';
+export { layoutFromData, SUPPORTED_VERSION, extractLayoutJson, LAYOUT_SCRIPT_ID };
+// Kept under its planner name; the package calls it layoutFromHtml.
+export const importHtml = layoutFromHtml;
 
 const metres = (mats) => ((mats * MAT_MM) / 1000).toFixed(2);
+
+// The track identity is settled when a layout leaves as a file. The caller
+// keeps the returned layout, so the next export compares against the id this
+// file carries; edits in between never touch it.
+export function prepareExport(layout) {
+  const settled = assignTrack(layout);
+  return { layout: settled, html: exportHtml(settled) };
+}
+
+// Undo restores a snapshot that may predate the last export. Carry the
+// current track over, so re-building the exported shape keeps its id;
+// assignTrack re-checks the shape at the next export, so a stale track is
+// never wrongly kept.
+export function carryTrack(previous, current) {
+  return previous.track || !current.track ? previous : { ...previous, track: current.track };
+}
 
 export function exportHtml(layout) {
   const { bbox, matCount, lapMm } = computeMetrics(layout);
@@ -75,23 +91,4 @@ ${JSON.stringify(layout, null, 2).replace(/</g, '\\u003c')}
 </script>
 </html>
 `;
-}
-
-const BLOCK = new RegExp(
-  `<script[^>]*id=["']${LAYOUT_SCRIPT_ID}["'][^>]*>([\\s\\S]*?)</script>`,
-  'i',
-);
-
-export function extractLayoutJson(html) {
-  const match = BLOCK.exec(html);
-  if (!match) throw new Error('This file has no layout data in it.');
-  try {
-    return JSON.parse(match[1]);
-  } catch (cause) {
-    throw new Error('The layout data in this file is not valid JSON.', { cause });
-  }
-}
-
-export function importHtml(html) {
-  return layoutFromData(extractLayoutJson(html));
 }
