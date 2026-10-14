@@ -30,7 +30,7 @@ docker run -p 8080:8080 -v tinylap-data:/data -e TINYLAP_PUBLIC_URL=https://plan
 | --- | --- | --- |
 | `PORT` | `8080` | Port to listen on |
 | `TINYLAP_DB` | `/data/tinylap.sqlite` | SQLite file (`:memory:` for none) |
-| `TINYLAP_PUBLIC_URL` | the request's `Host` | Origin used in share links |
+| `TINYLAP_PUBLIC_URL` | `http://<Host>` of the request | Origin used in share links. Without it links are built as `http://<Host>`, so set it (to the `https://` origin) behind TLS |
 | `TINYLAP_RATE_LIMIT` | `30` | Posts per hour per client |
 | `TINYLAP_CLIENT_IP_HEADER` | none | Header carrying the client IP behind a proxy (`Fly-Client-IP` on Fly). Unset means the socket address; never set it without a proxy that overwrites it. |
 

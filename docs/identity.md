@@ -64,7 +64,10 @@ track id (`leaderboardKey`).
 
 ## Getting a layout
 
-Every URL serves JSON to programs and HTML to browsers (content negotiation
-on `Accept`; `.json` or `.html` force one). The full API is described at
+`/layouts/<key>` and `/shapes/<key>` serve JSON to programs and HTML to
+browsers (content negotiation on `Accept`). Only `/layouts/<key>` also takes a
+`.json` or `.html` suffix to force one; `/shapes/<key>` negotiates by `Accept`
+alone. The discovery routes (`/openapi.json`, `/schemas/layout.json`, `/api`)
+serve one representation each. The full API is described at
 `/openapi.json`, readable at `/api`, and the file format is JSON Schema at
 `/schemas/layout.json`.
