@@ -6,13 +6,11 @@
 // objects and send() writes them, so every rule about headers lives here
 // once: security headers on everything, CORS and the service-desc link on
 // the API, Problem Details for every API error.
-import { PROBLEMS } from './problems.js';
+import { problem } from './responses.js';
 import { rateLimiter } from './rate-limit.js';
 import { staticFiles } from './static.js';
 import { layoutRoutes } from './layouts.js';
 import { discoveryRoutes } from './discovery.js';
-
-/** @typedef {{ status: number, headers?: Record<string, string>, body?: string | Buffer }} Response */
 
 const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
 const API_HEADERS = {
@@ -20,33 +18,6 @@ const API_HEADERS = {
   'Access-Control-Expose-Headers': 'Location, Link, ETag, Retry-After',
   Link: '</openapi.json>; rel="service-desc"',
 };
-
-/** Pages the server renders have no scripts at all. */
-export const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
-
-/** @returns {Response} */
-export const json = (status, value, headers = {}) => ({
-  status,
-  headers: { 'Content-Type': 'application/json', ...headers },
-  body: typeof value === 'string' ? value : JSON.stringify(value),
-});
-
-/** @returns {Response} */
-export const html = (status, text, headers = {}) => ({
-  status,
-  headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, ...headers },
-  body: text,
-});
-
-/** RFC 9457. @param {{ origin: string }} request @param {string} name @param {string} detail @returns {Response} */
-export function problem(request, name, detail, headers = {}) {
-  const { status, title } = PROBLEMS[name];
-  return {
-    status,
-    headers: { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store', ...headers },
-    body: JSON.stringify({ type: `${request.origin}/problems/${name}`, title, status, detail }),
-  };
-}
 
 function send(req, res, { status, headers = {}, body }) {
   res.writeHead(status, { ...BASE_HEADERS, ...headers });

@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import openapi from './openapi.json' with { type: 'json' };
 import { PROBLEMS } from './problems.js';
-import { problem, html } from './app.js';
+import { problem, html } from './responses.js';
 import { apiPage } from './pages.js';
 
 const DESCRIPTION = JSON.stringify(openapi);

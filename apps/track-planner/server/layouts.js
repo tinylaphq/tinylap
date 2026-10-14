@@ -5,7 +5,7 @@
 // Snapshots and shapes. See docs/identity.md for what the keys mean.
 import { canonicalJson, snapshotKey, shapeKey, shapeOf, parseLayout, layoutFromData, KEY_PATTERN } from '@tinylap/track-format';
 import { exportHtml } from '../js/storage.js';
-import { problem, json, html } from './app.js';
+import { problem, json, html } from './responses.js';
 import { prefersHtml, mediaType, matchesEtag } from './negotiate.js';
 import { shapePage } from './pages.js';
 
