@@ -7,7 +7,7 @@
 //   /pkg/<segment>/   one of the app's dependencies, by name without scope
 // Shared by the dev server and the assemble step so the two cannot disagree.
 import { readFileSync, realpathSync } from 'node:fs';
-import { join, normalize, sep } from 'node:path';
+import { join, normalize, resolve, sep } from 'node:path';
 
 const SCOPE = '@tinylap/';
 
@@ -27,7 +27,8 @@ export function packageRoots(appDir) {
 // Joins `rest` under `root`, or returns null if the result would escape it.
 // Decoding happens first, so %2e%2e and %2f cannot smuggle a `..` past the
 // check.
-export function within(root, rest) {
+export function within(rootDir, rest) {
+  const root = resolve(rootDir);
   let decoded;
   try {
     decoded = decodeURIComponent(rest);

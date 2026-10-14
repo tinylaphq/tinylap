@@ -89,3 +89,13 @@ test('the gzip twin really is gzip of the file', () => {
   const html = gunzipSync(readFileSync(join(root, 'index.html.gz'))).toString();
   assert.match(html, /<base href=/);
 });
+
+test('a root with a trailing slash serves files', async () => {
+  const slashed = await startServer({ root: `${root}/` });
+  try {
+    const res = await fetch(`${slashed.base}/v/${SHA}/js/app.js`);
+    assert.equal(res.status, 200);
+  } finally {
+    await slashed.close();
+  }
+});
