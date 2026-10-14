@@ -777,7 +777,7 @@ inventoryDialog.addEventListener('close', () => {
 // commit() to stay undoable. Metres are converted to whole mats — the unit
 // state.layout.room is actually stored in (see render.js, which compares
 // room.w/h directly against the mat-unit bbox). Non-finite or non-positive
-// input is rejected rather than stored: storage.js's importHtml validates
+// input is rejected rather than stored: storage.js's parseLayout validates
 // room on load and would reject a saved file containing one, so writing a
 // bad value into the live layout would produce a layout that can't be
 // re-opened after being saved.
@@ -1281,7 +1281,7 @@ function adoptLayout(imported) {
 async function loadFile(file) {
   if (!file) return;
   // C1: parse and validate the incoming file BEFORE touching history or
-  // state.layout. importHtml can throw (bad version, unknown piece type,
+  // state.layout. parseLayout can throw (bad version, unknown piece type,
   // non-finite coordinates, malformed room, ...) — pushing the history
   // snapshot first meant a failed import still left a phantom undo step
   // that did nothing when popped, since state.layout was never actually
@@ -1326,8 +1326,10 @@ export function undo() {
     state.ghost = null;
     state.pending = null;
     // C1: undo is itself a successful mutation, so it also supersedes a
-    // stale error from a previous failed operation.
+    // stale error from a previous failed operation. It also drops a share
+    // notice, which names a layout that is no longer on screen.
     state.error = null;
+    state.notice = null;
     render();
   }
 }
