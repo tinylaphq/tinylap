@@ -32,6 +32,25 @@ export async function loadAccount({ fetch = globalThis.fetch } = {}) {
 /** Where "Log in" goes: back to this page, query included. @param {{ pathname: string, search: string }} location */
 export const loginHref = ({ pathname, search }) => `/auth/login?${new URLSearchParams({ returnTo: pathname + search })}`;
 
+/** Shows "Log in", "unavailable" or the name for `view`. */
+function show(/** @type {Document} */ doc, /** @type {AccountView} */ view) {
+  /** @type {HTMLElement} */ (doc.querySelector('#account')).hidden = false;
+  /** @type {HTMLElement} */ (doc.querySelector('#btn-login')).hidden = view.state !== 'out';
+  /** @type {HTMLElement} */ (doc.querySelector('#account-down')).hidden = view.state !== 'down';
+  /** @type {HTMLElement} */ (doc.querySelector('#btn-account')).hidden = view.state !== 'in';
+}
+
+/**
+ * Asks again who is logged in and updates the control, after the server
+ * said the session is gone (a 401), so no stale name stays in the navbar.
+ * @returns {Promise<AccountView>}
+ */
+export async function refreshAccount(doc = document) {
+  const view = await loadAccount();
+  if (view.state === 'out' || view.state === 'down') show(doc, view);
+  return view;
+}
+
 /** Wires the control in the page; resolves with the state it shows. @returns {Promise<AccountView | undefined>} */
 export async function initAccount(doc = document) {
   const root = /** @type {HTMLElement} */ (doc.querySelector('#account'));
@@ -43,10 +62,7 @@ export async function initAccount(doc = document) {
 
   const view = await loadAccount();
   if (view.state === 'off') return view;
-  root.hidden = false;
-  login.hidden = view.state !== 'out';
-  down.hidden = view.state !== 'down';
-  button.hidden = view.state !== 'in';
+  show(doc, view);
 
   // The query can change while the page is open (?layout=…), so the link is
   // worked out when it is followed.

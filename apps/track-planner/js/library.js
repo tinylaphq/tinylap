@@ -21,18 +21,26 @@ const enc = encodeURIComponent;
 
 /**
  * The library API. Each call returns the parsed JSON (null for a 204), or
- * throws `Error(problem.title)` with the HTTP `status`, like share.js.
+ * throws `Error(problem.title)` with the HTTP `status`, like share.js. A
+ * 401 (the session is gone) also calls `onUnauthorized`.
+ * @param {{ fetch?: typeof globalThis.fetch, onUnauthorized?: () => void }} [options]
  */
-export function libraryApi({ fetch = globalThis.fetch } = {}) {
+export function libraryApi({ fetch = globalThis.fetch, onUnauthorized = () => {} } = {}) {
   /** @param {string} method @param {string} path @param {any} [body] */
   async function call(method, path, body) {
-    const res = await request(fetch, path, {
-      method,
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers: body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await request(fetch, path, {
+        method,
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (error) {
+      if (/** @type {any} */ (error).status === 401) onUnauthorized();
+      throw error;
+    }
     return res.status === 204 ? null : res.json();
   }
   const track = (/** @type {string} */ id) => `/library/tracks/${enc(id)}`;
@@ -207,6 +215,7 @@ function confirmAction(doc, { title, text, confirm }) {
  * @property {() => Layout} settle the canvas's layout with its track settled, as Save keeps it
  * @property {(layout: Layout) => void} adopt replaces the canvas (one undo step)
  * @property {(message: { error?: string, notice?: string }) => void} report the status line
+ * @property {() => void} [unauthorized] a library call answered 401: the session is gone
  */
 
 /**
@@ -216,7 +225,7 @@ function confirmAction(doc, { title, text, confirm }) {
  * @param {Host} host @param {{ api?: ReturnType<typeof libraryApi>, doc?: Document }} [options]
  * @returns {{ save: () => Promise<void> }}
  */
-export function initLibrary(host, { api = libraryApi(), doc = document } = {}) {
+export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unauthorized }), doc = document } = {}) {
   const dialog = /** @type {HTMLDialogElement} */ (doc.querySelector('#library-dialog'));
   const body = /** @type {HTMLElement} */ (doc.querySelector('#library-body'));
   const problem = /** @type {HTMLElement} */ (doc.querySelector('#library-error'));

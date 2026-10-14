@@ -241,3 +241,38 @@ test('save, version, history, rename, share and log out', async (t) => {
   assert.equal(await page.locator('#menu-library').isHidden(), true);
   assert.equal(await status.isVisible(), true);
 });
+
+test('a library call answered 401 brings the navbar back to "Log in"', async (t) => {
+  const context = await browser.newContext({ baseURL: planner.base, viewport: { width: 1280, height: 800 } });
+  /** @type {string[]} */
+  const errors = [];
+  t.after(async () => {
+    await context.close();
+    assert.deepEqual(errors, [], 'no script errors on the page');
+  });
+  const page = await context.newPage();
+  page.on('pageerror', (error) => errors.push(error.message));
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: authenticatorOptions });
+
+  await page.goto(`${planner.suite.issuer}/sign-up`);
+  await page.getByLabel('Display name').fill('Stale');
+  await page.getByRole('button', { name: 'Create a passkey' }).click();
+  await page.locator('#code-list li').nth(9).waitFor();
+  await page.getByLabel("I've saved them").check();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByText('Your account is ready').waitFor();
+  await page.goto('/');
+  await page.locator('#btn-login').click();
+  await page.locator('#btn-account').waitFor();
+  assert.equal(await page.locator('#btn-account').textContent(), 'Stale');
+
+  // The planner session ends behind the page's back (as the deletions feed
+  // or an expired session would): the next library call is a 401.
+  const { id } = planner.suite.accounts.db.prepare('SELECT id FROM "user" WHERE name = ?').get('Stale');
+  await planner.store.sessions.deleteUser(String(id));
+  await page.locator('#btn-save').click();
+  await page.locator('#btn-login').waitFor();
+  assert.equal(await page.locator('#btn-account').isHidden(), true, 'no stale name in the navbar');
+});

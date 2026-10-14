@@ -13,7 +13,7 @@ import { loadKits, saveKits } from './kits-store.js';
 import { loadLayout, saveLayout } from './session-store.js';
 import { generateLayouts, outOfReach, outlineName, hasCachedLayouts, scoreLayouts } from './generate.js';
 import { orderSuggestions, availableFamilies } from './suggestions.js';
-import { initAccount } from './account.js';
+import { initAccount, refreshAccount } from './account.js';
 import { initLibrary, forgetTrack, linkedHistory } from './library.js';
 
 const canvas = document.querySelector('#canvas');
@@ -1551,6 +1551,7 @@ initAccount().then((view) => {
       return state.layout;
     },
     adopt: adoptLayout,
+    unauthorized: () => void refreshAccount(),
     report({ error = null, notice = null }) {
       state.error = error;
       state.notice = notice;

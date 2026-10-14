@@ -94,6 +94,16 @@ test('a refused call throws the problem title and keeps the status', async () =>
   });
 });
 
+test('a 401 tells the page the session is gone (and still throws); other refusals do not', async () => {
+  let told = 0;
+  const onUnauthorized = () => { told += 1; };
+  const at = (status) => async () => reply(status, { type: 'x', title: 'No', status }, 'application/problem+json');
+  await assert.rejects(libraryApi({ fetch: at(401), onUnauthorized }).list(), (error) => error.status === 401);
+  assert.equal(told, 1);
+  for (const status of [403, 404, 422, 503]) await libraryApi({ fetch: at(status), onUnauthorized }).list().catch(() => {});
+  assert.equal(told, 1, 'only a 401');
+});
+
 test('a call that never reaches the server says so', async () => {
   const fetch = async () => { throw new TypeError('fetch failed'); };
   await assert.rejects(libraryApi({ fetch }).list(), /could not reach/i);
