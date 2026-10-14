@@ -40,15 +40,28 @@ test('wrong audience, issuer, expiry or signature are all invalid_token', async 
   }
 });
 
+test('only typ at+jwt passes: an ID token (no typ) or a plain JWT is invalid_token', async () => {
+  const noTyp = await new SignJWT({ workspaces: [] })
+    .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+    .setIssuer(ISSUER).setAudience(AUD).setSubject('user-1').setIssuedAt().setExpirationTime('10m')
+    .sign(privateKey);
+  await assert.rejects(verifyAccessToken(noTyp, { issuer: ISSUER, audience: AUD, jwks }), (e) => e.code === 'invalid_token');
+  for (const typ of ['JWT', 'jwt']) {
+    await assert.rejects(verifyAccessToken(await sign({}, { typ }), { issuer: ISSUER, audience: AUD, jwks }), (e) => e.code === 'invalid_token');
+  }
+  // RFC 9068 §4: the media type prefix is optional and case-insensitive.
+  assert.equal((await verifyAccessToken(await sign({}, { typ: 'application/at+jwt' }), { issuer: ISSUER, audience: AUD, jwks })).sub, 'user-1');
+});
+
 test('a token without exp or sub is rejected', async () => {
   const noExp = await new SignJWT({ workspaces: [{ id: 'w1', role: 'member' }] })
-    .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+    .setProtectedHeader({ alg: 'RS256', kid: 'k1', typ: 'at+jwt' })
     .setIssuer(ISSUER).setAudience(AUD).setSubject('user-1').setIssuedAt()
     .sign(privateKey);
   await assert.rejects(verifyAccessToken(noExp, { issuer: ISSUER, audience: AUD, jwks }), (e) => e.code === 'invalid_token');
 
   const noSub = await new SignJWT({ workspaces: [{ id: 'w1', role: 'member' }] })
-    .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+    .setProtectedHeader({ alg: 'RS256', kid: 'k1', typ: 'at+jwt' })
     .setIssuer(ISSUER).setAudience(AUD).setIssuedAt().setExpirationTime('10m')
     .sign(privateKey);
   await assert.rejects(verifyAccessToken(noSub, { issuer: ISSUER, audience: AUD, jwks }), (e) => e.code === 'invalid_token');
@@ -57,7 +70,7 @@ test('a token without exp or sub is rejected', async () => {
 test('only RS256 is accepted (algorithm pinning)', async () => {
   const secret = await subtle.importKey('raw', randomBytes(32), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
   const hsToken = await new SignJWT({ workspaces: [{ id: 'w1', role: 'member' }] })
-    .setProtectedHeader({ alg: 'HS256', kid: 'k1' })
+    .setProtectedHeader({ alg: 'HS256', kid: 'k1', typ: 'at+jwt' })
     .setIssuer(ISSUER).setAudience(AUD).setSubject('u').setIssuedAt().setExpirationTime('5m')
     .sign(secret);
   const hsJwks = () => Promise.resolve(secret);
@@ -87,7 +100,7 @@ test('a token without kid against multi-key JWKS is invalid_token, not unavailab
   const multiJwks = createLocalJWKSet({ keys: [jwk, jwk2] });
 
   const noKidToken = await new SignJWT({ workspaces: [{ id: 'w1', role: 'member' }] })
-    .setProtectedHeader({ alg: 'RS256' })
+    .setProtectedHeader({ alg: 'RS256', typ: 'at+jwt' })
     .setIssuer(ISSUER).setAudience(AUD).setSubject('u').setIssuedAt().setExpirationTime('5m')
     .sign(privateKey);
 

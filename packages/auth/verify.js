@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Checks an access token the way any OAuth resource server would: the
-// issuer's published keys, RS256 only, the expected issuer and audience.
+// issuer's published keys, RS256 only, the expected issuer and audience,
+// and `typ: at+jwt` (RFC 9068), so an ID token never passes as one.
 // Nothing here knows which provider issued it.
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
@@ -61,7 +62,7 @@ export async function verifyAccessToken(token, opts) {
   const { issuer, audience, jwks, clockTolerance = 5 } = opts;
   try {
     const { payload } = await jwtVerify(token, wrapKeyGetter(jwks ?? remoteJwks(issuer)), {
-      issuer, audience, algorithms: ['RS256'], clockTolerance, requiredClaims: ['exp', 'sub'],
+      issuer, audience, algorithms: ['RS256'], typ: 'at+jwt', clockTolerance, requiredClaims: ['exp', 'sub'],
     });
     const workspaces = Array.isArray(payload.workspaces)
       ? payload.workspaces.filter(
