@@ -2,18 +2,18 @@
 
 Date: 2026-10-14
 Extends: `docs/superpowers/specs/2026-10-14-planner-server-design.md`
+Status: proof-of-concept phase (see §13)
 
 ## 1. Purpose
 
 One TinyLap login for the whole suite: the track planner, the timing app,
 future apps and, later, MCP servers. Logging in is optional. It gives people
 a durable home for what they build (a library of tracks) and gives clubs a
-home for what they run (drivers, transponders, leaderboards), so nothing
-depends on keeping a link from years ago.
+shared workspace, so nothing depends on keeping a link from years ago.
 
 This sub-project builds the login service, the workspace model and the
-planner library as the first real use. The timing app, MCP servers and online
-races build on it later.
+planner library as the first real use. Device pairing for club laptops, the
+timing app, MCP servers and online races build on it later (§14).
 
 ## 2. Decisions
 
@@ -21,9 +21,9 @@ races build on it later.
 | --- | --- |
 | Login for the whole suite? | **Yes, one identity.** Every app is a client of one TinyLap authorization server. |
 | Required? | **No.** The planner works fully without an account, as today. |
-| Who has accounts? | **People.** Drivers are records in a club workspace, not accounts. A shared club laptop is a **paired device**, not someone's login. |
+| Who has accounts? | **People.** Drivers will be records in a club workspace, not accounts. Shared club laptops will be paired devices with their own identity (a later spec). |
 | Who owns data? | **Workspaces:** a personal one per user, and shared club workspaces with roles. |
-| Identity provider | **Our own service, `apps/accounts`, built on Better Auth**, used only as a standards OAuth 2.1 / OpenID Connect provider. No Java, no vendor, $0. A spike (2026-10-14) confirmed every needed flow against `openid-client`. |
+| Identity provider | **Our own service, `apps/accounts`, built on Better Auth**, used only as a standards OAuth 2.1 / OpenID Connect provider. No Java, no vendor, $0. A spike (2026-10-14) confirmed the needed flows against `openid-client`. |
 | Lock-in | Better Auth exists only inside `apps/accounts`. Every other component speaks plain OIDC/OAuth (`openid-client`, `jose`). Self-hosters may use any OIDC provider. |
 | User identifiers | TinyLap's own user ids. Data never keys on a provider's subject id. |
 | How people log in | **Passkeys only**, with recovery codes. No passwords, no third parties. GitHub, Google and email are later additions, as further linked logins. |
@@ -31,7 +31,7 @@ races build on it later.
 | Browser apps | **Backend-for-frontend.** The app's server is the OIDC client and holds the tokens; the browser gets only an `HttpOnly` session cookie. |
 | Saved tracks | **Private until shared.** Saving is not publishing. |
 | Joining a club | **Invite links**, not email. |
-| Domain | None yet. Services run on `*.fly.dev`; the design keeps the issuer replaceable (§10). |
+| Domain | None during the proof of concept. Everything runs on `*.fly.dev`; moving to a domain later is a planned migration (§13). |
 | UI | palace-ui plus `@tinylap/design`, as everywhere (`AGENTS.md`). |
 
 ## 3. Architecture
@@ -45,23 +45,29 @@ apps/track-planner the first client: login, library, private snapshots
 ### `apps/accounts` (AGPL-3.0-or-later)
 
 A Node 24 server on `node:http` with SQLite through `node:sqlite`, deployed as
-its own Fly app with its own volume. Better Auth (exact version pinned) is
-mounted with `toNodeHandler` at the root, so the issuer is the service's
-origin.
+its own Fly app with its own volume. Better Auth and its plugins are pinned to
+exact versions and mounted with `toNodeHandler` at the root, so the issuer is
+the service's origin.
 
-Better Auth plugins used:
-- OAuth 2.1 / OIDC provider, signing ID tokens with **RS256** (and EdDSA)
-- passkey, with passkey-first sign-up (`requireSession: false`)
-- device authorization grant (RFC 8628)
-- JWT access tokens bound to one resource via `resource` (RFC 8707)
-- Client ID Metadata Documents, Dynamic Client Registration and protected
-  resource metadata (RFC 9728) for later MCP servers: installed and
-  configured, but **switched off** until the first MCP server exists, so no
-  open registration endpoint sits unused. CIMD will use the hardened network
-  fetcher.
+Used from Better Auth:
+- `@better-auth/oauth-provider` (the OAuth 2.1 / OIDC provider, not the older
+  `oidcProvider` plugin): authorization code + PKCE, refresh token rotation,
+  RP-initiated logout, JWT access tokens bound to one resource via `resource`
+  (RFC 8707). ID tokens and access tokens are signed with **RS256**.
+- The JWT plugin's key store: signing keys live in Better Auth's `jwks` table,
+  encrypted with `BETTER_AUTH_SECRET` (§9).
+- `@better-auth/passkey` with passkey-first sign-up (`requireSession: false`).
 
-TinyLap's own tables and pages live next to it (§4, §6). Better Auth ships no
+The planner is registered as a **trusted first-party client**: no consent
+screen for it. Consent screens appear only for third-party clients, which do
+not exist yet.
+
+TinyLap's own tables and pages live next to it (§4, §5). Better Auth ships no
 UI, so every page is ours, built with palace-ui and `@tinylap/design`.
+
+Not in this sub-project: the device authorization grant, Client ID Metadata
+Documents, Dynamic Client Registration and protected resource metadata. They
+come with their first consumer (§14).
 
 ### `packages/auth` (MPL-2.0)
 
@@ -70,15 +76,17 @@ Better Auth.
 
 | Export | Purpose |
 | --- | --- |
-| `createBff({ issuer, clientId, clientSecret, redirectUri, resource, sessionStore, encryptionKey })` | `login`, `callback`, `logout` handlers and `session(req)` for an app server |
-| `verifyAccessToken(token, { issuer, audience })` | checks signature against the issuer's JWKS, `iss`, `aud`, `exp`; returns the claims |
-| `requireRole(claims, workspaceId, role)` | `owner` > `admin` > `member` |
-| types | `AccessClaims`, `WorkspaceClaim`, `Role` |
+| `createBff({ issuer, clientId, clientSecret, redirectUri, resource, sessionStore, encryptionKeys })` | `login`, `callback`, `logout` handlers and `session(req)` for an app server (§6) |
+| `verifyAccessToken(token, { issuer, audience })` | checks the signature against the issuer's JWKS (algorithms pinned to `RS256`), `iss`, `aud`, `exp`; returns the claims. JWKS cached in memory, refetched on an unknown `kid`. |
+| `can(claims, workspaceId, action)` | the permission matrix (§5) |
+| types | `AccessClaims`, `WorkspaceClaim`, `Role`, `Action` |
 
 ### How apps learn about workspaces
 
 Access tokens carry `workspaces: [{ id, role }]` and live **10 minutes**. A
-role change takes effect at the latest with the next token. Apps make no call
+role change or removal takes effect at the latest with the next token; that
+window is accepted. Removing a member also revokes that user's refresh tokens
+for every client, so the next refresh re-reads memberships. Apps make no call
 to `accounts` per request.
 
 ## 4. Data
@@ -89,162 +97,290 @@ to `accounts` per request.
   more passkeys. Better Auth requires an email field: it holds the placeholder
   `<id>@users.invalid`, never shown and never used, until real email is
   switched on (`email`, `emailVerified`).
-- **`recovery_code`:** user, hash, `usedAt`. Ten codes per set; generating a
-  new set invalidates the old one.
-- **`workspace`:** `id`, `kind` (`personal` | `club`), `name`, `createdAt`.
-  A personal workspace is created at sign-up and cannot have other members.
+- **`recovery_code`:** user, `lookup_id` (random, unique, indexed),
+  `secret_hash` (SHA-256 of a secret with at least 80 bits of entropy),
+  `used_at`. Shown to the user as `<lookup_id>.<secret>`. Ten codes per set;
+  a new set invalidates the old one.
+- **`workspace`:** `id`, `kind` (`personal` | `club`), `name`, `created_at`.
+  A personal workspace is created at sign-up and never has other members.
 - **`membership`:** workspace, user, `role` (`owner` | `admin` | `member`).
-  A club has exactly one owner; the owner cannot leave without handing over
-  ownership.
-- **`invite`:** workspace, token hash, `expiresAt` (default 7 days),
-  `singleUse`, `createdBy`, `usedBy`.
-- **Devices:** a paired device is a device-grant client tied to one
-  workspace, with a name. Admins list and revoke them.
-- **`deletion`:** `kind` (`user` | `workspace`), `id`, `deletedAt`: the feed
-  other services read (§6).
+  A club has exactly one owner at all times.
+- **`invite`:** workspace, `role` (always `member` for now), `token_hash`,
+  `expires_at` (default 7 days), `single_use`, `created_by`, `used_by`,
+  `revoked_at`. The link is shown once.
+- **`deletion`:** `seq` (monotonically increasing integer), `kind`
+  (`user` | `workspace`), `id`, `deleted_at`. Kept forever; rows are tiny
+  ids, and a new or self-hosted consumer can start from 0.
 
 ### `apps/track-planner`
 
 - **Public snapshots** stay as they are (`layouts`, `/shapes`, immutable).
-- **`private_layouts(key, workspace_id, json, created_at)`**: the same
-  content-addressed keys, readable only by members of that workspace.
-  `GET /layouts/<key>` serves a public snapshot first, otherwise a private one
-  in one of the caller's workspaces, otherwise **404**: a stranger does not
-  learn that it exists. Private responses are `Cache-Control: private,
-  no-store`. Private snapshots never appear in `/shapes`. Identical content
-  published by someone else is public under the same key; that reveals
-  nothing about the workspace, because the key is only content.
+- **`private_layouts(key, workspace_id, json, created_at)`, primary key
+  `(key, workspace_id)`.** The same content-addressed keys, readable only by
+  members of that workspace. Two workspaces with identical content get two
+  rows; deleting one never touches the other or `layouts`. Saving always
+  writes a private row, even when the same content is public, so a share
+  never has to be undone.
 - **`library_track(id, workspace_id, name, current_key, created_at,
   updated_at, updated_by)`** and **`library_version(track_id, key, saved_at,
-  saved_by)`**: a named track with its history. Saving adds a private snapshot
-  and a version; nothing is overwritten.
+  saved_by)`**: a named track with its history; a version's snapshot is the
+  private row `(key, track.workspace_id)`. Nothing is overwritten. A track
+  keeps its 50 newest versions; older ones drop off, and the history view
+  says so. Private rows no longer referenced by any version are removed.
 - **`bff_session`:** session id hash, user id, encrypted access and refresh
-  tokens (AES-GCM, key from a Fly secret), `expiresAt`.
+  tokens, `created_at`, `expires_at`. Ciphertexts are AES-GCM and tagged with
+  a key id (§9).
+- **`feed_cursor`:** the last deletion `seq` processed.
 
-## 5. Flows
+### Quotas
+
+| Limit | Value |
+| --- | --- |
+| Tracks per workspace | 200 |
+| Versions kept per track | 50 newest |
+| Canonical size per snapshot | 64 KiB (as for public snapshots) |
+| Saves per user | 60 per hour |
+| Club workspaces a user can create | 5 |
+| Active invites per workspace | 20 |
+
+Exceeding a limit is a Problem Details `422` (`quota-exceeded`) with the
+limit in `detail`.
+
+## 5. Roles and permissions
+
+| Action | owner | admin | member |
+| --- | --- | --- | --- |
+| See the workspace's tracks and history | ✓ | ✓ | ✓ |
+| Save, save a new version, rename a track | ✓ | ✓ | ✓ |
+| Share a track (publish) | ✓ | ✓ | ✓ |
+| Copy a track to another workspace you belong to | ✓ | ✓ | ✓ |
+| Delete a track or a version | ✓ | ✓ | |
+| Create, list and revoke invites | ✓ | ✓ | |
+| Remove a member | ✓ | ✓ | |
+| Promote a member to admin, demote or remove an admin | ✓ | | |
+| Transfer ownership | ✓ | | |
+| Rename or delete the club | ✓ | | |
+| Leave the club | (transfer first) | ✓ | ✓ |
+
+In a personal workspace the user is the owner and the only member.
+
+A club whose owner has lost every passkey and every recovery code has no
+owner who can act. The maintainer can transfer ownership with an `accounts`
+admin command (`node apps/accounts/admin.js transfer-ownership <workspace>
+<user>`), after verifying the request out of band. This is documented.
+
+## 6. Flows
 
 - **Sign up:** display name → register a passkey → ten recovery codes shown
   once, confirmed with "I've saved them" → account and personal workspace
-  exist.
-- **Sign in:** passkey. "Lost your passkey?" takes a recovery code, signs in,
-  asks for a new passkey, and spends the code.
+  exist. WebAuthn options: `residentKey: required` (there is no username),
+  `userVerification: required`, `attestation: none`; challenges are
+  single-use and expire after 5 minutes.
+- **Sign in:** passkey (discoverable credential, no username field).
+- **Recovery:** "Lost your passkey?" asks for one recovery code. The
+  `lookup_id` finds it, the secret is compared in constant time, and the code
+  is spent with one atomic `UPDATE … WHERE used_at IS NULL`. The resulting
+  session can only add a passkey and manage recovery codes until a passkey is
+  registered. Losing every passkey and every code loses the account; the
+  sign-up page says so plainly.
 - **Account page:** manage passkeys (adding a second is prominent), new
-  recovery codes, export all account data as JSON, delete the account.
-- **Planner login (BFF):** "Log in" → `/auth/login` → `accounts` with PKCE,
-  `state`, `nonce`, `resource=<planner origin>` → passkey → consent the first
-  time → `/auth/callback` exchanges the code, stores the tokens, sets the
-  session cookie and returns to where the user was. What was open
-  anonymously stays open.
+  recovery codes, "sign out everywhere" (revokes all sessions and refresh
+  tokens), export, delete the account. Export downloads the account data from
+  `accounts` and links to the planner's export of every track and version in
+  the user's workspaces (JSON).
+- **Planner login (BFF):** "Log in" → `/auth/login?returnTo=<path>` (a
+  same-origin relative path; anything else is replaced by `/`) → `accounts`
+  with PKCE, `state`, `nonce`, `response_mode=query`,
+  `resource=<planner origin>` → passkey → `/auth/callback` exchanges the
+  code, stores the tokens, sets the session cookie, returns to `returnTo`.
+  The canvas survives the round trip because the planner already keeps it in
+  `sessionStorage` (`session-store.js`).
+- **Session refresh:** at most one refresh in flight per session (an
+  in-process lock; there is one machine). Only `invalid_grant` ends the
+  session; a network error, a 5xx or a timeout keeps it and answers 503
+  "Log-in is unavailable right now".
+- **Logout:** clears the planner session, revokes its refresh token, and
+  performs RP-initiated logout at `accounts` (`id_token_hint`,
+  `post_logout_redirect_uri`), so the next "Log in" on a shared computer asks
+  for a passkey again.
 - **Library:** "Save to library" (choose a workspace the first time) adds a
   version; "Open from library" lists the tracks of the user's workspaces with
-  their history; "Share" publishes the current version and copies the link,
-  as today. The planner's undo still works on the canvas only.
-- **Clubs:** create a club (you become owner); admins create invite links and
-  change roles; opening an invite link while logged out goes through sign-in
-  or sign-up first; an expired or used link says so and suggests asking the
-  club for a new one.
-- **Device pairing:** the device shows a code and the pairing URL; an admin,
-  logged in on their own phone, enters the code, picks the club workspace and
-  names the device; the device receives a token tied to that workspace. The
-  timing app is the first real user; this sub-project builds the grant and the
-  page and tests them with `openid-client`.
-- **Logout:** clears the planner session and revokes its refresh token.
+  their history; rename, copy to another workspace (the copy starts with the
+  current version only), delete a track or a version per §5. "Share"
+  publishes the current version and copies the link as today, after a
+  confirmation that publishing cannot be undone.
+- **Clubs:** create a club (you become owner); manage invites (create, list,
+  revoke) and members per §5; opening an invite link while logged out goes
+  through sign-in or sign-up first; an expired, used or revoked link says so
+  and suggests asking the club for a new one.
+- **Leaving or removal:** the club keeps its tracks. `saved_by` and
+  `updated_by` keep the bare user id and display as "former member". There is
+  no "take my tracks with me"; a member can copy tracks to their personal
+  workspace before leaving.
 
-## 6. Account and workspace deletion
+## 7. Deletion and the deletions feed
 
-- Deleting an account removes the user, their passkeys, recovery codes and
-  personal workspace. It is refused while the user owns a club: hand the club
-  over or delete it first.
-- Deleting a club workspace removes its memberships, invites and devices.
-- Each deletion is recorded in `deletion`. Services read
-  `GET /deletions?since=<timestamp>` on `accounts` with a client-credentials
-  token for their own service client, and remove what they hold: the planner
-  deletes private snapshots, library tracks and versions of deleted
-  workspaces, and the sessions of deleted users. The planner polls on start
-  and every 15 minutes.
+- Deleting an account removes the user, their passkeys, recovery codes,
+  sessions and personal workspace, and revokes their refresh tokens. It is
+  refused while the user owns a club: transfer ownership or delete the club
+  first.
+- Deleting a club removes its memberships and invites.
+- Each deletion appends a `deletion` row. Consumers read
+  `GET /deletions?after=<seq>` with a static bearer token (`TINYLAP_FEED_TOKEN`,
+  one per consumer, a Fly secret), store the highest `seq` they processed,
+  and remove what they hold. The planner deletes private snapshots, library
+  tracks and versions of deleted workspaces and the sessions of deleted
+  users. It reads the feed when it starts and hourly while it runs.
+- Until the planner has read the feed, a deleted workspace's data still sits
+  in the planner but cannot be reached: no token names that workspace any
+  more. That window is accepted.
 - Public snapshots stay: they contain no personal data.
 
-## 7. Errors
+## 8. Errors
 
 - **`accounts` unreachable:** the planner keeps working anonymously; "Log in"
-  and the library say "Log-in is unavailable right now". Nothing else breaks.
-- **Expired access token:** the planner refreshes it server-side, invisibly.
-  A failed refresh ends the session; the library asks to log in again;
-  unsaved work stays in the browser.
+  and the library say "Log-in is unavailable right now". If the planner
+  starts while `accounts` is down, it cannot fetch the JWKS, so logged-in
+  requests answer 503 until it can; anonymous use is unaffected. Accepted.
+- **Cold starts:** both machines stop when idle, so a first login may wake
+  two machines. Login waits up to 15 seconds before calling `accounts`
+  unavailable. Accepted.
+- **Expired access token:** refreshed server-side, invisibly (§6).
 - **Missing access:** 404 for private things that are not yours; 403 when
-  you are a member without the role needed (e.g. a member changing roles).
-- Every API error is RFC 9457 Problem Details, as in the planner server.
+  you are a member without the permission (§5).
+- Every API error is RFC 9457 Problem Details, as in the planner server; new
+  types: `quota-exceeded`, `forbidden`, `unauthorized`.
 
-## 8. Security
+## 9. Security
 
-- Session cookie: `HttpOnly; Secure; SameSite=Lax`, a 30-day sliding
-  lifetime. Every state-changing request also checks `Origin`.
-- PKCE, `state` and `nonce` on every login. Refresh tokens rotate.
-- Access tokens: JWT, 10 minutes, `aud` = the one service they were issued
-  for; any other service rejects them.
-- `accounts` pages: a strict CSP like the planner's, no third-party anything.
-- Rate limits on sign-up, sign-in and recovery per client, IPv6 per /64, as
-  in the planner server.
-- Tokens at rest are encrypted; the signing keys, the encryption key and the
-  planner's client secret are Fly secrets.
-- Exact version pins for Better Auth and its plugins; upgrades only with the
-  full test suite (§9) green.
+- **Cookie:** `__Host-tinylap-session`, `HttpOnly; Secure; SameSite=Lax;
+  Path=/`. Lifetime 30 days, sliding, capped at 90 days after login.
+  State-changing requests require `Sec-Fetch-Site: same-origin` or a
+  same-origin `Origin`; anything else is refused.
+- **Lifetimes:** access tokens 10 minutes; refresh tokens 30 days, rotated on
+  use; the `accounts` browser session 30 days.
+- **PKCE, `state` and `nonce`** on every login.
+- **Private responses:** the authorization check runs before any
+  `If-None-Match`/304 handling; private snapshot responses are `private,
+  no-store`, HTML ones add `frame-ancestors 'none'`; `/layouts/<key>` answers
+  `Vary: Cookie` once it depends on the session. Library and auth routes do
+  **not** send `Access-Control-Allow-Origin: *`; only the public, cookie-free
+  API keeps it. The planner-server spec's sentence "No route uses cookies or
+  credentials" is updated accordingly.
+- **`accounts` pages:** a strict CSP like the planner's, nothing third-party.
+- **Rate limits** per client (IPv6 per /64), as in the planner server: sign-up
+  10/hour, sign-in 30/hour, recovery 10/hour per client and 5/hour per
+  `lookup_id`, invite redemption 20/hour.
+- **Keys and secrets** (all Fly secrets; rotation procedures in the
+  `apps/accounts` README):
+  - `BETTER_AUTH_SECRET` encrypts the signing keys and signs `accounts`
+    cookies. Rotating it signs everyone out of `accounts` and needs the
+    signing keys re-encrypted; the procedure says how.
+  - Signing keys rotate by adding a new key to the JWKS, waiting longer than
+    the longest token lifetime plus the JWKS cache time, switching signing,
+    then retiring the old key.
+  - The planner's token encryption keys are a list with ids; new tokens use
+    the newest, old ones still decrypt, so rotation logs nobody out.
+  - The planner's client secret rotates by registering a second secret,
+    switching the planner, removing the first.
+- **Dependencies:** exact pins for Better Auth and its plugins; upgrades only
+  with the full test suite (§10) green; GitHub security alerts (Dependabot)
+  enabled for the repo.
 
-## 9. Testing
+## 10. Testing
 
 - **`apps/accounts`** (real server, random port, in-memory database):
   - OIDC through `openid-client` only: discovery, code + PKCE, ID token
-    checks (signature RS256, `iss`, `aud`, `nonce`), userinfo, refresh,
-    logout, device grant end to end;
+    checks (RS256, `iss`, `aud`, `nonce`), userinfo, refresh with rotation,
+    RP-initiated logout;
   - passkeys with a virtual WebAuthn authenticator (Playwright, Chrome's
-    virtual authenticator): sign-up, sign-in, recovery, adding a passkey;
-  - workspaces: roles, exactly one owner, invites expired / used /
-    single-use, deletion and the deletions feed;
-  - tokens: a planner token is rejected for another `resource`; the
-    `workspaces` claim matches the memberships.
-- **`packages/auth`:** token checks (issuer, audience, expiry, signature)
-  against a local key pair; the BFF handlers (cookie flags, `Origin`,
-  `state`/`nonce`, refresh, logout); `requireRole`.
+    virtual authenticator): sign-up, sign-in, adding a passkey, recovery
+    (lookup, spending, the restricted session, a spent code refused);
+  - workspaces: every row of the §5 matrix, exactly one owner, invites
+    (expired, used, single-use, revoked), quotas, deletion and the feed
+    (`after=<seq>`, the bearer token);
+  - tokens: a planner token is rejected by another `resource`; the
+    `workspaces` claim matches the memberships; removal revokes refresh
+    tokens.
+- **`packages/auth`:** token checks (issuer, audience, expiry, signature,
+  pinned algorithm) against a local key pair; the BFF handlers (cookie
+  attributes, `Sec-Fetch-Site`/`Origin`, `returnTo`, `state`/`nonce`,
+  single-flight refresh, transient vs `invalid_grant` failures, logout);
+  `can`.
 - **Planner:** private vs public snapshots (404 for strangers, `no-store`,
-  absent from `/shapes`), library versions and Share, login against a test
+  absent from `/shapes`, two workspaces with identical content), library
+  versions, the 50-version window, copy, delete, Share; login against a test
   `accounts`; the OpenAPI description gains the new routes and the contract
   test covers them.
-- **Conformance:** the OpenID Foundation conformance suite (prebuilt Docker
-  images) runs once against `accounts` before going live, as its own step;
-  results are committed. Not in CI.
+- **Local development and tests** run over `http://localhost`. Better Auth
+  refuses non-https, loopback redirect URIs for web clients, so `accounts`
+  accepts loopback redirect URIs only when `TINYLAP_DEV=1`, and refuses to
+  start with `TINYLAP_DEV=1` when its issuer is https. How tests drive
+  `/oauth2/authorize` (a 302 or a JSON redirect, depending on `Accept`) is
+  settled in the first implementation task and used everywhere after.
 - **Browser:** Playwright with Chrome: sign up, log in to the planner, save,
-  open from the library, share, join a club, pair a device.
+  open from the library, share, join a club, log out on a "shared" browser.
+- **Conformance:** the OpenID Foundation conformance suite runs before a
+  production release (§13), not in CI.
 
-## 10. Deployment and the later domain
+## 11. Deployment
 
 - `apps/accounts` becomes the Fly app `tinylap-accounts`: one smallest
-  machine that stops when idle, a 1 GB volume at `/data`. CI deploys it like
-  the planner, only when it changed, with its own smoke test.
-- Configuration by environment: issuer URL, allowed redirect URIs, client
-  registrations for the planner (confidential, with secret) and its
-  service client.
-- **Replacing the issuer later** (the domain): data keys on TinyLap user ids,
-  so a new issuer URL is a configuration change. Passkeys are bound to the
-  host they were created on (the WebAuthn RP ID): the old host serves
-  `/.well-known/webauthn` naming the new origin (Related Origin Requests;
-  Chrome, Edge and Safari support it, Firefox does not yet), and the account
-  page prompts everyone to add a passkey on the new host. The move is planned
-  when the domain is bought.
+  machine that stops when idle, a 1 GB volume at `/data`, daily Fly volume
+  snapshots. CI deploys it like the planner, only when it changed, with its
+  own smoke test. The plan first checks that the Fly organisation's free
+  allowance covers the second app and volume.
+- Configuration by environment: issuer URL, allowed redirect URIs, the
+  planner's client registration (confidential, trusted), feed tokens.
 
-## 11. Documentation
+## 12. Documentation
 
 - `docs/identity.md` gains a section on accounts and workspaces: who owns
-  what, roles, devices, private and public snapshots, deletion and the feed,
-  data protection.
+  what, roles and the permission matrix, private and public snapshots,
+  deletion and the feed, data protection.
 - README: self-hosting `accounts`, or plugging in another OIDC provider.
+- `apps/accounts/README.md`: operations (secrets, key rotation, the
+  ownership-transfer command, backups).
 - `packages/auth/README.md`: how a new app or MCP server joins the suite.
 - A privacy page in `accounts`: what is stored (display name, passkeys,
-  memberships, private tracks in the planner), how to export it, how to
+  memberships; private tracks in the planner), how to export it, how to
   delete it.
 
-## 12. Out of scope
+## 13. Proof-of-concept phase and production release
 
-- Email (modelled, switched off), GitHub and Google login.
-- The timing app, MCP servers, online races.
-- Buying a domain.
-- Social features of any kind.
+This sub-project ships as a proof of concept on `*.fly.dev`. When it proves
+itself and a domain makes sense, everything moves:
+- TinyLap controls both data stores, so the move is a migration, not a loss:
+  databases are copied, issuer, resource origins and redirect URIs are
+  reconfigured, and all sessions end once.
+- Passkeys are bound to the host they were created on (`fly.dev` is on the
+  Public Suffix List, so no shared parent can be chosen now). While signed in
+  on the old host, the account page offers "move to the new host": a
+  one-time, short-lived transfer token signs the user in on the new host,
+  which registers a new passkey right away. Recovery codes are not bound to a
+  host, so they work as the fallback for everyone who misses the move. The
+  old host is shut down after an announced deadline.
+
+Before a **production release**, these are required (tracked as GitHub
+issues):
+- the domain and the move above;
+- off-site backups of both databases (e.g. Litestream to an object store's
+  free tier), a backup before every Better Auth migration, a documented
+  restore drill, and a reconciliation rule for restoring one database without
+  the other;
+- the OpenID conformance run, with the acceptable failures decided up front;
+- a legal check of the privacy page and whether an imprint (Impressum) is
+  required;
+- email (verification, login links as a recovery route), now that a domain
+  exists.
+
+## 14. Out of scope (later specs)
+
+- **Device pairing** for club laptops, in the timing-app spec: a device is its
+  own principal (`sub = device:<id>`, a `device` role in one workspace, its
+  own refresh-token family), never the approving admin's identity. Needs its
+  own spike of custom token claims in Better Auth.
+- **MCP:** Client ID Metadata Documents, Dynamic Client Registration and
+  protected resource metadata, with the first MCP server.
+- GitHub and Google login; email (see §13).
+- The timing app, online races, social features.
