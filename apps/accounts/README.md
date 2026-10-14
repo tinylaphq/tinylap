@@ -157,7 +157,8 @@ two steps (its sessions are kept, and log-in answers "unavailable"):
 accounts, set the planner's to `new`, then set accounts' to `new` alone.
 
 **The signing keys** live in the `jwks` table. Better Auth signs with the newest
-key that has not expired and still publishes an expired key for 30 days, so
+key that has not expired and still publishes an expired key for 30 days (the
+JWT plugin's `gracePeriod`, pinned as `JWKS_GRACE_SECONDS` in `server/auth.js`), so
 expiring the current key switches signing to a fresh key and keeps the old one
 verifiable. Planners refetch the JWKS when they meet an unknown `kid`, and
 access tokens last 10 minutes, so no waiting is needed:
@@ -169,7 +170,8 @@ access tokens last 10 minutes, so no waiting is needed:
    ```
 
 2. Log in to the planner once; `GET /jwks` now lists two keys.
-3. The old key leaves the JWKS 30 days later by itself. Nothing to retire.
+3. The old key leaves the JWKS 30 days later (`JWKS_GRACE_SECONDS`) by itself.
+   Nothing to retire.
 
 **`BETTER_AUTH_SECRET`** encrypts the signing keys' private halves in the
 `jwks` table and signs `accounts` cookies. Changing it signs everyone out of

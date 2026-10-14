@@ -18,6 +18,12 @@ import { createPersonalWorkspace, listMemberships } from './workspaces.js';
 
 const DAY = 24 * 60 * 60;
 
+/**
+ * How long an expired signing key stays in the JWKS (the README's rotation
+ * relies on it). Pinned: Better Auth's default could change.
+ */
+export const JWKS_GRACE_SECONDS = 30 * DAY;
+
 /** Called by the planner's server (client-authenticated), never per person. */
 const UNLIMITED = ['/oauth2/token', '/oauth2/revoke', '/oauth2/userinfo'];
 
@@ -216,7 +222,7 @@ export function authOptions(config, db = null) {
     ],
     plugins: [
       jwt({
-        jwks: { keyPairConfig: { alg: 'RS256', modulusLength: 2048 } },
+        jwks: { keyPairConfig: { alg: 'RS256', modulusLength: 2048 }, gracePeriod: JWKS_GRACE_SECONDS },
         jwt: { issuer: config.issuer },
         disableSettingJwtHeader: true,
       }),
