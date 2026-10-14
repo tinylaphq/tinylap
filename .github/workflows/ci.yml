@@ -32,7 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -f apps/track-planner/Dockerfile --build-arg GIT_SHA=${{ github.sha }} -t planner .
-      - run: docker run -d -p 8080:8080 planner && sleep 3
+      - run: docker run -d -p 8080:8080 planner
+      - run: curl --silent --fail --retry 20 --retry-connrefused --retry-delay 1 http://localhost:8080/ > /dev/null
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
