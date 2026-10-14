@@ -2659,4 +2659,4 @@ git add -A apps/track-planner .github docs README.md packages/track-format/READM
 git commit -s -m "feat(track-planner): deploy the node server with a volume and document identities"
 ```
 
-The deploy itself needs the Fly volume to exist **before** this reaches `main`. The controller asks the maintainer to run the `fly volumes create` command from `fly.toml` first.
+The Fly volume `tinylap_data` already exists (created 2026-10-14), and the app is scaled to one machine. That machine was created without a volume: if the first deploy with `[mounts]` refuses to attach it, the controller destroys that one machine (`fly machine destroy <id> --app circuit30-planner`) and re-runs the deploy, after asking the maintainer.
