@@ -6,13 +6,27 @@
 // /v/<sha>/, and everything it loads lives under that path. A deploy changes
 // every asset URL at once, so assets can be cached forever and a visitor can
 // never mix files from two deploys.
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { packageRoots } from './serve-map.js';
 
 const BASE = '<base href="/">';
 const skip = (src) => !['node_modules', 'test', '.turbo'].includes(basename(src));
+
+// Compressed once here rather than on every request: the server sends the
+// .gz twin to clients that accept it. woff2 and images are compressed already.
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.svg', '.json', '.txt']);
+
+function gzipTree(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true, recursive: true })) {
+    const file = join(entry.parentPath, entry.name);
+    if (entry.isFile() && COMPRESSIBLE.has(extname(entry.name))) {
+      writeFileSync(`${file}.gz`, gzipSync(readFileSync(file), { level: 9 }));
+    }
+  }
+}
 
 export function assemble(appDir, outDir, sha) {
   if (typeof sha !== 'string' || !/^[0-9a-f]{7,40}$/.test(sha)) {
@@ -32,6 +46,7 @@ export function assemble(appDir, outDir, sha) {
     cpSync(root, join(tree, 'pkg', segment), { recursive: true, dereference: true, filter: skip });
   }
   writeFileSync(join(outDir, 'index.html'), html.replace(BASE, `<base href="/v/${sha}/">`));
+  gzipTree(outDir);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

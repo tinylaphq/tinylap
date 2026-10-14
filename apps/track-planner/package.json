@@ -10,8 +10,9 @@
     "js"
   ],
   "scripts": {
-    "test": "node --test 'test/**/*.test.js'",
-    "dev": "node ../../tools/dev-server.js . 8000",
+    "test": "node --disable-warning=ExperimentalWarning --test 'test/**/*.test.js'",
+    "dev": "node --disable-warning=ExperimentalWarning server/main.js --dev",
+    "start": "node --disable-warning=ExperimentalWarning server/main.js",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint ."
   },

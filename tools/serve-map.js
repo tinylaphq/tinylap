@@ -27,7 +27,7 @@ export function packageRoots(appDir) {
 // Joins `rest` under `root`, or returns null if the result would escape it.
 // Decoding happens first, so %2e%2e and %2f cannot smuggle a `..` past the
 // check.
-function within(root, rest) {
+export function within(root, rest) {
   let decoded;
   try {
     decoded = decodeURIComponent(rest);
