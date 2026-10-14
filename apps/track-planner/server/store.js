@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS library_track (
 );
 CREATE INDEX IF NOT EXISTS library_track_workspace ON library_track (workspace_id);
 CREATE TABLE IF NOT EXISTS library_version (
+  seq           INTEGER PRIMARY KEY,
   track_id      TEXT NOT NULL,
   key           TEXT NOT NULL,
   saved_at      TEXT NOT NULL,
@@ -153,14 +154,14 @@ function libraryStore(db) {
   const renameTrack = db.prepare('UPDATE library_track SET name = ?, updated_at = ?, updated_by = ?, updated_by_name = ? WHERE id = ?');
   const removeTrack = db.prepare('DELETE FROM library_track WHERE id = ?');
   const setCurrent = db.prepare('UPDATE library_track SET current_key = ? WHERE id = ?');
-  // Saving a key the history already has moves it to the top: the rowid
-  // orders versions, and a re-inserted row gets the highest one.
+  // Saving a key the history already has moves it to the top: seq orders
+  // versions, and a re-inserted row gets the highest one.
   const removeVersion = db.prepare('DELETE FROM library_version WHERE track_id = ? AND key = ?');
   const removeVersions = db.prepare('DELETE FROM library_version WHERE track_id = ?');
   const insertVersion = db.prepare('INSERT INTO library_version (track_id, key, saved_at, saved_by, saved_by_name) VALUES (?, ?, ?, ?, ?)');
-  const versionsOf = db.prepare('SELECT * FROM library_version WHERE track_id = ? ORDER BY rowid DESC');
-  const prune = db.prepare(`DELETE FROM library_version WHERE track_id = ? AND rowid NOT IN
-    (SELECT rowid FROM library_version WHERE track_id = ? ORDER BY rowid DESC LIMIT ${VERSIONS_KEPT})`);
+  const versionsOf = db.prepare('SELECT * FROM library_version WHERE track_id = ? ORDER BY seq DESC');
+  const prune = db.prepare(`DELETE FROM library_version WHERE track_id = ? AND seq NOT IN
+    (SELECT seq FROM library_version WHERE track_id = ? ORDER BY seq DESC LIMIT ${VERSIONS_KEPT})`);
   const unreferenced = db.prepare(`DELETE FROM private_layouts WHERE workspace_id = ? AND key NOT IN
     (SELECT v.key FROM library_version v JOIN library_track t ON t.id = v.track_id WHERE t.workspace_id = ?)`);
   const dropWorkspace = [

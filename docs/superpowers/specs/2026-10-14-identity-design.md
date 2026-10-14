@@ -125,8 +125,9 @@ to `accounts` per request.
   writes a private row, even when the same content is public, so a share
   never has to be undone.
 - **`library_track(id, workspace_id, name, current_key, created_at,
-  updated_at, updated_by)`** and **`library_version(track_id, key, saved_at,
-  saved_by)`**: a named track with its history; a version's snapshot is the
+  updated_at, updated_by)`** and **`library_version(seq, track_id, key,
+  saved_at, saved_by)`**: a named track with its history, ordered by `seq`
+  (an `INTEGER PRIMARY KEY`, never the implicit rowid); a version's snapshot is the
   private row `(key, track.workspace_id)`. Nothing is overwritten. A track
   keeps its 50 newest versions; older ones drop off, and the history view
   says so. Private rows no longer referenced by any version are removed.
