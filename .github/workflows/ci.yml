@@ -58,6 +58,22 @@ jobs:
       - run: curl --silent --fail --retry 20 --retry-all-errors --retry-delay 1 http://localhost:4100/sign-in > /dev/null
       - run: node apps/accounts/test/smoke.js http://localhost:4100/
 
+  # The identity story across accounts and the planner in a real browser
+  # (tools/e2e). It does not hold up a deploy: deploy needs check and smoke.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # ubuntu-latest ships Google Chrome, playwright-core's 'chrome' channel.
+      - run: google-chrome --version
+      - run: pnpm test:e2e
+
   reuse:
     runs-on: ubuntu-latest
     steps:

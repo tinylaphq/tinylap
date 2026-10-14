@@ -37,17 +37,18 @@ export const openLayout = () => createLayout({ pieces: [{ type: 'straight', x: 0
  * The planner with log-in on, against a real accounts (tools/test-env.js).
  * The server listens first, so accounts can register its port; the handler
  * is bound once the suite is up.
- * `hostname` is the issuer's host (see startSuite).
- * @param {{ store?: any, logged?: string[], hostname?: string, [key: string]: any }} [options]
+ * `hostname` is the issuer's host and `env` overrides accounts' environment
+ * (see startSuite).
+ * @param {{ store?: any, logged?: string[], hostname?: string, env?: Record<string, string>, [key: string]: any }} [options]
  */
 export async function startPlanner(options = {}) {
-  const { store = openStore(':memory:'), hostname, ...rest } = options;
+  const { store = openStore(':memory:'), hostname, env, ...rest } = options;
   /** @type {(req: any, res: any) => void} */
   let handler = (_req, res) => res.writeHead(503).end();
   const server = createServer((req, res) => handler(req, res));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const suite = await startSuite({ plannerPort: server.address().port, hostname });
+  const suite = await startSuite({ plannerPort: server.address().port, hostname, env });
   /** @type {string[]} */
   const logged = [];
   const keys = [{ id: 'k1', key: randomBytes(32) }];
