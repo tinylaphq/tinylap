@@ -142,8 +142,10 @@ members and invites. Public snapshots stay: they contain no personal data.
 `accounts` appends each deletion to a feed, `GET /deletions?after=<seq>`, behind
 a bearer token per consumer. The planner reads it when it starts and hourly,
 and deletes the private snapshots, library tracks and versions of deleted
-workspaces and the sessions of deleted users. Until it has read the feed,
-deleted data still sits in the planner but cannot be reached.
+workspaces and the sessions of deleted users. It takes a deletion only once
+it is older than one access token lifetime plus a minute, so a save made with
+a token that still names a deleted club is removed too. Until then, deleted
+data still sits in the planner but cannot be reached.
 
 If a club's owner can no longer act, the maintainer can transfer ownership
 after verifying the request out of band
