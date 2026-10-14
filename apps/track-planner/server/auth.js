@@ -153,16 +153,27 @@ async function logout(request) {
   return request.auth.bff.logout(request.req);
 }
 
-const me = withSession(async (request) => {
+/**
+ * The logged-in user's display name: cached in the session, else fetched
+ * from userinfo once. Call inside withSession, with a session.
+ * @param {any} request @returns {Promise<string | null>}
+ */
+export async function displayName(request) {
   const { auth, session } = request;
-  if (!auth) return json(200, { loggedIn: false, available: false }, NO_STORE);
-  if (!session) return json(200, { loggedIn: false, available: true }, NO_STORE);
   const id = auth.bff.sessionId(request.req);
   let name = id ? auth.sessions.getName(id) : null;
   if (name === null) {
     name = await auth.userName(session.accessToken);
     if (name !== null && id) auth.sessions.setName(id, name);
   }
+  return name;
+}
+
+const me = withSession(async (request) => {
+  const { auth, session } = request;
+  if (!auth) return json(200, { loggedIn: false, available: false }, NO_STORE);
+  if (!session) return json(200, { loggedIn: false, available: true }, NO_STORE);
+  const name = await displayName(request);
   return json(200, {
     loggedIn: true,
     available: true,

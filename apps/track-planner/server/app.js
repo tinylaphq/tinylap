@@ -12,6 +12,7 @@ import { staticFiles } from './static.js';
 import { layoutRoutes } from './layouts.js';
 import { discoveryRoutes } from './discovery.js';
 import { authRoutes } from './auth.js';
+import { libraryRoutes } from './library.js';
 
 const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
 const API_HEADERS = {
@@ -27,13 +28,20 @@ function send(req, res, { status, headers = {}, body }) {
 
 // Routes marked `credentials: true` read the session cookie, so they never
 // allow other origins (no CORS) and tell caches that the cookie matters.
+// A route marked `varyCookie: true` may read it (GET /layouts/<key> does, for
+// private snapshots): every response varies on Cookie, and only a response
+// marked `credentials: true` drops CORS.
 const CREDENTIAL_HEADERS = { Link: API_HEADERS.Link };
 
-/** @param {{ credentials?: boolean }} route @param {Record<string, any>} [headers] */
-function withRouteHeaders(route, headers = {}) {
-  if (!route.credentials) return { ...API_HEADERS, ...headers };
+/**
+ * @param {{ credentials?: boolean, varyCookie?: boolean }} route @param {Record<string, any>} [headers]
+ * @param {boolean} [credentials] the response's own mark
+ */
+function withRouteHeaders(route, headers = {}, credentials = false) {
   const vary = headers.Vary ? `${headers.Vary}, Cookie` : 'Cookie';
-  return { ...CREDENTIAL_HEADERS, ...headers, Vary: vary };
+  if (route.credentials || credentials) return { ...CREDENTIAL_HEADERS, ...headers, Vary: vary };
+  if (route.varyCookie) return { ...API_HEADERS, ...headers, Vary: vary };
+  return { ...API_HEADERS, ...headers };
 }
 
 async function dispatch(request, routes, serveStatic) {
@@ -66,14 +74,15 @@ async function dispatch(request, routes, serveStatic) {
       console.error(error);
       response = problem(request, 'unavailable', 'The server could not complete the request.');
     }
-    return { ...response, headers: withRouteHeaders(route, response.headers) };
+    const { credentials, ...rest } = response;
+    return { ...rest, headers: withRouteHeaders(route, response.headers, credentials) };
   }
   return serveStatic(req, url);
 }
 
 /**
  * @param {{ store: ReturnType<typeof import('./store.js').openStore> | null, root?: string, appDir: string,
- *   publicUrl?: string, rateLimit?: number, clientIpHeader?: string, build?: string,
+ *   publicUrl?: string, rateLimit?: number, saveLimit?: number, clientIpHeader?: string, build?: string,
  *   now?: () => number, log?: boolean, routes?: any[], auth?: import('./auth.js').Auth | null }} options
  *   `auth` turns log-in on (see auth.js); without it the planner is anonymous only.
  */
@@ -83,10 +92,12 @@ export function createHandler(options) {
     publicUrl: options.publicUrl?.replace(/\/$/, '') ?? null,
     build: options.build ?? 'dev',
     limiter: rateLimiter({ limit: options.rateLimit ?? 30, now: options.now }),
+    // Library saves, per user (identity spec §4).
+    saves: rateLimiter({ limit: options.saveLimit ?? 60, now: options.now }),
     clientIpHeader: options.clientIpHeader?.toLowerCase() || null,
     auth: options.auth ?? null,
   };
-  const routes = options.routes ?? [...layoutRoutes, ...authRoutes, ...discoveryRoutes];
+  const routes = options.routes ?? [...layoutRoutes, ...authRoutes, ...libraryRoutes, ...discoveryRoutes];
   const serveStatic = staticFiles({ ...options, formAction: context.auth ? [new URL(context.auth.issuer).origin] : [] });
 
   return async (req, res) => {

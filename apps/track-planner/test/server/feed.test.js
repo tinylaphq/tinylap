@@ -67,8 +67,10 @@ test('the feed reads every page, not just the first', async (t) => {
   const asked = [];
   const users = [];
   const cursor = { seq: 0 };
+  const forgotten = [];
   const store = {
     sessions: { deleteUser: async (id) => void users.push(id) },
+    forgetUser: (id) => void forgotten.push(id),
     deleteWorkspaceData: () => {},
     feedCursor: () => cursor.seq,
     setFeedCursor: (seq) => { cursor.seq = seq; },
@@ -84,6 +86,7 @@ test('the feed reads every page, not just the first', async (t) => {
   assert.equal((await feed.poll()).processed, 3);
   assert.deepEqual(asked, ['0', '2', '3']);
   assert.deepEqual(users, ['a', 'b']);
+  assert.deepEqual(forgotten, ['a', 'b'], 'their names on library saves go too');
   assert.equal(cursor.seq, 3);
 });
 
@@ -117,7 +120,7 @@ test('accounts down: the poll logs once per failure streak, does not throw, and 
 test('startFeed reads on start and on its interval, and stop() ends it', async () => {
   let calls = 0;
   const cursor = { seq: 0 };
-  const store = { sessions: { deleteUser: async () => {} }, deleteWorkspaceData: () => {}, feedCursor: () => cursor.seq, setFeedCursor: (s) => { cursor.seq = s; } };
+  const store = { sessions: { deleteUser: async () => {} }, forgetUser: () => {}, deleteWorkspaceData: () => {}, feedCursor: () => cursor.seq, setFeedCursor: (s) => { cursor.seq = s; } };
   const feed = startFeed({
     issuer: 'http://feed.test', token: 't', store, intervalMs: 20,
     logger: { warn: () => {}, info: () => {} },

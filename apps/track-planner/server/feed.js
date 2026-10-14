@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The deletions feed (identity spec §7). accounts lists every deleted user
-// and workspace in order; the planner removes what it holds for them and
+// and workspace in order; the planner removes what it holds for them (a
+// user's sessions, and their name on what they saved in the library; a
+// workspace's library) and
 // keeps the highest seq it processed, so each row is handled once. Read on
 // start and hourly. Processing is idempotent, so a crash between a row and
 // the cursor only repeats work.
@@ -12,6 +14,7 @@
  * @typedef {{
  *   sessions: Pick<import('@tinylap/auth').SessionStore, 'deleteUser'>,
  *   deleteWorkspaceData(workspaceId: string): void | Promise<void>,
+ *   forgetUser(userId: string): void | Promise<void>,
  *   feedCursor(): number,
  *   setFeedCursor(seq: number): void,
  * }} FeedStore
@@ -42,8 +45,10 @@ export function startFeed({ issuer, token, store, intervalMs = 3_600_000, poll: 
       if (!Array.isArray(page?.deletions)) throw new Error('accounts answered something that is not a deletions page');
       if (page.deletions.length === 0) return processed;
       for (const { seq, kind, id } of page.deletions) {
-        if (kind === 'user') await store.sessions.deleteUser(id);
-        else if (kind === 'workspace') await store.deleteWorkspaceData(id);
+        if (kind === 'user') {
+          await store.sessions.deleteUser(id);
+          await store.forgetUser(id);
+        } else if (kind === 'workspace') await store.deleteWorkspaceData(id);
         store.setFeedCursor(seq);
         processed += 1;
       }

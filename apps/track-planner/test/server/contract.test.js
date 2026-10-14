@@ -11,12 +11,13 @@ import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import openapi from '../../server/openapi.json' with { type: 'json' };
 import layoutSchema from '@tinylap/track-format/layout.schema.json' with { type: 'json' };
-import { snapshotKey, shapeKey } from '@tinylap/track-format';
+import { canonicalJson, snapshotKey, shapeKey } from '@tinylap/track-format';
 import { mediaType } from '../../server/negotiate.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { seal } from '@tinylap/auth';
 import { createAuth } from '../../server/auth.js';
 import { openStore } from '../../server/store.js';
+import { createClub } from '../../../accounts/server/workspaces.js';
 import { startServer, startPlanner, closedLayout, openLayout } from './helpers.js';
 
 const BASE = 'http://tinylap.test';
@@ -159,6 +160,88 @@ test('every /auth response matches the description', async () => {
     await call(off.base, 'POST', '/auth/logout', { headers: { origin: off.base } }); // 404
   } finally {
     await Promise.all([planner.close(), off.close(), dead.close()]);
+  }
+});
+
+test('every /library response matches the description', async () => {
+  const planner = await startPlanner();
+  const dead = await unreachable();
+  try {
+    const { user } = await planner.suite.signInUser(undefined, 'Lauda');
+    const club = createClub(planner.suite.accounts.db, user.id, 'Contract Club');
+    const full = createClub(planner.suite.accounts.db, user.id, 'Full Club');
+    for (let i = 0; i < 200; i += 1) {
+      planner.store.createTrack({ id: `seed-${i}`, workspaceId: full.id, name: `T${i}`, key: String(i).padStart(22, 'A'), json: canonicalJson(openLayout()), userId: user.id, userName: 'Lauda' });
+    }
+    const { jar } = await planner.login('/', user);
+    const as = { cookie: jar.header(), origin: planner.base };
+    const call = async (base, method, path, { body, headers = as, type = 'application/json' } = {}) => {
+      const init = { method, redirect: 'manual', headers: { ...headers, ...(body === undefined ? {} : { 'content-type': type }) } };
+      if (body !== undefined) init.body = typeof body === 'string' ? body : JSON.stringify(body);
+      const res = await fetch(base + path, init);
+      const copy = res.clone();
+      await check(method, base + path, res);
+      return copy;
+    };
+    const huge = 'x'.repeat(600 * 1024);
+    const unknown = '/library/tracks/nope';
+
+    const closed = closedLayout();
+    const created = await (await call(planner.base, 'POST', '/library/tracks', { body: { workspaceId: club.id, name: 'Zandvoort', layout: closed } })).json(); // 201
+    const id = created.track.id;
+    const t = `/library/tracks/${id}`;
+    const { track: bare } = await (await call(planner.base, 'POST', '/library/tracks', { body: { workspaceId: club.id, name: 'Bare', layout: { ...closed, track: undefined } } })).json();
+    const { track: doomed } = await (await call(planner.base, 'POST', '/library/tracks', { body: { workspaceId: club.id, name: 'Doomed', layout: openLayout() } })).json();
+
+    // Every route: 401 logged out, 503 with accounts unreachable; writes: 403 from elsewhere.
+    const routes = [
+      ['GET', '/library'], ['GET', '/library/export'], ['POST', '/library/tracks'], ['PATCH', t], ['DELETE', t],
+      ['GET', `${t}/versions`], ['POST', `${t}/versions`], ['DELETE', `${t}/versions/${created.track.currentKey}`],
+      ['POST', `${t}/copy`], ['POST', `${t}/share`],
+    ];
+    for (const [method, path] of routes) {
+      await call(planner.base, method, path, { headers: {} });                                         // 401
+      await call(dead.base, method, path, { headers: { cookie: dead.sessionCookie } });              // 503
+      if (method !== 'GET') await call(planner.base, method, path, { headers: { ...as, origin: 'https://evil.test' } }); // 403
+    }
+    for (const [method, path] of [['POST', '/library/tracks'], ['PATCH', t], ['POST', `${t}/versions`], ['POST', `${t}/copy`]]) {
+      await call(planner.base, method, path, { body: 'x', type: 'text/plain' });                      // 415
+      await call(planner.base, method, path, { body: huge });                                          // 413
+      await call(planner.base, method, path, { body: '[]' });                                          // 422
+    }
+
+    await call(planner.base, 'GET', '/library');                                                       // 200
+    await call(planner.base, 'GET', '/library/export');                                                // 200
+    await call(planner.base, 'POST', '/library/tracks', { body: { workspaceId: 'nope', name: 'x', layout: openLayout() } }); // 404
+    await call(planner.base, 'PATCH', t, { body: { name: 'Renamed' } });                               // 200
+    await call(planner.base, 'PATCH', unknown, { body: { name: 'x' } });                               // 404
+    await call(planner.base, 'GET', `${t}/versions`);                                                  // 200
+    await call(planner.base, 'GET', `${unknown}/versions`);                                            // 404
+    const { version } = await (await call(planner.base, 'POST', `${t}/versions`, { body: { layout: openLayout() } })).json(); // 201
+    await call(planner.base, 'POST', `${unknown}/versions`, { body: { layout: openLayout() } });       // 404
+    await call(planner.base, 'DELETE', `${t}/versions/${version.key}`);                                // 204
+    await call(planner.base, 'DELETE', `${t}/versions/${version.key}`);                                // 404
+    await call(planner.base, 'POST', `${t}/copy`, { body: { workspaceId: club.id } });                 // 201
+    await call(planner.base, 'POST', `${t}/copy`, { body: { workspaceId: 'nope' } });                  // 404
+    await call(planner.base, 'POST', `${t}/copy`, { body: { workspaceId: full.id } });                 // 422, quota
+    await call(planner.base, 'POST', `${t}/share`);                                                    // 201
+    await call(planner.base, 'POST', `${t}/share`);                                                    // 200
+    await call(planner.base, 'POST', `/library/tracks/${bare.id}/share`);                              // 422, track-mismatch
+    await call(planner.base, 'POST', `${unknown}/share`);                                              // 404
+    await call(planner.base, 'DELETE', `/library/tracks/${doomed.id}`);                                // 204
+    await call(planner.base, 'DELETE', unknown);                                                       // 404
+
+    // A private snapshot, for its member: 200 and 304; for nobody: 404.
+    const priv = `/layouts/${doomed.currentKey}`;
+    const { track: kept } = await (await call(planner.base, 'POST', '/library/tracks', { body: { workspaceId: club.id, name: 'Kept', layout: openLayout() } })).json();
+    for (const suffix of ['', '.json', '.html']) {
+      const path = `/layouts/${kept.currentKey}${suffix}`;
+      const res = await call(planner.base, 'GET', path, { headers: { cookie: jar.header(), accept: CHROME } });
+      await call(planner.base, 'GET', path, { headers: { cookie: jar.header(), accept: CHROME, 'if-none-match': res.headers.get('etag') } });
+      await call(planner.base, 'GET', `${priv}${suffix}`, { headers: {} });
+    }
+  } finally {
+    await Promise.all([planner.close(), dead.close()]);
   }
 });
 

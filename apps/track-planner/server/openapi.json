@@ -40,7 +40,7 @@
     "/layouts/{key}": {
       "get": {
         "summary": "A snapshot, as JSON or as a page",
-        "description": "Browsers that prefer text/html get the page with the drawing and the bill of materials; every other client gets the JSON. The JSON never changes and may be cached forever.",
+        "description": "Browsers that prefer text/html get the page with the drawing and the bill of materials; every other client gets the JSON. A public snapshot's JSON never changes and may be cached forever. A private library snapshot is served only to a member of its workspace, with the session cookie: private, no-store, and without Access-Control-Allow-Origin; to anyone else it is the same 404 as an unknown key. Every answer varies on Cookie.",
         "parameters": [{ "$ref": "#/components/parameters/key" }],
         "responses": {
           "200": {
@@ -185,6 +185,185 @@
           "503": { "$ref": "#/components/responses/Problem" }
         }
       }
+    },
+    "/library": {
+      "get": {
+        "summary": "Your workspaces and their tracks",
+        "description": "Every workspace in your token you may read, with its tracks, most recently updated first. Like every /library route, it needs the session cookie, sends no Access-Control-Allow-Origin, varies on Cookie and is never cached. Writes must come from the planner's own pages (Sec-Fetch-Site: same-origin, or a same-origin Origin), else 403.",
+        "security": [{ "session": [] }],
+        "responses": {
+          "200": { "description": "The library.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Library" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/library/export": {
+      "get": {
+        "summary": "Every track and version in your workspaces, with layouts",
+        "security": [{ "session": [] }],
+        "responses": {
+          "200": { "description": "A download (Content-Disposition: attachment).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LibraryExport" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/library/tracks": {
+      "post": {
+        "summary": "Save a new track",
+        "description": "Stores the layout as a private snapshot of the workspace, open or closed, and starts the track's history with it. Nothing is published. At most 200 tracks per workspace, 64 KiB per snapshot (canonical JSON) and 60 saves per user an hour; beyond that, 422 quota-exceeded.",
+        "security": [{ "session": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object", "required": ["workspaceId", "name", "layout"],
+            "properties": { "workspaceId": { "type": "string" }, "name": { "type": "string", "minLength": 1, "maxLength": 100 }, "layout": { "$ref": "#/components/schemas/Layout" } }
+          } } }
+        },
+        "responses": {
+          "201": { "description": "The track.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TrackResult" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "413": { "$ref": "#/components/responses/Problem" },
+          "415": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/library/tracks/{id}": {
+      "patch": {
+        "summary": "Rename a track",
+        "security": [{ "session": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/trackId" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 100 } } } } }
+        },
+        "responses": {
+          "200": { "description": "The renamed track.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TrackResult" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "413": { "$ref": "#/components/responses/Problem" },
+          "415": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "delete": {
+        "summary": "Delete a track and its history",
+        "description": "Owner and admins only; a member gets 403.",
+        "security": [{ "session": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/trackId" }],
+        "responses": {
+          "204": { "description": "Deleted." },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/library/tracks/{id}/versions": {
+      "get": {
+        "summary": "A track's history",
+        "description": "Newest first. A track keeps its 50 newest versions; older ones drop off.",
+        "security": [{ "session": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/trackId" }],
+        "responses": {
+          "200": { "description": "The versions.", "content": { "application/json": { "schema": {
+            "type": "object", "required": ["versions", "kept"],
+            "properties": { "versions": { "type": "array", "items": { "$ref": "#/components/schemas/Version" } }, "kept": { "type": "integer", "description": "How many versions a track keeps." } }
+          } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "post": {
+        "summary": "Save a new version",
+        "description": "The layout becomes the track's current version. Saving a snapshot the history already has moves it to the top.",
+        "security": [{ "session": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/trackId" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["layout"], "properties": { "layout": { "$ref": "#/components/schemas/Layout" } } } } }
+        },
+        "responses": {
+          "201": { "description": "The version, and the track as it is now.", "content": { "application/json": { "schema": {
+            "type": "object", "required": ["track", "version"],
+            "properties": { "track": { "$ref": "#/components/schemas/Track" }, "version": { "$ref": "#/components/schemas/Version" } }
+          } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "413": { "$ref": "#/components/responses/Problem" },
+          "415": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/library/tracks/{id}/versions/{key}": {
+      "delete": {
+        "summary": "Delete one version",
+        "description": "Owner and admins only. If it was the current version, the newest one left becomes current; deleting the last version deletes the track.",
+        "security": [{ "session": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/trackId" }, { "$ref": "#/components/parameters/key" }],
+        "responses": {
+          "204": { "description": "Deleted." },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/library/tracks/{id}/copy": {
+      "post": {
+        "summary": "Copy a track to another of your workspaces",
+        "description": "The copy starts with the current version only. A workspace you do not belong to is a 404.",
+        "security": [{ "session": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/trackId" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["workspaceId"], "properties": { "workspaceId": { "type": "string" } } } } }
+        },
+        "responses": {
+          "201": { "description": "The copy.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TrackResult" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "413": { "$ref": "#/components/responses/Problem" },
+          "415": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/library/tracks/{id}/share": {
+      "post": {
+        "summary": "Publish the current version",
+        "description": "Stores the current version as a public snapshot, exactly as POST /layouts would (the same track-consistency rule and size limit), so its link and shape listing work for anyone. This cannot be undone. The private snapshot stays.",
+        "security": [{ "session": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/trackId" }],
+        "responses": {
+          "200": { "description": "It was already public.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Snapshot" } } } },
+          "201": {
+            "description": "Published.",
+            "headers": { "Location": { "schema": { "type": "string" }, "description": "/layouts/<key>" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Snapshot" } } }
+          },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
     }
   },
   "components": {
@@ -195,7 +374,8 @@
         "required": true,
         "description": "22 base64url characters: the first 16 bytes of a SHA-256.",
         "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" }
-      }
+      },
+      "trackId": { "name": "id", "in": "path", "required": true, "description": "A library track's id.", "schema": { "type": "string" } }
     },
     "schemas": {
       "Layout": { "$ref": "/schemas/layout.json" },
@@ -256,6 +436,93 @@
         "if": { "properties": { "loggedIn": { "const": true } } },
         "then": { "required": ["user", "workspaces", "accountUrl"] }
       },
+      "Saver": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "description": "The user id." },
+          "name": { "type": "string", "description": "The display name at save time, or \"former member\" once the user is deleted." }
+        }
+      },
+      "Track": {
+        "type": "object",
+        "required": ["id", "workspaceId", "name", "currentKey", "createdAt", "updatedAt", "updatedBy"],
+        "properties": {
+          "id": { "type": "string" },
+          "workspaceId": { "type": "string" },
+          "name": { "type": "string" },
+          "currentKey": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "description": "The current version: a private snapshot of the workspace, at /layouts/<key> for its members." },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "updatedBy": { "$ref": "#/components/schemas/Saver" }
+        }
+      },
+      "TrackResult": { "type": "object", "required": ["track"], "properties": { "track": { "$ref": "#/components/schemas/Track" } } },
+      "Version": {
+        "type": "object",
+        "required": ["key", "savedAt", "savedBy"],
+        "properties": {
+          "key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+          "savedAt": { "type": "string", "format": "date-time" },
+          "savedBy": { "$ref": "#/components/schemas/Saver" }
+        }
+      },
+      "LibraryWorkspace": {
+        "type": "object",
+        "required": ["id", "name", "role"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "role": { "enum": ["owner", "admin", "member"] }
+        }
+      },
+      "Library": {
+        "type": "object",
+        "required": ["workspaces"],
+        "properties": {
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "allOf": [{ "$ref": "#/components/schemas/LibraryWorkspace" }],
+              "required": ["tracks"],
+              "properties": { "tracks": { "type": "array", "items": { "$ref": "#/components/schemas/Track" } } }
+            }
+          }
+        }
+      },
+      "LibraryExport": {
+        "type": "object",
+        "required": ["exportedAt", "workspaces"],
+        "properties": {
+          "exportedAt": { "type": "string", "format": "date-time" },
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "allOf": [{ "$ref": "#/components/schemas/LibraryWorkspace" }],
+              "required": ["tracks"],
+              "properties": {
+                "tracks": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [{ "$ref": "#/components/schemas/Track" }],
+                    "required": ["versions"],
+                    "properties": {
+                      "versions": {
+                        "type": "array",
+                        "items": {
+                          "allOf": [{ "$ref": "#/components/schemas/Version" }],
+                          "required": ["layout"],
+                          "properties": { "layout": { "$ref": "#/components/schemas/Layout" } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "Problem": {
         "type": "object",
         "description": "RFC 9457 Problem Details.",
@@ -291,10 +558,13 @@
     "too-large": { "status": 413, "title": "The layout is too large", "description": "A request body may be at most 512 KiB, and a layout at most 64 KiB once read (canonical JSON)." },
     "rate-limited": { "status": 429, "title": "Too many layouts posted", "description": "Wait for the number of seconds in Retry-After." },
     "unsupported-media-type": { "status": 415, "title": "Unsupported media type", "description": "Send application/json, or text/html for an exported page." },
-    "not-found": { "status": 404, "title": "Not found", "description": "Nothing is stored under this key, or the key is malformed." },
+    "not-found": { "status": 404, "title": "Not found", "description": "Nothing is stored under this key, or the key is malformed; or a library track or workspace that does not exist or is not one of yours." },
     "method-not-allowed": { "status": 405, "title": "Method not allowed", "description": "The Allow header lists the methods this URL supports." },
     "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Layouts cannot be stored or read right now, or log-in is unavailable because accounts can't be reached. The planner itself keeps working." },
-    "forbidden": { "status": 403, "title": "Forbidden", "description": "A state-changing request that did not come from the planner's own pages (Sec-Fetch-Site, or else Origin)." },
+    "forbidden": { "status": 403, "title": "Forbidden", "description": "A state-changing request that did not come from the planner's own pages (Sec-Fetch-Site, or else Origin), or your role in the workspace cannot do it: only the owner and admins delete tracks and versions." },
+    "unauthorized": { "status": 401, "title": "Not logged in", "description": "The library needs you to log in." },
+    "quota-exceeded": { "status": 422, "title": "A limit is reached", "description": "At most 200 tracks per workspace, 64 KiB per snapshot (canonical JSON) and 60 saves per user an hour. The detail names the limit; for saves, Retry-After says when to try again." },
+    "invalid-request": { "status": 422, "title": "The request is not valid", "description": "The body is not a JSON object, or a field is missing or wrong, such as a track name that is empty or longer than 100 characters." },
     "login-failed": { "status": 400, "title": "The log-in could not be completed", "description": "It expired, was replaced by a log-in started in another tab, or a check failed. Log in again." }
   }
 }
