@@ -54,10 +54,10 @@ async function call(path, { method = 'GET', body = undefined, jar = new Jar(), s
 const page = (path, jar = new Jar()) => navigate(`${accounts.issuer}${path}`, { accept: 'text/html', 'sec-fetch-mode': 'navigate', ...(jar.header() ? { cookie: jar.header() } : {}) });
 
 /** A passkey row as the plugin writes it, with key material to look for. */
-function addPasskey(userId, name = null) {
+function addPasskey(userId, name = null, createdAt = new Date()) {
   const id = randomBytes(8).toString('hex');
   accounts.db.prepare(`INSERT INTO passkey (id, name, publicKey, userId, credentialID, counter, deviceType, backedUp, transports, createdAt)
-    VALUES (?, ?, ?, ?, ?, 0, 'multiDevice', 1, 'internal', ?)`).run(id, name, `PUBLICKEY-${id}`, userId, `CREDENTIAL-${id}`, new Date().toISOString());
+    VALUES (?, ?, ?, ?, ?, 0, 'multiDevice', 1, 'internal', ?)`).run(id, name, `PUBLICKEY-${id}`, userId, `CREDENTIAL-${id}`, createdAt.toISOString());
   return id;
 }
 
@@ -207,7 +207,9 @@ describe('sign out everywhere', () => {
 describe('export', () => {
   test('the user, passkeys, memberships and invites created, with no key material', async () => {
     const p = await person('Exporter');
-    addPasskey(p.id, null);
+    // Later than the first, so the order (createdAt, then id) is not left
+    // to two random ids when both land in the same millisecond.
+    addPasskey(p.id, null, new Date(Date.now() + 60_000));
     const club = createClub(accounts.db, p.id, 'Export Club');
     const { invite } = createInvite(accounts.db, p.id, club.id, { singleUse: false, ttlDays: 7 });
     const res = await call('/api/me/export', { jar: p.jar });
