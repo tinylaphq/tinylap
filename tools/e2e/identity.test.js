@@ -40,8 +40,11 @@ const feedLog = [];
 before(async () => {
   const file = join(dir, 'planner.sqlite');
   planner = await startPlanner({ hostname: 'localhost', store: openStore(file), env: { TINYLAP_ACCESS_TTL: String(TTL) } });
+  // The feed holds a deletion back for one token lifetime plus 60 s; its
+  // clock runs that far ahead, so a poll right after a deletion processes it.
   feed = startFeed({
     issuer: planner.suite.issuer, token: 'feed-test', store: planner.store, poll: false,
+    accessTtlSeconds: TTL, now: () => Date.now() + (TTL + 61) * 1000,
     logger: { warn: (m) => void feedLog.push(m), info: (m) => void feedLog.push(m) },
   });
   plannerDb = new DatabaseSync(file, { readOnly: true });

@@ -30,12 +30,15 @@ function feedFor(store, extra = {}) {
   return { feed, logged };
 }
 
+const OLD = '2026-01-01T00:00:00.000Z';
+
 const loggedIn = async (jar) => (await (await fetch(`${planner.base}/auth/me`, { headers: { cookie: jar.header() } })).json()).loggedIn;
 
 test('deleting a user in accounts removes their planner sessions after a poll', async (t) => {
   const removed = [];
   const store = { ...planner.store, sessions: planner.store.sessions, deleteWorkspaceData: (id) => void removed.push(id) };
-  const { feed } = feedFor(store);
+  // As if one token lifetime and the skew had passed since each deletion.
+  const { feed } = feedFor(store, { now: () => Date.now() + 11 * 60_000 });
   t.after(() => feed.stop());
   await feed.poll(); // past everything deleted so far
 
@@ -60,8 +63,8 @@ test('deleting a user in accounts removes their planner sessions after a poll', 
 
 test('the feed reads every page, not just the first', async (t) => {
   const pages = [
-    { deletions: [{ seq: 1, kind: 'user', id: 'a', deletedAt: 'x' }, { seq: 2, kind: 'user', id: 'b', deletedAt: 'x' }], next: 2 },
-    { deletions: [{ seq: 3, kind: 'workspace', id: 'w', deletedAt: 'x' }], next: 3 },
+    { deletions: [{ seq: 1, kind: 'user', id: 'a', deletedAt: OLD }, { seq: 2, kind: 'user', id: 'b', deletedAt: OLD }], next: 2 },
+    { deletions: [{ seq: 3, kind: 'workspace', id: 'w', deletedAt: OLD }], next: 3 },
     { deletions: [], next: 3 },
   ];
   const asked = [];
@@ -88,6 +91,87 @@ test('the feed reads every page, not just the first', async (t) => {
   assert.deepEqual(users, ['a', 'b']);
   assert.deepEqual(forgotten, ['a', 'b'], 'their names on library saves go too');
   assert.equal(cursor.seq, 3);
+});
+
+/** A store in memory, for feeds against a fake accounts. */
+function memoryStore() {
+  const cursor = { seq: 0 };
+  const done = [];
+  return {
+    cursor, done,
+    sessions: { deleteUser: async (id) => void done.push(`sessions:${id}`) },
+    forgetUser: (id) => void done.push(`user:${id}`),
+    deleteWorkspaceData: (id) => void done.push(`workspace:${id}`),
+    feedCursor: () => cursor.seq,
+    setFeedCursor: (seq) => { cursor.seq = seq; },
+  };
+}
+
+test('a deletion younger than one token lifetime plus 60 s waits for a later poll', async (t) => {
+  const MIN = 60_000;
+  let clock = Date.parse('2026-10-14T12:00:00Z');
+  const rows = [
+    { seq: 1, kind: 'workspace', id: 'old', deletedAt: new Date(clock - 12 * MIN).toISOString() },
+    { seq: 2, kind: 'workspace', id: 'young', deletedAt: new Date(clock - 5 * MIN).toISOString() },
+    { seq: 3, kind: 'user', id: 'younger', deletedAt: new Date(clock - 1 * MIN).toISOString() },
+  ];
+  const asked = [];
+  const store = memoryStore();
+  const { feed } = feedFor(store, {
+    accessTtlSeconds: 600,
+    now: () => clock,
+    fetch: async (url) => {
+      const after = Number(new URL(url).searchParams.get('after'));
+      asked.push(after);
+      const deletions = rows.filter((r) => r.seq > after);
+      return Response.json({ deletions, next: deletions.at(-1)?.seq ?? after });
+    },
+  });
+  t.after(() => feed.stop());
+  assert.equal((await feed.poll()).processed, 1);
+  assert.deepEqual(store.done, ['workspace:old'], 'a token may still name the young club: it waits');
+  assert.equal(store.cursor.seq, 1, 'the cursor stops before the first young row');
+  assert.deepEqual(asked, [0], 'no further page once a young row is met');
+
+  clock += 6 * MIN; // seq 2 is now 11 minutes old, seq 3 only 7
+  assert.equal((await feed.poll()).processed, 1);
+  assert.deepEqual(store.done, ['workspace:old', 'workspace:young']);
+  clock += 5 * MIN;
+  assert.equal((await feed.poll()).processed, 1);
+  assert.deepEqual(store.done.slice(2), ['sessions:younger', 'user:younger']);
+  assert.equal(store.cursor.seq, 3);
+});
+
+test('a page that does not move past the cursor, or holds a row it cannot read, is an error, not a loop', async (t) => {
+  const old = '2026-01-01T00:00:00.000Z';
+  const bad = [
+    [{ seq: 0, kind: 'user', id: 'a', deletedAt: old }],
+    [{ seq: 1.5, kind: 'user', id: 'a', deletedAt: old }],
+    [{ seq: 1, kind: 'club', id: 'a', deletedAt: old }],
+    [{ seq: 1, kind: 'user', id: 7, deletedAt: old }],
+    [{ seq: 1, kind: 'user', id: 'a', deletedAt: 'yesterday' }],
+    [{ seq: 2, kind: 'user', id: 'a', deletedAt: old }, { seq: 2, kind: 'user', id: 'b', deletedAt: old }],
+  ];
+  for (const deletions of bad) {
+    let calls = 0;
+    const store = memoryStore();
+    const { feed, logged } = feedFor(store, {
+      fetch: async () => {
+        calls += 1;
+        if (calls > 3) throw new Error('read again and again');
+        return Response.json({ deletions, next: 1 });
+      },
+    });
+    t.after(() => feed.stop());
+    const result = await feed.poll();
+    const what = JSON.stringify(deletions);
+    assert.ok(result.error, what);
+    assert.doesNotMatch(result.error.message, /again and again/, `${what}: stops at the first page`);
+    assert.equal(calls, 1, what);
+    assert.equal(logged.length, 1, what);
+    assert.equal(store.cursor.seq, 0, `${what}: nothing of a bad page is processed`);
+    assert.deepEqual(store.done, [], what);
+  }
 });
 
 test('a refused feed token is logged and keeps the cursor', async (t) => {

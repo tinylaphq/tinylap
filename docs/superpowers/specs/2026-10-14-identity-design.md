@@ -233,7 +233,12 @@ admin command (`node apps/accounts/admin.js transfer-ownership <workspace>
   one per consumer, a Fly secret), store the highest `seq` they processed,
   and remove what they hold. The planner deletes private snapshots, library
   tracks and versions of deleted workspaces and the sessions of deleted
-  users. It reads the feed when it starts and hourly while it runs.
+  users. It reads the feed when it starts and hourly while it runs. A row is
+  processed only once it is older than one access token lifetime plus 60 s
+  of clock skew (a member's token may name a deleted club until then, and a
+  save with it would leave rows behind); the read stops at the first younger
+  row and a later poll takes it. A page whose rows do not move past the
+  cursor, or cannot be read, stops the read with an error instead of looping.
 - Until the planner has read the feed, a deleted workspace's data still sits
   in the planner but cannot be reached: no token names that workspace any
   more. That window is accepted.
