@@ -34,11 +34,32 @@ export async function verifyAccessToken(token, opts) {
   const { issuer, audience, jwks, clockTolerance = 5 } = opts;
   try {
     const { payload } = await jwtVerify(token, jwks ?? remoteJwks(issuer), {
-      issuer, audience, algorithms: ['RS256'], clockTolerance,
+      issuer, audience, algorithms: ['RS256'], clockTolerance, requiredClaims: ['exp', 'sub'],
     });
-    const workspaces = Array.isArray(payload.workspaces) ? payload.workspaces : [];
+    const workspaces = Array.isArray(payload.workspaces)
+      ? payload.workspaces.filter(
+          (w) => typeof w === 'object' && w !== null && typeof w.id === 'string' && typeof w.role === 'string'
+        )
+      : [];
     return /** @type {any} */ ({ ...payload, workspaces });
   } catch (cause) {
-    throw new AuthError('invalid_token', 'The access token is not valid.', { cause });
+    const code = isJwksError(cause) ? 'unavailable' : 'invalid_token';
+    const message = code === 'unavailable' ? 'The authorization server is unavailable.' : 'The access token is not valid.';
+    throw new AuthError(code, message, { cause });
   }
+}
+
+/** @param {any} err */
+function isJwksError(err) {
+  if (!err) return false;
+  const code = err.code ?? err.name ?? '';
+  const msg = err.message ?? '';
+  return (
+    code === 'ERR_JWKS_TIMEOUT'
+    || code === 'ERR_JWKS_MULTIPLE_MATCHING_KEYS'
+    || msg.includes('getaddrinfo')
+    || msg.includes('ECONNREFUSED')
+    || msg.includes('ENOTFOUND')
+    || msg.includes('fetch')
+  );
 }

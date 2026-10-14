@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPair, SignJWT, createLocalJWKSet, exportJWK } from 'jose';
+import { randomBytes, subtle } from 'node:crypto';
 import { verifyAccessToken } from '../index.js';
 
 const ISSUER = 'http://accounts.test';
@@ -38,14 +39,43 @@ test('wrong audience, issuer, expiry or signature are all invalid_token', async 
   }
 });
 
-test('only RS256 is accepted', async () => {
-  const ec = await generateKeyPair('ES256');
-  const token = await new SignJWT({}).setProtectedHeader({ alg: 'ES256', kid: 'k1' })
-    .setIssuer(ISSUER).setAudience(AUD).setSubject('u').setExpirationTime('5m').sign(ec.privateKey);
-  await assert.rejects(verifyAccessToken(token, { issuer: ISSUER, audience: AUD, jwks }), (e) => e.code === 'invalid_token');
+test('a token without exp or sub is rejected', async () => {
+  const noExp = await new SignJWT({ workspaces: [{ id: 'w1', role: 'member' }] })
+    .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+    .setIssuer(ISSUER).setAudience(AUD).setSubject('user-1').setIssuedAt()
+    .sign(privateKey);
+  await assert.rejects(verifyAccessToken(noExp, { issuer: ISSUER, audience: AUD, jwks }), (e) => e.code === 'invalid_token');
+
+  const noSub = await new SignJWT({ workspaces: [{ id: 'w1', role: 'member' }] })
+    .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+    .setIssuer(ISSUER).setAudience(AUD).setIssuedAt().setExpirationTime('10m')
+    .sign(privateKey);
+  await assert.rejects(verifyAccessToken(noSub, { issuer: ISSUER, audience: AUD, jwks }), (e) => e.code === 'invalid_token');
+});
+
+test('only RS256 is accepted (algorithm pinning)', async () => {
+  const secret = await subtle.importKey('raw', randomBytes(32), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+  const hsToken = await new SignJWT({ workspaces: [{ id: 'w1', role: 'member' }] })
+    .setProtectedHeader({ alg: 'HS256', kid: 'k1' })
+    .setIssuer(ISSUER).setAudience(AUD).setSubject('u').setIssuedAt().setExpirationTime('5m')
+    .sign(secret);
+  const hsJwks = () => Promise.resolve(secret);
+  await assert.rejects(verifyAccessToken(hsToken, { issuer: ISSUER, audience: AUD, jwks: hsJwks }), (e) => e.code === 'invalid_token');
 });
 
 test('a token without a workspaces claim reads as no workspaces', async () => {
   const token = await sign({ workspaces: undefined });
   assert.deepEqual((await verifyAccessToken(token, { issuer: ISSUER, audience: AUD, jwks })).workspaces, []);
+});
+
+test('malformed workspace claims are filtered out', async () => {
+  const token = await sign({ workspaces: [null, { id: 'w1', role: 'member' }, { role: 'member' }, { id: 'w2' }] });
+  assert.deepEqual((await verifyAccessToken(token, { issuer: ISSUER, audience: AUD, jwks })).workspaces, [{ id: 'w1', role: 'member' }]);
+});
+
+test('JWKS fetch failure throws unavailable', async () => {
+  await assert.rejects(
+    verifyAccessToken(await sign(), { issuer: 'http://127.0.0.1:1', audience: AUD }),
+    (e) => e.code === 'unavailable'
+  );
 });

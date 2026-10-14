@@ -4,7 +4,10 @@ Access token verification and permission checks for apps and MCP servers in the 
 
 ## `verifyAccessToken(token, options)`
 
-Verifies an OAuth 2.0 access token against the issuer's published JWKS. Always uses RS256; throws `AuthError` with `code: 'invalid_token'` if the token is missing, malformed, signed with a different algorithm, expired, issued by the wrong issuer, or not meant for this audience.
+Verifies an OAuth 2.0 access token against the issuer's published JWKS. Always uses RS256; throws `AuthError` with one of two codes:
+
+- `code: 'invalid_token'` — the token is missing, malformed, lacks required claims (`exp`, `sub`), signed with a different algorithm, expired, issued by the wrong issuer, or not meant for this audience.
+- `code: 'unavailable'` — the authorization server (JWKS endpoint) is unreachable or timed out.
 
 ```js
 import { verifyAccessToken } from '@tinylap/auth';
@@ -40,17 +43,17 @@ if (can(claims, workspaceId, 'admin.manage')) {
 | Action | owner | admin | member |
 | --- | --- | --- | --- |
 | `track.read` | ✓ | ✓ | ✓ |
-| `track.save` | ✓ | ✓ | ✓ |
+| `track.save` (save, new version, rename) | ✓ | ✓ | ✓ |
 | `track.share` | ✓ | ✓ | ✓ |
 | `track.copy` | ✓ | ✓ | ✓ |
-| `track.delete` | ✓ | ✓ | |
+| `track.delete` (track or version) | ✓ | ✓ | |
 | `invite.manage` | ✓ | ✓ | |
 | `member.remove` | ✓ | ✓ | |
 | `admin.manage` | ✓ | | |
 | `owner.transfer` | ✓ | | |
-| `club.manage` | ✓ | | |
+| `club.manage` (rename, delete) | ✓ | | |
 | `club.leave` | | ✓ | ✓ |
 
 ## Provider independence
 
-This package never depends on a specific identity provider. `verifyAccessToken` accepts any OAuth 2.0 access token issued by any provider, provided the issuer publishes an RS256 JWKS at `{issuer}/jwks`. Task 2 uses OpenID Connect discovery to use the actual `jwks_uri` if it differs.
+This package never depends on a specific identity provider. `verifyAccessToken` accepts any OAuth 2.0 access token issued by any provider, provided the issuer publishes an RS256 JWKS at `{issuer}/jwks`.

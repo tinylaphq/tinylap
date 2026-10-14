@@ -34,7 +34,7 @@ export function verifyAccessToken(
   options: {
     issuer: string;
     audience: string;
-    jwks?: any;
+    jwks?: import('jose').JWTVerifyGetKey;
     clockTolerance?: number;
   }
 ): Promise<AccessClaims>;
@@ -45,5 +45,5 @@ export const ROLES: readonly Role[];
 export const ACTIONS: readonly Action[];
 
 export class AuthError extends Error {
-  code: string;
+  code: 'invalid_token' | 'unavailable';
 }
