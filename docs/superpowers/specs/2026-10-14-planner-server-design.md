@@ -70,9 +70,10 @@ apps/track-planner/
     static.js      file serving for the assembled app (/, /v/<sha>/)
     store.js       SQLite access: put, get, list by shape
     problems.js    RFC 9457 helpers
+    negotiate.js   Accept and Content-Type parsing
     rate-limit.js  in-memory fixed window per client IP
+    pages.js       the server-rendered HTML pages (/api, /shapes/<key>)
     openapi.json   the API description, hand written
-    api.html       the docs page (renders openapi.json)
   test/server/     server tests
 ```
 
@@ -183,9 +184,15 @@ All API responses carry `Link: </openapi.json>; rel="service-desc"` and
   description.
 - `GET /.well-known/api-catalog`: an RFC 9727 linkset pointing at
   `/openapi.json` and `/api`.
-- `GET /api`: the rendered docs page. The renderer (Scalar) is an npm
-  dependency served from `/v/<sha>/` like everything else; no CDN. It is
-  configured to load no external fonts or other resources.
+- `GET /api`: the docs page, rendered **on the server** from `openapi.json`
+  into plain HTML (routes, parameters, representations, responses, problem
+  types), with no scripts. Off-the-shelf renderers were ruled out: Scalar
+  alone is 48 MB of Vue components, the opposite of this project's
+  platform-first approach. Tools that want an interactive explorer point at
+  `/openapi.json`.
+- Problem types are defined once, as an `x-tinylap-problems` extension in
+  `openapi.json` (name, status, title, description). The server takes its error
+  titles from there, and `/api` lists them with an anchor each.
 
 ### Errors
 
@@ -218,7 +225,8 @@ redirects (`302`) to its description on `/api`.
     its SHA-256 hash, computed in the assemble step;
   - `/layouts/<key>` HTML: `default-src 'none'; style-src 'unsafe-inline';
     img-src data:` (the page has no scripts at all);
-  - `/api`: `default-src 'self'` plus whatever Scalar needs, kept to the minimum.
+  - `/api` and the `/shapes/<key>` HTML: the same policy as the `/layouts`
+    HTML, since none of them has a script.
 - Logs: one line per request (method, path, status, duration). No IP addresses
   are logged; the rate limiter holds them in memory only, for at most one hour.
 
