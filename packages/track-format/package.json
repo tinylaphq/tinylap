@@ -17,10 +17,12 @@
     },
     "./types": {
       "types": "./types.d.ts"
-    }
+    },
+    "./layout.schema.json": "./layout.schema.json"
   },
   "files": [
     "*.js",
+    "*.json",
     "types.d.ts",
     "dist"
   ],
@@ -29,5 +31,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "prepack": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('types.d.ts', 'dist/types.d.ts')\" && node -e \"require('node:fs').copyFileSync('../../LICENSES/MPL-2.0.txt', 'LICENSE')\""
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0"
   }
 }
