@@ -8,8 +8,10 @@ import { exportHtml } from '../js/storage.js';
 import { problem, json, html } from './responses.js';
 import { prefersHtml, mediaType, matchesEtag } from './negotiate.js';
 import { shapePage } from './pages.js';
+import { clientBucket } from './rate-limit.js';
 
 const MAX_BODY = 512 * 1024;
+const MAX_LAYOUT = 64 * 1024;
 const TYPES = new Set(['application/json', 'text/html']);
 
 /** Reads at most `max` bytes; past that it drains the rest and returns null. */
@@ -26,7 +28,7 @@ async function readBody(req, max) {
 /** Only a configured header names the client: an unconfigured one is just a forgery. */
 function clientOf(request) {
   const value = request.clientIpHeader && request.req.headers[request.clientIpHeader];
-  return typeof value === 'string' && value ? value : request.req.socket.remoteAddress ?? 'unknown';
+  return clientBucket(typeof value === 'string' && value ? value : request.req.socket.remoteAddress ?? 'unknown');
 }
 
 const notFound = (request, detail = 'Nothing is stored under this key.') => problem(request, 'not-found', detail);
@@ -65,9 +67,14 @@ async function postLayout(request) {
       : 'Only a single closed loop carries a track. Remove the track block, or run assignTrack before posting.');
   }
 
+  const canonical = canonicalJson(layout);
+  if (Buffer.byteLength(canonical) > MAX_LAYOUT) {
+    return problem(request, 'too-large', 'A layout may be at most 64 KiB once read, however large the page or file it came in.');
+  }
+
   const key = await snapshotKey(layout);
   const sk = shape ? await shapeKey(shape) : null;
-  const created = request.store.put({ key, json: canonicalJson(layout), shapeKey: sk, trackId: layout.track?.id ?? null });
+  const created = request.store.put({ key, json: canonical, shapeKey: sk, trackId: layout.track?.id ?? null });
   return json(created ? 201 : 200, { key, url: `${request.origin}/layouts/${key}`, shapeKey: sk }, {
     Location: `/layouts/${key}`,
     'Cache-Control': 'no-store',
@@ -107,4 +114,6 @@ export const layoutRoutes = [
   { pattern: /^\/layouts$/, methods: { POST: postLayout } },
   { pattern: /^\/layouts\/([^/]+?)(?:\.(json|html))?$/, methods: { GET: getLayout } },
   { pattern: /^\/shapes\/([^/]+)$/, methods: { GET: getShape } },
+  // Last: anything else under these prefixes is an API miss, not a static one.
+  { pattern: /^\/(?:layouts|shapes)(?:\/.*)?$/, unknown: true, methods: {} },
 ];

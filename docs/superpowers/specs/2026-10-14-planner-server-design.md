@@ -72,6 +72,7 @@ apps/track-planner/
     discovery.js   API description, schema, catalog, problem types, docs page
     store.js       SQLite access: put, get, list by shape
     problems.js    RFC 9457 helpers
+    responses.js   problem, json and html response builders (no imports from the routes)
     negotiate.js   Accept and Content-Type parsing
     rate-limit.js  in-memory fixed window per client IP
     pages.js       the server-rendered HTML pages (/api, /shapes/<key>)
@@ -140,9 +141,13 @@ All API responses carry `Link: </openapi.json>; rel="service-desc"` and
 - Validation, in order:
   1. Larger than 512 KiB: `413`. (An exported page carries the drawing and is
      several times larger than its JSON.)
-  2. Over the rate limit: `429` with `Retry-After`.
+  2. Over the rate limit: `429` with `Retry-After`. Clients are told apart by
+     address, IPv6 by its /64 prefix (IPv4-mapped addresses count as IPv4).
   3. Unparseable, or rejected by `layoutFromData`: `422`.
-  4. **Track consistency.** If `shapeOf(layout)` is a shape, the layout must
+  4. Canonical JSON larger than 64 KiB: `413` `too-large`, with a `detail`
+     saying a layout may be at most 64 KiB once read. This bounds what an
+     anonymous client can store; the 512 KiB cap above only bounds the request.
+  5. **Track consistency.** If `shapeOf(layout)` is a shape, the layout must
      carry a `track` whose `shape` equals it. If `shapeOf(layout)` is `null`,
      it must carry no `track`. Otherwise `422`, with a `detail` that says to run
      `assignTrack` first. Open and unfinished layouts are welcome; they simply
@@ -206,7 +211,9 @@ Every error is `application/problem+json`:
 redirects (`302`) to its description on `/api`.
 
 - Database unavailable: `503` on API routes; static files keep working.
-- Unknown route: `404`. Wrong method on a known route: `405` with `Allow`.
+- Unknown route: `404`, a problem document for anything under `/layouts` and
+  `/shapes`. Wrong method on a known route: `405` with `Allow` (which lists
+  `HEAD` where `GET` is allowed, and `OPTIONS`).
 
 ## 6. Static files
 
@@ -224,7 +231,8 @@ redirects (`302`) to its description on `/api`.
   no `Server` header.
 - New `Content-Security-Policy`:
   - planner pages: `default-src 'self'`, with the inline import map allowed by
-    its SHA-256 hash, computed in the assemble step;
+    its SHA-256 hash, computed per request by `plannerCsp` from the page it
+    serves;
   - `/layouts/<key>` HTML: `default-src 'none'; style-src 'unsafe-inline';
     img-src data:` (the page has no scripts at all);
   - `/api` and the `/shapes/<key>` HTML: the same policy as the `/layouts`

@@ -29,7 +29,12 @@ async function dispatch(request, routes, serveStatic) {
   for (const route of routes) {
     const match = route.pattern.exec(url.pathname);
     if (!match) continue;
-    const allowed = Object.keys(route.methods).join(', ');
+    if (route.unknown) {
+      const miss = problem(request, 'not-found', 'There is no such route.');
+      return { ...miss, headers: { ...API_HEADERS, ...miss.headers } };
+    }
+    const names = Object.keys(route.methods);
+    const allowed = [...names, ...(names.includes('GET') ? ['HEAD'] : []), 'OPTIONS'].join(', ');
     if (req.method === 'OPTIONS') {
       return {
         status: 204,

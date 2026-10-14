@@ -202,7 +202,7 @@
   "x-tinylap-problems": {
     "invalid-layout": { "status": 422, "title": "The layout is not valid", "description": "The body could not be read as a layout: not JSON, no layout data in the page, an unknown version, piece type or rotation." },
     "track-mismatch": { "status": 422, "title": "The track block does not match the layout", "description": "A single closed loop must carry a track whose shape equals its geometry, and any other layout must carry none. Run assignTrack before posting." },
-    "too-large": { "status": 413, "title": "The layout is too large", "description": "A request body may be at most 512 KiB." },
+    "too-large": { "status": 413, "title": "The layout is too large", "description": "A request body may be at most 512 KiB, and a layout at most 64 KiB once read (canonical JSON)." },
     "rate-limited": { "status": 429, "title": "Too many layouts posted", "description": "Wait for the number of seconds in Retry-After." },
     "unsupported-media-type": { "status": 415, "title": "Unsupported media type", "description": "Send application/json, or text/html for an exported page." },
     "not-found": { "status": 404, "title": "Not found", "description": "Nothing is stored under this key, or the key is malformed." },

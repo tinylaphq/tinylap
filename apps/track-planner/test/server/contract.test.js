@@ -78,6 +78,8 @@ test('every response matches the description', async () => {
     await postJson(up.base, JSON.stringify(openLayout()));
     await call(up.base, 'POST', '/layouts', { headers: { 'Content-Type': 'text/plain' }, body: 'x' });  // 415
     await postJson(up.base, 'x'.repeat(600 * 1024));            // 413
+    const big = { ...openLayout(), pieces: Array.from({ length: 2000 }, (_, i) => ({ type: 'straight', x: i, y: 0, rot: 0 })) };
+    await postJson(up.base, JSON.stringify(big));               // 413, once read
     await postJson(up.base, '{oops');                           // 422
     await postJson(limited.base, JSON.stringify(layout));       // 429
     await postJson(down.base, JSON.stringify(layout));          // 503

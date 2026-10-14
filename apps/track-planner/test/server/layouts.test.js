@@ -139,7 +139,7 @@ test('the api answers cross-origin and points at its description', async () => {
   assert.equal(preflight.headers.get('access-control-allow-headers'), 'Content-Type');
   const wrong = await fetch(`${server.base}/layouts`, { method: 'GET' });
   assert.equal(wrong.status, 405);
-  assert.equal(wrong.headers.get('allow'), 'POST');
+  assert.equal(wrong.headers.get('allow'), 'POST, OPTIONS');
 });
 
 test('posts over the limit are refused with retry-after', async () => {
@@ -182,4 +182,55 @@ test('without a database the api is unavailable', async () => {
   } finally {
     await down.close();
   }
+});
+
+test('a stored layout may be at most 64 KiB once read', async () => {
+  const big = { ...openLayout(), pieces: Array.from({ length: 2000 }, (_, i) => ({ type: 'straight', x: i, y: 0, rot: 0 })) };
+  assert.ok(JSON.stringify(big).length < 512 * 1024);
+  const p = await problemOf(await post(big));
+  assert.equal(p.status, 413);
+  assert.match(p.type, /too-large$/);
+  assert.match(p.detail, /64 KiB/);
+});
+
+test('a piece that is not an object is a readable 422', async () => {
+  const p = await problemOf(await post('{"version":2,"pieces":[null]}'));
+  assert.equal(p.status, 422);
+  assert.match(p.detail, /^Invalid piece/);
+});
+
+test('ipv6 clients share a window per /64', async () => {
+  const fly = await startServer({ rateLimit: 1, clientIpHeader: 'Fly-Client-IP' });
+  const from = (ip) => fetch(`${fly.base}/layouts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Fly-Client-IP': ip },
+    body: JSON.stringify(openLayout()),
+  });
+  try {
+    assert.equal((await from('2001:db8:0:1::1')).status, 201);
+    assert.equal((await from('2001:db8:0:1:aaaa::2')).status, 429);
+    assert.equal((await from('2001:db8:0:2::1')).status, 200);
+  } finally {
+    await fly.close();
+  }
+});
+
+test('unknown paths under the api prefixes are problems, not static 404s', async () => {
+  for (const path of ['/layouts/', '/layouts/a/b', '/shapes/', '/shapes/a/b']) {
+    const res = await fetch(server.base + path);
+    assert.equal((await problemOf(res)).status, 404, path);
+    assert.equal(res.headers.get('access-control-allow-origin'), '*', path);
+  }
+  const post = await fetch(`${server.base}/layouts/`, { method: 'POST' });
+  assert.equal(post.status, 404);
+  assert.equal((await fetch(`${server.base}/layoutsfoo`)).headers.get('content-type'), 'text/plain; charset=utf-8');
+});
+
+test('405 lists every method the url takes, HEAD and OPTIONS included', async () => {
+  const key = 'AAAAAAAAAAAAAAAAAAAAAA';
+  const get = await fetch(`${server.base}/layouts/${key}`, { method: 'DELETE' });
+  assert.equal(get.status, 405);
+  assert.equal(get.headers.get('allow'), 'GET, HEAD, OPTIONS');
+  const posts = await fetch(`${server.base}/layouts`, { method: 'PUT' });
+  assert.equal(posts.headers.get('allow'), 'POST, OPTIONS');
 });
