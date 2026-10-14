@@ -32,7 +32,7 @@ export async function loadAccount({ fetch = globalThis.fetch } = {}) {
 /** Where "Log in" goes: back to this page, query included. @param {{ pathname: string, search: string }} location */
 export const loginHref = ({ pathname, search }) => `/auth/login?${new URLSearchParams({ returnTo: pathname + search })}`;
 
-/** Wires the control in the page; returns once it shows the current state. */
+/** Wires the control in the page; resolves with the state it shows. @returns {Promise<AccountView | undefined>} */
 export async function initAccount(doc = document) {
   const root = /** @type {HTMLElement} */ (doc.querySelector('#account'));
   const login = /** @type {HTMLAnchorElement} */ (doc.querySelector('#btn-login'));
@@ -42,7 +42,7 @@ export async function initAccount(doc = document) {
   if (!root || !login || !button || !down || !menu) return;
 
   const view = await loadAccount();
-  if (view.state === 'off') return;
+  if (view.state === 'off') return view;
   root.hidden = false;
   login.hidden = view.state !== 'out';
   down.hidden = view.state !== 'down';
@@ -54,7 +54,7 @@ export async function initAccount(doc = document) {
   refresh();
   login.addEventListener('click', refresh);
 
-  if (view.state !== 'in') return;
+  if (view.state !== 'in') return view;
   button.textContent = view.name;
   button.setAttribute('aria-expanded', 'false');
   /** @type {HTMLAnchorElement} */ (menu.querySelector('#menu-account')).href = view.accountUrl;
@@ -80,4 +80,5 @@ export async function initAccount(doc = document) {
     event.preventDefault();
     list[(to + list.length) % list.length]?.focus();
   });
+  return view;
 }

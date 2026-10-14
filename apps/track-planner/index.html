@@ -16,10 +16,12 @@
 <body>
   <nav class="navbar">
     <span class="navbar-brand">Circuit 30 Planner</span>
+    <span class="library-current" id="library-current" hidden></span>
     <div class="navbar-right">
       <button type="button" class="btn btn-sm btn-outline" id="btn-presets">Layouts</button>
       <button type="button" class="btn btn-sm btn-secondary" id="btn-open">Open</button>
       <button type="button" class="btn btn-sm btn-secondary" id="btn-share">Share</button>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-download" hidden>Download</button>
       <button type="button" class="btn btn-sm btn-primary" id="btn-save">Save</button>
       <div class="account" id="account" hidden>
         <a class="btn btn-sm btn-outline" id="btn-login" href="/auth/login">Log in</a>
@@ -29,7 +31,7 @@
       </div>
     </div>
     <div class="account-menu" id="account-menu" popover role="menu" aria-labelledby="btn-account">
-      <a role="menuitem" id="menu-library" href="/library" hidden>Library</a>
+      <button type="button" role="menuitem" id="menu-library" hidden>Library</button>
       <a role="menuitem" id="menu-account" href="/">Account</a>
       <form method="post" action="/auth/logout">
         <button type="submit" role="menuitem">Log out</button>
@@ -150,6 +152,57 @@
     </div>
     <ul id="suggestions-list"></ul>
     <div id="out-of-reach"></div>
+  </dialog>
+
+  <dialog id="library-dialog" aria-labelledby="library-dialog-title">
+    <form method="dialog" class="dialog-dismiss"><button class="btn btn-sm btn-outline" aria-label="Close">&#10005;</button></form>
+    <h2 id="library-dialog-title">Library</h2>
+    <p class="subtitle">Your tracks and your clubs' tracks, each with its history.</p>
+    <p class="status status-error" id="library-error" role="alert" hidden></p>
+    <div id="library-body"></div>
+    <p class="library-foot"><a class="btn btn-sm btn-outline" href="/library/export" download>Export everything (JSON)</a></p>
+  </dialog>
+
+  <dialog id="save-dialog" aria-labelledby="save-dialog-title">
+    <h2 id="save-dialog-title">Save to library</h2>
+    <p class="subtitle">Later saves add versions to this track.</p>
+    <form method="dialog" id="save-form">
+      <div class="field">
+        <label for="save-name">Name</label>
+        <input type="text" id="save-name" name="name" maxlength="100" autocomplete="off" placeholder="Living room oval">
+      </div>
+      <div class="field">
+        <label for="save-workspace">Workspace</label>
+        <select id="save-workspace" name="workspace"></select>
+      </div>
+      <p class="status status-error" id="save-error" role="alert" hidden></p>
+      <menu>
+        <button type="button" class="btn btn-outline" id="save-cancel">Cancel</button>
+        <button class="btn btn-primary" value="save" id="save-submit">Save</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="share-dialog" aria-labelledby="share-dialog-title" aria-describedby="share-dialog-text">
+    <h2 id="share-dialog-title">Publish this layout?</h2>
+    <p id="share-dialog-text">Publishing makes this layout public at a permanent link. It cannot be undone.</p>
+    <form method="dialog">
+      <menu>
+        <button class="btn btn-outline" value="cancel">Cancel</button>
+        <button class="btn btn-primary" value="publish">Publish and copy link</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-text">
+    <h2 id="confirm-dialog-title"></h2>
+    <p id="confirm-dialog-text"></p>
+    <form method="dialog">
+      <menu>
+        <button class="btn btn-outline" value="cancel">Cancel</button>
+        <button class="btn btn-danger" value="confirm" id="confirm-dialog-ok"></button>
+      </menu>
+    </form>
   </dialog>
 
   <script type="module" src="./js/app.js"></script>

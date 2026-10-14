@@ -14,11 +14,12 @@ export { driveAuthorize, Jar, navigate };
  * Starts accounts for an app listening on `http://127.0.0.1:<plannerPort>`:
  * the app's redirect URI is `/auth/callback`, its post-logout redirect URI
  * `/`, its resource its origin. Start the app's server first (port 0) and
- * pass the port it got.
- * @param {{ plannerPort: number, env?: Record<string, string> }} options
+ * pass the port it got. `hostname` names the issuer's host (a browser test
+ * needs `localhost`: a passkey's RP ID cannot be an IP address).
+ * @param {{ plannerPort: number, env?: Record<string, string>, hostname?: string }} options
  */
-export async function startSuite({ plannerPort, env = {} }) {
-  const accounts = await startAccounts({ plannerPort, env });
+export async function startSuite({ plannerPort, env = {}, hostname }) {
+  const accounts = await startAccounts({ plannerPort, env, hostname });
   const { client } = accounts;
   /** @type {Promise<void> | undefined} */
   let closing;

@@ -508,3 +508,140 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 .account-menu [role="menuitem"]:hover,
 .account-menu [role="menuitem"]:focus-visible { background: var(--p-hover-bg); color: var(--p-accent-2); outline: none; }
 .account-menu [role="menuitem"]:focus-visible { box-shadow: inset 3px 0 0 var(--p-accent-2); }
+
+/* ── Library ─────────────────────────────────────────────────────── */
+
+/* The library track on the canvas, named beside the brand: what "Save"
+   adds a version to. Pink on the left, like the row it came from in the
+   library dialog, so the two read as the same thing. */
+.library-current {
+  margin: 0 auto 0 var(--p-space-md);
+  padding: 2px var(--p-space-sm);
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  border-left: var(--p-space-xs) solid var(--p-accent-1);
+}
+.library-current[hidden], #btn-download[hidden] { display: none; }   /* .btn sets display */
+@media (max-width: 700px) { .library-current { display: none; } }
+
+#library-dialog { max-width: var(--p-container-width); }
+#library-dialog [hidden] { display: none; }
+#library-error { margin-bottom: var(--p-space-md); text-transform: none; }
+
+.library-ws + .library-ws { margin-top: var(--p-space-lg); }
+.library-ws-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--p-space-sm);
+  margin-bottom: var(--p-space-sm);
+}
+.library-ws-head h3 { color: var(--p-accent-2); }
+.library-ws-head .tag { font-size: 11px; padding: 1px 6px; }
+.library-hint { color: var(--p-text-muted); }
+
+.library-tracks { list-style: none; padding: 0; margin: 0; }
+.library-track {
+  padding: var(--p-space-sm) var(--p-space-md);
+  margin-bottom: var(--p-space-sm);
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text);
+  border-left-width: var(--p-space-xs);
+}
+/* The one on the canvas: the same pink edge as the navbar's name. */
+.library-track[aria-current="true"] { border-left-color: var(--p-accent-1); }
+
+.library-track-head { display: flex; align-items: baseline; gap: var(--p-space-sm); flex-wrap: wrap; }
+.library-track-name {
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.library-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--p-accent-1);
+}
+.library-meta { margin: 2px 0 0; font-size: 12px; color: var(--p-text-muted); }
+.library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--p-space-xs);
+  margin-top: var(--p-space-sm);
+}
+.library-actions .btn[aria-expanded="true"] { background: var(--p-text); color: var(--p-bg); }
+
+.library-panel {
+  margin-top: var(--p-space-sm);
+  padding-top: var(--p-space-sm);
+  border-top: var(--p-border-thin) solid var(--p-border);
+}
+.library-note { margin: var(--p-space-sm) 0 0; font-size: 12px; color: var(--p-text-faint); }
+
+/* The history: newest first, down a rule, a square stop per save. The
+   rule is painted inside the list's padding so the scroll box clips
+   nothing. */
+.library-versions {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--p-space-lg);
+  background: linear-gradient(var(--p-border), var(--p-border)) 7px 0 / var(--p-border-width) 100% no-repeat;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+.library-version {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 var(--p-space-sm);
+  padding: var(--p-space-xs) 0;
+}
+.library-version::before {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--p-space-lg) + 3px);
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text-faint);
+}
+.library-version[aria-current="true"]::before { background: var(--p-accent-1); border-color: var(--p-accent-1); }
+.library-version-when { font-size: 13px; font-weight: 600; }
+.library-version-current { margin-left: var(--p-space-sm); font-size: 11px; font-weight: 700; color: var(--p-accent-1); }
+.library-version .library-meta { grid-column: 1; margin: 0; }
+.library-version-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: var(--p-space-xs); }
+
+.library-form label { margin-bottom: var(--p-space-xs); }
+.library-form-row { display: flex; gap: var(--p-space-xs); align-items: stretch; flex-wrap: wrap; }
+.library-form-row input, .library-form-row select { flex: 1 1 12rem; width: auto; padding: 6px 10px; font-size: 14px; }
+
+.library-foot { margin: var(--p-space-lg) 0 0; }
+
+/* palace styles text inputs but not <select>: the same box here. */
+#save-dialog select, .library-form select {
+  width: 100%;
+  padding: 12px;
+  font-family: var(--p-font);
+  font-size: 1rem;
+  color: var(--p-text);
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text);
+  border-radius: var(--p-radius);
+  outline: none;
+}
+#save-dialog select:focus, .library-form select:focus { border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); }
+#save-dialog .field { margin-bottom: var(--p-space-md); }
+#save-dialog [hidden] { display: none; }
+#save-error { text-transform: none; }
+
+@media (max-width: 600px) {
+  #library-dialog { padding: var(--p-space-md); }
+  .library-track { padding: var(--p-space-sm); }
+}

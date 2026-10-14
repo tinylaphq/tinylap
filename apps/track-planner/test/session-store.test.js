@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLayout, loadLayout, saveLayout, clearLayout, LAYOUT_STORAGE_KEY } from '../js/session-store.js';
+import { parseLayout, loadLayout, saveLayout, clearLayout, LAYOUT_STORAGE_KEY, loadTrackRef, saveTrackRef, TRACK_STORAGE_KEY } from '../js/session-store.js';
 import { createLayout } from '@tinylap/track-format';
 import { prepareExport } from '../js/storage.js';
 import { stockL } from '../js/presets.js';
@@ -78,4 +78,23 @@ test('the session keeps a layout\'s track across a reload', () => {
   const { layout } = prepareExport(createLayout({ pieces: stockL() }));
   saveLayout(storage, layout);
   assert.deepEqual(loadLayout(storage).track, layout.track);
+});
+
+test('the library track the canvas came from round-trips and can be forgotten', () => {
+  const s = fakeStorage();
+  assert.equal(loadTrackRef(s), null);
+  saveTrackRef(s, { id: 'T1', name: 'Monza', workspaceId: 'W1', extra: 'dropped' });
+  assert.deepEqual(loadTrackRef(s), { id: 'T1', name: 'Monza', workspaceId: 'W1' });
+  saveTrackRef(s, null);
+  assert.equal(loadTrackRef(s), null);
+  assert.equal(s.dump()[TRACK_STORAGE_KEY], undefined);
+});
+
+test('a damaged track reference is no reference', () => {
+  for (const raw of ['{', '"x"', '{"id":1,"name":"a","workspaceId":"w"}', '{"id":"a"}']) {
+    assert.equal(loadTrackRef(fakeStorage({ [TRACK_STORAGE_KEY]: raw })), null, raw);
+  }
+  const denied = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() { throw new Error('denied'); } };
+  assert.equal(loadTrackRef(denied), null);
+  saveTrackRef(denied, { id: 'a', name: 'b', workspaceId: 'c' });
 });
