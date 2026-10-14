@@ -1,0 +1,28 @@
+# Single Node app, one region, scales to zero. Set it up once by following
+# the first-deploy checklist in apps/accounts/README.md; CI deploys it after.
+app = 'tinylap-accounts'
+primary_region = 'fra'
+
+[build]
+
+[env]
+  TINYLAP_ISSUER = 'https://tinylap-accounts.fly.dev'
+  TINYLAP_CLIENT_IP_HEADER = 'Fly-Client-IP'
+
+# SQLite on one volume means exactly one machine. Fly snapshots the volume
+# daily; that is the only backup during the proof of concept. Create it once:
+#   fly volumes create tinylap_accounts_data --app tinylap-accounts --region fra --size 1
+[mounts]
+  source = 'tinylap_accounts_data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 4100
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'

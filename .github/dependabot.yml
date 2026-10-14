@@ -1,0 +1,10 @@
+# Security updates for npm come from GitHub's Dependabot alerts. Version
+# updates stay off: Better Auth and its plugins are pinned exactly and are
+# upgraded by hand, with the full test suite green (identity spec §9).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0

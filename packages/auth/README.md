@@ -135,6 +135,15 @@ The cookie value never reaches the store, only its hash, and the tokens only sea
 
 `seal(keys, text)` encrypts with the first key, as `<kid>.<iv>.<ciphertext+tag>` (base64url); `open(keys, sealed)` decrypts with whichever key the id names and throws for an unknown id or a tampered value. An optional third argument, a purpose label, is authenticated too and must match on `open`: the BFF seals the login cookie as `login` and stored tokens as `tokens`, so neither opens as the other. To rotate, put a new key first and keep the old one until every session sealed with it has expired or refreshed: nobody is logged out. A session whose key was removed reads as logged out.
 
+## Joining the suite
+
+A new app or MCP server becomes a client of `apps/accounts` in four steps:
+
+1. Register a trusted client in the `TINYLAP_CLIENTS` secret of `accounts`: a `clientId`, a random `clientSecret`, the app's `redirectUris` (`<origin>/auth/callback`), `postLogoutRedirectUris` and `resource` (the app's origin, which becomes the access token's `aud`).
+2. In the app, `createBff` with that client for browser log-in, and `verifyAccessToken(token, { issuer, audience: <origin> })` plus `can(claims, workspaceId, action)` for every request that needs a role. Keep nothing of a user keyed on the provider's subject: `sub` is TinyLap's own user id.
+3. Give the app its own token key list and, if it stores user data, a token for `accounts`' deletions feed (add it to `TINYLAP_FEED_TOKENS`) so it can remove what it holds when an account or workspace is deleted.
+4. Read `apps/accounts/README.md` for the secrets and their rotation.
+
 ## Provider independence
 
 This package never depends on a specific identity provider: `createBff` speaks standard OIDC through `openid-client`, and `verifyAccessToken` accepts any OAuth 2.0 access token issued by any provider, provided the issuer publishes an RS256 JWKS at `{issuer}/jwks`.

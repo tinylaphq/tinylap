@@ -42,6 +42,35 @@ The API is described at `/openapi.json` and `/api`. See [docs/identity.md](docs/
 
 Log-in is off in development unless `TINYLAP_ISSUER` is set. To try it, run `accounts` and the planner side by side: `TINYLAP_CLIENTS='[{"clientId":"planner-dev","clientSecret":"dev","redirectUris":["http://localhost:8000/auth/callback"],"postLogoutRedirectUris":["http://localhost:8000/"],"resource":"http://localhost:8000"}]' TINYLAP_FEED_TOKENS=dev pnpm --filter @tinylap/accounts dev` (on `http://localhost:4100`), then `TINYLAP_ISSUER=http://localhost:4100 TINYLAP_CLIENT_ID=planner-dev TINYLAP_CLIENT_SECRET=dev TINYLAP_FEED_TOKEN=dev TINYLAP_TOKEN_KEYS=dev:$(openssl rand -base64 32) pnpm dev`, and open `http://localhost:8000`. The session cookie is `Secure` even here; browsers accept that on `http://localhost`.
 
+## Self-hosting accounts
+
+`apps/accounts` is the login service (passkeys, workspaces and an OpenID Connect provider). It is optional: without it the planner is anonymous only. One Node 24 process with a SQLite file:
+
+```sh
+docker build -f apps/accounts/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEAD) -t tinylap-accounts .
+docker run -p 4100:4100 -v tinylap-accounts:/data \
+  -e TINYLAP_ISSUER=https://accounts.example -e BETTER_AUTH_SECRET=<32+ random characters> \
+  -e TINYLAP_CLIENTS='[{"clientId":"track-planner","clientSecret":"<random>","redirectUris":["https://planner.example/auth/callback"],"postLogoutRedirectUris":["https://planner.example/"],"resource":"https://planner.example"}]' \
+  -e TINYLAP_FEED_TOKENS=<random> tinylap-accounts
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `TINYLAP_ISSUER` | required | Public `https` origin of `accounts`, no path |
+| `BETTER_AUTH_SECRET` | required | At least 32 characters; encrypts the signing keys and signs cookies |
+| `TINYLAP_CLIENTS` | `[]` | JSON array of clients: `clientId`, `clientSecret`, `redirectUris`, `postLogoutRedirectUris`, `resource` (the app's origin) |
+| `TINYLAP_FEED_TOKENS` | none | Comma-separated bearer tokens for the deletions feed, one per app |
+| `TINYLAP_DB` | `/data/accounts.sqlite` | SQLite file |
+| `PORT` | `4100` | Port to listen on |
+| `TINYLAP_CLIENT_IP_HEADER` | none | Header carrying the client IP behind a proxy, for rate limits |
+| `TINYLAP_DEV` | off | Local development only: http issuer, loopback redirects |
+
+Then give the planner `TINYLAP_ISSUER`, `TINYLAP_CLIENT_ID`, `TINYLAP_CLIENT_SECRET` (the same as in `TINYLAP_CLIENTS`), `TINYLAP_TOKEN_KEYS`, `TINYLAP_FEED_TOKEN` and `TINYLAP_PUBLIC_URL`, as in the planner table above. Secrets, key rotation and backups: [apps/accounts/README.md](apps/accounts/README.md).
+
+### Another OIDC provider
+
+The planner needs only `TINYLAP_ISSUER`, a client id and a secret for a confidential client, and `TINYLAP_TOKEN_KEYS`. The provider must support the authorization code flow with PKCE and refresh tokens, and issue **RS256 JWT access tokens** (`typ` `at+jwt`) with `aud` set to the planner's origin (RFC 8707 `resource`) and a `workspaces` claim, `[{ "id", "role" }]` with roles `owner`, `admin` or `member`, which the planner reads for access. The JWKS must be at `{issuer}/jwks`. The deletions feed (`TINYLAP_FEED_TOKEN`) is an `accounts` feature: another provider has to offer the same `GET /deletions?after=<seq>`, or deleted workspaces stay in the planner. See [packages/auth](packages/auth/README.md).
+
 ## License
 
 TinyLap is free software and stays that way. Apps and tools are

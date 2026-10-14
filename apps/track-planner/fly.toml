@@ -7,6 +7,11 @@ primary_region = 'fra'
 [env]
   TINYLAP_PUBLIC_URL = 'https://circuit30-planner.fly.dev'
   TINYLAP_CLIENT_IP_HEADER = 'Fly-Client-IP'
+  # Log-in through accounts. Uncomment both once the planner's login secrets
+  # exist (apps/accounts/README.md, first deploy): with TINYLAP_ISSUER set the
+  # planner refuses to start without them.
+  # TINYLAP_ISSUER = 'https://tinylap-accounts.fly.dev'
+  # TINYLAP_CLIENT_ID = 'track-planner'
 
 # SQLite on one volume means exactly one machine. Fly snapshots the volume
 # daily; that is the backup. Create it once:

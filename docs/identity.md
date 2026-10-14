@@ -71,3 +71,91 @@ alone. The discovery routes (`/openapi.json`, `/schemas/layout.json`, `/api`)
 serve one representation each. The full API is described at
 `/openapi.json`, readable at `/api`, and the file format is JSON Schema at
 `/schemas/layout.json`.
+
+# Accounts and workspaces
+
+Logging in is optional: the planner works fully without an account. An
+account gives you a durable library of tracks, and gives clubs a shared one.
+The login service is `apps/accounts`; the planner is its first client. The
+design is in `docs/superpowers/specs/2026-10-14-identity-design.md`.
+
+**Status: proof of concept.** Everything runs on `*.fly.dev`, with Fly's daily
+volume snapshots as the only backup. It is not meant for data you cannot
+lose. What is needed before a production release (a domain, off-site backups,
+the OpenID conformance run, a legal check, email) is tracked in the GitHub
+issues [#5](https://github.com/tinylaphq/tinylap/issues/5) to
+[#9](https://github.com/tinylaphq/tinylap/issues/9).
+
+## Who owns what
+
+People have accounts, and sign in with a passkey (no passwords). Recovery
+codes, shown once at sign-up, are the way back if every passkey is lost. Lose
+every passkey and every code and the account is gone.
+
+Data belongs to **workspaces**, not to people. Everyone has a personal
+workspace, created at sign-up, which never has other members. A **club** is a
+shared workspace with members. Each club has exactly one owner at all times.
+A person can create up to five clubs.
+
+## Roles
+
+| Action | owner | admin | member |
+| --- | --- | --- | --- |
+| See the workspace's tracks and history | ✓ | ✓ | ✓ |
+| Save, save a new version, rename a track | ✓ | ✓ | ✓ |
+| Share a track (publish) | ✓ | ✓ | ✓ |
+| Copy a track to another workspace you belong to | ✓ | ✓ | ✓ |
+| Delete a track or a version | ✓ | ✓ | |
+| Create, list and revoke invites | ✓ | ✓ | |
+| Remove a member | ✓ | ✓ | |
+| Promote a member to admin, demote or remove an admin | ✓ | | |
+| Transfer ownership | ✓ | | |
+| Rename or delete the club | ✓ | | |
+| Leave the club | (transfer first) | ✓ | ✓ |
+
+People join a club through an invite link (valid 7 days, single use by
+default, shown once). When someone leaves or is removed, the club keeps their
+tracks; their saves show as "former member". Copy tracks to your personal
+workspace before leaving if you want them.
+
+## Private and public snapshots
+
+Saving a track to the library writes a **private** snapshot: same
+content-addressed key as a public one, readable only by members of that
+workspace (anyone else gets a 404). Saving is not publishing. **Share**
+publishes the current version as an ordinary public snapshot and cannot be
+undone, which is why it asks first. Two workspaces with identical content each
+have their own private copy, and deleting one never touches the other or any
+public snapshot.
+
+A library track keeps its **50 newest versions**; older ones drop off, and the
+history view says so. Other limits: 200 tracks per workspace, 64 KiB per
+snapshot, 60 saves per user per hour, 20 active invites per workspace.
+
+## Deleting, and the deletions feed
+
+Deleting an account removes the person, their passkeys, recovery codes and
+sessions, and their personal workspace. It is refused while they own a club:
+transfer ownership or delete the club first. Deleting a club removes its
+members and invites. Public snapshots stay: they contain no personal data.
+
+`accounts` appends each deletion to a feed, `GET /deletions?after=<seq>`, behind
+a bearer token per consumer. The planner reads it when it starts and hourly,
+and deletes the private snapshots, library tracks and versions of deleted
+workspaces and the sessions of deleted users. Until it has read the feed,
+deleted data still sits in the planner but cannot be reached.
+
+If a club's owner can no longer act, the maintainer can transfer ownership
+after verifying the request out of band
+(`node apps/accounts/admin.js transfer-ownership <workspace> <user>`, see
+`apps/accounts/README.md`).
+
+## Data protection
+
+`accounts` stores a display name, passkeys (public keys), recovery code hashes,
+memberships and sessions. The email field holds a placeholder
+(`<id>@users.invalid`) that is never shown or used. The planner stores the
+library and, per login session, the tokens, encrypted. The account page offers
+an export of the account data with a link to the planner's export of every
+track and version, and deletion. The privacy page of `accounts` says the same
+in plain words. Nothing is third-party: no analytics, fonts or logins.

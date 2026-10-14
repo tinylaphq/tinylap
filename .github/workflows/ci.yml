@@ -1,7 +1,8 @@
 name: ci
 
 # Pull requests run the checks but never deploy. A push to main runs the same
-# checks and then deploys the planner, but only if the push touched it.
+# checks and then deploys the planner and accounts, each only if the push
+# touched it (accounts also only once ACCOUNTS_DEPLOY_ENABLED is set).
 on:
   push:
     branches: [main]
@@ -44,6 +45,18 @@ jobs:
           node-version: '24'
       - run: node tools/smoke.js http://localhost:8080/
       - run: node apps/track-planner/test/smoke-api.js http://localhost:8080/
+      # TINYLAP_DEV=1 makes accounts listen on loopback only, so it shares the
+      # runner's network instead of publishing a port. CI-only secrets.
+      - run: docker build -f apps/accounts/Dockerfile --build-arg GIT_SHA=${{ github.sha }} -t accounts .
+      - run: >
+          docker run -d --network host
+          -e TINYLAP_DEV=1
+          -e TINYLAP_ISSUER=http://localhost:4100
+          -e BETTER_AUTH_SECRET=ci-only-secret-0123456789abcdef0123456789
+          -e 'TINYLAP_CLIENTS=[{"clientId":"ci","clientSecret":"ci-only","redirectUris":["http://localhost:8080/auth/callback"],"resource":"http://localhost:8080"}]'
+          accounts
+      - run: curl --silent --fail --retry 20 --retry-all-errors --retry-delay 1 http://localhost:4100/sign-in > /dev/null
+      - run: node apps/accounts/test/smoke.js http://localhost:4100/
 
   reuse:
     runs-on: ubuntu-latest
@@ -85,10 +98,19 @@ jobs:
           # deploy rather than silently skip.
           if ! files=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null); then
             echo "planner=true" >> "$GITHUB_OUTPUT"
-          elif grep -qE '^(apps/track-planner|packages|tools)/|^(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.dockerignore)$' <<< "$files"; then
-            echo "planner=true" >> "$GITHUB_OUTPUT"
+            accounts=true
+          else
+            grep -qE '^(apps/track-planner|packages|tools)/|^(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.dockerignore)$' <<< "$files" && echo "planner=true" >> "$GITHUB_OUTPUT"
+            grep -qE '^(apps/accounts|packages/auth|packages/design)/|^(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.dockerignore)$' <<< "$files" && accounts=true
           fi
-      - if: steps.changed.outputs.planner == 'true'
+          # The Fly app does not exist until the maintainer has followed the
+          # checklist in apps/accounts/README.md, whose last step sets this.
+          if [ "$accounts" = true ] && [ "$ACCOUNTS_DEPLOY_ENABLED" = true ]; then
+            echo "accounts=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          ACCOUNTS_DEPLOY_ENABLED: ${{ vars.ACCOUNTS_DEPLOY_ENABLED }}
+      - if: steps.changed.outputs.planner == 'true' || steps.changed.outputs.accounts == 'true'
         uses: superfly/flyctl-actions/setup-flyctl@master
       # Build context is the repo root (the image needs packages and tools);
       # the positional "." makes that explicit rather than relying on
@@ -98,6 +120,14 @@ jobs:
           flyctl deploy . --remote-only
           --config apps/track-planner/fly.toml
           --dockerfile apps/track-planner/Dockerfile
+          --build-arg GIT_SHA=${{ github.sha }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - if: steps.changed.outputs.accounts == 'true'
+        run: >
+          flyctl deploy . --remote-only
+          --config apps/accounts/fly.toml
+          --dockerfile apps/accounts/Dockerfile
           --build-arg GIT_SHA=${{ github.sha }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
