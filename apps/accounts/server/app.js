@@ -26,6 +26,10 @@ import { recoverPage } from './pages/recover.js';
 import { clubsPage } from './pages/clubs.js';
 import { clubPage } from './pages/club.js';
 import { invitePage } from './pages/invite.js';
+import { accountPage } from './pages/account.js';
+import { privacyPage } from './pages/privacy.js';
+import { signedOutPage } from './pages/signed-out.js';
+import { listPasskeys, ownedClubs, recoveryCodesLeft } from './account.js';
 
 const APP_DIR = fileURLToPath(new URL('..', import.meta.url));
 
@@ -57,6 +61,7 @@ const LIMITS = { signUp: 10, signIn: 30, recovery: 10, recoveryLookup: 5, invite
 // What a recovery session may still do (spec §6): add a passkey, manage its
 // recovery codes, see the recovery page, or sign out. Everything else,
 // Better Auth's routes included, is refused until a passkey is registered.
+// The privacy and signed-out pages show nothing of the account.
 const RECOVERY_ALLOWED = new Set([
   '/passkey/generate-register-options',
   '/passkey/verify-registration',
@@ -64,13 +69,30 @@ const RECOVERY_ALLOWED = new Set([
   '/recover',
   '/sign-out',
   '/error',
+  '/privacy',
+  '/signed-out',
 ]);
+
+// A session counts as fresh for this long after the passkey sign-in (or
+// sign-up) that created it. Adding a passkey, new recovery codes, removing
+// a passkey and deleting the account need a fresh session, so a stolen
+// 30-day cookie cannot plant a lasting passkey or take the account away.
+// Better Auth's own freshSessionMiddleware is not reachable here: the
+// passkey plugin applies it only with registration.requireSession, which
+// sign-up must leave off. A recovery session is exempt: its only way on is
+// to add a passkey.
+export const FRESH_SECONDS = 10 * 60;
+const FRESH_PATHS = new Set(['/passkey/generate-register-options', '/passkey/verify-registration', '/recovery-codes']);
+
+/** @param {{ session: { createdAt: Date | string, recovery?: boolean } } | null} session */
+const isFresh = (session) => Boolean(session) && Date.now() - new Date(session.session.createdAt).getTime() <= FRESH_SECONDS * 1000;
 
 const PROBLEMS = {
   'bad-request': { status: 400, title: 'Bad request' },
   unauthorized: { status: 401, title: 'Sign in first' },
   'recovery-only': { status: 403, title: 'Add a passkey first' },
   'cross-site': { status: 403, title: 'Cross-site request refused' },
+  reauthenticate: { status: 403, title: 'Confirm it is you' },
   'not-found': { status: 404, title: 'Not found' },
   'method-not-allowed': { status: 405, title: 'Method not allowed' },
   'rate-limited': { status: 429, title: 'Too many requests' },
@@ -195,6 +217,16 @@ export async function createAccounts(config) {
   const roots = servedPackages();
   const cache = config.dev ? 'no-store' : 'public, max-age=3600';
 
+  // What clearing this browser's session cookie looks like, after signing
+  // out everywhere or deleting the account.
+  const { sessionToken } = (await auth.$context).authCookies;
+  const clearCookie = [[
+    `${sessionToken.name}=`, 'Max-Age=0', `Path=${sessionToken.attributes.path ?? '/'}`, 'HttpOnly',
+    `SameSite=${sessionToken.attributes.sameSite ?? 'lax'}`, ...(sessionToken.attributes.secure ? ['Secure'] : []),
+  ].join('; ')];
+  // The planner, whose /library/export holds the user's tracks.
+  const planner = config.clients.find((c) => c.trusted)?.resource ?? null;
+
   const limiters = Object.fromEntries(Object.entries(LIMITS).map(([name, limit]) => [name, rateLimiter({ limit })]));
   const { issuer } = config;
 
@@ -224,8 +256,20 @@ export async function createAccounts(config) {
     return json(req, res, 200, readDeletions(db, Number(after)));
   }
 
-  /** The signed-in pages: /clubs, /clubs/:id, /invite/:token. Null if none of them. */
+  /** The signed-in pages: /clubs, /clubs/:id, /invite/:token, /account. Null if none of them. */
   function page(req, res, pathname, session) {
+    if (pathname === '/account') {
+      if (!session) return toSignIn(req, res, pathname);
+      const { id } = session.user;
+      const user = db.prepare('SELECT id, name, createdAt FROM "user" WHERE id = ?').get(id);
+      return html(req, res, accountPage({
+        user: { id, name: String(user?.name ?? session.user.name), createdAt: new Date(/** @type {any} */ (user?.createdAt ?? Date.now())).toISOString() },
+        passkeys: listPasskeys(db, id),
+        codesLeft: recoveryCodesLeft(db, id),
+        owned: ownedClubs(db, id),
+        plannerExport: planner && `${planner}/library/export`,
+      }));
+    }
     const invite = /^\/invite\/([^/]+)$/.exec(pathname);
     if (invite) {
       const found = inspectInvite(db, invite[1]);
@@ -268,7 +312,7 @@ export async function createAccounts(config) {
 
   /**
    * The Better Auth session of this request, or null. Never refreshes it.
-   * @returns {Promise<{ user: { id: string, name: string }, session: { recovery?: boolean } } | null>}
+   * @returns {Promise<{ user: { id: string, name: string }, session: { createdAt: Date | string, recovery?: boolean } } | null>}
    */
   const sessionOf = async (req) => {
     if (!req.headers.cookie) return null;
@@ -300,6 +344,41 @@ export async function createAccounts(config) {
     return json(req, res, 200, { codes: createRecoveryCodes(db, session.user.id) });
   }
 
+  /**
+   * RP-initiated logout (spec §6). Better Auth's end-session endpoint does
+   * the protocol: a valid id_token_hint for this browser's session ends it
+   * and redirects to a registered post_logout_redirect_uri only. Every page
+   * it would render itself (its confirmation for a missing or invalid hint,
+   * "logged out" without a redirect, its errors) is replaced by
+   * /signed-out, which asks a still signed-in person to sign out there.
+   * Its confirmation cookie is dropped: the confirm route is disabled.
+   */
+  async function endSession(req, res) {
+    let body;
+    if (req.method === 'POST') {
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > 16384) return problem(req, res, issuer, 'bad-request', 'The request is too big.');
+        chunks.push(chunk);
+      }
+      body = Buffer.concat(chunks);
+    }
+    const response = await auth.handler(new Request(new URL(req.url ?? '/', issuer), { method: req.method, headers: fromNodeHeaders(req.headers), body }));
+    const cookies = response.headers.getSetCookie().filter((c) => !c.includes('.oauth_logout_confirmation='));
+    if ((response.headers.get('content-type') ?? '').startsWith('text/html')) {
+      return send(req, res, 303, { Location: '/signed-out', 'Cache-Control': 'no-store', 'Set-Cookie': cookies }, '');
+    }
+    /** @type {Record<string, string | string[]>} */
+    const headers = {};
+    response.headers.forEach((value, name) => {
+      if (name !== 'set-cookie') headers[name] = value;
+    });
+    if (cookies.length) headers['set-cookie'] = cookies;
+    return send(req, res, response.status, headers, Buffer.from(await response.arrayBuffer()));
+  }
+
   /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res */
   async function route(req, res) {
     // One plain origin-form target ("/path"), so the recovery gate and
@@ -323,6 +402,11 @@ export async function createAccounts(config) {
       if (readOnly && wantsHtml(req)) return html(req, res, recoveryOnlyPage(), 403);
       return problem(req, res, issuer, 'recovery-only', 'You signed in with a recovery code. Add a passkey at /recover first.');
     }
+    if (FRESH_PATHS.has(pathname) && session && !session.session.recovery && !isFresh(session)) {
+      req.resume();
+      return problem(req, res, issuer, 'reauthenticate', 'Confirm it is you with your passkey first, then try again.');
+    }
+    if (pathname === '/oauth2/end-session') return endSession(req, res);
 
     if (pathname.startsWith('/api/')) {
       return handleApi(req, pathname, {
@@ -335,6 +419,8 @@ export async function createAccounts(config) {
         readJson: () => readJson(req),
         sameOrigin: sameOrigin(req),
         allowRedeem: () => allow(req, res, 'invite', clientOf(req)),
+        fresh: isFresh(session),
+        clearCookie,
       });
     }
 
@@ -345,6 +431,8 @@ export async function createAccounts(config) {
       if (pathname === '/sign-up') return html(req, res, signUpPage(url, session && { name: session.user.name }));
       if (pathname === '/recover') return html(req, res, recoverPage(url, session?.session.recovery ? { name: session.user.name } : null));
       if (pathname === '/consent') return html(req, res, consentPage());
+      if (pathname === '/privacy') return html(req, res, privacyPage({ plannerExport: planner && `${planner}/library/export` }));
+      if (pathname === '/signed-out') return html(req, res, signedOutPage({ user: session && { name: session.user.name }, deleted: url.searchParams.has('deleted') }));
       if (pathname === '/error') return html(req, res, errorPage(url));
       if (pathname === '/passkey/generate-register-options' && !allow(req, res, 'signUp', clientOf(req))) return;
       if (pathname === '/passkey/generate-authenticate-options' && !allow(req, res, 'signIn', clientOf(req))) return;

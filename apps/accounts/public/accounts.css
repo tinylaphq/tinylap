@@ -326,3 +326,62 @@ a.accounts-workspace-name {
   flex: 0 1 auto;
   margin-right: auto;
 }
+
+/* ── Account (/account) ────────────────────────────────────────────────
+ * The one accent: ten marks for a set of recovery codes, filled pink while
+ * a code is unused, like a lap counter. */
+
+.accounts-gauge-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--p-space-sm) var(--p-space-md);
+  font-size: 15px;
+}
+
+.accounts-gauge {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.accounts-gauge-mark {
+  width: 12px;
+  height: 24px;
+  border: var(--p-border-width) solid var(--p-text);
+  background: var(--p-surface);
+}
+
+.accounts-gauge-mark.is-left {
+  background: var(--p-accent-1);
+}
+
+/* Adding a passkey is the page's prominent action: the pink hard shadow. */
+.accounts-add {
+  box-shadow: var(--p-shadow-lg) var(--p-accent-1);
+}
+
+/* The re-authentication dialog asks, it does not warn: no red shadow. */
+.accounts-dialog-calm {
+  box-shadow: var(--p-shadow-lg) var(--p-accent-2);
+}
+
+.accounts-reveal .accounts-codes {
+  display: grid;
+  gap: var(--p-space-sm);
+  list-style: none;
+  padding: 0;
+  margin-bottom: var(--p-space-md);
+}
+
+.accounts-reveal .accounts-codes li {
+  margin: 0;
+  font-family: var(--p-font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--p-code-highlight);
+  overflow-wrap: anywhere;
+}
+
+.accounts-row-sub time {
+  font-weight: 400;
+}

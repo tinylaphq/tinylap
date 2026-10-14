@@ -56,10 +56,12 @@ test("Better Auth's errors land on our error page", async () => {
   assert.equal(location.searchParams.get('error'), 'invalid_request');
 });
 
-test("HTML Better Auth renders itself carries a CSP; a stricter one of its own is kept", async () => {
+test("Better Auth's own end-session pages are never shown: they become /signed-out", async () => {
   const res = await navigate(`${accounts.issuer}/oauth2/end-session?id_token_hint=garbage`);
-  assert.match(res.headers.get('content-type'), /^text\/html/);
-  assert.equal(res.headers.get('content-security-policy'), "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), '/signed-out');
+  assert.equal(res.headers.get('content-security-policy'), CSP);
+  assert.equal((await navigate(`${accounts.issuer}/oauth2/end-session/confirm`)).status, 404, 'the confirm route is off');
 });
 
 test('every other response defaults to the page CSP', async () => {

@@ -4,6 +4,8 @@
 
 // /sign-up: display name, passkey (which creates the account and signs in),
 // then the recovery codes, shown once. Continuing needs "I've saved them".
+// If making the codes fails once the account exists, "Try again" asks for
+// the codes only, never a second passkey.
 import { api, authorizeUrl, nextPath, onSubmit, PageError, registerPasskey, show, stepTo } from './webauthn.js';
 
 const $ = (id) => /** @type {any} */ (document.getElementById(id));
@@ -29,13 +31,37 @@ onSubmit(nameForm, status, async () => {
     stepTo('name');
     throw error;
   }
-  ({ codes } = await api('/recovery-codes', { method: 'POST', body: {} }));
+  await showCodes();
+});
+
+/** Makes the account's recovery codes and shows them; offers "Try again" if that fails. */
+async function showCodes() {
+  try {
+    ({ codes } = await api('/recovery-codes', { method: 'POST', body: {} }));
+  } catch (error) {
+    nameForm.hidden = true;
+    $('codes-retry').hidden = false;
+    show($('retry-status'), error instanceof PageError ? `${error.message} Your account and passkey are ready; only the codes are missing.` : 'Your account and passkey are ready, but the recovery codes could not be made.', 'error');
+    $('retry').focus();
+    return;
+  }
+  $('codes-retry').hidden = true;
   const list = $('code-list');
   list.replaceChildren(...codes.map((code) => Object.assign(document.createElement('li'), { textContent: code })));
   nameForm.hidden = true;
   codesForm.hidden = false;
   stepTo('codes');
   codesForm.querySelector('h2').focus();
+}
+
+$('retry').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await showCodes();
+  } finally {
+    button.disabled = false;
+  }
 });
 
 const asText = () => [

@@ -8,8 +8,20 @@
 // PublicKeyCredential.parse*OptionsFromJSON read as they are, and
 // credential.toJSON() is the shape its verify endpoints take.
 
-/** Thrown with a message meant for the person in front of the page. */
-export class PageError extends Error {}
+/**
+ * Thrown with a message meant for the person in front of the page. `type`
+ * is the Problem Details type of a failed request, when there was one.
+ */
+export class PageError extends Error {
+  /** @param {string} message @param {string} [type] */
+  constructor(message, type = '') {
+    super(message);
+    this.type = type;
+  }
+}
+
+/** The problem type that means "sign in with your passkey again first". */
+export const isReauthenticate = (error) => error instanceof PageError && error.type.endsWith('/problems/reauthenticate');
 
 export const supported = () =>
   typeof PublicKeyCredential !== 'undefined' &&
@@ -29,10 +41,10 @@ export async function api(path, { method = 'GET', body } = {}) {
     headers: body === undefined ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = await res.json().catch(() => null);
+  const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     if (res.status === 429) throw new PageError(data?.detail ?? 'Too many tries. Wait a while and try again.');
-    throw new PageError(data?.detail ?? data?.message ?? `The server answered ${res.status}. Try again.`);
+    throw new PageError(data?.detail ?? data?.message ?? `The server answered ${res.status}. Try again.`, typeof data?.type === 'string' ? data.type : '');
   }
   return data;
 }
@@ -50,9 +62,9 @@ function ceremonyError(error) {
  * query: `context` (the display name, for passkey-first sign-up) or
  * `name` (what the authenticator shows). Returns the verify response.
  * @param {Record<string, string>} params
- * @param {{ createSession?: boolean }} [verify]
+ * @param {{ createSession?: boolean, name?: string }} [verify] `name` is what TinyLap lists the passkey as
  */
-export async function registerPasskey(params, { createSession = false } = {}) {
+export async function registerPasskey(params, { createSession = false, name = '' } = {}) {
   if (!supported()) throw new PageError('This browser cannot create passkeys. Use a current Chrome, Edge, Firefox or Safari.');
   const options = await api(`/passkey/generate-register-options?${new URLSearchParams(params)}`);
   let credential;
@@ -61,7 +73,7 @@ export async function registerPasskey(params, { createSession = false } = {}) {
   } catch (error) {
     throw ceremonyError(error);
   }
-  return api('/passkey/verify-registration', { method: 'POST', body: { response: credential.toJSON(), createSession } });
+  return api('/passkey/verify-registration', { method: 'POST', body: { response: credential.toJSON(), createSession, ...(name ? { name } : {}) } });
 }
 
 /**
@@ -112,12 +124,12 @@ export function authorizeUrl() {
 /**
  * Where to go after signing in or up when no app sent the person here:
  * the `next` query parameter, if it is one of TinyLap's own pages (an
- * invite or a club). Anything else is ignored, so a link cannot send
+ * invite, a club or the account page). Anything else is ignored, so a link cannot send
  * someone off-site.
  */
 export function nextPath() {
   const next = new URLSearchParams(location.search).get('next') ?? '';
-  return /^\/(invite\/[A-Za-z0-9_-]+|clubs(\/[A-Za-z0-9_-]+)?)$/.test(next) ? next : null;
+  return /^\/(invite\/[A-Za-z0-9_-]+|clubs(\/[A-Za-z0-9_-]+)?|account)$/.test(next) ? next : null;
 }
 
 /**

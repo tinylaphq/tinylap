@@ -37,7 +37,7 @@ export function clubsPage({ user, workspaces }) {
     script: 'club.js',
     data: { page: 'clubs' },
     wide: true,
-    body: `
+    body: `<p class="accounts-back"><a href="/account">Your account</a></p>
 <section class="stack-md" aria-labelledby="ws-heading">
   <h2 class="h3" id="ws-heading">Workspaces</h2>
   <ul class="accounts-list accounts-workspaces">${items}

@@ -32,3 +32,26 @@ export function revokeUserTokens(db, userId) {
   const refreshTokens = Number(db.prepare('DELETE FROM "oauthRefreshToken" WHERE "userId" = ?').run(userId).changes);
   return { refreshTokens, accessTokens };
 }
+
+/**
+ * "Sign out everywhere" (spec §6): every Better Auth session of `userId`
+ * (every browser signed in to accounts) and every OAuth token, in one
+ * transaction. The deletes are plain SQL, so the provider's per-session
+ * back-channel hook does not run; the tokens it would revoke go here.
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {string} userId
+ * @returns {{ sessions: number, refreshTokens: number, accessTokens: number }}
+ */
+export function signOutEverywhere(db, userId) {
+  db.exec('SAVEPOINT sign_out_everywhere');
+  try {
+    const sessions = Number(db.prepare('DELETE FROM "session" WHERE "userId" = ?').run(userId).changes);
+    const revoked = revokeUserTokens(db, userId);
+    db.exec('RELEASE sign_out_everywhere');
+    return { sessions, ...revoked };
+  } catch (error) {
+    db.exec('ROLLBACK TO sign_out_everywhere');
+    db.exec('RELEASE sign_out_everywhere');
+    throw error;
+  }
+}

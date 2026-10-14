@@ -69,10 +69,15 @@ ${progress([{ id: 'name', label: 'Name' }, { id: 'passkey', label: 'Passkey' }, 
   <button type="submit" class="btn btn-primary btn-block">Create a passkey</button>
   <p class="status" id="status" role="status" hidden></p>
 </form>
+<div class="card-static stack-md" id="codes-retry" hidden>
+  <p class="status" id="retry-status" role="status"></p>
+  <button type="button" class="btn btn-primary btn-block" id="retry">Try again</button>
+  <p class="accounts-hint">Or make them later on <a href="/account">your account page</a>.</p>
+</div>
 ${CODES_STEP}
 <div class="card-static stack-md" id="done" hidden>
   <p class="status status-success" role="status">Your account is ready</p>
-  <p>You are signed in. You can close this page.</p>
+  <p>You are signed in. You can close this page, or go to <a href="/account">your account</a>.</p>
 </div>
 ${NOSCRIPT}
 <ul class="accounts-links">

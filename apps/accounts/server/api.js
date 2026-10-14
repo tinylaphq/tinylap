@@ -7,6 +7,8 @@
 // CORS; every state-changing request must come from our own origin. Errors
 // are RFC 9457 Problem Details.
 import * as ws from './workspaces.js';
+import { exportAccount, removePasskey } from './account.js';
+import { signOutEverywhere } from './tokens.js';
 
 /** How a WorkspaceError reads as Problem Details. */
 const STATUS = {
@@ -38,6 +40,8 @@ export function problemOf(issuer, error) {
  * @property {() => Promise<unknown>} readJson
  * @property {boolean} sameOrigin
  * @property {() => boolean} allowRedeem true if the invite rate limit lets it through (else the 429 is sent)
+ * @property {boolean} fresh the session was made by a passkey within the fresh window (app.js)
+ * @property {string[]} clearCookie Set-Cookie lines that end this browser's session
  */
 
 /** A JSON object body, or a WorkspaceError. */
@@ -47,13 +51,27 @@ async function body(ctx) {
   return /** @type {Record<string, unknown>} */ (value);
 }
 
+/** Routes a stolen, older session cookie must not reach (spec §9; see app.js). */
+const FRESH = { fresh: true };
+
 /**
- * The routes, as [method, pattern, handler(ctx, user, params)]. A handler
- * returns [status, value] (value undefined for 204).
- * @type {[string, RegExp, (ctx: ApiContext, user: { id: string, name: string }, p: string[]) => Promise<[number, unknown?]> | [number, unknown?]][]}
+ * The routes, as [method, pattern, handler(ctx, user, params), options]. A
+ * handler returns [status, value, headers?] (value undefined for 204).
+ * `fresh` routes need a recent passkey sign-in.
+ * @type {[string, RegExp, (ctx: ApiContext, user: { id: string, name: string }, p: string[]) => Promise<[number, unknown?, Record<string, any>?]> | [number, unknown?, Record<string, any>?], { fresh?: boolean }?][]}
  */
 const ROUTES = [
   ['GET', /^\/api\/me$/, (_ctx, user) => [200, { id: user.id, name: user.name }]],
+  ['DELETE', /^\/api\/me$/, async (ctx, user) => {
+    await ws.deleteUser(ctx.db, null, user.id);
+    return [204, undefined, { 'Set-Cookie': ctx.clearCookie }];
+  }, FRESH],
+  ['GET', /^\/api\/me\/export$/, (ctx, user) => [200, exportAccount(ctx.db, user.id), { 'Content-Disposition': 'attachment; filename="tinylap-account.json"' }]],
+  ['DELETE', /^\/api\/me\/passkeys\/([^/]+)$/, (ctx, user, [id]) => (removePasskey(ctx.db, user.id, id), [204]), FRESH],
+  ['POST', /^\/api\/me\/sign-out-everywhere$/, (ctx, user) => {
+    signOutEverywhere(ctx.db, user.id);
+    return [204, undefined, { 'Set-Cookie': ctx.clearCookie }];
+  }],
   ['GET', /^\/api\/workspaces$/, (ctx, user) => [200, { workspaces: ws.listMemberships(ctx.db, user.id) }]],
   ['POST', /^\/api\/clubs$/, async (ctx, user) => [201, ws.createClub(ctx.db, user.id, (await body(ctx)).name)]],
   ['GET', /^\/api\/clubs\/([^/]+)$/, (ctx, user, [id]) => [200, ws.getWorkspace(ctx.db, user.id, id)]],
@@ -100,7 +118,7 @@ const decode = (segment) => {
  * @param {ApiContext} ctx
  */
 export async function handleApi(req, pathname, ctx) {
-  const matches = ROUTES.map(([method, pattern, handler]) => ({ method, handler, m: pattern.exec(pathname) })).filter((r) => r.m);
+  const matches = ROUTES.map(([method, pattern, handler, options]) => ({ method, handler, options, m: pattern.exec(pathname) })).filter((r) => r.m);
   if (!matches.length) {
     req.resume();
     return ctx.problem('not-found', 'There is no such API route.');
@@ -119,6 +137,10 @@ export async function handleApi(req, pathname, ctx) {
     req.resume();
     return ctx.problem('unauthorized', 'Sign in first.');
   }
+  if (route.options?.fresh && !ctx.fresh) {
+    req.resume();
+    return ctx.problem('reauthenticate', 'Confirm it is you with your passkey first, then try again.');
+  }
   if (pathname === '/api/invites/redeem' && !ctx.allowRedeem()) {
     req.resume();
     return undefined;
@@ -126,9 +148,9 @@ export async function handleApi(req, pathname, ctx) {
   const params = route.m.slice(1).map(decode);
   if (params.some((p) => p === null)) return ctx.problem('bad-request', 'The path is not valid.');
   try {
-    const [status, value] = await route.handler(ctx, ctx.session.user, /** @type {string[]} */ (params));
-    if (status === 204) return ctx.json(204, undefined);
-    return ctx.json(status, value);
+    const [status, value, headers] = await route.handler(ctx, ctx.session.user, /** @type {string[]} */ (params));
+    if (status === 204) return ctx.json(204, undefined, headers);
+    return ctx.json(status, value, headers);
   } catch (error) {
     if (error instanceof ws.WorkspaceError) return ctx.problemBody(problemOf(ctx.issuer, error));
     throw error;

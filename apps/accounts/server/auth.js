@@ -171,6 +171,12 @@ export function authOptions(config, db = null) {
       '/oauth2/delete-client',
       '/oauth2/client/rotate-secret',
       '/oauth2/public-client-prelogin',
+      // RP-initiated logout's confirmation: app.js shows /signed-out instead.
+      '/oauth2/end-session/confirm',
+      // Passkeys are removed through /api/me/passkeys (never the last one)
+      // and are not renamed.
+      '/passkey/delete-passkey',
+      '/passkey/update-passkey',
     ],
     plugins: [
       jwt({
