@@ -5,7 +5,7 @@
 // The HTTP shell around Better Auth: headers, static styles, the database.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { startAccounts } from './helpers.js';
+import { driveAuthorize, Jar, navigate, startAccounts } from './helpers.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
 let accounts;
@@ -31,6 +31,38 @@ test('pages are HTML under the strict CSP', async () => {
     assert.equal(res.status, 200, path);
     assert.match(res.headers.get('content-type'), /^text\/html/);
     assert.equal(res.headers.get('content-security-policy'), CSP);
+  }
+});
+
+test('the error page carries the CSP and escapes what it shows', async () => {
+  const res = await fetch(`${accounts.issuer}/error?error=x&error_description=${encodeURIComponent('<script>alert(1)</script>')}`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/html/);
+  assert.equal(res.headers.get('content-security-policy'), CSP);
+  const html = await res.text();
+  assert.ok(!html.includes('<script>alert'), 'not injected');
+  assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
+  assert.ok(html.includes('href="/sign-in"'));
+  assert.ok(!/better-auth\.com/.test(html));
+});
+
+test("Better Auth's errors land on our error page", async () => {
+  const url = `${accounts.issuer}/oauth2/authorize?client_id=nope&response_type=code&redirect_uri=x`;
+  const res = await driveAuthorize(url, new Jar());
+  const location = new URL(res.headers.get('location'));
+  assert.equal(location.origin + location.pathname, `${accounts.issuer}/error`);
+  assert.equal(location.searchParams.get('error'), 'invalid_request');
+});
+
+test("HTML Better Auth renders itself carries a CSP; a stricter one of its own is kept", async () => {
+  const res = await navigate(`${accounts.issuer}/oauth2/end-session?id_token_hint=garbage`);
+  assert.match(res.headers.get('content-type'), /^text\/html/);
+  assert.equal(res.headers.get('content-security-policy'), "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+});
+
+test('every other response defaults to the page CSP', async () => {
+  for (const path of ['/.well-known/openid-configuration', '/nope', '/pkg/design/design.css']) {
+    assert.equal((await fetch(`${accounts.issuer}${path}`)).headers.get('content-security-policy'), CSP, path);
   }
 });
 

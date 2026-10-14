@@ -37,13 +37,21 @@ const TYPES = {
 
 const isFile = (path) => stat(path).then((s) => s.isFile(), () => false);
 
+const escapeHtml = (text) =>
+  String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
 // Placeholders until Task 3 builds the real pages.
 const PLACEHOLDERS = {
-  '/sign-in': 'Sign in',
-  '/consent': 'Allow access',
+  '/sign-in': () => page('Sign in'),
+  '/consent': () => page('Allow access'),
+  // Better Auth sends its errors here (onAPIError.errorURL).
+  '/error': (url) => page('Something went wrong', `
+<p><code>${escapeHtml(url.searchParams.get('error') ?? 'unknown_error')}</code></p>
+<p>${escapeHtml(url.searchParams.get('error_description') ?? '')}</p>
+<p><a href="/sign-in">Back to sign-in</a></p>`),
 };
 
-function page(title) {
+function page(title, body = '') {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -54,7 +62,7 @@ function page(title) {
 <link rel="stylesheet" href="/pkg/design/design.css">
 </head>
 <body>
-<main><h1>${title}</h1></main>
+<main><h1>${title}</h1>${body}</main>
 </body>
 </html>
 `;
@@ -94,16 +102,17 @@ export async function createAccounts(config) {
 
   /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res */
   async function route(req, res) {
-    const { pathname } = new URL(req.url ?? '/', 'http://localhost');
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const { pathname } = url;
     const readOnly = req.method === 'GET' || req.method === 'HEAD';
 
-    const title = PLACEHOLDERS[pathname];
-    if (title && readOnly) {
+    const render = PLACEHOLDERS[pathname];
+    if (render && readOnly) {
       return send(req, res, 200, {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Security-Policy': PAGE_CSP,
         'Cache-Control': 'no-store',
-      }, page(title));
+      }, render(url));
     }
 
     const asset = assetPath(roots, pathname);
@@ -121,6 +130,9 @@ export async function createAccounts(config) {
   /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res */
   async function handler(req, res) {
     for (const [name, value] of Object.entries(BASE_HEADERS)) res.setHeader(name, value);
+    // The default for everything, Better Auth's responses included; a
+    // response that sets its own (its end-session pages, stricter) keeps it.
+    res.setHeader('Content-Security-Policy', PAGE_CSP);
     res.removeHeader('Server');
     try {
       await route(req, res);

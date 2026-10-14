@@ -30,6 +30,9 @@ export function authOptions(config) {
     emailAndPassword: { enabled: false },
     session: { expiresIn: 30 * DAY },
     trustedOrigins: [config.issuer],
+    // Errors go to TinyLap's own /error page (app.js), never Better Auth's,
+    // which brings inline styles and third-party links.
+    onAPIError: { errorURL: `${config.issuer}/error` },
     // Endpoints TinyLap does not use (exact paths; Better Auth matches them
     // literally). No passwords, no email, no third-party logins, no session
     // JWTs from the JWT plugin's /token (access tokens come from

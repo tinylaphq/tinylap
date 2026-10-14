@@ -125,7 +125,7 @@ export async function testSession(auth, userId, jar = new Jar()) {
  * @param {Record<string, string>} headers
  * @returns {Promise<Response>}
  */
-function navigate(url, headers) {
+export function navigate(url, headers = { accept: 'text/html', 'sec-fetch-mode': 'navigate' }) {
   return new Promise((resolve, reject) => {
     const req = request(url, { method: 'GET', headers }, (res) => {
       const chunks = [];
