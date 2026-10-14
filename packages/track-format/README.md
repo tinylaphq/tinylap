@@ -37,6 +37,25 @@ const { track } = assignTrack(layoutFromHtml(html));
 const key = track && `${venue}:${leaderboardKey(track, 'cw')}`;
 ```
 
+## Keys
+
+Shared layouts are addressed by content. See [docs/identity.md](https://github.com/tinylaphq/tinylap/blob/main/docs/identity.md) for how snapshots, track ids and shapes relate.
+
+- `@tinylap/track-format/layout.schema.json` is the format as JSON Schema 2020-12, for validating layouts without this package.
+- `snapshotKey(layout)` names one exact layout: SHA-256 of `canonicalJson(layout)`, first 16 bytes, base64url (22 characters). Piece order does not matter; anything else does.
+- `shapeKey(shapeOf(layout))` names one physical build, wherever and however it was laid out.
+- `parseLayout(text)` reads a layout from JSON or from an exported page.
+- `KEY_PATTERN` matches a valid key.
+
+```js
+import { parseLayout, snapshotKey, shapeKey, shapeOf } from '@tinylap/track-format';
+
+const layout = parseLayout(text);
+const link = `/layouts/${await snapshotKey(layout)}`;
+const shape = shapeOf(layout);
+const sameBuild = shape && `/shapes/${await shapeKey(shape)}`;
+```
+
 ## License
 
 MPL-2.0. See `LICENSE`.

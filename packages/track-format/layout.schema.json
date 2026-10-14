@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TinyLap Circuit 30 layout",
+  "description": "A track layout for the Kyosho Mini-Z Grand Prix Circuit 30, as the planner saves it. Readers accept versions 1 and 2 and upgrade 1 in memory. See docs/identity.md for the track block.",
+  "type": "object",
+  "required": ["version", "pieces"],
+  "properties": {
+    "version": { "enum": [1, 2] },
+    "unit": { "const": "mat", "description": "Coordinates count Circuit 30 mats (500 mm)." },
+    "room": {
+      "description": "The floor the layout must fit, in mats, or null for none.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["w", "h"],
+          "properties": { "w": { "type": "number" }, "h": { "type": "number" } }
+        }
+      ]
+    },
+    "pieces": { "type": "array", "items": { "$ref": "#/$defs/piece" } },
+    "track": { "$ref": "#/$defs/track" }
+  },
+  "$defs": {
+    "piece": {
+      "type": "object",
+      "required": ["type", "x", "y", "rot"],
+      "properties": {
+        "type": { "enum": ["straight", "cornerR30", "cornerR60"] },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "rot": { "enum": [0, 90, 180, 270] }
+      }
+    },
+    "track": {
+      "description": "Present only on a single closed loop. id names the track; shape fingerprints its build.",
+      "type": "object",
+      "required": ["id", "shape"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+        "shape": { "type": "string", "pattern": "^c30:" }
+      }
+    }
+  }
+}

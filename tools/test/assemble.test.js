@@ -58,3 +58,15 @@ test('an index without exactly one <base href="/"> fails loudly', () => {
     assert.throws(() => assemble(app, out, SHA), /base/i, html);
   }
 });
+
+test('every text file gets a gzip twin, binaries do not', async () => {
+  const { gunzipSync } = await import('node:zlib');
+  const { app, out } = fixture();
+  writeFileSync(join(app, 'css', 'font.woff2'), 'binary');
+  assemble(app, out, SHA);
+  const css = join(out, 'v', SHA, 'css', 'a.css');
+  assert.equal(gunzipSync(readFileSync(`${css}.gz`)).toString(), 'a{}');
+  assert.ok(existsSync(join(out, 'index.html.gz')));
+  assert.ok(existsSync(join(out, 'v', SHA, 'pkg', 'fmt', 'index.js.gz')));
+  assert.ok(!existsSync(join(out, 'v', SHA, 'css', 'font.woff2.gz')));
+});

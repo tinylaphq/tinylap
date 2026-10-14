@@ -30,6 +30,9 @@ export function layoutFromData(data) {
     throw new Error('The layout data has no pieces array.');
   }
   for (const piece of data.pieces) {
+    if (piece === null || typeof piece !== 'object' || Array.isArray(piece)) {
+      throw new Error(`Invalid piece: ${JSON.stringify(piece)}`);
+    }
     // Object.hasOwn, not a truthy lookup: PIECES['__proto__'] and
     // PIECES['constructor'] are inherited and truthy, so a crafted file
     // or a hand-edited session entry got a bogus piece type past this

@@ -9,5 +9,5 @@ export default [
   { ignores: ['**/node_modules/**', '**/dist/**'] },
   js.configs.recommended,
   { languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: globals.browser } },
-  { files: ['**/test/**/*.js', 'tools/**/*.js', '*.config.js'], languageOptions: { globals: globals.node } },
+  { files: ['**/test/**/*.js', 'tools/**/*.js', 'apps/*/server/**/*.js', '*.config.js'], languageOptions: { globals: globals.node } },
 ];

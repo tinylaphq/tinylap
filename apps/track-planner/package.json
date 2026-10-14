@@ -10,8 +10,9 @@
     "js"
   ],
   "scripts": {
-    "test": "node --test 'test/**/*.test.js'",
-    "dev": "node ../../tools/dev-server.js . 8000",
+    "test": "node --disable-warning=ExperimentalWarning --test 'test/**/*.test.js'",
+    "dev": "node --disable-warning=ExperimentalWarning server/main.js --dev",
+    "start": "node --disable-warning=ExperimentalWarning server/main.js",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint ."
   },
@@ -19,5 +20,9 @@
     "@tinylap/design": "workspace:*",
     "@tinylap/track-format": "workspace:*",
     "palace-ui": "^0.10.0"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
   }
 }

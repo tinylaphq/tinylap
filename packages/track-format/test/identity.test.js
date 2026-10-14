@@ -4,21 +4,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLayout, isClosedCircuit, placedCells, rotateCell, shapeOf, rectangularRing, stockL, capVertices, computeBarriers, assignTrack, DIRECTIONS, leaderboardKey } from '../index.js';
-
-// Rotate a whole build by `rot` degrees clockwise: every piece turns with it,
-// and lands at the minimum of its rotated cells (rotatedDef's convention).
-function rotated(pieces, rot) {
-  return pieces.map((p) => {
-    const cells = placedCells(p).map((c) => rotateCell(c, rot));
-    return {
-      type: p.type,
-      x: Math.min(...cells.map((c) => c[0])),
-      y: Math.min(...cells.map((c) => c[1])),
-      rot: (p.rot + rot) % 360,
-    };
-  });
-}
+import { createLayout, isClosedCircuit, placedCells, shapeOf, rectangularRing, stockL, capVertices, computeBarriers, assignTrack, DIRECTIONS, leaderboardKey } from '../index.js';
+import { rotated } from './fixtures.js';
 
 // Mirror a build left-to-right. A corner's ports N+E become N+W, which is the
 // corner at the rotation in MIRROR_ROT. A straight's two ports are opposite,

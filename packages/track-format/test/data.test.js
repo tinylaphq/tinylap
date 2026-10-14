@@ -94,3 +94,9 @@ test('layouts are read out of an exported html file', () => {
   assert.throws(() => layoutFromHtml('<html></html>'), /no layout data/);
   assert.throws(() => layoutFromHtml('<script id="layout">{nope</script>'), /not valid JSON/);
 });
+
+test('a piece that is not an object is refused without leaking internals', () => {
+  for (const piece of [null, 5, 'x', []]) {
+    assert.throws(() => layoutFromData({ ...valid(), pieces: [piece] }), /^Error: Invalid piece: /, String(piece));
+  }
+});

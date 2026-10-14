@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // @ts-nocheck: DOM glue; typed incrementally later, see docs/superpowers/specs/2026-10-13-tinylap-monorepo-design.md §6
-import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR, PIECES, MAT_MM, placedCells, placedPorts } from '@tinylap/track-format';
+import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, matchPorts, computeMetrics, isClosedCircuit, findOverlaps, NEIGHBOUR, PIECES, MAT_MM, placedCells, placedPorts, parseLayout } from '@tinylap/track-format';
 import { drawLayout, drawGhost, drawMarquee, layoutToSvgString } from './render.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
-import { prepareExport, importHtml, carryTrack } from './storage.js';
+import { prepareExport, carryTrack } from './storage.js';
+import { shareLayout, fetchShared } from './share.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
 import { loadLayout, saveLayout } from './session-store.js';
@@ -42,6 +43,7 @@ const state = {
                      // file open) that renderStatus prefers over its normal
                      // text — never written into #status directly, since
                      // render() owns that field and repaints it on every call.
+  notice: null,     // a success message (e.g. a copied share link), shown when there is no error
 };
 
 // Derived from generateLayouts(stockFromKits(state.kits)) every time the
@@ -149,6 +151,11 @@ function renderStatus() {
     status.className = 'status status-error';
     return;
   }
+  if (state.notice) {
+    status.textContent = state.notice;
+    status.className = 'status status-success';
+    return;
+  }
   // I2: an overlapping layout is invalid, not merely "has open ends" — say
   // so plainly rather than falling through to a possibly-zero open-end
   // count that reads as if the layout were fine.
@@ -222,6 +229,7 @@ export function commit(mutate) {
   // selection) must not clear it, or the feedback disappears before the
   // user can read it.
   state.error = null;
+  state.notice = null;
   render();
 }
 
@@ -769,7 +777,7 @@ inventoryDialog.addEventListener('close', () => {
 // commit() to stay undoable. Metres are converted to whole mats — the unit
 // state.layout.room is actually stored in (see render.js, which compares
 // room.w/h directly against the mat-unit bbox). Non-finite or non-positive
-// input is rejected rather than stored: storage.js's importHtml validates
+// input is rejected rather than stored: storage.js's parseLayout validates
 // room on load and would reject a saved file containing one, so writing a
 // bad value into the live layout would produce a layout that can't be
 // re-opened after being saved.
@@ -1218,6 +1226,24 @@ document.querySelector('#btn-save').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 0);
 });
 
+// Sharing settles the track exactly as Save does, then stores the result as
+// a snapshot. The layout itself is never touched by a failed share.
+document.querySelector('#btn-share').addEventListener('click', async () => {
+  const { layout } = prepareExport(state.layout);
+  state.layout = layout;
+  saveLayout(sessionStorage, state.layout);
+  try {
+    const url = await shareLayout(state.layout);
+    const copied = await navigator.clipboard?.writeText(url).then(() => true, () => false);
+    state.error = null;
+    state.notice = copied ? `Link copied: ${url}` : `Share link: ${url}`;
+  } catch (error) {
+    state.notice = null;
+    state.error = error.message;
+  }
+  render();
+});
+
 const openInput = document.querySelector('#open-input');
 document.querySelector('#btn-open').addEventListener('click', () => openInput.click());
 // loadFile never rejects (its own try/catch swallows import errors), so
@@ -1228,32 +1254,12 @@ openInput.addEventListener('change', () => {
   loadFile(openInput.files[0]).finally(() => { openInput.value = ''; });
 });
 
-async function loadFile(file) {
-  if (!file) return;
-  // C1: parse and validate the incoming file BEFORE touching history or
-  // state.layout. importHtml can throw (bad version, unknown piece type,
-  // non-finite coordinates, malformed room, ...) — pushing the history
-  // snapshot first meant a failed import still left a phantom undo step
-  // that did nothing when popped, since state.layout was never actually
-  // replaced. Only commit history once the new layout is known-good.
-  let imported;
-  try {
-    imported = importHtml(await file.text());
-  } catch (error) {
-    // Routed through state.error rather than written into #status
-    // directly: renderStatus() runs on every render() call, including
-    // ones triggered by unrelated, non-mutating interactions (e.g. a click
-    // on empty canvas), and would otherwise overwrite this message on the
-    // very next repaint.
-    state.error = error.message;
-    render();
-    return;
-  }
-
+function adoptLayout(imported) {
   state.history.push(structuredClone(state.layout));
   state.layout = imported;
   state.selection = [];
   state.error = null;
+  state.notice = null;
   // The new layout invalidates anything computed against the old one:
   // a ghost/pending placement, a hovered cell, or an armed tool all
   // referenced state.layout as it was before this import. Space's
@@ -1270,6 +1276,31 @@ async function loadFile(file) {
   state.hoverCell = null;
   state.tool = null;
   render();
+}
+
+async function loadFile(file) {
+  if (!file) return;
+  // C1: parse and validate the incoming file BEFORE touching history or
+  // state.layout. parseLayout can throw (bad version, unknown piece type,
+  // non-finite coordinates, malformed room, ...) — pushing the history
+  // snapshot first meant a failed import still left a phantom undo step
+  // that did nothing when popped, since state.layout was never actually
+  // replaced. Only commit history once the new layout is known-good.
+  let imported;
+  try {
+    imported = parseLayout(await file.text());
+  } catch (error) {
+    // Routed through state.error rather than written into #status
+    // directly: renderStatus() runs on every render() call, including
+    // ones triggered by unrelated, non-mutating interactions (e.g. a click
+    // on empty canvas), and would otherwise overwrite this message on the
+    // very next repaint.
+    state.error = error.message;
+    render();
+    return;
+  }
+
+  adoptLayout(imported);
 }
 
 document.addEventListener('dragover', (e) => {
@@ -1295,8 +1326,10 @@ export function undo() {
     state.ghost = null;
     state.pending = null;
     // C1: undo is itself a successful mutation, so it also supersedes a
-    // stale error from a previous failed operation.
+    // stale error from a previous failed operation. It also drops a share
+    // notice, which names a layout that is no longer on screen.
     state.error = null;
+    state.notice = null;
     render();
   }
 }
@@ -1486,3 +1519,15 @@ document.addEventListener('keydown', (e) => {
     render();
   }
 });
+
+// /?layout=<key> opens a shared snapshot like a file: one undo step, its
+// track adopted. The parameter is dropped either way, so a reload does not
+// open it again over later edits.
+const sharedKey = new URLSearchParams(location.search).get('layout');
+if (sharedKey) {
+  history.replaceState(null, '', location.pathname);
+  fetchShared(sharedKey).then(adoptLayout, (error) => {
+    state.error = error.message;
+    render();
+  });
+}

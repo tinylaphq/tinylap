@@ -6,8 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { packageSegment, packageRoots, resolveUrl, jsEntry } from '../serve-map.js';
+import { join, relative } from 'node:path';
+import { packageSegment, packageRoots, resolveUrl, jsEntry, within } from '../serve-map.js';
 
 // A throwaway app with one JS package and one CSS-only package, linked the
 // way pnpm links workspace and registry dependencies.
@@ -62,4 +62,13 @@ test('the js entry comes from exports or main, and css-only packages have none',
   const { fmt, css } = fixture();
   assert.equal(jsEntry(fmt), 'index.js');
   assert.equal(jsEntry(css), null);
+});
+
+test('within accepts a root with a trailing slash or a relative root, and still refuses escapes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'within-'));
+  assert.equal(within(`${root}/`, 'a/b.js'), join(root, 'a', 'b.js'));
+  const rel = relative(process.cwd(), root);
+  assert.equal(within(rel, 'a.js'), join(root, 'a.js'));
+  assert.equal(within(`${root}/`, '%2e%2e/x'), null);
+  assert.equal(within(rel, '../x'), null);
 });
