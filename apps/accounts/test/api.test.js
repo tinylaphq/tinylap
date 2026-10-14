@@ -172,6 +172,15 @@ describe('the API', () => {
     assert.match(body.detail, /5/);
   });
 
+  test('a transfer to someone who owns 5 clubs is 422 quota-exceeded', async () => {
+    const [a, b] = [await person(), await person()];
+    for (let i = 0; i < 5; i += 1) createClub(accounts.db, b.id, `B${i}`);
+    const { id } = createClub(accounts.db, a.id, 'Handover');
+    redeemInvite(accounts.db, b.id, createInvite(accounts.db, a.id, id, { singleUse: true }).link.split('/').pop());
+    const body = await assertProblem(await call(`/api/clubs/${id}/transfer`, { method: 'POST', jar: a.jar, body: { userId: b.id } }), 422, 'quota-exceeded');
+    assert.match(body.detail, /5/);
+  });
+
   test('a recovery session reaches none of it', async () => {
     const user = await createTestUser(accounts.auth, 'Lost');
     const c = createClub(accounts.db, user.id, 'Lost Club');

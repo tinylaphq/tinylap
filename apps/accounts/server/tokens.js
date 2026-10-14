@@ -11,6 +11,11 @@
 // deleting the rows revokes them; that is also what the provider itself does
 // to a token family on replay (invalidateRefreshFamily). JWT access tokens
 // are not stored: they run out on their own within 10 minutes.
+// A refresh grant already in flight when the rows go is harmless: it
+// rotates with a conditional update on the old row, which is gone, so it
+// answers invalid_grant; and even a token issued in that instant carries
+// only the memberships read live at issuance (customAccessTokenClaims), so
+// it never brings a removed club back.
 // Consents (`oauthConsent`) are kept: they are not tokens, and trusted
 // clients never ask for one.
 

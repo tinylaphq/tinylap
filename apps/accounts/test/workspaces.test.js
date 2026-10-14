@@ -320,6 +320,22 @@ describe('quotas', () => {
     throwsCode(() => createClub(accounts.db, u, 'Club 6'), 'quota-exceeded', /5/);
   });
 
+  test('the quota counts clubs owned: a transfer frees a slot and is refused to someone at 5', async () => {
+    const [a, b] = [await user(), await user()];
+    const clubs = [];
+    for (let i = 0; i < 5; i += 1) clubs.push(createClub(accounts.db, a, `A ${i}`).id);
+    throwsCode(() => createClub(accounts.db, a, 'A 6'), 'quota-exceeded');
+    join(clubs[0], a, b);
+    transferOwnership(accounts.db, a, clubs[0], b);
+    assert.equal(roleOf(clubs[0], b), 'owner');
+    const sixth = createClub(accounts.db, a, 'A 6').id; // a owns 5 again
+    for (let i = 0; i < 4; i += 1) createClub(accounts.db, b, `B ${i}`); // b owns 5
+    join(sixth, a, b);
+    throwsCode(() => transferOwnership(accounts.db, a, sixth, b), 'quota-exceeded', /5/);
+    assert.equal(roleOf(sixth, a), 'owner', 'nothing changed');
+    assert.equal(roleOf(sixth, b), 'member');
+  });
+
   test('a 21st active invite is quota-exceeded; revoked ones do not count', async () => {
     const c = await club();
     const first = createInvite(accounts.db, c.owner, c.id, { singleUse: true });

@@ -120,7 +120,7 @@ export function clubPage({ user, claims, workspace, members, invites }) {
       <select id="new-owner"${others.length ? '' : ' disabled'}>
 ${others.map((m) => `        <option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`).join('\n')}
       </select>
-      <p class="accounts-hint">${others.length ? 'They become the owner and you become an admin.' : 'Invite someone first: only a member can take over.'}</p>
+      <p class="accounts-hint">${others.length ? 'They become the owner and you become an admin. Someone who already owns 5 clubs cannot take another.' : 'Invite someone first: only a member can take over.'}</p>
     </div>
     <button type="submit" class="btn btn-outline"${others.length ? '' : ' disabled'}>Transfer ownership</button>
     <p class="status" id="transfer-status" role="status" hidden></p>

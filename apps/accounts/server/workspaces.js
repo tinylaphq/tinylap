@@ -115,6 +115,9 @@ function memberRole(db, workspaceId, userId) {
   return /** @type {Role} */ (row.role);
 }
 
+/** How many clubs `userId` owns: the quota is at most 5 clubs owned per account. */
+const ownedClubs = (db, userId) => Number(db.prepare("SELECT COUNT(*) AS n FROM membership m JOIN workspace w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.role = 'owner' AND w.kind = 'club'").get(userId).n);
+
 /**
  * A new club with `userId` as its owner. A user can own 5 clubs.
  * @param {Db} db @param {string} userId @param {unknown} name
@@ -122,8 +125,7 @@ function memberRole(db, workspaceId, userId) {
 export function createClub(db, userId, name) {
   const clean = clubNameOf(name);
   return atomically(db, () => {
-    const owned = Number(db.prepare("SELECT COUNT(*) AS n FROM membership m JOIN workspace w ON w.id = m.workspace_id WHERE m.user_id = ? AND m.role = 'owner' AND w.kind = 'club'").get(userId).n);
-    if (owned >= CLUB_QUOTA) throw new WorkspaceError('quota-exceeded', `You can own at most ${CLUB_QUOTA} clubs.`);
+    if (ownedClubs(db, userId) >= CLUB_QUOTA) throw new WorkspaceError('quota-exceeded', `You can own at most ${CLUB_QUOTA} clubs.`);
     const id = newId();
     db.prepare("INSERT INTO workspace (id, kind, name, created_at) VALUES (?, 'club', ?, ?)").run(id, clean, now());
     db.prepare("INSERT INTO membership (workspace_id, user_id, role) VALUES (?, ?, 'owner')").run(id, userId);
@@ -296,18 +298,26 @@ function swapOwner(db, workspaceId, from, to) {
 
 /**
  * Hands the club to another member (owner only); the owner becomes an admin.
+ * The recipient must own fewer than 5 clubs, or two accounts could pass
+ * clubs back and forth past the quota.
  * @param {Db} db @param {string} actor @param {string} workspaceId @param {string} userId
  */
 export function transferOwnership(db, actor, workspaceId, userId) {
   const { id } = authorize(db, actor, workspaceId, 'owner.transfer', { forbidden: 'Only the owner can transfer ownership.' });
   if (userId === actor) throw new WorkspaceError('invalid', 'You already own this club.');
   memberRole(db, id, userId);
-  swapOwner(db, id, actor, userId);
+  atomically(db, () => {
+    if (ownedClubs(db, userId) >= CLUB_QUOTA) {
+      throw new WorkspaceError('quota-exceeded', `That member already owns ${CLUB_QUOTA} clubs, the most an account can own.`);
+    }
+    swapOwner(db, id, actor, userId);
+  });
 }
 
 /**
  * The maintainer's transfer (admin.js), for a club whose owner cannot act.
- * No actor: the request was verified out of band.
+ * No actor: the request was verified out of band. Exempt from the club
+ * quota, so a stranded club can always be handed on.
  * @param {Db} db @param {string} workspaceId @param {string} userId
  * @returns {{ workspace: { id: string, name: string }, from: { id: string, name: string } | null, to: { id: string, name: string }, changed: boolean }}
  */
