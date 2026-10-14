@@ -151,8 +151,8 @@ export function createBff(options) {
     `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly${secureCookies ? '; Secure' : ''}; SameSite=Lax`;
 
   /**
-   * Every call to the issuer: a timeout, and a failure to connect or a 5xx
-   * becomes IssuerUnavailable.
+   * Every call to the issuer: a timeout, and a failure to connect, a 429
+   * (the issuer's rate limit, logged) or a 5xx becomes IssuerUnavailable.
    * @type {oidc.CustomFetch}
    */
   const issuerFetch = async (url, init) => {
@@ -164,6 +164,11 @@ export function createBff(options) {
       res = await fetchImpl(url, /** @type {RequestInit} */ ({ ...init, signal }));
     } catch (cause) {
       throw new IssuerUnavailable(`The issuer did not answer ${new URL(url).pathname}.`, cause);
+    }
+    if (res.status === 429) {
+      await res.body?.cancel();
+      logger.warn(`@tinylap/auth: the issuer answered 429 (too many requests) for ${new URL(url).pathname}; treated as unavailable.`);
+      throw new IssuerUnavailable(`The issuer answered 429 for ${new URL(url).pathname}.`);
     }
     if (res.status >= 500) {
       await res.body?.cancel();
@@ -283,6 +288,10 @@ export function createBff(options) {
         return null;
       }
       // An outage, or anything else the issuer got wrong: keep the session.
+      const reason = isOutage(error) ? 'issuer unavailable'
+        : error instanceof oidc.ResponseBodyError ? error.error
+          : error instanceof Error ? error.message : 'unknown error';
+      logger.warn(`@tinylap/auth: a refresh failed (${reason}); the session is kept.`);
       throw unavailable(error);
     }
     // From here the old refresh token is spent: the new one must be stored,
@@ -427,10 +436,18 @@ export function createBff(options) {
       /** @type {Record<string, string>} */
       const params = { post_logout_redirect_uri: postLogoutRedirectUri };
       if (current?.tokens.idToken) params.id_token_hint = current.tokens.idToken;
+      let location = postLogoutRedirectUri;
+      if (config) {
+        try {
+          location = oidc.buildEndSessionUrl(config, params).href;
+        } catch {
+          // The issuer has no end_session_endpoint: only this app logs out.
+        }
+      }
       return {
         status: 302,
         headers: {
-          Location: config ? oidc.buildEndSessionUrl(config, params).href : postLogoutRedirectUri,
+          Location: location,
           'Set-Cookie': [cookie(sessionCookie, '', 0)],
           'Cache-Control': 'no-store',
         },

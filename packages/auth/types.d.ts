@@ -127,7 +127,7 @@ export interface BffOptions {
   fetchTimeoutMs?: number;
   /** The fetch used for calls to the issuer; for tests and instrumentation. */
   fetch?: typeof globalThis.fetch;
-  /** Where skipped failures (revocation, an unusable refresh) are reported. Default `console`. No tokens or user data in the messages. */
+  /** Where skipped failures (revocation, a failed or unusable refresh, an issuer's 429) are reported. Default `console`. No tokens or user data in the messages. */
   logger?: { warn(message: string): void };
 }
 
@@ -154,7 +154,7 @@ export interface Bff {
   login(req: BffRequest): Promise<BffResponse>;
   /** 302 to `returnTo` with the session cookie, or 400 when the log-in can't complete. */
   callback(req: BffRequest): Promise<BffResponse>;
-  /** Forgets the session, revokes its refresh token (best effort, 3 s), 302 to the issuer's end_session_endpoint, or to postLogoutRedirectUri when the issuer can't be reached. Never throws for an outage. */
+  /** Forgets the session, revokes its refresh token (best effort, 3 s), 302 to the issuer's end_session_endpoint, or to postLogoutRedirectUri when the issuer can't be reached or has none. Always clears the cookie; never throws for an outage. */
   logout(req: BffRequest): Promise<BffResponse>;
   /** The session, refreshed when under 60 s are left (one refresh in flight per session); null when logged out. */
   session(req: BffRequest): Promise<BffSession | null>;
@@ -164,5 +164,5 @@ export interface Bff {
   requireSameOrigin(req: BffRequest): boolean;
 }
 
-/** Throws `AuthError('unavailable')` from any method when the issuer is down, slow or failing. */
+/** `login`, `callback` and `session` throw `AuthError('unavailable')` when the issuer is down, slow, failing or rate-limiting (429); `logout` never does. */
 export function createBff(options: BffOptions): Bff;

@@ -409,6 +409,72 @@ test('logout revokes the refresh token, clears the cookie and goes to end_sessio
   assert.equal(end.headers.get('location'), app.suite.postLogoutRedirectUri);
 });
 
+test('an issuer answering 429 is unavailable (logged): at the callback no 400, at a refresh the session is kept', async () => {
+  const tooMany = (/** @type {string} */ path, /** @type {Response} */ res) => (path === '/oauth2/token'
+    ? Response.json({ message: 'Too many requests. Please try again later.' }, { status: 429 })
+    : res);
+  const appJar = new Jar();
+  const start = await fetch(`${app.origin}/auth/login`, { redirect: 'manual' });
+  appJar.store(start);
+  const { jar } = await app.suite.signInUser();
+  const back = await driveAuthorize(/** @type {string} */ (start.headers.get('location')), jar);
+  const logged = app.logged.length;
+  app.tap.hook = tooMany;
+  try {
+    const callback = await fetch(/** @type {string} */ (back.headers.get('location')), { redirect: 'manual', headers: { cookie: appJar.header() } });
+    assert.equal(callback.status, 503, 'unavailable, not "the log-in did not complete"');
+  } finally {
+    app.tap.hook = null;
+  }
+  assert.ok(app.logged.slice(logged).some((m) => /429/.test(m)), 'the 429 is logged');
+
+  const { appJar: signedIn } = await login();
+  await expireSoon(signedIn);
+  const before = app.logged.length;
+  app.tap.hook = tooMany;
+  try {
+    await assert.rejects(app.bff.session(reqFor(signedIn)), (/** @type {any} */ e) => e instanceof AuthError && e.code === 'unavailable');
+  } finally {
+    app.tap.hook = null;
+  }
+  assert.ok(await app.store.get(sessionId(signedIn)), 'the session is kept');
+  assert.ok(app.logged.slice(before).some((m) => /refresh/i.test(m)), 'the failed refresh is logged');
+});
+
+test('a refresh error other than invalid_grant is logged and keeps the session', async () => {
+  const { appJar } = await login();
+  await expireSoon(appJar);
+  const before = app.logged.length;
+  app.tap.hook = (path, res) => (path === '/oauth2/token' ? Response.json({ error: 'invalid_client' }, { status: 401 }) : res);
+  try {
+    await assert.rejects(app.bff.session(reqFor(appJar)), (/** @type {any} */ e) => e instanceof AuthError && e.code === 'unavailable');
+  } finally {
+    app.tap.hook = null;
+  }
+  assert.ok(await app.store.get(sessionId(appJar)), 'the session is kept');
+  assert.ok(app.logged.slice(before).some((m) => /refresh/i.test(m) && /invalid_client/.test(m)), 'logged with the error');
+});
+
+test('logout at an issuer without end_session_endpoint goes to postLogoutRedirectUri and clears the cookie', async () => {
+  /** @type {typeof fetch} */
+  const noEndSession = async (input, init) => {
+    const res = await fetch(input, init);
+    if (new URL(input instanceof Request ? input.url : input).pathname !== '/.well-known/openid-configuration') return res;
+    const meta = await res.json();
+    delete meta.end_session_endpoint;
+    return Response.json(meta);
+  };
+  const bff = createBff({
+    issuer: app.suite.issuer, clientId: app.suite.clientId, clientSecret: app.suite.clientSecret,
+    redirectUri: app.suite.redirectUri, postLogoutRedirectUri: app.suite.postLogoutRedirectUri,
+    resource: app.suite.resource, store: memoryStore(), keys, fetch: noEndSession, logger: { warn: () => {} },
+  });
+  const out = await bff.logout({ headers: { cookie: `__Host-tinylap-session=${randomBytes(32).toString('base64url')}` } });
+  assert.equal(out.status, 302);
+  assert.equal(out.headers.Location, app.suite.postLogoutRedirectUri);
+  assert.ok(String(out.headers['Set-Cookie']).includes('Max-Age=0'));
+});
+
 test('logout without a session still clears the cookie and goes to end_session_endpoint', async () => {
   const res = await fetch(`${app.origin}/auth/logout`, { method: 'POST', redirect: 'manual', headers: { 'sec-fetch-site': 'same-origin' } });
   assert.equal(res.status, 302);
