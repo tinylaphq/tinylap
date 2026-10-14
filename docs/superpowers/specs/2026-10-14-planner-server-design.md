@@ -51,9 +51,10 @@ Consequences:
 - `snapshotKey(layout)`: SHA-256 of the UTF-8 bytes of the layout's canonical
   JSON, truncated to the first 16 bytes, base64url without padding
   (22 characters).
-- Canonical JSON: `JSON.stringify(layoutFromData(data))`. `layoutFromData`
-  builds a fresh object with a fixed key order, so the same layout always
-  serialises to the same bytes. A golden test pins one known key, so any
+- Canonical JSON: `layoutFromData(data)`, with `pieces` sorted by `y`, `x`,
+  `type`, `rot`, then `JSON.stringify`. `layoutFromData` builds a fresh object
+  with a fixed key order, and piece order carries no meaning, so the same
+  layout always serialises to the same bytes, however its pieces were listed. A golden test pins one known key, so any
   accidental change to the canonical form fails a test.
 - `shapeKey(shape)`: the same hash over the full shape string, prefix included.
 - Both are async (`crypto.subtle.digest`) and run unchanged in browsers and in
@@ -79,9 +80,17 @@ apps/track-planner/
   the HTML representation. `exportHtml` already runs in Node.
 - `tools/dev-server.js` is removed; `pnpm dev` runs the server against the app
   source using `tools/serve-map.js`, with `Cache-Control: no-store` as today.
-- Configuration by environment: `PORT` (default 8080), `TINYLAP_DB`
-  (default `/data/tinylap.sqlite`; `:memory:` in tests), `TINYLAP_RATE_LIMIT`
-  (posts per hour per IP, default 30).
+- Configuration by environment:
+  - `PORT` (default 8080)
+  - `TINYLAP_DB` (default `/data/tinylap.sqlite`; `:memory:` in tests)
+  - `TINYLAP_RATE_LIMIT` (posts per hour per client, default 30)
+  - `TINYLAP_PUBLIC_URL` (the origin used in absolute links such as `url`;
+    without it, the request's `Host`)
+  - `TINYLAP_CLIENT_IP_HEADER` (the header carrying the client IP, set to
+    `Fly-Client-IP` on Fly; without it, the socket address. A header is only
+    trusted when configured, so a self-hoster without a proxy can't be fooled
+    by a forged one.)
+- The rate limiter lives in memory, so a restart resets it. That is accepted.
 - `node:sqlite` is built into Node 24. If it still prints an experimental
   warning, that is accepted.
 
@@ -126,7 +135,8 @@ All API responses carry `Link: </openapi.json>; rel="service-desc"` and
 - Body: `application/json` (a layout) or `text/html` (an exported page), read
   with `parseLayout`. Other types: `415`.
 - Validation, in order:
-  1. Larger than 256 KiB: `413`.
+  1. Larger than 512 KiB: `413`. (An exported page carries the drawing and is
+     several times larger than its JSON.)
   2. Over the rate limit: `429` with `Retry-After`.
   3. Unparseable, or rejected by `layoutFromData`: `422`.
   4. **Track consistency.** If `shapeOf(layout)` is a shape, the layout must
@@ -137,7 +147,7 @@ All API responses carry `Link: </openapi.json>; rel="service-desc"` and
 - Stores the canonical JSON under its snapshot key.
 - `201 Created` with `Location: /layouts/<key>` when new, `200` when it already
   existed. Body: `{ "key", "url", "shapeKey" }` (`shapeKey` is `null` without a
-  track). `url` is absolute, built from the request's host.
+  track). `url` is absolute, built from `TINYLAP_PUBLIC_URL`.
 
 ### `GET /layouts/<key>`
 
@@ -147,8 +157,12 @@ All API responses carry `Link: </openapi.json>; rel="service-desc"` and
 | anything else, including `*/*` and no `Accept` | the canonical JSON |
 | `/layouts/<key>.json` or `/layouts/<key>.html` | that one, whatever `Accept` says |
 
-- Success: `Vary: Accept`, `ETag: "<key>"`, `Cache-Control: public,
-  max-age=31536000, immutable`; `If-None-Match` gives `304`.
+- Both carry `Vary: Accept`; `If-None-Match` gives `304`.
+- **JSON** is the snapshot itself and never changes: `ETag: "<key>"`,
+  `Cache-Control: public, max-age=31536000, immutable`.
+- **HTML** is a rendering of it, and the rendering changes when the export page
+  does: `ETag: "<key>-<build sha>"`, `Cache-Control: no-cache`. The two
+  representations never share an ETag.
 - The export page gains an "Open in planner" link to `/?layout=<key>`.
   `exportHtml(layout, { openUrl })` takes it as an option; downloaded files
   are unchanged.
@@ -170,15 +184,17 @@ All API responses carry `Link: </openapi.json>; rel="service-desc"` and
 - `GET /.well-known/api-catalog`: an RFC 9727 linkset pointing at
   `/openapi.json` and `/api`.
 - `GET /api`: the rendered docs page. The renderer (Scalar) is an npm
-  dependency served from `/v/<sha>/` like everything else; no CDN.
+  dependency served from `/v/<sha>/` like everything else; no CDN. It is
+  configured to load no external fonts or other resources.
 
 ### Errors
 
 Every error is `application/problem+json`:
 `{ "type", "title", "status", "detail" }`. `type` is a URL under
 `/problems/<name>` (`invalid-layout`, `track-mismatch`, `too-large`,
-`rate-limited`, `unsupported-media-type`, `not-found`, `unavailable`), each
-described in the OpenAPI document.
+`rate-limited`, `unsupported-media-type`, `not-found`, `method-not-allowed`,
+`unavailable`), each described in the OpenAPI document. Requesting a type URL
+redirects (`302`) to its description on `/api`.
 
 - Database unavailable: `503` on API routes; static files keep working.
 - Unknown route: `404`. Wrong method on a known route: `405` with `Allow`.
@@ -225,15 +241,18 @@ described in the OpenAPI document.
   computed and when it changes, the keys' exact algorithms, and worked
   examples (sharing a link; two friends who lost the link; an online race).
   It is written for people building against the API, not for this repo's
-  developers. The package README and the OpenAPI description link to it.
+  developers. It also says what the identifiers are not: a track id proves no
+  ownership (anyone can post a snapshot carrying any id, as long as the shape
+  matches), and a shape key says "built the same", not "the same venue". The package README and the OpenAPI description link to it.
 - The OpenAPI description documents every route, representation and problem
   type, and is checked against the server by the contract tests.
 - README: a self-hosting section (Docker image, volume, environment variables).
 
 ## 10. Deployment
 
-- The image runs `node:24-alpine` with the server and the assembled `/srv`,
-  instead of Caddy.
+- The image runs `node:24-alpine` instead of Caddy. It holds the assembled
+  `/srv`, plus the server, the planner modules it imports and their production
+  `node_modules`.
 - A Fly volume mounted at `/data` holds the database. Creating it is a one-off
   `fly volumes create` the maintainer runs. Fly's daily volume snapshots are
   the backup.
@@ -243,7 +262,7 @@ described in the OpenAPI document.
 ## 11. Testing
 
 - **Package:** `parseLayout` reads JSON and HTML and rejects other text;
-  `canonicalJson` is stable; `snapshotKey` matches a golden value and changes
+  `canonicalJson` is stable and independent of piece order; `snapshotKey` matches a golden value and changes
   with any change; `shapeKey` is equal after a rotation; the JSON Schema
   accepts every reference layout and the v1 golden file's data, and rejects a
   missing `pieces`.
@@ -252,7 +271,7 @@ described in the OpenAPI document.
     mismatch (missing, wrong shape, track on an open layout), `429`;
   - an HTML body stores the same snapshot as its JSON;
   - negotiation: browser `Accept`, `*/*`, none, q-values, suffixes, `Vary`,
-    `304`;
+    `304`; JSON and HTML have different ETags;
   - `/shapes`: lists snapshots of two different track ids with one shape;
     `404` for an unknown shape;
   - CORS headers and preflight; `Link` header; Problem Details bodies;
