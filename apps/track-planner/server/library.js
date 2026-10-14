@@ -10,7 +10,7 @@
 // yours, 403 when your role may not do it.
 import { randomBytes } from 'node:crypto';
 import { canonicalJson, snapshotKey, layoutFromData, parseLayout } from '@tinylap/track-format';
-import { can } from '@tinylap/auth';
+import { AuthError, can } from '@tinylap/auth';
 import { displayName, withSession } from './auth.js';
 import { MAX_BODY, MAX_LAYOUT, publish, readBody } from './layouts.js';
 import { mediaType } from './negotiate.js';
@@ -121,9 +121,15 @@ function trackFor(request, id, action) {
   return { track };
 }
 
-/** Who saves: the user id and the display name at save time. */
+/**
+ * Who saves: the user id and the display name at save time. A name that
+ * can't be looked up fails the save (503, nothing written): a stored null
+ * means "former member", which only the deletions feed may write.
+ */
 async function saver(request) {
-  return { userId: request.session.userId, userName: await displayName(request) };
+  const userName = await displayName(request);
+  if (userName === null) throw new AuthError('unavailable', 'Your name could not be looked up at accounts right now; nothing was saved. Try again in a minute.');
+  return { userId: request.session.userId, userName };
 }
 
 const newId = () => randomBytes(16).toString('base64url');

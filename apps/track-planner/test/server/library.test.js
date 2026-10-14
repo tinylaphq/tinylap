@@ -373,3 +373,30 @@ test('a deleted user shows as "former member" on what they saved', async () => {
   const listed = workspaces.find((w) => w.id === club.id).tracks.find((t) => t.id === track.id);
   assert.deepEqual(listed.updatedBy, { id: admin.user.id, name: 'former member' });
 });
+
+test('a save whose name lookup fails is a 503 and writes nothing: no live user is stored as "former member"', async (t) => {
+  const db = planner.suite.accounts.db;
+  const user = (await planner.suite.signInUser(undefined, 'Lookup')).user;
+  join(db, owner.user.id, club.id, user.id);
+  const who = await planner.login('/', user); // no name cached for this session yet
+  const track = await save(owner, club.id, variant(1300), 'Before');
+  const tracks = planner.store.countTracks(club.id);
+  const versions = planner.store.listVersions(track.id).length;
+
+  // userinfo answering anything but 200 with a name (here: as a 429 would).
+  const real = planner.auth.userName;
+  planner.auth.userName = async () => null;
+  t.after(() => { planner.auth.userName = real; });
+
+  await problemOf(await api(who, 'POST', '/library/tracks', { workspaceId: club.id, name: 'New', layout: variant(1301) }), 503, 'unavailable');
+  await problemOf(await api(who, 'POST', `/library/tracks/${track.id}/versions`, { layout: variant(1302) }), 503, 'unavailable');
+  await problemOf(await api(who, 'PATCH', `/library/tracks/${track.id}`, { name: 'Renamed' }), 503, 'unavailable');
+  await problemOf(await api(who, 'POST', `/library/tracks/${track.id}/copy`, { workspaceId: club.id }), 503, 'unavailable');
+  assert.equal(planner.store.countTracks(club.id), tracks, 'no track written');
+  assert.equal(planner.store.listVersions(track.id).length, versions, 'no version written');
+  assert.equal(planner.store.getTrack(track.id)?.name, 'Before', 'not renamed');
+
+  planner.auth.userName = real;
+  const saved = await save(who, club.id, variant(1303), 'After');
+  assert.deepEqual(saved.updatedBy, { id: user.id, name: 'Lookup' });
+});
