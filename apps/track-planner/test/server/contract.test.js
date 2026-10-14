@@ -13,7 +13,11 @@ import openapi from '../../server/openapi.json' with { type: 'json' };
 import layoutSchema from '@tinylap/track-format/layout.schema.json' with { type: 'json' };
 import { snapshotKey, shapeKey } from '@tinylap/track-format';
 import { mediaType } from '../../server/negotiate.js';
-import { startServer, closedLayout, openLayout } from './helpers.js';
+import { createHash, randomBytes } from 'node:crypto';
+import { seal } from '@tinylap/auth';
+import { createAuth } from '../../server/auth.js';
+import { openStore } from '../../server/store.js';
+import { startServer, startPlanner, closedLayout, openLayout } from './helpers.js';
 
 const BASE = 'http://tinylap.test';
 const ajv = new Ajv({ strict: false, allErrors: true });
@@ -100,6 +104,61 @@ test('every response matches the description', async () => {
     }
   } finally {
     await Promise.all([up.close(), limited.close(), down.close()]);
+  }
+});
+
+/** A planner whose accounts can't be reached at all (nothing listens on port 1). */
+async function unreachable() {
+  const store = openStore(':memory:');
+  const keys = [{ id: 'k1', key: randomBytes(32) }];
+  const publicUrl = 'http://planner.test';
+  const auth = createAuth({ issuer: 'http://127.0.0.1:1', clientId: 'c', clientSecret: 's', keys, publicUrl, sessions: store.sessions, fetchTimeoutMs: 2000 });
+  const server = await startServer({ store, auth, publicUrl });
+  // A pending log-in, as /auth/login would have set it.
+  const pending = seal(keys, JSON.stringify({ state: 's', nonce: 'n', verifier: 'v'.repeat(43), returnTo: '/', expiresAt: Date.now() + 60_000 }), 'login');
+  // A session whose access token is spent, so the next request must refresh.
+  const value = randomBytes(32).toString('base64url');
+  const now = Date.now();
+  await store.sessions.set(createHash('sha256').update(value).digest('hex'), {
+    userId: 'u', createdAt: now, expiresAt: now + 3_600_000,
+    sealedTokens: seal(keys, JSON.stringify({ accessToken: 'a', refreshToken: 'r', expiresAt: 0 }), 'tokens'),
+  });
+  return { ...server, loginCookie: `__Host-tinylap-login=${pending}`, sessionCookie: `__Host-tinylap-session=${value}` };
+}
+
+test('every /auth response matches the description', async () => {
+  const planner = await startPlanner();
+  const off = await startServer();
+  const dead = await unreachable();
+  const call = async (base, method, path, init = {}) => {
+    const res = await fetch(base + path, { method, redirect: 'manual', ...init });
+    await check(method, base + path, res);
+    return res;
+  };
+  try {
+    const page = { accept: CHROME };
+    await call(planner.base, 'GET', '/auth/login?returnTo=/');                      // 302
+    await call(off.base, 'GET', '/auth/login');                                     // 404
+    await call(dead.base, 'GET', '/auth/login', { headers: page });                 // 503, a page
+    await call(dead.base, 'GET', '/auth/login');                                    // 503, a problem
+
+    const { jar, callback } = await planner.login();
+    await check('GET', `${planner.base}/auth/callback`, callback);                  // 302
+    await call(planner.base, 'GET', '/auth/callback?code=x&state=y', { headers: page }); // 400, a page
+    await call(planner.base, 'GET', '/auth/callback?code=x&state=y');               // 400, a problem
+    await call(off.base, 'GET', '/auth/callback');                                  // 404
+    await call(dead.base, 'GET', '/auth/callback?code=x&state=s', { headers: { ...page, cookie: dead.loginCookie } }); // 503
+
+    await call(planner.base, 'GET', '/auth/me');                                    // 200, logged out
+    await call(planner.base, 'GET', '/auth/me', { headers: { cookie: jar.header() } }); // 200, logged in
+    await call(off.base, 'GET', '/auth/me');                                        // 200, log-in off
+    await call(dead.base, 'GET', '/auth/me', { headers: { cookie: dead.sessionCookie } }); // 503
+
+    await call(planner.base, 'POST', '/auth/logout', { headers: { origin: 'https://evil.test', cookie: jar.header() } }); // 403
+    await call(planner.base, 'POST', '/auth/logout', { headers: { origin: planner.base, cookie: jar.header() } });       // 302
+    await call(off.base, 'POST', '/auth/logout', { headers: { origin: off.base } }); // 404
+  } finally {
+    await Promise.all([planner.close(), off.close(), dead.close()]);
   }
 });
 

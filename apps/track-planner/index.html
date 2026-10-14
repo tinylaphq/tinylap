@@ -21,6 +21,19 @@
       <button type="button" class="btn btn-sm btn-secondary" id="btn-open">Open</button>
       <button type="button" class="btn btn-sm btn-secondary" id="btn-share">Share</button>
       <button type="button" class="btn btn-sm btn-primary" id="btn-save">Save</button>
+      <div class="account" id="account" hidden>
+        <a class="btn btn-sm btn-outline" id="btn-login" href="/auth/login">Log in</a>
+        <button type="button" class="btn btn-sm btn-outline account-name" id="btn-account"
+                popovertarget="account-menu" aria-haspopup="menu" hidden></button>
+        <span class="account-down" id="account-down" role="status" hidden>Log-in is unavailable right now</span>
+      </div>
+    </div>
+    <div class="account-menu" id="account-menu" popover role="menu" aria-labelledby="btn-account">
+      <a role="menuitem" id="menu-library" href="/library" hidden>Library</a>
+      <a role="menuitem" id="menu-account" href="/">Account</a>
+      <form method="post" action="/auth/logout">
+        <button type="submit" role="menuitem">Log out</button>
+      </form>
     </div>
     <input type="file" id="open-input" accept=".html,.json,text/html,application/json" hidden>
   </nav>

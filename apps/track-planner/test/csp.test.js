@@ -33,3 +33,8 @@ test('the app code uses no eval and writes no inline handlers', () => {
     assert.doesNotMatch(code, /<[a-z][^>]*\son[a-z]+=/i, name);
   }
 });
+
+test('with log-in on, forms may also end at accounts (logout redirects through end-session)', () => {
+  assert.match(plannerCsp(html), /form-action 'self'(;|$)/);
+  assert.match(plannerCsp(html, { formAction: ['https://accounts.tinylap.club'] }), /form-action 'self' https:\/\/accounts\.tinylap\.club(;|$)/);
+});

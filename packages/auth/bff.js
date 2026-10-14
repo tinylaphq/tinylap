@@ -458,6 +458,10 @@ export function createBff(options) {
       return flight;
     },
 
+    sessionId(req) {
+      return sessionIdOf(req);
+    },
+
     requireSameOrigin(req) {
       const site = header(req.headers, 'sec-fetch-site');
       if (site !== undefined) return site === 'same-origin';

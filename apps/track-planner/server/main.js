@@ -5,10 +5,18 @@
 // Production: node server/main.js (serves TINYLAP_ROOT, default /srv).
 // Development: node server/main.js --dev (serves the source on :8000, with
 // an in-memory database unless TINYLAP_DB says otherwise).
+//
+// Log-in is on when TINYLAP_ISSUER (the accounts origin) is set, and then
+// needs all of: TINYLAP_CLIENT_ID, TINYLAP_CLIENT_SECRET, TINYLAP_TOKEN_KEYS
+// (`<id>:<base64 32 bytes>,…`, newest first), TINYLAP_FEED_TOKEN, and
+// TINYLAP_PUBLIC_URL (in dev it defaults to http://localhost:<port>).
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseKeys } from '@tinylap/auth';
 import { createHandler } from './app.js';
+import { createAuth } from './auth.js';
+import { startFeed } from './feed.js';
 import { openStore } from './store.js';
 
 const env = process.env;
@@ -30,23 +38,57 @@ if (rateLimit !== undefined && !(Number.isInteger(rateLimit) && rateLimit >= 0))
   process.exit(1);
 }
 
+const port = Number(env.PORT ?? (dev ? 8000 : 8080));
+const publicUrl = env.TINYLAP_PUBLIC_URL || (dev && env.TINYLAP_ISSUER ? `http://localhost:${port}` : undefined);
+
+/** Refuses to start: log-in half configured must not quietly run without it. */
+function refuse(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+let auth = null;
+let feed = null;
+if (env.TINYLAP_ISSUER) {
+  const needed = { TINYLAP_CLIENT_ID: env.TINYLAP_CLIENT_ID, TINYLAP_CLIENT_SECRET: env.TINYLAP_CLIENT_SECRET, TINYLAP_TOKEN_KEYS: env.TINYLAP_TOKEN_KEYS, TINYLAP_FEED_TOKEN: env.TINYLAP_FEED_TOKEN, TINYLAP_PUBLIC_URL: publicUrl };
+  const missing = Object.keys(needed).filter((name) => !needed[name]);
+  if (missing.length) refuse(`TINYLAP_ISSUER is set, so log-in also needs ${missing.join(', ')}. Set them, or unset TINYLAP_ISSUER to run without log-in.`);
+  let keys;
+  try {
+    keys = parseKeys(env.TINYLAP_TOKEN_KEYS);
+  } catch (error) {
+    refuse(`TINYLAP_TOKEN_KEYS: ${error.message}`);
+  }
+  if (!store) {
+    console.error('log-in is off: it keeps its sessions in the database, which is unavailable.');
+  } else {
+    try {
+      auth = createAuth({ issuer: env.TINYLAP_ISSUER, clientId: env.TINYLAP_CLIENT_ID, clientSecret: env.TINYLAP_CLIENT_SECRET, keys, publicUrl, sessions: store.sessions });
+    } catch (error) {
+      refuse(`log-in: ${error.message}`);
+    }
+    feed = startFeed({ issuer: env.TINYLAP_ISSUER, token: env.TINYLAP_FEED_TOKEN, store });
+  }
+}
+
 const handler = createHandler({
   store,
   root: dev ? undefined : env.TINYLAP_ROOT ?? '/srv',
   appDir: resolve(fileURLToPath(new URL('..', import.meta.url))),
-  publicUrl: env.TINYLAP_PUBLIC_URL,
+  publicUrl,
   rateLimit,
   clientIpHeader: env.TINYLAP_CLIENT_IP_HEADER,
   build: env.TINYLAP_BUILD,
+  auth,
 });
 
-const port = Number(env.PORT ?? (dev ? 8000 : 8080));
 const host = dev ? '127.0.0.1' : '0.0.0.0';
-const server = createServer(handler).listen(port, host, () => console.log(`planner on http://${host}:${port}${dev ? ' (dev, no-store)' : ''}`));
+const server = createServer(handler).listen(port, host, () => console.log(`planner on http://${host}:${port}${dev ? ' (dev, no-store)' : ''}${auth ? `, log-in through ${env.TINYLAP_ISSUER}` : ''}`));
 
 // Stop accepting, finish what is in flight, close the database, leave.
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {
+    feed?.stop();
     server.close(() => {
       store?.close();
       process.exit(0);

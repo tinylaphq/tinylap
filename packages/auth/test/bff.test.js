@@ -270,6 +270,14 @@ test('session() is null without a cookie, with an unknown cookie, or a garbled o
   assert.equal(await app.bff.session({ headers: { cookie: '__Host-tinylap-session=x;y' } }), null);
 });
 
+test('sessionId() is the store id of the cookie, or null without a well-formed one', async () => {
+  const { appJar } = await login();
+  assert.equal(app.bff.sessionId(reqFor(appJar)), sessionId(appJar));
+  assert.ok(await app.store.get(/** @type {string} */ (app.bff.sessionId(reqFor(appJar)))));
+  assert.equal(app.bff.sessionId({ headers: {} }), null);
+  assert.equal(app.bff.sessionId({ headers: { cookie: '__Host-tinylap-session=x;y' } }), null);
+});
+
 test('a fresh token is used as is: no call to the token endpoint', async () => {
   const { appJar } = await login();
   const before = app.calls.get('/oauth2/token') ?? 0;

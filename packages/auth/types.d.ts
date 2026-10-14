@@ -48,6 +48,7 @@ export const ROLES: readonly Role[];
 export const ACTIONS: readonly Action[];
 
 export class AuthError extends Error {
+  constructor(code: 'invalid_token' | 'unavailable', message: string, options?: ErrorOptions);
   code: 'invalid_token' | 'unavailable';
 }
 
@@ -157,6 +158,8 @@ export interface Bff {
   logout(req: BffRequest): Promise<BffResponse>;
   /** The session, refreshed when under 60 s are left (one refresh in flight per session); null when logged out. */
   session(req: BffRequest): Promise<BffSession | null>;
+  /** The store id (SHA-256 hex) of the request's session cookie, or null; it doesn't check that the session exists. For apps that keep data next to a session. */
+  sessionId(req: BffRequest): string | null;
   /** `Sec-Fetch-Site: same-origin`, or else an `Origin` equal to the app origin. */
   requireSameOrigin(req: BffRequest): boolean;
 }

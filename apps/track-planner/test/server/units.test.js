@@ -58,7 +58,7 @@ test('the store keeps one row per key and lists by shape, newest first', () => {
 
 test('every problem type has a status, a title and a description', () => {
   assert.deepEqual(Object.keys(PROBLEMS).sort(), [
-    'invalid-layout', 'method-not-allowed', 'not-found', 'rate-limited',
+    'forbidden', 'invalid-layout', 'login-failed', 'method-not-allowed', 'not-found', 'rate-limited',
     'too-large', 'track-mismatch', 'unavailable', 'unsupported-media-type',
   ]);
   for (const p of Object.values(PROBLEMS)) {

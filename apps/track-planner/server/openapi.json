@@ -137,6 +137,54 @@
         "summary": "This description as a page",
         "responses": { "200": { "description": "The docs.", "content": { "text/html": { "schema": { "type": "string" } } } } }
       }
+    },
+    "/auth/login": {
+      "get": {
+        "summary": "Log in to TinyLap",
+        "description": "A browser navigation, not an API call: the planner is a backend-for-frontend, so the tokens stay on the server and the browser only gets the session cookie. Like every /auth route, it sends no Access-Control-Allow-Origin and varies on Cookie.",
+        "security": [{ "session": [] }],
+        "parameters": [{ "name": "returnTo", "in": "query", "description": "Where to come back to: a path on this origin. Anything else is replaced by /.", "schema": { "type": "string" } }],
+        "responses": {
+          "302": { "description": "To accounts, with the pending log-in in a short-lived, sealed cookie." },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/LoginProblem" }
+        }
+      }
+    },
+    "/auth/callback": {
+      "get": {
+        "summary": "Where accounts sends the browser back",
+        "description": "Exchanges the code for tokens, stores them, sets the session cookie.",
+        "security": [{ "session": [] }],
+        "responses": {
+          "302": { "description": "Back to returnTo, with the session cookie." },
+          "400": { "$ref": "#/components/responses/LoginProblem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/LoginProblem" }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Log out",
+        "description": "Forgets the session, revokes its refresh token, and logs out at accounts too. Only from the planner's own pages: Sec-Fetch-Site: same-origin, or a same-origin Origin.",
+        "security": [{ "session": [] }],
+        "responses": {
+          "302": { "description": "Through accounts' end-session endpoint back to /; the session cookie is cleared." },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Who is logged in",
+        "security": [{ "session": [] }],
+        "responses": {
+          "200": { "description": "The log-in state. Never cached.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginState" } } } },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
     }
   },
   "components": {
@@ -180,6 +228,34 @@
           }
         }
       },
+      "LoginState": {
+        "type": "object",
+        "required": ["loggedIn", "available"],
+        "properties": {
+          "loggedIn": { "type": "boolean" },
+          "available": { "type": "boolean", "description": "false when this server has log-in turned off." },
+          "user": {
+            "type": "object",
+            "required": ["id", "name"],
+            "properties": { "id": { "type": "string" }, "name": { "type": ["string", "null"], "description": "The display name, from accounts." } }
+          },
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "role"],
+              "properties": {
+                "id": { "type": "string" },
+                "role": { "enum": ["owner", "admin", "member"] },
+                "name": { "type": "string" }
+              }
+            }
+          },
+          "accountUrl": { "type": "string", "format": "uri", "description": "The account page at accounts." }
+        },
+        "if": { "properties": { "loggedIn": { "const": true } } },
+        "then": { "required": ["user", "workspaces", "accountUrl"] }
+      },
       "Problem": {
         "type": "object",
         "description": "RFC 9457 Problem Details.",
@@ -196,7 +272,17 @@
       "Problem": {
         "description": "An error as RFC 9457 Problem Details; its type names one of the problem types below.",
         "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+      },
+      "LoginProblem": {
+        "description": "A page saying what happened, with a link to log in again, for a browser (Accept prefers text/html); Problem Details for anything else.",
+        "content": {
+          "text/html": { "schema": { "type": "string" } },
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
       }
+    },
+    "securitySchemes": {
+      "session": { "type": "apiKey", "in": "cookie", "name": "__Host-tinylap-session", "description": "The planner's session cookie, set by /auth/callback. HttpOnly; a browser sends it, scripts can't read it." }
     }
   },
   "x-tinylap-problems": {
@@ -207,6 +293,8 @@
     "unsupported-media-type": { "status": 415, "title": "Unsupported media type", "description": "Send application/json, or text/html for an exported page." },
     "not-found": { "status": 404, "title": "Not found", "description": "Nothing is stored under this key, or the key is malformed." },
     "method-not-allowed": { "status": 405, "title": "Method not allowed", "description": "The Allow header lists the methods this URL supports." },
-    "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Layouts cannot be stored or read right now. The planner itself keeps working." }
+    "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Layouts cannot be stored or read right now, or log-in is unavailable because accounts can't be reached. The planner itself keeps working." },
+    "forbidden": { "status": 403, "title": "Forbidden", "description": "A state-changing request that did not come from the planner's own pages (Sec-Fetch-Site, or else Origin)." },
+    "login-failed": { "status": 400, "title": "The log-in could not be completed", "description": "It expired, was replaced by a log-in started in another tab, or a check failed. Log in again." }
   }
 }

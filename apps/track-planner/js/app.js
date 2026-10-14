@@ -13,6 +13,7 @@ import { loadKits, saveKits } from './kits-store.js';
 import { loadLayout, saveLayout } from './session-store.js';
 import { generateLayouts, outOfReach, outlineName, hasCachedLayouts, scoreLayouts } from './generate.js';
 import { orderSuggestions, availableFamilies } from './suggestions.js';
+import { initAccount } from './account.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -1531,3 +1532,5 @@ if (sharedKey) {
     render();
   });
 }
+
+initAccount();
