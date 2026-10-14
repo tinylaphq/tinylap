@@ -144,6 +144,16 @@ function assetPath(roots, pathname) {
   return null;
 }
 
+// The only dependencies whose files the pages load. Everything else in
+// package.json (Better Auth and its plugins, @tinylap/auth) is server code.
+const SERVED = ['palace-ui', 'design'];
+
+/** The /pkg/<segment>/ roots accounts serves: palace-ui and @tinylap/design only. */
+export function servedPackages() {
+  const all = packageRoots(APP_DIR);
+  return new Map(SERVED.flatMap((segment) => (all.has(segment) ? [[segment, all.get(segment)]] : [])));
+}
+
 /**
  * @param {import('./config.js').Config} config
  */
@@ -152,7 +162,7 @@ export async function createAccounts(config) {
   const auth = createAuth(config, db);
   await seedClients(auth, config.clients);
   const betterAuth = toNodeHandler(auth);
-  const roots = packageRoots(APP_DIR);
+  const roots = servedPackages();
   const cache = config.dev ? 'no-store' : 'public, max-age=3600';
 
   const limiters = Object.fromEntries(Object.entries(LIMITS).map(([name, limit]) => [name, rateLimiter({ limit })]));
@@ -211,6 +221,9 @@ export async function createAccounts(config) {
 
   /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res */
   async function route(req, res) {
+    // One plain origin-form target ("/path"), so the recovery gate and
+    // Better Auth read the same path: no "//host/…", no absolute-form.
+    if (!/^\/(?!\/)/.test(req.url ?? '')) return problem(req, res, issuer, 'bad-request', 'The request target must be a path starting with one "/".');
     const url = new URL(req.url ?? '/', 'http://localhost');
     const { pathname } = url;
     const readOnly = req.method === 'GET' || req.method === 'HEAD';

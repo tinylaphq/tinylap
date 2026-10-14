@@ -45,8 +45,9 @@ after(async () => {
 /**
  * A fresh browser profile with its own empty authenticator: a new device.
  * @param {import('node:test').TestContext} t
+ * @param {any} [options] the virtual authenticator's options
  */
-async function device(t) {
+async function device(t, options = authenticatorOptions) {
   const context = await browser.newContext({ baseURL: accounts.issuer, acceptDownloads: true });
   /** @type {string[]} */
   const errors = [];
@@ -57,7 +58,7 @@ async function device(t) {
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
-  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: authenticatorOptions });
+  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options });
   page.on('pageerror', (error) => errors.push(error.message));
   return { context, page, cdp, authenticatorId };
 }
@@ -256,4 +257,72 @@ test('signing up from the OIDC sign-in page continues the login', async (t) => {
   const tokens = await finishLogin(page, login);
   const user = accounts.db.prepare('SELECT id FROM "user" WHERE name = ?').get('Jackie');
   assert.equal(tokens.claims().sub, user.id);
+});
+
+// The ceremonies below bypass public/webauthn.js on purpose: it always asks
+// for user verification, so the platform would refuse before the server is
+// ever asked. These ask for 'discouraged' to reach the server's own check.
+
+/** Registers through the plugin's endpoints directly, as a modified page would. */
+const rawRegister = (page, { name, createSession }) => page.evaluate(async ({ name, createSession }) => {
+  const options = await (await fetch(`/passkey/generate-register-options?context=${encodeURIComponent(name)}`)).json();
+  options.authenticatorSelection = { ...options.authenticatorSelection, userVerification: 'discouraged' };
+  const credential = await navigator.credentials.create({ publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options) });
+  const res = await fetch('/passkey/verify-registration', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ response: /** @type {any} */ (credential).toJSON(), createSession }),
+  });
+  return { status: res.status, body: await res.json() };
+}, { name, createSession });
+
+const NO_UV = { ...authenticatorOptions, hasUserVerification: false, isUserVerified: false };
+const count = (sql, ...args) => Number(accounts.db.prepare(sql).get(...args).n);
+
+test('the server refuses a passkey registered without user verification', async (t) => {
+  const { page } = await device(t, NO_UV);
+  await page.goto('/sign-up');
+  const passkeys = count('SELECT COUNT(*) AS n FROM passkey');
+  const result = await rawRegister(page, { name: 'NoVerify', createSession: true });
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /did not verify you/);
+  assert.equal(count('SELECT COUNT(*) AS n FROM passkey'), passkeys, 'no passkey row');
+  assert.equal(count('SELECT COUNT(*) AS n FROM "user" WHERE name = ?', 'NoVerify'), 0, 'no user');
+  assert.equal((await page.request.get('/api/me')).status(), 401, 'no session');
+});
+
+test('a sign-up that does not ask for a session is refused', async (t) => {
+  const { page } = await device(t);
+  await page.goto('/sign-up');
+  const passkeys = count('SELECT COUNT(*) AS n FROM passkey');
+  const result = await rawRegister(page, { name: 'NoSession', createSession: false });
+  assert.equal(result.status, 400);
+  assert.equal(count('SELECT COUNT(*) AS n FROM passkey'), passkeys, 'no passkey row');
+  assert.equal(count('SELECT COUNT(*) AS n FROM "user" WHERE name = ?', 'NoSession'), 0, 'no user');
+});
+
+test('the server refuses a sign-in without user verification', async (t) => {
+  const owner = await device(t);
+  await signUp(owner.page, 'Graham');
+  await confirmSaved(owner.page);
+  const user = accounts.db.prepare('SELECT id FROM "user" WHERE name = ?').get('Graham');
+
+  // The same device, now not verifying its user (no PIN, no fingerprint).
+  await signOut(owner.page);
+  await owner.cdp.send('WebAuthn.setUserVerified', { authenticatorId: owner.authenticatorId, isUserVerified: false });
+  const lax = owner;
+  await lax.page.goto('/sign-in');
+  const sessions = count('SELECT COUNT(*) AS n FROM session WHERE "userId" = ?', user.id);
+  const result = await lax.page.evaluate(async () => {
+    const options = await (await fetch('/passkey/generate-authenticate-options')).json();
+    const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON({ ...options, userVerification: 'discouraged' });
+    const assertion = await navigator.credentials.get({ publicKey });
+    const res = await fetch('/passkey/verify-authentication', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ response: /** @type {any} */ (assertion).toJSON() }),
+    });
+    return { status: res.status, body: await res.json() };
+  });
+  assert.equal(result.status, 401);
+  assert.match(result.body.message, /did not verify you/);
+  assert.equal(count('SELECT COUNT(*) AS n FROM session WHERE "userId" = ?', user.id), sessions, 'no session created');
+  assert.equal((await lax.page.request.get('/api/me')).status(), 401);
 });

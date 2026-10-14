@@ -5,6 +5,8 @@
 // The HTTP shell around Better Auth: headers, static styles, the database.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { request } from 'node:http';
+import { servedPackages } from '../server/app.js';
 import { driveAuthorize, Jar, navigate, startAccounts } from './helpers.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
@@ -74,6 +76,31 @@ test('palace-ui and @tinylap/design styles are served under /pkg/', async () => 
   }
   assert.equal((await fetch(`${accounts.issuer}/pkg/design/%2e%2e/package.json`)).status, 404);
   assert.equal((await fetch(`${accounts.issuer}/pkg/other/x.css`)).status, 404);
+});
+
+test('only palace-ui and @tinylap/design are served; server-only dependencies never are', async () => {
+  assert.deepEqual([...servedPackages().keys()].sort(), ['design', 'palace-ui']);
+  for (const path of ['/pkg/passkey/dist/index.mjs', '/pkg/passkey/package.json', '/pkg/better-auth/package.json', '/pkg/oauth-provider/dist/index.mjs', '/pkg/auth/index.js']) {
+    assert.equal((await fetch(`${accounts.issuer}${path}`)).status, 404, path);
+  }
+});
+
+/** Sends a raw request target, which fetch() would normalise. */
+const rawGet = (target) => new Promise((resolve, reject) => {
+  const { hostname, port } = new URL(accounts.issuer);
+  const req = request({ hostname, port, path: target, method: 'GET', headers: { accept: 'application/json' } }, (res) => {
+    res.resume();
+    res.on('end', () => resolve(res.statusCode));
+  });
+  req.on('error', reject);
+  req.end();
+});
+
+test('a request target that is not one plain /path is refused before routing', async () => {
+  for (const target of ['//api/me', '//evil.test/sign-in', `${accounts.issuer}/api/me`, 'http://evil.test/api/me', '*']) {
+    assert.equal(await rawGet(target), 400, target);
+  }
+  assert.equal(await rawGet('/api/me'), 401, 'a plain path still routes');
 });
 
 test('password sign-up and sign-in are switched off', async () => {

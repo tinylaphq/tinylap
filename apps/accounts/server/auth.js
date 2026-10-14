@@ -74,6 +74,9 @@ function passkeyPlugin(config, db) {
       afterVerification: async ({ ctx, verification, user, context }) => {
         if (!verification.registrationInfo?.userVerified) throw refuse('This passkey did not verify you (no PIN, fingerprint or face check).');
         if (await ctx.context.internalAdapter.findUserById(user.id)) return;
+        // A new account: only with createSession, which is when the plugin
+        // runs this hook and the passkey insert in one transaction.
+        if (ctx.body?.createSession !== true) throw refuse('Sign-up must ask for a session (createSession: true).');
         const name = displayNameOf(context);
         if (!name) throw refuse('Choose a display name of 1 to 40 characters.');
         await ctx.context.internalAdapter.createUser({ id: user.id, name, email: `${user.id}@users.invalid`, emailVerified: false }, { method: 'passkey' });
