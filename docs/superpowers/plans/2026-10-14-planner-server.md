@@ -1483,7 +1483,7 @@ Run → PASS.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { snapshotKey, shapeKey, shapeOf, assignTrack } from '@tinylap/track-format';
+import { snapshotKey, shapeKey, shapeOf, assignTrack, canonicalJson } from '@tinylap/track-format';
 import { exportHtml } from '../../js/storage.js';
 import { startServer, closedLayout, openLayout } from './helpers.js';
 
@@ -1566,7 +1566,8 @@ test('a browser gets the page, everything else gets json', async () => {
     assert.equal(res.headers.get('cache-control'), 'public, max-age=31536000, immutable');
     assert.equal(res.headers.get('etag'), `"${key}"`);
     assert.equal(res.headers.get('vary'), 'Accept');
-    assert.deepEqual(await res.json(), layout);
+    // Stored in canonical form: pieces sorted, so compare against that.
+    assert.deepEqual(await res.json(), JSON.parse(canonicalJson(layout)));
   }
 });
 
