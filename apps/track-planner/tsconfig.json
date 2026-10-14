@@ -1,1 +1,1 @@
-{ "extends": "../../tsconfig.base.json", "compilerOptions": { "strict": false }, "include": ["js/**/*.js"] }
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "strict": false, "resolveJsonModule": true }, "include": ["js/**/*.js", "server/**/*.js"] }

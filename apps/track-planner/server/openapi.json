@@ -1,0 +1,212 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "TinyLap planner API",
+    "version": "1.0.0",
+    "license": { "name": "AGPL-3.0-or-later", "identifier": "AGPL-3.0-or-later" },
+    "description": "Shared Circuit 30 layouts. A layout is stored as an immutable snapshot under a key computed from its content, so the same layout always has the same link and a changed layout gets a new one. Every snapshot of one physical build is also listed under its shape key, so someone who only has the layout can find it without a link. Each URL serves HTML to browsers and JSON to everything else."
+  },
+  "externalDocs": {
+    "description": "Snapshots, tracks and shapes: how the identifiers relate",
+    "url": "https://github.com/tinylaphq/tinylap/blob/main/docs/identity.md"
+  },
+  "paths": {
+    "/layouts": {
+      "post": {
+        "summary": "Store a snapshot",
+        "description": "Accepts a layout as JSON, or a page the planner exported. A single closed loop must carry a track block whose shape matches its geometry (run assignTrack first); any other layout must carry none. The server never assigns track ids.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Layout" } },
+            "text/html": { "schema": { "type": "string", "description": "A page exported by the planner." } }
+          }
+        },
+        "responses": {
+          "200": { "description": "The snapshot was already stored.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Snapshot" } } } },
+          "201": {
+            "description": "The snapshot was stored.",
+            "headers": { "Location": { "schema": { "type": "string" }, "description": "/layouts/<key>" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Snapshot" } } }
+          },
+          "413": { "$ref": "#/components/responses/Problem" },
+          "415": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" },
+          "429": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/layouts/{key}": {
+      "get": {
+        "summary": "A snapshot, as JSON or as a page",
+        "description": "Browsers that prefer text/html get the page with the drawing and the bill of materials; every other client gets the JSON. The JSON never changes and may be cached forever.",
+        "parameters": [{ "$ref": "#/components/parameters/key" }],
+        "responses": {
+          "200": {
+            "description": "The snapshot.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Layout" } },
+              "text/html": { "schema": { "type": "string" } }
+            }
+          },
+          "304": { "description": "Not modified." },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/layouts/{key}.json": {
+      "get": {
+        "summary": "A snapshot as JSON, whatever Accept says",
+        "parameters": [{ "$ref": "#/components/parameters/key" }],
+        "responses": {
+          "200": { "description": "The snapshot.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Layout" } } } },
+          "304": { "description": "Not modified." },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/layouts/{key}.html": {
+      "get": {
+        "summary": "A snapshot as a page, whatever Accept says",
+        "parameters": [{ "$ref": "#/components/parameters/key" }],
+        "responses": {
+          "200": { "description": "The page.", "content": { "text/html": { "schema": { "type": "string" } } } },
+          "304": { "description": "Not modified." },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/shapes/{key}": {
+      "get": {
+        "summary": "Every snapshot of one build",
+        "description": "Compute the key locally with shapeKey(shapeOf(layout)). Snapshots with the same track id are the same track; different track ids are separate tracks built the same way.",
+        "parameters": [{ "$ref": "#/components/parameters/key" }],
+        "responses": {
+          "200": {
+            "description": "Up to 100 snapshots, newest first.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShapeListing" } },
+              "text/html": { "schema": { "type": "string" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "This description",
+        "responses": { "200": { "description": "OpenAPI 3.1.", "content": { "application/vnd.oai.openapi+json": { "schema": { "type": "object" } } } } }
+      }
+    },
+    "/schemas/layout.json": {
+      "get": {
+        "summary": "The layout format as JSON Schema 2020-12",
+        "responses": { "200": { "description": "The schema.", "content": { "application/schema+json": { "schema": { "type": "object" } } } } }
+      }
+    },
+    "/.well-known/api-catalog": {
+      "get": {
+        "summary": "The API catalog (RFC 9727)",
+        "responses": {
+          "200": {
+            "description": "A linkset naming this description and its docs.",
+            "content": { "application/linkset+json": { "schema": { "type": "object", "required": ["linkset"] } } }
+          }
+        }
+      }
+    },
+    "/problems/{name}": {
+      "get": {
+        "summary": "A problem type",
+        "description": "Redirects to the problem type's description on /api.",
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "302": { "description": "To /api#problem-<name>." },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/api": {
+      "get": {
+        "summary": "This description as a page",
+        "responses": { "200": { "description": "The docs.", "content": { "text/html": { "schema": { "type": "string" } } } } }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "key": {
+        "name": "key",
+        "in": "path",
+        "required": true,
+        "description": "22 base64url characters: the first 16 bytes of a SHA-256.",
+        "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" }
+      }
+    },
+    "schemas": {
+      "Layout": { "$ref": "/schemas/layout.json" },
+      "Snapshot": {
+        "type": "object",
+        "required": ["key", "url", "shapeKey"],
+        "properties": {
+          "key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+          "url": { "type": "string", "format": "uri" },
+          "shapeKey": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{22}$", "description": "null for a layout without a track." }
+        }
+      },
+      "ShapeListing": {
+        "type": "object",
+        "required": ["shapeKey", "shape", "layouts"],
+        "properties": {
+          "shapeKey": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+          "shape": { "type": "string", "pattern": "^c30:" },
+          "layouts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["key", "trackId", "createdAt"],
+              "properties": {
+                "key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+                "trackId": { "type": "string" },
+                "createdAt": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457 Problem Details.",
+        "required": ["type", "title", "status"],
+        "properties": {
+          "type": { "type": "string", "format": "uri" },
+          "title": { "type": "string" },
+          "status": { "type": "integer" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "Problem": {
+        "description": "An error as RFC 9457 Problem Details; its type names one of the problem types below.",
+        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+      }
+    }
+  },
+  "x-tinylap-problems": {
+    "invalid-layout": { "status": 422, "title": "The layout is not valid", "description": "The body could not be read as a layout: not JSON, no layout data in the page, an unknown version, piece type or rotation." },
+    "track-mismatch": { "status": 422, "title": "The track block does not match the layout", "description": "A single closed loop must carry a track whose shape equals its geometry, and any other layout must carry none. Run assignTrack before posting." },
+    "too-large": { "status": 413, "title": "The layout is too large", "description": "A request body may be at most 512 KiB." },
+    "rate-limited": { "status": 429, "title": "Too many layouts posted", "description": "Wait for the number of seconds in Retry-After." },
+    "unsupported-media-type": { "status": 415, "title": "Unsupported media type", "description": "Send application/json, or text/html for an exported page." },
+    "not-found": { "status": 404, "title": "Not found", "description": "Nothing is stored under this key, or the key is malformed." },
+    "method-not-allowed": { "status": 405, "title": "Method not allowed", "description": "The Allow header lists the methods this URL supports." },
+    "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Layouts cannot be stored or read right now. The planner itself keeps working." }
+  }
+}
