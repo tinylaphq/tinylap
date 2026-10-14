@@ -88,9 +88,10 @@ Better Auth.
 
 Access tokens carry `workspaces: [{ id, role }]` and live **10 minutes**. A
 role change or removal takes effect at the latest with the next token; that
-window is accepted. Removing a member also revokes that user's refresh tokens
-for every client, so the next refresh re-reads memberships. Apps make no call
-to `accounts` per request.
+window is accepted. Removing a member revokes nothing: claims are read live
+at every issuance, so the club drops out with the member's next token, and
+they stay logged in. Account deletion and "sign out everywhere" revoke the
+user's refresh tokens. Apps make no call to `accounts` per request.
 
 ## 4. Data
 
@@ -218,9 +219,10 @@ admin command (`node apps/accounts/admin.js transfer-ownership <workspace>
   through sign-in or sign-up first; an expired, used or revoked link says so
   and suggests asking the club for a new one.
 - **Leaving or removal:** the club keeps its tracks. `saved_by` and
-  `updated_by` keep the bare user id and display as "former member" (only
-  the deletions feed clears a stored name; a save whose name lookup at
-  `accounts` fails is refused with 503 and writes nothing). There is
+  `updated_by` keep the bare user id and display as "former member". A
+  stored name is cleared only by the deletions feed (a deleted user); a save
+  whose name lookup at `accounts` fails is refused with 503 and writes
+  nothing. There is
   no "take my tracks with me"; a member can copy tracks to their personal
   workspace before leaving.
 
@@ -316,8 +318,8 @@ admin command (`node apps/accounts/admin.js transfer-ownership <workspace>
     (expired, used, single-use, revoked), quotas, deletion and the feed
     (`after=<seq>`, the bearer token);
   - tokens: a planner token is rejected by another `resource`; the
-    `workspaces` claim matches the memberships; removal revokes refresh
-    tokens.
+    `workspaces` claim matches the memberships; after a removal the next
+    refresh succeeds without the club.
 - **`packages/auth`:** token checks (issuer, audience, expiry, signature,
   pinned algorithm) against a local key pair; the BFF handlers (cookie
   attributes, `Sec-Fetch-Site`/`Origin`, `returnTo`, `state`/`nonce`,

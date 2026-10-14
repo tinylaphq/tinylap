@@ -250,9 +250,9 @@ export function redeemInvite(db, userId, token) {
 
 /**
  * Removes a member (owner or admin) or an admin (owner only). The owner
- * cannot be removed; you leave rather than remove yourself. The removed
- * user's refresh tokens are revoked for every client (memberRemoved), so
- * the next refresh cannot carry the club.
+ * cannot be removed; you leave rather than remove yourself. Nothing is
+ * revoked: claims are read live at every issuance, so the removed user's
+ * next token (at the latest after one access token lifetime) lacks the club.
  * @param {Db} db @param {string} actor @param {string} workspaceId @param {string} userId
  */
 export function removeMember(db, actor, workspaceId, userId) {
@@ -261,19 +261,7 @@ export function removeMember(db, actor, workspaceId, userId) {
   const role = memberRole(db, id, userId);
   if (role === 'owner') throw new WorkspaceError('forbidden', 'Nobody can remove the owner.');
   if (role === 'admin' && !can(claimsOf(db, actor), id, 'admin.manage')) throw new WorkspaceError('forbidden', 'Only the owner can remove an admin.');
-  atomically(db, () => {
-    db.prepare('DELETE FROM membership WHERE workspace_id = ? AND user_id = ?').run(id, userId);
-    memberRemoved(db, userId);
-  });
-}
-
-/**
- * Runs when someone is removed from a club: revokes that user's refresh
- * tokens for every client (spec §3).
- * @param {Db} db @param {string} userId
- */
-export function memberRemoved(db, userId) {
-  return revokeUserTokens(db, userId);
+  db.prepare('DELETE FROM membership WHERE workspace_id = ? AND user_id = ?').run(id, userId);
 }
 
 /**

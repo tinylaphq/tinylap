@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The `workspaces` claim in access tokens (spec §3), as a relying party sees
-// it through openid-client: it names the user's memberships, and removing a
-// member revokes their refresh tokens, so the next login re-reads them.
+// it through openid-client: it names the user's memberships, read live at
+// every issuance, so after a removal the next refresh drops the club. A
+// removal revokes nothing: the member stays logged in.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as oidc from 'openid-client';
@@ -80,25 +81,21 @@ test('a refreshed token re-reads the memberships', async () => {
   assert.ok(owner);
 });
 
-test('after removeMember the refresh token is refused, and a new login drops the club', async () => {
+test('after removeMember the next refresh succeeds and its token lacks the club', async () => {
   const { owner, member, club } = await setUp();
   const first = await login(member);
   const second = await login(member); // another device, another refresh token
   const ownerTokens = await login(owner);
+  const refreshTokens = accounts.db.prepare('SELECT COUNT(*) AS n FROM oauthRefreshToken WHERE userId = ?').get(member).n;
 
   removeMember(accounts.db, owner, club.id, member);
 
+  assert.equal(accounts.db.prepare('SELECT COUNT(*) AS n FROM oauthRefreshToken WHERE userId = ?').get(member).n, refreshTokens, 'nothing revoked');
   for (const tokens of [first, second]) {
-    await assert.rejects(
-      oidc.refreshTokenGrant(config, tokens.refresh_token, { resource: accounts.client.resource }),
-      (error) => error instanceof oidc.ResponseBodyError && error.error === 'invalid_grant',
-    );
+    const refreshed = await oidc.refreshTokenGrant(config, tokens.refresh_token, { resource: accounts.client.resource });
+    assert.equal(claimOf(refreshed).some((w) => w.id === club.id), false, 'the club is gone from the next token');
+    assert.equal(claimOf(refreshed).length, 1, 'the personal workspace stays');
   }
-  assert.equal(accounts.db.prepare('SELECT COUNT(*) AS n FROM oauthRefreshToken WHERE userId = ?').get(member).n, 0);
-  // Other users keep theirs.
-  await oidc.refreshTokenGrant(config, ownerTokens.refresh_token, { resource: accounts.client.resource });
-
-  const again = await login(member);
-  assert.equal(claimOf(again).some((w) => w.id === club.id), false);
-  assert.equal(claimOf(again).length, 1, 'the personal workspace stays');
+  const ownerRefreshed = await oidc.refreshTokenGrant(config, ownerTokens.refresh_token, { resource: accounts.client.resource });
+  assert.ok(claimOf(ownerRefreshed).some((w) => w.id === club.id && w.role === 'owner'));
 });

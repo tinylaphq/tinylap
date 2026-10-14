@@ -235,11 +235,10 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   await stranger.page.waitForFunction((n) => JSON.parse(sessionStorage.getItem('circuit30.layout') ?? '{"pieces":[]}').pieces.length === n, pieces);
   await stranger.context.close();
 
-  // 7. Alice removes Bob from the club. The removal revokes his refresh
-  //    tokens (spec §3): his access token keeps listing the club until it
-  //    expires, and then his planner session ends at its next refresh,
-  //    within one token lifetime. Logging in again needs no passkey (his
-  //    accounts session is untouched) and gets a token without the club.
+  // 7. Alice removes Bob from the club. Nothing is revoked (spec §3): his
+  //    access token keeps listing the club until it expires, and the next
+  //    refresh reads his memberships again and drops it, within one token
+  //    lifetime. He stays logged in throughout: never a 401.
   //    The BFF refreshes a token with less than 60 s left, so with a 5 s
   //    TTL each of Bob's requests refreshes: the one just before the
   //    removal gives the newest token the club can be listed with.
@@ -256,23 +255,19 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   for (;;) {
     const askedAt = Date.now();
     const { status, body } = await libraryJson(b);
-    if (status === 401) break;
-    assert.equal(status, 200, `the library answers ${status}`);
-    assert.ok(body.workspaces.some((w) => w.id === clubId), 'before the session ends, the token it has still lists the club');
+    assert.equal(status, 200, `the library answers ${status}: Bob stays logged in`);
+    if (!body.workspaces.some((w) => w.id === clubId)) break;
     assert.ok(askedAt - refreshedAt < TTL * 1000 + 1000, `the club is still listed ${askedAt - refreshedAt} ms after the token was issued`);
     listedAfterRemoval += 1;
-    assert.ok(Date.now() - removedAt < (TTL + 5) * 1000, `no 401 ${Date.now() - removedAt} ms after the removal`);
+    assert.ok(Date.now() - removedAt < (TTL + 5) * 1000, `the club still listed ${Date.now() - removedAt} ms after the removal`);
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  const endedAfter = Date.now() - removedAt;
-  assert.ok(endedAfter < (TTL + 5) * 1000, `the session ended ${endedAfter} ms after the removal`);
-  t.diagnostic(`step 7: club listed ${listedAfterRemoval} times after the removal; planner session ended ${endedAfter} ms after it`);
+  const droppedAfter = Date.now() - removedAt;
+  assert.ok(droppedAfter < (TTL + 5) * 1000, `the club dropped ${droppedAfter} ms after the removal`);
+  t.diagnostic(`step 7: club listed ${listedAfterRemoval} times after the removal; dropped ${droppedAfter} ms after it`);
   await b.reload();
-  await b.locator('#btn-login').click();
-  await b.waitForURL(`${planner.base}/`);
   await b.locator('#btn-account').waitFor();
-  assert.equal(await b.locator('#btn-account').textContent(), 'Bob');
-  assert.equal((await libraryJson(b)).body.workspaces.some((w) => w.id === clubId), false);
+  assert.equal(await b.locator('#btn-account').textContent(), 'Bob', 'still logged in, no new login');
   await openLibrary(b);
   assert.equal(await clubSection(b).count(), 0, 'the dialog has no club section');
   await closeLibrary(b);
