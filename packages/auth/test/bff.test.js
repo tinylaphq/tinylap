@@ -11,6 +11,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import * as oidc from 'openid-client';
 import { decodeJwt } from 'jose';
 import { AuthError, createBff, open, seal } from '../index.js';
+import { safeReturnTo } from '../bff.js';
 import { driveAuthorize, Jar, navigate, startSuite } from '../../../tools/test-env.js';
 
 const keys = [{ id: 'k1', key: randomBytes(32) }];
@@ -43,13 +44,17 @@ function memoryStore() {
 function countingFetch() {
   /** @type {Map<string, number>} */
   const calls = new Map();
+  /** A test may replace or delay a response: (path, response) => response. */
+  /** @type {{ hook: ((path: string, res: Response) => Response | Promise<Response>) | null }} */
+  const tap = { hook: null };
   /** @type {typeof fetch} */
-  const wrapped = (input, init) => {
+  const wrapped = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     calls.set(path, (calls.get(path) ?? 0) + 1);
-    return fetch(input, init);
+    const res = await fetch(input, init);
+    return tap.hook ? tap.hook(path, res) : res;
   };
-  return { calls, fetch: wrapped };
+  return { calls, tap, fetch: wrapped };
 }
 
 /**
@@ -82,6 +87,8 @@ async function startApp() {
   const suite = await startSuite({ plannerPort: port });
   const store = memoryStore();
   const counter = countingFetch();
+  /** @type {string[]} */
+  const logged = [];
   bff = createBff({
     issuer: suite.issuer,
     clientId: suite.clientId,
@@ -92,10 +99,11 @@ async function startApp() {
     store,
     keys,
     fetch: counter.fetch,
+    logger: { warn: (/** @type {string} */ msg) => void logged.push(msg) },
   });
   const origin = suite.plannerOrigin(port);
   return {
-    suite, store, bff, origin, calls: counter.calls,
+    suite, store, bff, origin, calls: counter.calls, tap: counter.tap, logged,
     close: async () => {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(() => resolve(undefined)));
@@ -143,8 +151,8 @@ const reqFor = (jar) => ({ headers: { cookie: jar.header() } });
 async function expireSoon(/** @type {Jar} */ jar, ms = 10_000, target = app) {
   const id = sessionId(jar);
   const row = /** @type {import('../types.js').StoredSession} */ (await target.store.get(id));
-  const tokens = JSON.parse(open(keys, row.sealedTokens));
-  await target.store.set(id, { ...row, sealedTokens: seal(keys, JSON.stringify({ ...tokens, expiresAt: Date.now() + ms })) });
+  const tokens = JSON.parse(open(keys, row.sealedTokens, 'tokens'));
+  await target.store.set(id, { ...row, sealedTokens: seal(keys, JSON.stringify({ ...tokens, expiresAt: Date.now() + ms }), 'tokens') });
   return tokens;
 }
 
@@ -200,10 +208,38 @@ test('callback sets __Host-tinylap-session (HttpOnly, Secure, SameSite=Lax, Path
 });
 
 test('a returnTo that leaves the origin ends at /', async () => {
-  for (const returnTo of ['//evil.test', 'https://evil.test', '/\\evil', 'evil', '/%5Cevil', '/\tevil']) {
+  for (const returnTo of [
+    '//evil.test', 'https://evil.test', '/\\evil', 'evil', '/%5Cevil', '/\tevil',
+    '/..//evil.test', '/.//evil.test', '/%2e%2e//evil.test', '/a/../..//evil.test', '/%2E//evil.test', '/./%2e/..//evil.test',
+  ]) {
     const { callback } = await login(returnTo);
     assert.equal(callback.headers.get('location'), `${app.origin}/`, `returnTo ${JSON.stringify(returnTo)}`);
   }
+  // Dot segments that stay on the origin are fine, normalised.
+  const { callback } = await login('/a/../b?c=1');
+  assert.equal(callback.headers.get('location'), `${app.origin}/b?c=1`);
+});
+
+test('safeReturnTo normalises first, then checks: dot segments cannot make //host', () => {
+  const o = 'https://app.test';
+  for (const v of ['/..//evil.test', '/.//evil.test', '/%2e%2e//evil.test', '/a/../..//evil.test', '//evil.test', '/\\evil', null, '']) {
+    assert.equal(safeReturnTo(v, o), '/', JSON.stringify(v));
+  }
+  assert.equal(safeReturnTo('/a/./b/../c?d=1#e', o), '/a/c?d=1');
+});
+
+test('a login cookie and a sealed token store are not interchangeable', async () => {
+  const start = await fetch(`${app.origin}/auth/login`, { redirect: 'manual' });
+  const sealed = /** @type {string} */ (setCookie(start, '__Host-tinylap-login')).split(';')[0].split('=')[1];
+  assert.ok(open(keys, sealed, 'login'));
+  assert.throws(() => open(keys, sealed, 'tokens'));
+  assert.throws(() => open(keys, sealed));
+  const { appJar } = await login();
+  const row = /** @type {any} */ (await app.store.get(sessionId(appJar)));
+  assert.throws(() => open(keys, row.sealedTokens, 'login'));
+  // A stored token blob planted as the login cookie is refused.
+  const res = await fetch(`${app.origin}/auth/callback?code=x&state=y`, { redirect: 'manual', headers: { cookie: `__Host-tinylap-login=${row.sealedTokens}` } });
+  assert.equal(res.status, 400);
 });
 
 test('a callback without the login cookie, or with a forged state, fails with 400 and no session', async () => {
@@ -254,7 +290,7 @@ test('two concurrent session() calls on an expiring token cause one refresh, and
   assert.equal(a.userId, user.id);
   assert.equal(decodeJwt(a.accessToken).sub, user.id);
   // The rotated refresh token is the one stored; the next refresh works.
-  const stored = JSON.parse(open(keys, /** @type {any} */ (await app.store.get(sessionId(appJar))).sealedTokens));
+  const stored = JSON.parse(open(keys, /** @type {any} */ (await app.store.get(sessionId(appJar))).sealedTokens, 'tokens'));
   assert.notEqual(stored.refreshToken, old.refreshToken);
   assert.equal(stored.accessToken, a.accessToken);
   await expireSoon(appJar);
@@ -282,6 +318,54 @@ test('a request that read the old row while a refresh ran does not refresh again
   assert.equal((app.calls.get('/oauth2/token') ?? 0) - before, 1, 'one refresh');
 });
 
+test('a refresh whose new access token does not verify ends the session (logged), not a 500', async () => {
+  const { appJar } = await login();
+  await expireSoon(appJar);
+  app.tap.hook = async (path, res) => {
+    if (path !== '/oauth2/token') return res;
+    const body = await res.json();
+    return Response.json({ ...body, access_token: 'not.a.jwt' }, { status: res.status });
+  };
+  try {
+    assert.equal(await app.bff.session(reqFor(appJar)), null);
+  } finally {
+    app.tap.hook = null;
+  }
+  assert.equal(await app.store.get(sessionId(appJar)), null);
+  assert.ok(app.logged.some((m) => /refresh/i.test(m)), 'logged');
+});
+
+test('a logout while a refresh is in flight stays logged out, and the rotated token is revoked', async () => {
+  const { appJar } = await login();
+  await expireSoon(appJar);
+  /** @type {() => void} */
+  let release = () => {};
+  const gate = new Promise((resolve) => (release = () => resolve(undefined)));
+  /** @type {any} */
+  let rotated;
+  app.tap.hook = async (path, res) => {
+    if (path !== '/oauth2/token') return res;
+    rotated = await res.json();
+    await gate;
+    return Response.json(rotated, { status: res.status });
+  };
+  try {
+    const pending = app.bff.session(reqFor(appJar));
+    while (!rotated) await new Promise((resolve) => setTimeout(resolve, 5));
+    const out = await fetch(`${app.origin}/auth/logout`, { method: 'POST', redirect: 'manual', headers: { cookie: appJar.header(), 'sec-fetch-site': 'same-origin' } });
+    assert.equal(out.status, 302);
+    release();
+    assert.equal(await pending, null);
+  } finally {
+    app.tap.hook = null;
+  }
+  assert.equal(await app.store.get(sessionId(appJar)), null, 'not resurrected');
+  await assert.rejects(
+    oidc.refreshTokenGrant(rp, rotated.refresh_token, { resource: app.suite.resource }),
+    (/** @type {any} */ error) => error.error === 'invalid_grant',
+  );
+});
+
 test('a refresh answered with invalid_grant deletes the session and returns null', async () => {
   const { appJar } = await login();
   const tokens = await expireSoon(appJar);
@@ -293,7 +377,7 @@ test('a refresh answered with invalid_grant deletes the session and returns null
 test('logout revokes the refresh token, clears the cookie and goes to end_session_endpoint with id_token_hint', async () => {
   const { appJar, accountsJar } = await login();
   const id = sessionId(appJar);
-  const tokens = JSON.parse(open(keys, /** @type {any} */ (await app.store.get(id)).sealedTokens));
+  const tokens = JSON.parse(open(keys, /** @type {any} */ (await app.store.get(id)).sealedTokens, 'tokens'));
 
   const foreign = await fetch(`${app.origin}/auth/logout`, { method: 'POST', redirect: 'manual', headers: { cookie: appJar.header(), origin: 'https://evil.test' } });
   assert.equal(foreign.status, 403);
@@ -350,6 +434,14 @@ test('accounts stopped: session() throws unavailable and the stored session surv
     assert.ok(await own.store.get(sessionId(appJar)), 'the session is kept');
     const res = await fetch(`${own.origin}/auth/login`, { redirect: 'manual' });
     assert.equal(res.status, 302, 'discovery is cached, so login still builds the URL');
+    const id = sessionId(appJar);
+    const out = await fetch(`${own.origin}/auth/logout`, { method: 'POST', redirect: 'manual', headers: { cookie: appJar.header(), 'sec-fetch-site': 'same-origin' } });
+    assert.equal(out.status, 302, 'logout still works');
+    assert.equal(new URL(/** @type {string} */ (out.headers.get('location'))).pathname, '/oauth2/end-session');
+    const cleared = setCookie(out, '__Host-tinylap-session');
+    assert.ok(cleared && cookieAttrs(cleared).includes('Max-Age=0'));
+    assert.equal(await own.store.get(id), null);
+    assert.ok(own.logged.some((m) => /revo/i.test(m)), 'the failed revocation is logged');
   } finally {
     await own.close();
   }
@@ -368,6 +460,29 @@ test('discovery that fails is unavailable, and the next call tries again', async
     await assert.rejects(bff.login({ url: '/auth/login', headers: {} }), (/** @type {any} */ e) => e instanceof AuthError && e.code === 'unavailable');
   }
   assert.equal(counter.calls.get('/.well-known/openid-configuration'), 2);
+});
+
+test('logout without discovery goes to postLogoutRedirectUri, clears the cookie, and does not wait for a hanging issuer', async () => {
+  /** @type {import('node:http').ServerResponse[]} */
+  const hanging = [];
+  const server = createServer((_req, res) => void hanging.push(res));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+  const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
+  try {
+    for (const issuer of ['http://127.0.0.1:1', `http://127.0.0.1:${port}`]) {
+      const started = Date.now();
+      const bff = bffAt(issuer, { logger: { warn: () => {} } });
+      const out = await bff.logout({ headers: { cookie: `__Host-tinylap-session=${randomBytes(32).toString('base64url')}` } });
+      assert.equal(out.status, 302);
+      assert.equal(out.headers.Location, 'http://127.0.0.1:9/');
+      assert.ok(String(out.headers['Set-Cookie']).includes('Max-Age=0'));
+      assert.ok(Date.now() - started < 5000, `${issuer}: quick`);
+    }
+  } finally {
+    for (const res of hanging) res.destroy();
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
 });
 
 test('an issuer answering 5xx, or not answering within fetchTimeoutMs, is unavailable', async () => {

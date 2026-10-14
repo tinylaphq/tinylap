@@ -20,6 +20,26 @@ const LOGIN_TTL_S = 600;
 /** Refresh when the access token has less than this left. */
 const REFRESH_MARGIN_MS = 60_000;
 const COOKIE_VALUE = /^[A-Za-z0-9_-]{43}$/;
+/** Logout waits at most this long for discovery and revocation. */
+const LOGOUT_WAIT_MS = 3_000;
+/** Purpose labels for sealed values (AAD), so one can't be opened as the other. */
+const LOGIN = 'login';
+const TOKENS = 'tokens';
+
+/**
+ * Resolves like `promise`, or to `undefined` when it rejects or takes longer
+ * than `ms` (the caller moves on without it).
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @returns {Promise<T | undefined>}
+ */
+function within(promise, ms) {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  const late = new Promise((resolve) => (timer = setTimeout(() => resolve(undefined), ms)));
+  return /** @type {Promise<T | undefined>} */ (Promise.race([promise.catch(() => undefined), late]).finally(() => clearTimeout(timer)));
+}
 
 /** Raised from inside fetch, so it is found in the cause chain of whatever openid-client throws. */
 class IssuerUnavailable extends Error {
@@ -75,7 +95,9 @@ function readCookie(req, name) {
 /**
  * A same-origin relative path, or `/`. It must start with exactly one `/`,
  * hold no backslash (WHATWG URLs read `\` as `/`) and no control characters,
- * and still resolve to the app origin.
+ * and, normalised, still be on the app origin and not start with `//`: dot
+ * segments collapse (`/..//evil.test` becomes `//evil.test`, which a
+ * browser reads as another host).
  * @param {string | null} value
  * @param {string} origin
  */
@@ -87,8 +109,8 @@ export function safeReturnTo(value, origin) {
   if (/%5c/i.test(value)) return '/';
   try {
     const url = new URL(value, origin);
-    if (url.origin !== origin) return '/';
-    return url.pathname + url.search + url.hash;
+    if (url.origin !== origin || url.pathname.startsWith('//') || url.pathname.includes('\\')) return '/';
+    return url.pathname + url.search;
   } catch {
     return '/';
   }
@@ -105,6 +127,7 @@ export function createBff(options) {
     secureCookies = true,
     fetchTimeoutMs = 15_000,
     fetch: fetchImpl = globalThis.fetch,
+    logger = console,
   } = options;
   const issuerUrl = new URL(issuer);
   if (issuerUrl.protocol !== 'https:' && issuerUrl.protocol !== 'http:') throw new Error(`createBff: the issuer must be an http(s) URL; got "${issuer}".`);
@@ -206,10 +229,24 @@ export function createBff(options) {
       return null;
     }
     try {
-      return { row, tokens: /** @type {import('./types.js').SealedTokens} */ (JSON.parse(open(keys, row.sealedTokens))) };
+      return { row, tokens: /** @type {import('./types.js').SealedTokens} */ (JSON.parse(open(keys, row.sealedTokens, TOKENS))) };
     } catch {
       await store.delete(id);
       return null;
+    }
+  }
+
+  /**
+   * Revokes a refresh token; a failure is logged, never thrown (RFC 7009:
+   * the server answers 200 for a token it doesn't know anyway).
+   * @param {oidc.Configuration} config
+   * @param {string} refreshToken
+   */
+  async function revoke(config, refreshToken) {
+    try {
+      await oidc.tokenRevocation(config, refreshToken, { token_type_hint: 'refresh_token' });
+    } catch (error) {
+      logger.warn(`@tinylap/auth: revoking a refresh token failed (${isOutage(error) ? 'issuer unavailable' : error instanceof Error ? error.message : 'unknown error'}); skipped.`);
     }
   }
 
@@ -248,15 +285,39 @@ export function createBff(options) {
       // An outage, or anything else the issuer got wrong: keep the session.
       throw unavailable(error);
     }
-    const next = await tokensFrom(response, tokens);
-    if (next.claims.sub !== row.userId) {
+    // From here the old refresh token is spent: the new one must be stored,
+    // or the session ended, never left behind.
+    /** @type {Awaited<ReturnType<typeof tokensFrom>>} */
+    let next;
+    try {
+      next = await tokensFrom(response, tokens);
+    } catch (error) {
+      if (error instanceof AuthError && error.code === 'unavailable') {
+        // The keys can't be fetched to check it: keep the rotated tokens,
+        // marked expired so the next request refreshes and checks again.
+        const kept = { accessToken: response.access_token, refreshToken: response.refresh_token ?? tokens.refreshToken, idToken: response.id_token ?? tokens.idToken, expiresAt: 0 };
+        if (await store.get(id)) await store.set(id, { ...row, sealedTokens: seal(keys, JSON.stringify(kept), TOKENS) });
+        throw error;
+      }
+      logger.warn(`@tinylap/auth: a refresh response could not be used (${error instanceof Error ? error.message : 'unknown error'}); the session ends.`);
       await store.delete(id);
+      return null;
+    }
+    if (next.claims.sub !== row.userId) {
+      logger.warn('@tinylap/auth: a refresh returned a token for another subject; the session ends.');
+      await store.delete(id);
+      return null;
+    }
+    // A logout or a user deletion while the refresh ran: stay gone, and
+    // revoke the refresh token that was just issued.
+    if (!(await store.get(id))) {
+      await within(revoke(config, next.tokens.refreshToken), LOGOUT_WAIT_MS);
       return null;
     }
     const now = Date.now();
     await store.set(id, {
       ...row,
-      sealedTokens: seal(keys, JSON.stringify(next.tokens)),
+      sealedTokens: seal(keys, JSON.stringify(next.tokens), TOKENS),
       expiresAt: Math.min(now + SESSION_IDLE_MS, row.createdAt + SESSION_MAX_MS),
     });
     return { userId: row.userId, accessToken: next.tokens.accessToken, claims: next.claims };
@@ -280,7 +341,7 @@ export function createBff(options) {
         nonce,
         resource,
       });
-      const pending = seal(keys, JSON.stringify({ state, nonce, verifier, returnTo, expiresAt: Date.now() + LOGIN_TTL_S * 1000 }));
+      const pending = seal(keys, JSON.stringify({ state, nonce, verifier, returnTo, expiresAt: Date.now() + LOGIN_TTL_S * 1000 }), LOGIN);
       return {
         status: 302,
         headers: { Location: location.href, 'Set-Cookie': [cookie(loginCookie, pending, LOGIN_TTL_S)], 'Cache-Control': 'no-store' },
@@ -300,7 +361,7 @@ export function createBff(options) {
       /** @type {{ state: string, nonce: string, verifier: string, returnTo: string, expiresAt: number }} */
       let pending;
       try {
-        pending = JSON.parse(open(keys, sealed));
+        pending = JSON.parse(open(keys, sealed, LOGIN));
       } catch {
         return fail('This log-in could not be read.');
       }
@@ -339,14 +400,15 @@ export function createBff(options) {
       if (old) await store.delete(old);
       await store.set(idOf(value), {
         userId: claims.sub,
-        sealedTokens: seal(keys, JSON.stringify(tokens)),
+        sealedTokens: seal(keys, JSON.stringify(tokens), TOKENS),
         createdAt: now,
         expiresAt: now + SESSION_IDLE_MS,
       });
       return {
         status: 302,
         headers: {
-          Location: new URL(pending.returnTo, appOrigin).href,
+          // Checked again, and only ever appended to the app origin.
+          Location: appOrigin + safeReturnTo(pending.returnTo, appOrigin),
           'Set-Cookie': [cookie(sessionCookie, value, SESSION_MAX_MS / 1000), spent],
           'Cache-Control': 'no-store',
         },
@@ -357,23 +419,18 @@ export function createBff(options) {
       const id = sessionIdOf(req);
       const current = id ? await load(id) : null;
       // Gone here first: whatever happens at the issuer, this app forgets it.
+      // Logout always answers: the issuer gets a few seconds, not more.
       if (id) await store.delete(id);
-      const config = await configuration();
-      if (current) {
-        try {
-          await oidc.tokenRevocation(config, current.tokens.refreshToken, { token_type_hint: 'refresh_token' });
-        } catch (error) {
-          if (isOutage(error)) throw unavailable(error);
-          // RFC 7009: anything else means the token is no good anyway.
-        }
-      }
+      const config = await within(configuration(), LOGOUT_WAIT_MS);
+      if (!config) logger.warn('@tinylap/auth: the issuer is unavailable at logout; its session and the refresh token are left as they are.');
+      else if (current) await within(revoke(config, current.tokens.refreshToken), LOGOUT_WAIT_MS);
       /** @type {Record<string, string>} */
       const params = { post_logout_redirect_uri: postLogoutRedirectUri };
       if (current?.tokens.idToken) params.id_token_hint = current.tokens.idToken;
       return {
         status: 302,
         headers: {
-          Location: oidc.buildEndSessionUrl(config, params).href,
+          Location: config ? oidc.buildEndSessionUrl(config, params).href : postLogoutRedirectUri,
           'Set-Cookie': [cookie(sessionCookie, '', 0)],
           'Cache-Control': 'no-store',
         },

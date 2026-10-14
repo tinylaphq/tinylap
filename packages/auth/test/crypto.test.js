@@ -65,6 +65,14 @@ test('parseKeys reads "<id>:<base64 32 bytes>,…" and refuses anything else', (
   assert.throws(() => parseKeys(`k.1:${k1.key.toString('base64')}`), /id/);
 });
 
+test('a purpose label binds a sealed value to its use', () => {
+  const sealed = seal([k1], 'state', 'login');
+  assert.equal(open([k1], sealed, 'login'), 'state');
+  assert.throws(() => open([k1], sealed, 'tokens'));
+  assert.throws(() => open([k1], sealed));
+  assert.throws(() => open([k1], seal([k1], 'x'), 'login'));
+});
+
 test('seal needs at least one key', () => {
   assert.throws(() => seal([], 'x'), /key/);
 });

@@ -75,10 +75,10 @@ export interface SealKey {
 
 /** Parses `TINYLAP_TOKEN_KEYS`: `<id>:<base64 32 bytes>,<id>:<…>`, newest first. */
 export function parseKeys(text: string | undefined): SealKey[];
-/** AES-256-GCM with the first key: `<kid>.<iv>.<ciphertext+tag>`, base64url. */
-export function seal(keys: SealKey[], plaintext: string): string;
-/** Opens with whichever listed key the id names; throws for an unknown id or tampering. */
-export function open(keys: SealKey[], sealed: string): string;
+/** AES-256-GCM with the first key: `<kid>.<iv>.<ciphertext+tag>`, base64url. `purpose` is authenticated (AAD). */
+export function seal(keys: SealKey[], plaintext: string, purpose?: string): string;
+/** Opens with whichever listed key the id names; throws for an unknown id, another purpose, or tampering. */
+export function open(keys: SealKey[], sealed: string, purpose?: string): string;
 
 export interface StoredSession {
   userId: string;
@@ -126,6 +126,8 @@ export interface BffOptions {
   fetchTimeoutMs?: number;
   /** The fetch used for calls to the issuer; for tests and instrumentation. */
   fetch?: typeof globalThis.fetch;
+  /** Where skipped failures (revocation, an unusable refresh) are reported. Default `console`. No tokens or user data in the messages. */
+  logger?: { warn(message: string): void };
 }
 
 /** Enough of a node:http IncomingMessage. */
@@ -151,7 +153,7 @@ export interface Bff {
   login(req: BffRequest): Promise<BffResponse>;
   /** 302 to `returnTo` with the session cookie, or 400 when the log-in can't complete. */
   callback(req: BffRequest): Promise<BffResponse>;
-  /** Forgets the session, revokes its refresh token, 302 to the issuer's end_session_endpoint. */
+  /** Forgets the session, revokes its refresh token (best effort, 3 s), 302 to the issuer's end_session_endpoint, or to postLogoutRedirectUri when the issuer can't be reached. Never throws for an outage. */
   logout(req: BffRequest): Promise<BffResponse>;
   /** The session, refreshed when under 60 s are left (one refresh in flight per session); null when logged out. */
   session(req: BffRequest): Promise<BffSession | null>;

@@ -5,6 +5,8 @@
 // Seals small secrets (tokens, pending-login state) with AES-256-GCM under a
 // list of keys with ids. The first key seals; any listed key opens, so a new
 // key goes first and the old one stays until nothing sealed with it is left.
+// An optional purpose label is authenticated with the key id, so a value
+// sealed for one use (a login cookie) never opens as another (stored tokens).
 import { Buffer } from 'node:buffer';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
@@ -38,17 +40,21 @@ export function parseKeys(text) {
   return keys;
 }
 
+/** @param {string} kid @param {string} purpose */
+const aad = (kid, purpose) => Buffer.from(purpose ? `${kid}:${purpose}` : kid);
+
 /**
  * @param {SealKey[]} keys the first one seals
  * @param {string} plaintext
+ * @param {string} [purpose] must be given again to open it
  * @returns {string} `<kid>.<iv>.<ciphertext+tag>`, base64url
  */
-export function seal(keys, plaintext) {
+export function seal(keys, plaintext, purpose = '') {
   const [first] = keys;
   if (!first) throw new Error('seal needs at least one key.');
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', first.key, iv);
-  cipher.setAAD(Buffer.from(first.id));
+  cipher.setAAD(aad(first.id, purpose));
   const body = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final(), cipher.getAuthTag()]);
   return `${first.id}.${iv.toString('base64url')}.${body.toString('base64url')}`;
 }
@@ -56,9 +62,10 @@ export function seal(keys, plaintext) {
 /**
  * @param {SealKey[]} keys any of them may open it, chosen by id
  * @param {string} sealed
+ * @param {string} [purpose] the one it was sealed with
  * @returns {string}
  */
-export function open(keys, sealed) {
+export function open(keys, sealed, purpose = '') {
   const parts = sealed.split('.');
   if (parts.length !== 3) throw new Error('Not a sealed value.');
   const [kid, ivText, bodyText] = parts;
@@ -68,7 +75,7 @@ export function open(keys, sealed) {
   const body = Buffer.from(bodyText, 'base64url');
   if (iv.length !== 12 || body.length < TAG_BYTES) throw new Error('Not a sealed value.');
   const decipher = createDecipheriv('aes-256-gcm', entry.key, iv, { authTagLength: TAG_BYTES });
-  decipher.setAAD(Buffer.from(kid));
+  decipher.setAAD(aad(kid, purpose));
   decipher.setAuthTag(body.subarray(body.length - TAG_BYTES));
   return Buffer.concat([decipher.update(body.subarray(0, body.length - TAG_BYTES)), decipher.final()]).toString('utf8');
 }
