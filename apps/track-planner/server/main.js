@@ -22,16 +22,35 @@ try {
   console.error(`database unavailable: ${error.message}`);
 }
 
+// 0 is allowed (refuse every post); anything else must be a whole number.
+const rateLimitText = env.TINYLAP_RATE_LIMIT;
+const rateLimit = rateLimitText === undefined || rateLimitText === '' ? undefined : Number(rateLimitText);
+if (rateLimit !== undefined && !(Number.isInteger(rateLimit) && rateLimit >= 0)) {
+  console.error(`TINYLAP_RATE_LIMIT must be a whole number of posts per hour, 0 or more; got "${rateLimitText}".`);
+  process.exit(1);
+}
+
 const handler = createHandler({
   store,
   root: dev ? undefined : env.TINYLAP_ROOT ?? '/srv',
   appDir: resolve(fileURLToPath(new URL('..', import.meta.url))),
   publicUrl: env.TINYLAP_PUBLIC_URL,
-  rateLimit: env.TINYLAP_RATE_LIMIT ? Number(env.TINYLAP_RATE_LIMIT) : undefined,
+  rateLimit,
   clientIpHeader: env.TINYLAP_CLIENT_IP_HEADER,
   build: env.TINYLAP_BUILD,
 });
 
 const port = Number(env.PORT ?? (dev ? 8000 : 8080));
 const host = dev ? '127.0.0.1' : '0.0.0.0';
-createServer(handler).listen(port, host, () => console.log(`planner on http://${host}:${port}${dev ? ' (dev, no-store)' : ''}`));
+const server = createServer(handler).listen(port, host, () => console.log(`planner on http://${host}:${port}${dev ? ' (dev, no-store)' : ''}`));
+
+// Stop accepting, finish what is in flight, close the database, leave.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    server.close(() => {
+      store?.close();
+      process.exit(0);
+    });
+    server.closeIdleConnections();
+  });
+}
