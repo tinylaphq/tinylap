@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPair, SignJWT, createLocalJWKSet, exportJWK } from 'jose';
 import { randomBytes, subtle } from 'node:crypto';
+import { createServer } from 'node:http';
 import { verifyAccessToken } from '../index.js';
 
 const ISSUER = 'http://accounts.test';
@@ -78,4 +79,55 @@ test('JWKS fetch failure throws unavailable', async () => {
     verifyAccessToken(await sign(), { issuer: 'http://127.0.0.1:1', audience: AUD }),
     (e) => e.code === 'unavailable'
   );
+});
+
+test('a token without kid against multi-key JWKS is invalid_token, not unavailable', async () => {
+  const { publicKey: pub2 } = await generateKeyPair('RS256');
+  const jwk2 = { ...(await exportJWK(pub2)), kid: 'k2', alg: 'RS256' };
+  const multiJwks = createLocalJWKSet({ keys: [jwk, jwk2] });
+
+  const noKidToken = await new SignJWT({ workspaces: [{ id: 'w1', role: 'member' }] })
+    .setProtectedHeader({ alg: 'RS256' })
+    .setIssuer(ISSUER).setAudience(AUD).setSubject('u').setIssuedAt().setExpirationTime('5m')
+    .sign(privateKey);
+
+  await assert.rejects(verifyAccessToken(noKidToken, { issuer: ISSUER, audience: AUD, jwks: multiJwks }), (e) => e.code === 'invalid_token');
+});
+
+test('JWKS endpoint returning 500 throws unavailable', async () => {
+  const server = createServer((req, res) => {
+    res.writeHead(500, { 'content-type': 'application/json' });
+    res.end('{"error": "server error"}');
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  try {
+    await assert.rejects(
+      verifyAccessToken(await sign(), { issuer: `http://127.0.0.1:${port}`, audience: AUD }),
+      (e) => e.code === 'unavailable'
+    );
+  } finally {
+    server.close();
+  }
+});
+
+test('JWKS endpoint returning unparseable JSON throws unavailable', async () => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('not json at all');
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  try {
+    await assert.rejects(
+      verifyAccessToken(await sign(), { issuer: `http://127.0.0.1:${port}`, audience: AUD }),
+      (e) => e.code === 'unavailable'
+    );
+  } finally {
+    server.close();
+  }
 });
