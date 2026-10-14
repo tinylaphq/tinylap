@@ -161,3 +161,28 @@ test('sign-up: if the codes fail after the passkey, "Try again" makes only the c
   assert.equal(passkeyNames(id).length, 1, 'no second passkey');
   assert.equal(accounts.db.prepare('SELECT COUNT(*) AS c FROM recovery_code WHERE user_id = ?').get(id).c, 10);
 });
+
+test('a passkey name is trimmed and at most 40 characters, as on the account page', async (t) => {
+  const { page } = await device(t);
+  await signUpHere(page, 'Clark');
+  const id = userId('Clark');
+  const count = () => passkeyNames(id).length;
+  const add = (passkeyName) => page.evaluate(async (passkeyName) => {
+    const options = await (await fetch('/passkey/generate-register-options?name=Clark')).json();
+    // This authenticator already holds the sign-up passkey; let it make another.
+    options.excludeCredentials = [];
+    const credential = await navigator.credentials.create({ publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options) });
+    const res = await fetch('/passkey/verify-registration', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ response: /** @type {any} */ (credential).toJSON(), name: passkeyName }),
+    });
+    return { status: res.status, body: await res.json() };
+  }, passkeyName);
+  const before = count();
+  const long = await add('x'.repeat(41));
+  assert.equal(long.status, 400);
+  assert.match(long.body.message, /40 characters/);
+  assert.equal(count(), before, 'no passkey row');
+  assert.equal((await add('  Work   laptop ')).status, 200);
+  assert.ok(passkeyNames(id).includes('Work laptop'), passkeyNames(id).join(', '));
+});

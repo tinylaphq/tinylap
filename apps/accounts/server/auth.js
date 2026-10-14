@@ -82,6 +82,32 @@ function passkeyPlugin(config, db) {
 }
 
 /**
+ * A passkey's name follows the account page's rules: optional, trimmed,
+ * at most 40 characters, no control characters; an empty one means none.
+ */
+function passkeyNamePlugin() {
+  return {
+    id: 'tinylap-passkey-name',
+    hooks: {
+      before: [{
+        matcher: (ctx) => ctx.path === '/passkey/verify-registration',
+        handler: createAuthMiddleware(async (ctx) => {
+          /** @type {Record<string, unknown>} */
+          const body = ctx.body && typeof ctx.body === 'object' ? /** @type {Record<string, unknown>} */ (ctx.body) : {};
+          const given = body.name;
+          if (given === undefined || given === null) return;
+          // The plugin stores an empty name as none.
+          if (typeof given === 'string' && given.trim() === '') return { context: { body: { ...body, name: '' } } };
+          const name = displayNameOf(given);
+          if (!name) throw refuse('Name the passkey with at most 40 characters, or leave the name empty.');
+          return { context: { body: { ...body, name } } };
+        }),
+      }],
+    },
+  };
+}
+
+/**
  * TinyLap's own piece of Better Auth: recovery sessions (spec §6).
  * - `auth.api.redeemRecoveryCode({ body: { code } })` is server-only (never
  *   on the HTTP router; app.js calls it after its rate limits). It spends the
@@ -214,6 +240,7 @@ export function authOptions(config, db = null) {
         }),
       }),
       passkeyPlugin(config, db),
+      passkeyNamePlugin(),
       recoveryPlugin(db),
     ],
   };

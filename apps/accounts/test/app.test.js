@@ -7,7 +7,7 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { servedPackages } from '../server/app.js';
-import { driveAuthorize, Jar, navigate, startAccounts } from './helpers.js';
+import { createTestUser, driveAuthorize, Jar, navigate, startAccounts, testSession } from './helpers.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
 let accounts;
@@ -118,6 +118,53 @@ test('password sign-up and sign-in are switched off', async () => {
 
 test("the JWT plugin's session-token endpoint is switched off", async () => {
   assert.equal((await fetch(`${accounts.issuer}/token`)).status, 404);
+});
+
+// Better Auth routes TinyLap does not use, called by a signed-in browser
+// from accounts' own origin: every one is a 404, whatever its method.
+/** @type {[string, string, object?][]} */
+const UNUSED = [
+  ['POST', '/update-user', { name: 'x'.repeat(200) }],
+  ['GET', '/list-sessions'],
+  ['POST', '/revoke-session', { token: 'x' }],
+  ['POST', '/revoke-sessions', {}],
+  ['POST', '/revoke-other-sessions', {}],
+  ['POST', '/update-session', {}],
+  ['GET', '/get-session'],
+  ['GET', '/list-accounts'],
+  ['POST', '/unlink-account', { providerId: 'x' }],
+  ['POST', '/delete-user', {}],
+  ['GET', '/delete-user/callback'],
+  ['GET', '/ok'],
+  ['GET', '/callback/x'],
+  ['GET', '/passkey/list-user-passkeys'],
+  ['POST', '/oauth2/consent', { accept: true }],
+  ['GET', '/oauth2/get-consent?id=x'],
+  ['GET', '/oauth2/get-consents'],
+  ['POST', '/oauth2/update-consent', { id: 'x', update: { scopes: [] } }],
+  ['POST', '/oauth2/delete-consent', { id: 'x' }],
+  ['GET', '/oauth2/get-client?client_id=planner-test'],
+  ['GET', '/oauth2/get-clients'],
+  ['GET', '/oauth2/public-client?client_id=planner-test'],
+  ['POST', '/oauth2/continue', {}],
+  ['POST', '/oauth2/introspect', { token: 'x' }],
+  ['GET', '/admin/oauth2/resources'],
+];
+
+test("Better Auth's routes TinyLap does not use are 404, even for a signed-in user", async () => {
+  const user = await createTestUser(accounts.auth, 'Prost');
+  const jar = await testSession(accounts.auth, user.id);
+  for (const [method, path, body] of UNUSED) {
+    const res = await fetch(`${accounts.issuer}${path}`, {
+      method,
+      headers: { cookie: jar.header(), origin: accounts.issuer, 'sec-fetch-site': 'same-origin', ...(body ? { 'content-type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    assert.equal(res.status, 404, `${method} ${path}`);
+    await res.body?.cancel();
+  }
+  const row = accounts.db.prepare('SELECT name FROM "user" WHERE id = ?').get(user.id);
+  assert.equal(row?.name, 'Prost', 'the name was not changed past displayNameOf');
 });
 
 test('the database has TinyLap tables next to Better Auth', () => {

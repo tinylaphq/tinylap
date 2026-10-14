@@ -2,8 +2,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The request handler: TinyLap's pages, styles and scripts first, then
-// everything else to Better Auth at the root, so the issuer is the origin.
+// The request handler: TinyLap's pages, styles and scripts first, then the
+// Better Auth routes TinyLap uses (an allow-list) at the root, so the issuer
+// is the origin. Anything else is a 404.
 // Security headers go on every response, whoever writes it.
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
@@ -71,6 +72,27 @@ const RECOVERY_ALLOWED = new Set([
   '/error',
   '/privacy',
   '/signed-out',
+]);
+
+// The only Better Auth routes reachable over HTTP: passkey ceremonies,
+// sign-out, and the OAuth/OIDC provider's protocol endpoints. Everything
+// else it ships (session and user self-service such as /update-user or
+// /list-sessions, consent and client management) bypasses TinyLap's own
+// rules and is a 404. Server-side calls (auth.api) are not affected.
+const BETTER_AUTH_ROUTES = new Set([
+  '/passkey/generate-register-options',
+  '/passkey/verify-registration',
+  '/passkey/generate-authenticate-options',
+  '/passkey/verify-authentication',
+  '/sign-out',
+  '/oauth2/authorize',
+  '/oauth2/token',
+  '/oauth2/revoke',
+  '/oauth2/userinfo',
+  '/oauth2/end-session',
+  '/jwks',
+  '/.well-known/openid-configuration',
+  '/.well-known/oauth-authorization-server',
 ]);
 
 // A session counts as fresh for this long after the passkey sign-in (or
@@ -441,6 +463,10 @@ export async function createAccounts(config) {
       if (pathname === '/recovery-codes') return newCodes(req, res, session);
     }
 
+    if (!BETTER_AUTH_ROUTES.has(pathname)) {
+      req.resume();
+      return problem(req, res, issuer, 'not-found', 'There is nothing here.');
+    }
     return betterAuth(req, res);
   }
 

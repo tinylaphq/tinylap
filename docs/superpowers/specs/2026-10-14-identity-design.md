@@ -47,7 +47,10 @@ apps/track-planner the first client: login, library, private snapshots
 A Node 24 server on `node:http` with SQLite through `node:sqlite`, deployed as
 its own Fly app with its own volume. Better Auth and its plugins are pinned to
 exact versions and mounted with `toNodeHandler` at the root, so the issuer is
-the service's origin.
+the service's origin. Only the Better Auth routes TinyLap uses are reachable
+over HTTP (an allow-list: the passkey ceremonies, `/sign-out`, the OAuth/OIDC
+protocol endpoints, `/jwks` and discovery); every other route it ships, such
+as `/update-user` or `/list-sessions`, is a 404.
 
 Used from Better Auth:
 - `@better-auth/oauth-provider` (the OAuth 2.1 / OIDC provider, not the older
