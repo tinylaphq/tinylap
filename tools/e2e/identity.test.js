@@ -115,7 +115,10 @@ async function closeLibrary(page) {
 }
 
 /** @param {import('playwright-core').Page} page */
-const libraryJson = (page) => page.evaluate(() => fetch('/library', { headers: { accept: 'application/json' } }).then(async (r) => ({ status: r.status, body: await r.json() })));
+const libraryJson = (page) => page.evaluate(() => fetch('/library', { headers: { accept: 'application/json' } }).then(async (r) => ({
+  status: r.status,
+  body: /^application\/(problem\+)?json/.test(r.headers.get('content-type') ?? '') ? await r.json() : await r.text(),
+})));
 
 test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletion', async (t) => {
   const alice = await device(t, { permissions: ['clipboard-read', 'clipboard-write'] });
@@ -229,31 +232,42 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   await stranger.page.waitForFunction((n) => JSON.parse(sessionStorage.getItem('circuit30.layout') ?? '{"pieces":[]}').pieces.length === n, pieces);
   await stranger.context.close();
 
-  // 7. Alice removes Bob from the club. Within one token lifetime Bob's
-  //    library no longer lists it. The removal revokes his refresh tokens
-  //    (spec §3), so his planner session ends at its next refresh; logging
-  //    in again needs no passkey (his accounts session is untouched) and
-  //    gets a token without the club.
+  // 7. Alice removes Bob from the club. The removal revokes his refresh
+  //    tokens (spec §3): his access token keeps listing the club until it
+  //    expires, and then his planner session ends at its next refresh,
+  //    within one token lifetime. Logging in again needs no passkey (his
+  //    accounts session is untouched) and gets a token without the club.
+  //    The BFF refreshes a token with less than 60 s left, so with a 5 s
+  //    TTL each of Bob's requests refreshes: the one just before the
+  //    removal gives the newest token the club can be listed with.
   await a.goto(`${planner.suite.issuer}/clubs/${clubId}`);
+  const refreshedAt = Date.now();
+  const fresh = await libraryJson(b);
+  assert.equal(fresh.status, 200);
+  assert.ok(fresh.body.workspaces.some((w) => w.id === clubId), 'the refreshed token still has the club');
   await a.locator('#members li', { hasText: 'Bob' }).getByRole('button', { name: 'Remove' }).click();
   await a.locator('#confirm').getByRole('button', { name: 'Remove' }).click();
   await a.locator('#members li', { hasText: 'Bob' }).waitFor({ state: 'detached' });
   const removedAt = Date.now();
+  let listedAfterRemoval = 0;
   for (;;) {
+    const askedAt = Date.now();
     const { status, body } = await libraryJson(b);
-    assert.ok(status === 200 || status === 401, `the library answers ${status}`);
-    if (status === 401 || !body.workspaces.some((w) => w.id === clubId)) {
-      t.diagnostic(`step 7: ${status === 401 ? 'planner session ended' : 'club gone from the library'} ${Date.now() - removedAt} ms after the removal`);
-      break;
-    }
-    assert.ok(Date.now() - removedAt < (TTL + 5) * 1000, `the club is still listed ${Date.now() - removedAt} ms after the removal`);
+    if (status === 401) break;
+    assert.equal(status, 200, `the library answers ${status}`);
+    assert.ok(body.workspaces.some((w) => w.id === clubId), 'before the session ends, the token it has still lists the club');
+    assert.ok(askedAt - refreshedAt < TTL * 1000 + 1000, `the club is still listed ${askedAt - refreshedAt} ms after the token was issued`);
+    listedAfterRemoval += 1;
+    assert.ok(Date.now() - removedAt < (TTL + 5) * 1000, `no 401 ${Date.now() - removedAt} ms after the removal`);
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+  const endedAfter = Date.now() - removedAt;
+  assert.ok(endedAfter < (TTL + 5) * 1000, `the session ended ${endedAfter} ms after the removal`);
+  t.diagnostic(`step 7: club listed ${listedAfterRemoval} times after the removal; planner session ended ${endedAfter} ms after it`);
   await b.reload();
-  if (await b.locator('#btn-login').isVisible()) {
-    await b.locator('#btn-login').click();
-    await b.locator('#btn-account').waitFor();
-  }
+  await b.locator('#btn-login').click();
+  await b.waitForURL(`${planner.base}/`);
+  await b.locator('#btn-account').waitFor();
   assert.equal(await b.locator('#btn-account').textContent(), 'Bob');
   assert.equal((await libraryJson(b)).body.workspaces.some((w) => w.id === clubId), false);
   await openLibrary(b);
@@ -319,13 +333,13 @@ test('logging out of the planner as one user does not sign another out of accoun
   assert.equal(accountsSessions(dave), 1);
 
   await page.goto('/');
+  await page.locator('#btn-account').waitFor();
   assert.equal(await page.locator('#btn-account').textContent(), 'Carol');
   await page.locator('#btn-account').click();
   await page.getByRole('menuitem', { name: 'Log out' }).click();
-  await page.waitForLoadState('load');
-  assert.equal(accountsSessions(dave), 1, `Dave is still signed in to accounts (ended on ${page.url()})`);
-  assert.equal(new URL(page.url()).origin, planner.suite.issuer, `asked at accounts, not sent back to the planner: ${page.url()}`);
   await page.getByText('You are still signed in as Dave.').waitFor();
+  assert.equal(accountsSessions(dave), 1, `Dave is still signed in to accounts (ended on ${page.url()})`);
+  assert.equal(page.url(), `${planner.suite.issuer}/signed-out`, 'asked at accounts, not sent back to the planner');
   // The planner session is gone either way.
   await page.goto('/');
   await page.locator('#btn-login').waitFor();
