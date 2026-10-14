@@ -28,7 +28,8 @@ export function carryTrack(previous, current) {
   return previous.track || !current.track ? previous : { ...previous, track: current.track };
 }
 
-export function exportHtml(layout) {
+/** @param {any} layout @param {{ openUrl?: string }} [options] */
+export function exportHtml(layout, { openUrl } = {}) {
   const { bbox, matCount, lapMm } = computeMetrics(layout);
   const bom = billOfMaterials(layout);
   const svg = layoutToSvgString(layout);
@@ -84,7 +85,7 @@ export function exportHtml(layout) {
   <figcaption>${size} &middot; ${matCount} mats &middot; lap ${(lapMm / 1000).toFixed(2)} m</figcaption>
 </figure>
 <table><caption>Bill of materials</caption><tbody>${rows}</tbody></table>
-<p class="note">Open this file in the Circuit 30 Planner to keep editing it.</p>
+${openUrl ? `<p class="note"><a href="${openUrl}">Open in planner</a></p>` : '<p class="note">Open this file in the Circuit 30 Planner to keep editing it.</p>'}
 </main>
 <script type="application/json" id="${LAYOUT_SCRIPT_ID}">
 ${JSON.stringify(layout, null, 2).replace(/</g, '\\u003c')}

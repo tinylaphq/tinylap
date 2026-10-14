@@ -9,6 +9,7 @@
 import { PROBLEMS } from './problems.js';
 import { rateLimiter } from './rate-limit.js';
 import { staticFiles } from './static.js';
+import { layoutRoutes } from './layouts.js';
 
 /** @typedef {{ status: number, headers?: Record<string, string>, body?: string | Buffer }} Response */
 
@@ -85,7 +86,7 @@ export function createHandler(options) {
     limiter: rateLimiter({ limit: options.rateLimit ?? 30, now: options.now }),
     clientIpHeader: options.clientIpHeader?.toLowerCase() || null,
   };
-  const routes = options.routes ?? [];
+  const routes = options.routes ?? [...layoutRoutes];
   const serveStatic = staticFiles(options);
 
   return async (req, res) => {

@@ -88,3 +88,8 @@ test('the json block escapes an embedded </script> to prevent injection', () => 
   const data = extractLayoutJson(html);
   assert.equal(data.pieces[0].note, '</script><script>alert(1)</script>');
 });
+
+test('a served export links back to the planner; a downloaded one does not', () => {
+  assert.match(exportHtml(ring(), { openUrl: '/?layout=abc' }), /<a href="\/\?layout=abc">Open in planner<\/a>/);
+  assert.doesNotMatch(exportHtml(ring()), /Open in planner/);
+});
