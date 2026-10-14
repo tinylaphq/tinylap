@@ -1,8 +1,19 @@
-# Single static app, one region, scales to zero.
+# Single Node app, one region, scales to zero.
 app = 'circuit30-planner'
 primary_region = 'fra'
 
 [build]
+
+[env]
+  TINYLAP_PUBLIC_URL = 'https://circuit30-planner.fly.dev'
+  TINYLAP_CLIENT_IP_HEADER = 'Fly-Client-IP'
+
+# SQLite on one volume means exactly one machine. Fly snapshots the volume
+# daily; that is the backup. Create it once:
+#   fly volumes create tinylap_data --app circuit30-planner --region fra --size 1
+[mounts]
+  source = 'tinylap_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 8080
@@ -15,7 +26,7 @@ primary_region = 'fra'
   min_machines_running = 0
 
 [[vm]]
-  # The smallest thing Fly offers. It is Caddy serving 580 KB of static
-  # files; anything larger would be paying for idle memory.
+  # The smallest thing Fly offers. It is one Node process serving a small
+  # app and a SQLite file; anything larger would be paying for idle memory.
   size = 'shared-cpu-1x'
   memory = '256mb'

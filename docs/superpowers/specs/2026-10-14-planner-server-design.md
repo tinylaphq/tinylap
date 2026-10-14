@@ -67,7 +67,9 @@ apps/track-planner/
   server/
     main.js        entry: reads env, opens the store, starts listening
     app.js         request handler: routing, negotiation, headers
-    static.js      file serving for the assembled app (/, /v/<sha>/)
+    static.js      file serving for the assembled app (/, /v/<sha>/) and the planner's CSP
+    layouts.js     snapshot and shape routes (/layouts, /shapes)
+    discovery.js   API description, schema, catalog, problem types, docs page
     store.js       SQLite access: put, get, list by shape
     problems.js    RFC 9457 helpers
     negotiate.js   Accept and Content-Type parsing
@@ -173,7 +175,7 @@ All API responses carry `Link: </openapi.json>; rel="service-desc"` and
 
 - JSON: `{ "shapeKey", "shape", "layouts": [{ "key", "trackId", "createdAt" }] }`,
   newest first, at most 100.
-- HTML (same negotiation rules): a plain page listing the snapshots as links.
+- HTML (same negotiation rules, but by `Accept` only: no `.json`/`.html` suffixes on this route): a plain page listing the snapshots as links.
 - `Cache-Control: public, max-age=60`, `Vary: Accept`. A shape with no stored
   snapshots: `404`, `no-store`.
 
