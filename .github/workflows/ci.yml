@@ -117,7 +117,7 @@ jobs:
             accounts=true
           else
             grep -qE '^(apps/track-planner|packages|tools)/|^(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.dockerignore)$' <<< "$files" && echo "planner=true" >> "$GITHUB_OUTPUT"
-            grep -qE '^(apps/accounts|packages/auth|packages/design)/|^(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.dockerignore)$' <<< "$files" && accounts=true
+            grep -qE '^(apps/accounts|packages/auth|packages/design|tools)/|^(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.dockerignore)$' <<< "$files" && accounts=true
           fi
           # The Fly app does not exist until the maintainer has followed the
           # checklist in apps/accounts/README.md, whose last step sets this.
