@@ -18,6 +18,9 @@ import { createPersonalWorkspace, listMemberships } from './workspaces.js';
 
 const DAY = 24 * 60 * 60;
 
+/** Called by the planner's server (client-authenticated), never per person. */
+const UNLIMITED = ['/oauth2/token', '/oauth2/revoke', '/oauth2/userinfo'];
+
 /** Client secrets are stored as SHA-256 (base64url), so seeding can hash them the same way. */
 export const hashClientSecret = (secret) => createHash('sha256').update(secret).digest('base64url');
 
@@ -139,6 +142,13 @@ export function authOptions(config, db = null) {
       additionalFields: { recovery: { type: /** @type {const} */ ('boolean'), required: false, defaultValue: false, input: false } },
     },
     trustedOrigins: [config.issuer],
+    // Better Auth's own rate limiter is on with NODE_ENV=production. It keys
+    // on the client address: only the trusted proxy's header names it, never
+    // a spoofable X-Forwarded-For. The client-authenticated endpoints are
+    // not limited per address at all: every planner call comes from the
+    // planner's one server (TinyLap limits the browser-facing routes itself).
+    ...(config.clientIpHeader ? { advanced: { ipAddress: { ipAddressHeaders: [config.clientIpHeader] } } } : {}),
+    rateLimit: { customRules: Object.fromEntries(UNLIMITED.map((path) => [path, /** @type {const} */ (false)])) },
     // Errors go to TinyLap's own /error page (app.js), never Better Auth's,
     // which brings inline styles and third-party links.
     onAPIError: { errorURL: `${config.issuer}/error` },
@@ -196,6 +206,7 @@ export function authOptions(config, db = null) {
         resourceSeedMode: 'overwrite',
         enforcePerClientResources: true,
         storeClientSecret: { hash: hashClientSecret },
+        rateLimit: { token: false, revoke: false, userinfo: false },
         // Every workspace the user is in, read live at each issuance, so
         // a refresh picks up role changes (spec §3).
         customAccessTokenClaims: ({ user }) => ({

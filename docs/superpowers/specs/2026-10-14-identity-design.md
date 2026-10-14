@@ -270,7 +270,12 @@ admin command (`node apps/accounts/admin.js transfer-ownership <workspace>
 - **`accounts` pages:** a strict CSP like the planner's, nothing third-party.
 - **Rate limits** per client (IPv6 per /64), as in the planner server: sign-up
   10/hour, sign-in 30/hour, recovery 10/hour per client and 5/hour per
-  `lookup_id`, invite redemption 20/hour.
+  `lookup_id`, invite redemption 20/hour. Better Auth's own limiter (on in
+  production) keys on the trusted proxy's header (`Fly-Client-IP`), never on
+  `X-Forwarded-For`, and does not limit the client-authenticated endpoints
+  (`/oauth2/token`, `/oauth2/revoke`, `/oauth2/userinfo`): every planner call
+  comes from one server. A 429 from the issuer counts as unavailable in the
+  BFF.
 - **Keys and secrets** (all Fly secrets; rotation procedures in the
   `apps/accounts` README):
   - `BETTER_AUTH_SECRET` encrypts the signing keys and signs `accounts`
