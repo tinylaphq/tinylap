@@ -14,7 +14,7 @@ import { loadLayout, saveLayout } from './session-store.js';
 import { generateLayouts, outOfReach, outlineName, hasCachedLayouts, scoreLayouts } from './generate.js';
 import { orderSuggestions, availableFamilies } from './suggestions.js';
 import { initAccount } from './account.js';
-import { initLibrary, forgetTrack } from './library.js';
+import { initLibrary, forgetTrack, linkedHistory } from './library.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -36,7 +36,7 @@ const state = {
   tool: null,     // { type, rot }
   ghost: null,    // { cells, valid }
   hoverCell: null, // [x, y] last cell hovered while dragging
-  history: [],
+  history: linkedHistory(), // each entry keeps the library track link it had
   selection: [], // indices into layout.pieces; empty when nothing is selected
   dragging: false, // true while a piece move-drag or port-handle drag is in flight
   lastPlaced: null, // { type, x, y, rot } of the most recently placed piece
@@ -1309,8 +1309,8 @@ async function loadFile(file) {
     return;
   }
 
-  forgetTrack();
   adoptLayout(imported);
+  forgetTrack();       // after the push, so undo brings the link back
 }
 
 document.addEventListener('dragover', (e) => {
@@ -1536,7 +1536,7 @@ document.addEventListener('keydown', (e) => {
 const sharedKey = new URLSearchParams(location.search).get('layout');
 if (sharedKey) {
   history.replaceState(null, '', location.pathname);
-  fetchShared(sharedKey).then((shared) => { forgetTrack(); adoptLayout(shared); }, (error) => {
+  fetchShared(sharedKey).then((shared) => { adoptLayout(shared); forgetTrack(); }, (error) => {
     state.error = error.message;
     render();
   });

@@ -106,7 +106,8 @@ export const workspaceLabel = (workspace, index) => {
 function showCurrent(doc, ref) {
   const label = /** @type {HTMLElement | null} */ (doc.querySelector('#library-current'));
   if (label) {
-    label.hidden = !ref;
+    // Only while the library is on (logged in); undo may restore a link at any time.
+    label.hidden = !ref || !doc.querySelector('#btn-save[data-library]');
     label.textContent = ref?.name ?? '';
     label.title = ref ? `On the canvas: ${ref.name} from your library` : '';
   }
@@ -124,6 +125,35 @@ function setCurrent(ref, doc = document) {
 /** The canvas no longer comes from a library track (a file, a shared link, a new layout). */
 export function forgetTrack(doc = document) {
   setCurrent(null, doc);
+}
+
+/**
+ * The undo stack, with the track link each layout had. app.js keeps its
+ * history in this (push before a change, pop on undo), so undoing the open
+ * of a library track also forgets the track, and undoing a file open brings
+ * the track back: the link always belongs to the layout on the canvas.
+ * @template T
+ * @param {{ load?: () => TrackRef | null, restore?: (ref: TrackRef | null) => void }} [io]
+ */
+export function linkedHistory({ load = () => loadTrackRef(sessionStorage), restore = (ref) => setCurrent(ref) } = {}) {
+  /** @type {{ layout: T, link: TrackRef | null }[]} */
+  const entries = [];
+  return {
+    /** @param {T} layout */
+    push(layout) {
+      return entries.push({ layout, link: load() });
+    },
+    /** @returns {T | undefined} */
+    pop() {
+      const entry = entries.pop();
+      if (!entry) return undefined;
+      restore(entry.link);
+      return entry.layout;
+    },
+    get length() {
+      return entries.length;
+    },
+  };
 }
 
 // ── DOM helpers ─────────────────────────────────────────────────────
@@ -221,7 +251,22 @@ export function initLibrary(host, { api = libraryApi(), doc = document } = {}) {
 
   // ── Save ──
 
+  // One save at a time: a double click must not post two versions.
+  const saveButton = /** @type {HTMLButtonElement} */ (doc.querySelector('#btn-save'));
+  let saving = false;
   async function save() {
+    if (saving) return;
+    saving = true;
+    saveButton.disabled = true;
+    try {
+      await saveOnce();
+    } finally {
+      saving = false;
+      saveButton.disabled = false;
+    }
+  }
+
+  async function saveOnce() {
     const ref = loadTrackRef(sessionStorage);
     const layout = host.settle();
     if (ref) {
@@ -307,7 +352,45 @@ export function initLibrary(host, { api = libraryApi(), doc = document } = {}) {
     if (workspaces.length && total === 0) {
       sections.unshift(el(doc, 'p', { class: 'library-hint', text: 'Nothing saved yet. Close this and press Save to keep the layout on the canvas here.' }));
     }
+    const focused = focusKey(doc.activeElement);
     body.replaceChildren(...sections);
+    if (focused) refocus(focused);
+  }
+
+  // A re-render replaces every node, so the focus is carried over by what
+  // it was on: the same button of the same track (and version), else the
+  // button that opened the panel it was in, else the row, else its
+  // neighbour, else the dialog's Close.
+
+  /** @param {Element | null} node */
+  function focusKey(node) {
+    if (!(node instanceof HTMLElement) || !body.contains(node)) return null;
+    const row = node.closest('[data-track-id]');
+    if (!row) return null;
+    return {
+      track: /** @type {string} */ (row.getAttribute('data-track-id')),
+      act: node.dataset.act,
+      key: /** @type {HTMLElement | null} */ (node.closest('[data-key]'))?.dataset.key,
+      panel: /** @type {HTMLElement | null} */ (node.closest('[data-panel]'))?.dataset.panel,
+      index: [...body.querySelectorAll('.library-track')].indexOf(row),
+    };
+  }
+
+  /** @param {NonNullable<ReturnType<typeof focusKey>>} k */
+  function refocus({ track, act, key, panel, index }) {
+    const row = body.querySelector(`[data-track-id="${CSS.escape(track)}"]`);
+    const rows = body.querySelectorAll('.library-track');
+    const own = act && act !== 'close-panel'
+      ? key
+        ? row?.querySelector(`[data-key="${CSS.escape(key)}"] [data-act="${act}"]`)
+        : row?.querySelector(`.library-actions [data-act="${act}"]`)
+      : null;
+    const target = own
+      ?? (panel ? row?.querySelector(`.library-actions [data-act="${panel}"]`) : null)
+      ?? row
+      ?? rows[Math.min(index, rows.length - 1)]
+      ?? dialog.querySelector('.dialog-dismiss button');
+    /** @type {HTMLElement | null | undefined} */ (target)?.focus();
   }
 
   /** @param {Track} t @param {Workspace} w @param {TrackRef | null} current */
@@ -327,7 +410,7 @@ export function initLibrary(host, { api = libraryApi(), doc = document } = {}) {
       ...(onCanvas ? [el(doc, 'span', { class: 'library-badge', text: 'On the canvas' })] : []),
     ]);
     const meta = el(doc, 'p', { class: 'library-meta' }, ['Updated ', when(doc, t.updatedAt), ` by ${saverName(t.updatedBy)}`]);
-    const li = el(doc, 'li', { class: 'library-track', 'data-track-id': t.id, 'aria-current': onCanvas ? 'true' : undefined }, [name, meta, actions]);
+    const li = el(doc, 'li', { class: 'library-track', tabIndex: -1, 'data-track-id': t.id, 'aria-current': onCanvas ? 'true' : undefined }, [name, meta, actions]);
     if (panel === 'history') li.append(historyPanel(t, w));
     if (panel === 'rename') li.append(renamePanel(t));
     if (panel === 'copy') li.append(copyPanel(t, others));
@@ -337,7 +420,7 @@ export function initLibrary(host, { api = libraryApi(), doc = document } = {}) {
   /** @param {Track} t @param {Workspace} w */
   function historyPanel(t, w) {
     const history = histories.get(t.id);
-    if (!history) return el(doc, 'div', { class: 'library-panel' }, [el(doc, 'p', { class: 'empty', text: 'Loading the history…' })]);
+    if (!history) return el(doc, 'div', { class: 'library-panel', 'data-panel': 'history' }, [el(doc, 'p', { class: 'empty', text: 'Loading the history…' })]);
     const items = history.versions.map((v) => el(doc, 'li', { class: 'library-version', 'data-key': v.key, 'aria-current': v.key === t.currentKey ? 'true' : undefined }, [
       el(doc, 'span', { class: 'library-version-when' }, [
         capitalized(when(doc, v.savedAt)),
@@ -351,7 +434,7 @@ export function initLibrary(host, { api = libraryApi(), doc = document } = {}) {
           : []),
       ]),
     ]));
-    return el(doc, 'div', { class: 'library-panel' }, [
+    return el(doc, 'div', { class: 'library-panel', 'data-panel': 'history' }, [
       el(doc, 'ol', { class: 'library-versions', 'aria-label': `Versions of ${t.name}, newest first` }, items),
       el(doc, 'p', { class: 'library-note', text: `The ${history.kept} newest versions are kept; older ones drop off.` }),
     ]);
@@ -360,7 +443,7 @@ export function initLibrary(host, { api = libraryApi(), doc = document } = {}) {
   /** @param {Track} t */
   function renamePanel(t) {
     const id = `rename-${t.id}`;
-    return el(doc, 'form', { class: 'library-panel library-form', 'data-form': 'rename' }, [
+    return el(doc, 'form', { class: 'library-panel library-form', 'data-form': 'rename', 'data-panel': 'rename' }, [
       el(doc, 'label', { for: id, text: 'New name' }),
       el(doc, 'div', { class: 'library-form-row' }, [
         el(doc, 'input', { type: 'text', id, name: 'name', value: t.name, maxLength: 100, required: true, autocomplete: 'off' }),
@@ -373,7 +456,7 @@ export function initLibrary(host, { api = libraryApi(), doc = document } = {}) {
   /** @param {Track} t @param {Workspace[]} targets */
   function copyPanel(t, targets) {
     const id = `copy-${t.id}`;
-    return el(doc, 'form', { class: 'library-panel library-form', 'data-form': 'copy' }, [
+    return el(doc, 'form', { class: 'library-panel library-form', 'data-form': 'copy', 'data-panel': 'copy' }, [
       el(doc, 'label', { for: id, text: 'Copy to' }),
       el(doc, 'div', { class: 'library-form-row' }, [
         el(doc, 'select', { id, name: 'workspace' }, targets.map((o) => el(doc, 'option', { value: o.id, text: workspaceLabel(o, workspaces.indexOf(o)) }))),

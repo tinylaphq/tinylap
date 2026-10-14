@@ -56,6 +56,19 @@ test('save, version, history, rename, share and log out', async (t) => {
   await cdp.send('WebAuthn.addVirtualAuthenticator', { options: authenticatorOptions });
 
   const status = page.locator('#status');
+  /** What has the focus: its data-act, id, aria-expanded and the track row it is in. */
+  const focused = () => page.evaluate(() => {
+    const a = /** @type {HTMLElement} */ (document.activeElement);
+    return {
+      act: a?.dataset?.act, id: a?.id, expanded: a?.getAttribute('aria-expanded'),
+      track: a?.closest('[data-track-id]')?.querySelector('.library-track-name')?.textContent,
+    };
+  });
+  // palace's .btn transitions `all` for 0.1s, padding included: wait it out before measuring.
+  const settled = () => page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
+  /** @type {string[]} */
+  const versionPosts = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/versions$/.test(new URL(r.url()).pathname)) versionPosts.push(r.url()); });
   // Waits until the canvas, as the session store has it, is empty or not.
   // (#btn-clear's hidden attribute is no signal: palace's .btn sets display.)
   const canvasHas = (/** @type {boolean} */ some) => page.waitForFunction((want) => {
@@ -102,11 +115,14 @@ test('save, version, history, rename, share and log out', async (t) => {
   await page.getByText('Saved Monza to your library.').waitFor();
   assert.equal(await page.locator('#library-current').textContent(), 'Monza');
 
-  // An edit, then Save again: a second version of the same track.
+  // An edit, then Save again: a second version of the same track. A double
+  // click saves once.
   await page.locator('#btn-clear').click();
   await canvasHas(false);
-  await save.click();
+  await save.dblclick();
   await page.getByText('Saved a new version of Monza.').waitFor();
+  await page.waitForFunction(() => !(/** @type {HTMLButtonElement} */ (document.querySelector('#btn-save'))).disabled);
+  assert.equal(versionPosts.length, 1, 'a double click posts one version');
   assert.equal(await saveDialog.isHidden(), true, 'no name asked the second time');
 
   // The library: one track, its history has two versions; open the first.
@@ -118,13 +134,19 @@ test('save, version, history, rename, share and log out', async (t) => {
   assert.equal(await row.getAttribute('aria-current'), 'true');
   assert.equal(await row.getByRole('button', { name: 'Delete' }).count(), 1, 'the owner may delete');
   assert.match(await row.locator('.library-meta').textContent(), /^Updated (just now|\d+ seconds? ago) by Ayrton$/);
-  await row.getByRole('button', { name: 'History' }).click();
+  // By keyboard: Tab from Open to History, Enter. The focus stays on History.
+  await row.getByRole('button', { name: 'Open', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  assert.equal((await focused()).act, 'history');
+  await page.keyboard.press('Enter');
   const versions = row.locator('.library-version');
   await versions.nth(1).waitFor();
+  assert.deepEqual(await focused(), { act: 'history', id: '', expanded: 'true', track: 'Monza' }, 'focus survives the re-render');
   assert.equal(await versions.count(), 2);
   assert.equal(await versions.first().getAttribute('aria-current'), 'true', 'newest first, and current');
   await shot(page, 'task-9-library-desktop.png');
   await page.setViewportSize({ width: 390, height: 844 });
+  await settled();
   await shot(page, 'task-9-library-phone.png');
   await page.setViewportSize({ width: 1280, height: 800 });
   await versions.nth(1).getByRole('button', { name: /^Open/ }).click();
@@ -142,13 +164,46 @@ test('save, version, history, rename, share and log out', async (t) => {
   await page.locator('#btn-account').click();
   await page.getByRole('menuitem', { name: 'Library' }).click();
   await row.waitFor();
-  await row.getByRole('button', { name: 'Rename' }).click();
-  await row.getByLabel('New name').fill('Imola');
-  await row.getByRole('button', { name: 'Save name' }).click();
+  // By keyboard: Enter on Rename puts the focus in the name; Enter saves it
+  // and the focus is back on Rename.
+  await row.getByRole('button', { name: 'Rename' }).focus();
+  await page.keyboard.press('Enter');
+  await row.getByLabel('New name').waitFor();
+  assert.match((await focused()).id, /^rename-/);
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Imola');
+  await page.keyboard.press('Enter');
   await dialog.locator('.library-track', { hasText: 'Imola' }).waitFor();
+  await page.waitForFunction(() => /** @type {HTMLElement} */ (document.activeElement)?.dataset?.act === 'rename');
+  assert.equal((await focused()).track, 'Imola');
   assert.equal(await dialog.locator('.library-track').count(), 1);
   assert.equal(await page.locator('#library-current').textContent(), 'Imola');
   await dialog.getByRole('button', { name: 'Close' }).click();
+
+  // The link belongs to the layout: a stock layout (no link), open Imola,
+  // undo. The stock layout is back without a link, so Save asks for a name
+  // instead of posting it as a version of Imola.
+  await page.locator('#btn-presets').click();
+  await page.locator('#presets-list button[data-preset-id]').first().click();
+  await page.locator('#library-current').waitFor({ state: 'hidden' });
+  await page.locator('#btn-account').click();
+  await page.getByRole('menuitem', { name: 'Library' }).click();
+  await dialog.locator('.library-track', { hasText: 'Imola' }).getByRole('button', { name: 'Open', exact: true }).click();
+  await page.getByText('Opened Imola.').waitFor();
+  assert.equal(await page.locator('#library-current').textContent(), 'Imola');
+  await page.locator('#canvas').focus();
+  await page.keyboard.press('Control+z');
+  await page.locator('#library-current').waitFor({ state: 'hidden' });
+  await save.click();
+  await saveDialog.waitFor();
+  await page.locator('#save-cancel').click();
+  await saveDialog.waitFor({ state: 'hidden' });
+  assert.equal(versionPosts.length, 1, 'no version of Imola was posted');
+  // Undo once more: the empty Imola version, and its link, come back.
+  await page.locator('#canvas').focus();
+  await page.keyboard.press('Control+z');
+  await canvasHas(false);
+  assert.equal(await page.locator('#library-current').textContent(), 'Imola');
 
   // Share asks first; Cancel publishes nothing.
   const posts = [];
@@ -165,6 +220,18 @@ test('save, version, history, rename, share and log out', async (t) => {
   await confirm.getByRole('button', { name: 'Publish and copy link' }).click();
   await page.getByText(/^(Link copied|Share link): http/).waitFor();
   assert.equal(posts.length, 1);
+
+  // Phone width: the navbar wraps instead of running off the screen.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settled();
+  const overflow = await page.evaluate(() => [...document.querySelectorAll('.navbar, .navbar *')]
+    .filter((n) => n.getClientRects().length && n.getBoundingClientRect().right > document.documentElement.clientWidth + 0.5)
+    .map((n) => n.id || n.className));
+  assert.deepEqual(overflow, [], 'nothing in the navbar reaches past the screen');
+  await shot(page, 'task-9-navbar-phone.png');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await settled();
+  assert.equal(await page.locator('.navbar').evaluate((n) => n.getBoundingClientRect().height), 52, 'desktop keeps the one-row bar');
 
   // Log out: the planner is back to downloads.
   await page.locator('#btn-account').click();

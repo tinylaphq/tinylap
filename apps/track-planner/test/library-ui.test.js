@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLayout, assignTrack, stockL } from '@tinylap/track-format';
-import { libraryApi, may, relativeTime, saverName, workspaceLabel } from '../js/library.js';
+import { libraryApi, linkedHistory, may, relativeTime, saverName, workspaceLabel } from '../js/library.js';
 
 const layout = () => assignTrack(createLayout({ pieces: stockL() }));
 const reply = (status, body, type = 'application/json') =>
@@ -132,4 +132,25 @@ test('the first workspace is the personal one', () => {
   assert.equal(workspaceLabel({ id: 'W1', name: 'Ayrton', role: 'owner' }, 0), 'Ayrton (personal)');
   assert.equal(workspaceLabel({ id: 'W2', name: 'Kart Club', role: 'member' }, 1), 'Kart Club');
   assert.equal(workspaceLabel({ id: 'W3', name: null, role: 'member' }, 2), 'Unnamed workspace');
+});
+
+test('undo restores the track link that belonged to the layout it brings back', () => {
+  let link = null;
+  const restored = [];
+  const history = linkedHistory({ load: () => link, restore: (ref) => { restored.push(ref); link = ref; } });
+  const A = { id: 'A', name: 'Monza', workspaceId: 'W1' };
+  // Layout X (no link) on the canvas; the user opens library track A.
+  history.push('X');
+  link = A;
+  // An edit of A keeps A.
+  history.push('A1');
+  assert.equal(history.length, 2);
+  assert.equal(history.pop(), 'A1');
+  assert.deepEqual(link, A, 'undoing an edit of A is still A');
+  // Undo the open: X is back, and so is its (absent) link.
+  assert.equal(history.pop(), 'X');
+  assert.equal(link, null, 'X never came from A, so Save must not post it as a version of A');
+  assert.deepEqual(restored, [A, null]);
+  assert.equal(history.pop(), undefined, 'an empty history pops nothing');
+  assert.deepEqual(restored, [A, null], 'and restores nothing');
 });

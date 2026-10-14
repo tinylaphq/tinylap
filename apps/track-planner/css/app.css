@@ -552,6 +552,8 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   border: var(--p-border-width) solid var(--p-text);
   border-left-width: var(--p-space-xs);
 }
+/* A row takes the focus when the button it had is gone (library.js). */
+.library-track:focus-visible, .library-track:focus { outline: var(--p-border-width) solid var(--p-accent-2); outline-offset: 2px; }
 /* The one on the canvas: the same pink edge as the navbar's name. */
 .library-track[aria-current="true"] { border-left-color: var(--p-accent-1); }
 
@@ -644,4 +646,28 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 @media (max-width: 600px) {
   #library-dialog { padding: var(--p-space-md); }
   .library-track { padding: var(--p-space-sm); }
+}
+
+/* ── Phone-width navbar ──────────────────────────────────────────── */
+
+/* One row does not hold the brand and seven controls at phone width. The
+   bar becomes two: the brand and the account (who you are) on top, the
+   document actions (Layouts … Save) on a row of their own beneath, in
+   reading order and starting at the left edge. Desktop keeps palace's
+   single 52px bar. */
+@media (max-width: 600px) {
+  body { grid-template-rows: auto 1fr auto; }
+  .navbar {
+    position: relative;
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: var(--p-space-sm);
+    padding: var(--p-space-sm) var(--p-space-md);
+  }
+  .navbar-brand { min-height: 32px; }
+  /* Pinned beside the brand rather than moved with `order`, which palace's
+     `.btn { transition: all }` would animate on every resize. */
+  .account { position: absolute; top: var(--p-space-sm); right: var(--p-space-md); min-height: 32px; padding-left: 0; border-left: 0; }
+  .navbar-right { flex: 1 1 100%; flex-wrap: wrap; gap: var(--p-space-xs); }
+  .navbar-right > .btn { padding: 6px 10px; }
 }
