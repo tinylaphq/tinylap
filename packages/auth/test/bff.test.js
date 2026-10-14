@@ -1,0 +1,400 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: MPL-2.0
+
+// createBff against a real accounts (tools/test-env.js) and a tiny node:http
+// app that mounts the handlers the way an app server would.
+import test, { after, before } from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { createHash, randomBytes } from 'node:crypto';
+import * as oidc from 'openid-client';
+import { decodeJwt } from 'jose';
+import { AuthError, createBff, open, seal } from '../index.js';
+import { driveAuthorize, Jar, navigate, startSuite } from '../../../tools/test-env.js';
+
+const keys = [{ id: 'k1', key: randomBytes(32) }];
+
+/** A SessionStore in a Map, as an app would back it with a table. */
+function memoryStore() {
+  /** @type {Map<string, import('../types.js').StoredSession>} */
+  const rows = new Map();
+  /** Reads wait for these first, in order: a test can hold one read back. */
+  /** @type {Promise<void>[]} */
+  const holds = [];
+  return {
+    rows,
+    holds,
+    get: async (/** @type {string} */ id) => {
+      const row = rows.get(id) ?? null;
+      const hold = holds.shift();
+      if (hold) await hold;
+      return row;
+    },
+    set: async (/** @type {string} */ id, /** @type {any} */ session) => void rows.set(id, session),
+    delete: async (/** @type {string} */ id) => void rows.delete(id),
+    deleteUser: async (/** @type {string} */ userId) => {
+      for (const [id, s] of rows) if (s.userId === userId) rows.delete(id);
+    },
+  };
+}
+
+/** Counts calls per path, then fetches. */
+function countingFetch() {
+  /** @type {Map<string, number>} */
+  const calls = new Map();
+  /** @type {typeof fetch} */
+  const wrapped = (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    calls.set(path, (calls.get(path) ?? 0) + 1);
+    return fetch(input, init);
+  };
+  return { calls, fetch: wrapped };
+}
+
+/**
+ * Starts an app server on a random port with `handlers` late-bound, then a
+ * suite registered for that port.
+ */
+async function startApp() {
+  /** @type {any} */
+  let bff;
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://app');
+    try {
+      /** @type {{ status: number, headers?: any, body?: string }} */
+      let out;
+      if (req.method === 'GET' && url.pathname === '/auth/login') out = await bff.login(req);
+      else if (req.method === 'GET' && url.pathname === '/auth/callback') out = await bff.callback(req);
+      else if (req.method === 'POST' && url.pathname === '/auth/logout') {
+        out = bff.requireSameOrigin(req) ? await bff.logout(req) : { status: 403 };
+      } else if (url.pathname === '/me') {
+        const session = await bff.session(req);
+        out = session ? { status: 200, body: JSON.stringify(session) } : { status: 401 };
+      } else out = { status: 404 };
+      res.writeHead(out.status, out.headers ?? {}).end(out.body);
+    } catch (error) {
+      res.writeHead(error instanceof AuthError && error.code === 'unavailable' ? 503 : 500).end(String(error));
+    }
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+  const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
+  const suite = await startSuite({ plannerPort: port });
+  const store = memoryStore();
+  const counter = countingFetch();
+  bff = createBff({
+    issuer: suite.issuer,
+    clientId: suite.clientId,
+    clientSecret: suite.clientSecret,
+    redirectUri: suite.redirectUri,
+    postLogoutRedirectUri: suite.postLogoutRedirectUri,
+    resource: suite.resource,
+    store,
+    keys,
+    fetch: counter.fetch,
+  });
+  const origin = suite.plannerOrigin(port);
+  return {
+    suite, store, bff, origin, calls: counter.calls,
+    close: async () => {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(() => resolve(undefined)));
+      await suite.close();
+    },
+  };
+}
+
+/** @type {Awaited<ReturnType<typeof startApp>>} */
+let app;
+/** @type {oidc.Configuration} */
+let rp;
+
+before(async () => {
+  app = await startApp();
+  rp = await oidc.discovery(new URL(app.suite.issuer), app.suite.clientId, undefined,
+    oidc.ClientSecretBasic(app.suite.clientSecret), { execute: [oidc.allowInsecureRequests] });
+});
+after(() => app.close());
+
+/** @param {string} line */
+const cookieAttrs = (line) => line.split(';').slice(1).map((a) => a.trim());
+/** @param {Response} res @param {string} name */
+const setCookie = (res, name) => res.headers.getSetCookie().find((l) => l.startsWith(`${name}=`));
+
+/** Logs a fresh user in through the app; returns the app's cookie jar. */
+async function login(returnTo = '/tracks?x=1', target = app) {
+  const appJar = new Jar();
+  const start = await fetch(`${target.origin}/auth/login?${new URLSearchParams({ returnTo })}`, { redirect: 'manual' });
+  assert.equal(start.status, 302);
+  appJar.store(start);
+  const { user, jar } = await target.suite.signInUser();
+  const back = await driveAuthorize(/** @type {string} */ (start.headers.get('location')), jar);
+  const callback = await fetch(/** @type {string} */ (back.headers.get('location')), { redirect: 'manual', headers: { cookie: appJar.header() } });
+  appJar.store(callback);
+  return { start, callback, appJar, user, accountsJar: jar };
+}
+
+/** @param {Jar} jar */
+const sessionId = (jar) => createHash('sha256').update(/** @type {string} */ (jar.cookies.get('__Host-tinylap-session'))).digest('hex');
+/** @param {Jar} jar */
+const reqFor = (jar) => ({ headers: { cookie: jar.header() } });
+
+/** Makes the stored access token look as if it had `ms` left. */
+async function expireSoon(/** @type {Jar} */ jar, ms = 10_000, target = app) {
+  const id = sessionId(jar);
+  const row = /** @type {import('../types.js').StoredSession} */ (await target.store.get(id));
+  const tokens = JSON.parse(open(keys, row.sealedTokens));
+  await target.store.set(id, { ...row, sealedTokens: seal(keys, JSON.stringify({ ...tokens, expiresAt: Date.now() + ms })) });
+  return tokens;
+}
+
+test('login redirects to accounts with PKCE S256, state, nonce and resource, and a sealed login cookie', async () => {
+  const res = await fetch(`${app.origin}/auth/login?returnTo=/x`, { redirect: 'manual' });
+  assert.equal(res.status, 302);
+  const location = new URL(/** @type {string} */ (res.headers.get('location')));
+  assert.equal(location.origin + location.pathname, `${app.suite.issuer}/oauth2/authorize`);
+  const q = location.searchParams;
+  assert.equal(q.get('code_challenge_method'), 'S256');
+  assert.match(q.get('code_challenge') ?? '', /^[A-Za-z0-9_-]{43}$/);
+  assert.ok(q.get('state'));
+  assert.ok(q.get('nonce'));
+  assert.equal(q.get('resource'), app.suite.resource);
+  assert.equal(q.get('redirect_uri'), app.suite.redirectUri);
+  assert.equal(q.get('client_id'), app.suite.clientId);
+  assert.equal(q.get('response_type'), 'code');
+  assert.equal(q.get('response_mode'), 'query');
+  assert.deepEqual((q.get('scope') ?? '').split(' ').sort(), ['offline_access', 'openid', 'profile']);
+  assert.match(res.headers.get('cache-control') ?? '', /no-store/);
+  const cookie = setCookie(res, '__Host-tinylap-login');
+  assert.ok(cookie, 'the login cookie is set');
+  const attrs = cookieAttrs(cookie);
+  for (const a of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/', 'Max-Age=600']) assert.ok(attrs.includes(a), `${a} in ${cookie}`);
+  assert.ok(!attrs.some((a) => /^domain=/i.test(a)));
+  assert.ok(!cookie.includes(/** @type {string} */ (q.get('state'))), 'the state is sealed, not in clear');
+});
+
+test('callback sets __Host-tinylap-session (HttpOnly, Secure, SameSite=Lax, Path=/, no Domain) and returns to returnTo', async () => {
+  const { callback, appJar, user } = await login('/tracks?x=1');
+  assert.equal(callback.status, 302);
+  assert.equal(callback.headers.get('location'), `${app.origin}/tracks?x=1`);
+  const cookie = setCookie(callback, '__Host-tinylap-session');
+  assert.ok(cookie);
+  const attrs = cookieAttrs(cookie);
+  for (const a of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/']) assert.ok(attrs.includes(a), `${a} in ${cookie}`);
+  assert.ok(!attrs.some((a) => /^domain=/i.test(a)), 'no Domain');
+  const spent = setCookie(callback, '__Host-tinylap-login');
+  assert.ok(spent && cookieAttrs(spent).includes('Max-Age=0'), 'the login cookie is spent');
+
+  const row = await app.store.get(sessionId(appJar));
+  assert.ok(row);
+  assert.equal(row.userId, user.id);
+  assert.ok(row.expiresAt > Date.now() + 29 * 86_400_000);
+  assert.ok(!row.sealedTokens.includes('eyJ'), 'tokens are sealed');
+
+  const me = await fetch(`${app.origin}/me`, { headers: { cookie: appJar.header() } });
+  assert.equal(me.status, 200);
+  const session = await me.json();
+  assert.equal(session.userId, user.id);
+  assert.equal(session.claims.sub, user.id);
+  assert.ok(Array.isArray(session.claims.workspaces));
+});
+
+test('a returnTo that leaves the origin ends at /', async () => {
+  for (const returnTo of ['//evil.test', 'https://evil.test', '/\\evil', 'evil', '/%5Cevil', '/\tevil']) {
+    const { callback } = await login(returnTo);
+    assert.equal(callback.headers.get('location'), `${app.origin}/`, `returnTo ${JSON.stringify(returnTo)}`);
+  }
+});
+
+test('a callback without the login cookie, or with a forged state, fails with 400 and no session', async () => {
+  const start = await fetch(`${app.origin}/auth/login`, { redirect: 'manual' });
+  const { jar } = await app.suite.signInUser();
+  const back = await driveAuthorize(/** @type {string} */ (start.headers.get('location')), jar);
+  const location = /** @type {string} */ (back.headers.get('location'));
+
+  const bare = await fetch(location, { redirect: 'manual' });
+  assert.equal(bare.status, 400);
+  assert.match(await bare.text(), /log in again/i);
+  assert.equal(setCookie(bare, '__Host-tinylap-session'), undefined);
+
+  const appJar = new Jar();
+  appJar.store(start);
+  const forged = new URL(location);
+  forged.searchParams.set('state', 'forged');
+  const res = await fetch(forged, { redirect: 'manual', headers: { cookie: appJar.header() } });
+  assert.equal(res.status, 400);
+  assert.equal(setCookie(res, '__Host-tinylap-session'), undefined);
+  const spent = setCookie(res, '__Host-tinylap-login');
+  assert.ok(spent && cookieAttrs(spent).includes('Max-Age=0'), 'the login cookie is single-use');
+});
+
+test('session() is null without a cookie, with an unknown cookie, or a garbled one', async () => {
+  assert.equal(await app.bff.session({ headers: {} }), null);
+  assert.equal(await app.bff.session({ headers: { cookie: `__Host-tinylap-session=${randomBytes(32).toString('base64url')}` } }), null);
+  assert.equal(await app.bff.session({ headers: { cookie: '__Host-tinylap-session=x;y' } }), null);
+});
+
+test('a fresh token is used as is: no call to the token endpoint', async () => {
+  const { appJar } = await login();
+  const before = app.calls.get('/oauth2/token') ?? 0;
+  const session = await app.bff.session(reqFor(appJar));
+  assert.ok(session);
+  assert.equal(app.calls.get('/oauth2/token') ?? 0, before);
+});
+
+test('two concurrent session() calls on an expiring token cause one refresh, and both get the new token', async () => {
+  const { appJar, user } = await login();
+  const old = await expireSoon(appJar);
+  const before = app.calls.get('/oauth2/token') ?? 0;
+  const [a, b] = await Promise.all([app.bff.session(reqFor(appJar)), app.bff.session(reqFor(appJar))]);
+  assert.equal((app.calls.get('/oauth2/token') ?? 0) - before, 1, 'one refresh');
+  assert.ok(a && b);
+  assert.equal(a.accessToken, b.accessToken);
+  assert.notEqual(a.accessToken, old.accessToken);
+  assert.equal(a.userId, user.id);
+  assert.equal(decodeJwt(a.accessToken).sub, user.id);
+  // The rotated refresh token is the one stored; the next refresh works.
+  const stored = JSON.parse(open(keys, /** @type {any} */ (await app.store.get(sessionId(appJar))).sealedTokens));
+  assert.notEqual(stored.refreshToken, old.refreshToken);
+  assert.equal(stored.accessToken, a.accessToken);
+  await expireSoon(appJar);
+  const c = await app.bff.session(reqFor(appJar));
+  assert.ok(c);
+  assert.notEqual(c.accessToken, a.accessToken);
+});
+
+test('a request that read the old row while a refresh ran does not refresh again with the spent token', async () => {
+  const { appJar } = await login();
+  await expireSoon(appJar);
+  const before = app.calls.get('/oauth2/token') ?? 0;
+  const first = app.bff.session(reqFor(appJar));
+  // The second request reads the row now (still the old tokens) but only
+  // sees it once the first refresh has finished and left the flight map.
+  /** @type {() => void} */
+  let release = () => {};
+  app.store.holds.push(new Promise((resolve) => (release = () => resolve(undefined))));
+  const second = app.bff.session(reqFor(appJar));
+  const a = await first;
+  release();
+  const b = await second;
+  assert.ok(a && b, 'still logged in');
+  assert.equal(b.accessToken, a.accessToken);
+  assert.equal((app.calls.get('/oauth2/token') ?? 0) - before, 1, 'one refresh');
+});
+
+test('a refresh answered with invalid_grant deletes the session and returns null', async () => {
+  const { appJar } = await login();
+  const tokens = await expireSoon(appJar);
+  await oidc.tokenRevocation(rp, tokens.refreshToken, { token_type_hint: 'refresh_token' });
+  assert.equal(await app.bff.session(reqFor(appJar)), null);
+  assert.equal(await app.store.get(sessionId(appJar)), null);
+});
+
+test('logout revokes the refresh token, clears the cookie and goes to end_session_endpoint with id_token_hint', async () => {
+  const { appJar, accountsJar } = await login();
+  const id = sessionId(appJar);
+  const tokens = JSON.parse(open(keys, /** @type {any} */ (await app.store.get(id)).sealedTokens));
+
+  const foreign = await fetch(`${app.origin}/auth/logout`, { method: 'POST', redirect: 'manual', headers: { cookie: appJar.header(), origin: 'https://evil.test' } });
+  assert.equal(foreign.status, 403);
+
+  const res = await fetch(`${app.origin}/auth/logout`, { method: 'POST', redirect: 'manual', headers: { cookie: appJar.header(), origin: app.origin } });
+  assert.equal(res.status, 302);
+  const location = new URL(/** @type {string} */ (res.headers.get('location')));
+  assert.equal(location.origin + location.pathname, rp.serverMetadata().end_session_endpoint);
+  assert.equal(location.searchParams.get('id_token_hint'), tokens.idToken);
+  assert.equal(location.searchParams.get('post_logout_redirect_uri'), app.suite.postLogoutRedirectUri);
+  const cleared = setCookie(res, '__Host-tinylap-session');
+  assert.ok(cleared && cookieAttrs(cleared).includes('Max-Age=0'), 'the session cookie is cleared');
+  assert.equal(await app.store.get(id), null);
+  await assert.rejects(
+    oidc.refreshTokenGrant(rp, tokens.refreshToken, { resource: app.suite.resource }),
+    (/** @type {any} */ error) => error.error === 'invalid_grant',
+  );
+  // accounts honours it: back to the app, and the accounts session is over.
+  const end = await navigate(location, { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: accountsJar.header() });
+  assert.equal(end.status, 302);
+  assert.equal(end.headers.get('location'), app.suite.postLogoutRedirectUri);
+});
+
+test('logout without a session still clears the cookie and goes to end_session_endpoint', async () => {
+  const res = await fetch(`${app.origin}/auth/logout`, { method: 'POST', redirect: 'manual', headers: { 'sec-fetch-site': 'same-origin' } });
+  assert.equal(res.status, 302);
+  const location = new URL(/** @type {string} */ (res.headers.get('location')));
+  assert.equal(location.origin + location.pathname, rp.serverMetadata().end_session_endpoint);
+  assert.equal(location.searchParams.get('id_token_hint'), null);
+  assert.ok(setCookie(res, '__Host-tinylap-session'));
+});
+
+test('requireSameOrigin: Sec-Fetch-Site same-origin, else an Origin equal to the app origin', () => {
+  const { bff, origin } = app;
+  assert.equal(bff.requireSameOrigin({ headers: { 'sec-fetch-site': 'same-origin' } }), true);
+  assert.equal(bff.requireSameOrigin({ headers: { 'sec-fetch-site': 'cross-site', origin } }), false);
+  assert.equal(bff.requireSameOrigin({ headers: { 'sec-fetch-site': 'same-site' } }), false);
+  assert.equal(bff.requireSameOrigin({ headers: { 'sec-fetch-site': 'none' } }), false);
+  assert.equal(bff.requireSameOrigin({ headers: { origin } }), true);
+  assert.equal(bff.requireSameOrigin({ headers: { origin: 'https://evil.test' } }), false);
+  assert.equal(bff.requireSameOrigin({ headers: { origin: 'null' } }), false);
+  assert.equal(bff.requireSameOrigin({ headers: {} }), false);
+});
+
+test('accounts stopped: session() throws unavailable and the stored session survives', async () => {
+  const own = await startApp();
+  try {
+    const { appJar } = await login('/', own);
+    // A fresh token still works without accounts: the JWKS is cached.
+    await own.suite.close();
+    assert.ok(await own.bff.session(reqFor(appJar)));
+    await expireSoon(appJar, 10_000, own);
+    await assert.rejects(own.bff.session(reqFor(appJar)), (/** @type {any} */ e) => e instanceof AuthError && e.code === 'unavailable');
+    assert.ok(await own.store.get(sessionId(appJar)), 'the session is kept');
+    const res = await fetch(`${own.origin}/auth/login`, { redirect: 'manual' });
+    assert.equal(res.status, 302, 'discovery is cached, so login still builds the URL');
+  } finally {
+    await own.close();
+  }
+});
+
+/** A bff whose issuer is `issuer`, for outage tests. */
+const bffAt = (/** @type {string} */ issuer, extra = {}) => createBff({
+  issuer, clientId: 'c', clientSecret: 's', redirectUri: 'http://127.0.0.1:9/auth/callback',
+  postLogoutRedirectUri: 'http://127.0.0.1:9/', resource: 'http://127.0.0.1:9', store: memoryStore(), keys, ...extra,
+});
+
+test('discovery that fails is unavailable, and the next call tries again', async () => {
+  const counter = countingFetch();
+  const bff = bffAt('http://127.0.0.1:1', { fetch: counter.fetch });
+  for (let i = 0; i < 2; i++) {
+    await assert.rejects(bff.login({ url: '/auth/login', headers: {} }), (/** @type {any} */ e) => e instanceof AuthError && e.code === 'unavailable');
+  }
+  assert.equal(counter.calls.get('/.well-known/openid-configuration'), 2);
+});
+
+test('an issuer answering 5xx, or not answering within fetchTimeoutMs, is unavailable', async () => {
+  /** @type {import('node:http').ServerResponse[]} */
+  const hanging = [];
+  const server = createServer((req, res) => {
+    if (req.url?.startsWith('/slow')) hanging.push(res);
+    else res.writeHead(502, { 'content-type': 'text/html' }).end('<h1>Bad gateway</h1>');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+  const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
+  try {
+    await assert.rejects(bffAt(`http://127.0.0.1:${port}`).login({ url: '/auth/login', headers: {} }), (/** @type {any} */ e) => e.code === 'unavailable');
+    const started = Date.now();
+    // An issuer with a path is not valid OIDC, but it lets one server do both.
+    const slow = bffAt(`http://127.0.0.1:${port}/slow`, { fetchTimeoutMs: 150 });
+    await assert.rejects(slow.login({ url: '/auth/login', headers: {} }), (/** @type {any} */ e) => e.code === 'unavailable');
+    assert.ok(Date.now() - started < 5000, 'the timeout applies');
+  } finally {
+    for (const res of hanging) res.destroy();
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
+});
+
+test('createBff refuses an issuer, redirect URI or keys it cannot use', () => {
+  assert.throws(() => bffAt('ftp://x'), /issuer/);
+  assert.throws(() => bffAt('http://127.0.0.1:9', { keys: [] }), /key/);
+  assert.throws(() => bffAt('http://127.0.0.1:9', { redirectUri: '/auth/callback' }), /redirectUri/);
+});

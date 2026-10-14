@@ -66,3 +66,98 @@ export function rateLimiter(options: {
   now?: () => number;
   sweepMs?: number;
 }): RateLimiter;
+
+export interface SealKey {
+  id: string;
+  /** 32 bytes for AES-256-GCM. */
+  key: Buffer;
+}
+
+/** Parses `TINYLAP_TOKEN_KEYS`: `<id>:<base64 32 bytes>,<id>:<…>`, newest first. */
+export function parseKeys(text: string | undefined): SealKey[];
+/** AES-256-GCM with the first key: `<kid>.<iv>.<ciphertext+tag>`, base64url. */
+export function seal(keys: SealKey[], plaintext: string): string;
+/** Opens with whichever listed key the id names; throws for an unknown id or tampering. */
+export function open(keys: SealKey[], sealed: string): string;
+
+export interface StoredSession {
+  userId: string;
+  sealedTokens: string;
+  /** ms since the epoch, at login. */
+  createdAt: number;
+  /** ms since the epoch: 30 days after the last refresh, at most 90 after login. */
+  expiresAt: number;
+}
+
+export interface SessionStore {
+  /** `id` is the SHA-256 (hex) of the cookie value. */
+  get(id: string): Promise<StoredSession | null>;
+  set(id: string, session: StoredSession): Promise<void>;
+  delete(id: string): Promise<void>;
+  deleteUser(userId: string): Promise<void>;
+}
+
+/** What `sealedTokens` holds. */
+export interface SealedTokens {
+  accessToken: string;
+  refreshToken: string;
+  idToken?: string;
+  /** The access token's `exp`, in ms. */
+  expiresAt: number;
+}
+
+export interface BffOptions {
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  /** Absolute; its origin is the app origin. */
+  redirectUri: string;
+  postLogoutRedirectUri: string;
+  /** RFC 8707 resource: the audience of the access tokens. */
+  resource: string;
+  store: SessionStore;
+  /** Newest first: the first seals, any opens. */
+  keys: SealKey[];
+  scope?: string;
+  cookieName?: string;
+  /** Default true. False drops `Secure` and the `__Host-` prefix. */
+  secureCookies?: boolean;
+  /** Per call to the issuer (discovery, token, revocation). Default 15000. */
+  fetchTimeoutMs?: number;
+  /** The fetch used for calls to the issuer; for tests and instrumentation. */
+  fetch?: typeof globalThis.fetch;
+}
+
+/** Enough of a node:http IncomingMessage. */
+export interface BffRequest {
+  url?: string;
+  headers: Record<string, string | string[] | undefined>;
+}
+
+export interface BffResponse {
+  status: number;
+  headers: Record<string, string | string[]>;
+  body?: string;
+}
+
+export interface BffSession {
+  userId: string;
+  accessToken: string;
+  claims: AccessClaims;
+}
+
+export interface Bff {
+  /** 302 to the issuer; `?returnTo=` must be a same-origin path, else `/`. */
+  login(req: BffRequest): Promise<BffResponse>;
+  /** 302 to `returnTo` with the session cookie, or 400 when the log-in can't complete. */
+  callback(req: BffRequest): Promise<BffResponse>;
+  /** Forgets the session, revokes its refresh token, 302 to the issuer's end_session_endpoint. */
+  logout(req: BffRequest): Promise<BffResponse>;
+  /** The session, refreshed when under 60 s are left (one refresh in flight per session); null when logged out. */
+  session(req: BffRequest): Promise<BffSession | null>;
+  /** `Sec-Fetch-Site: same-origin`, or else an `Origin` equal to the app origin. */
+  requireSameOrigin(req: BffRequest): boolean;
+}
+
+/** Throws `AuthError('unavailable')` from any method when the issuer is down, slow or failing. */
+export function createBff(options: BffOptions): Bff;

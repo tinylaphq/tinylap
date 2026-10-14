@@ -21,7 +21,7 @@
     "types.d.ts"
   ],
   "scripts": {
-    "test": "node --test 'test/**/*.test.js'",
+    "test": "node --disable-warning=ExperimentalWarning --test 'test/**/*.test.js'",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint ."
   },
