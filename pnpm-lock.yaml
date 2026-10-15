@@ -64,6 +64,28 @@ importers:
         specifier: ^1.64.1
         version: 1.64.1
 
+  apps/timing:
+    dependencies:
+      '@tinylap/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@tinylap/design':
+        specifier: workspace:*
+        version: link:../../packages/design
+      '@tinylap/timing':
+        specifier: workspace:*
+        version: link:../../packages/timing
+      '@tinylap/track-format':
+        specifier: workspace:*
+        version: link:../../packages/track-format
+      palace-ui:
+        specifier: ^0.10.0
+        version: 0.10.0
+    devDependencies:
+      playwright-core:
+        specifier: ^1.64.1
+        version: 1.64.1
+
   apps/track-planner:
     dependencies:
       '@tinylap/auth':
@@ -104,6 +126,8 @@ importers:
         specifier: ^0.10.0
         version: 0.10.0
 
+  packages/timing: {}
+
   packages/track-format:
     devDependencies:
       ajv:
@@ -111,6 +135,10 @@ importers:
         version: 8.20.0
 
   tools:
+    dependencies:
+      '@tinylap/timing':
+        specifier: workspace:*
+        version: link:../packages/timing
     devDependencies:
       playwright-core:
         specifier: ^1.64.1

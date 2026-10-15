@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinyLap Timing</title>
+  <script type="importmap">
+  { "imports": { "@tinylap/timing": "./pkg/timing/index.js", "@tinylap/track-format": "./pkg/track-format/index.js" } }
+  </script>
+  <link rel="stylesheet" href="./pkg/palace-ui/palace.css">
+  <link rel="stylesheet" href="./pkg/design/design.css">
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <nav class="navbar" id="nav" hidden>
+    <span class="navbar-brand">TinyLap Timing</span>
+    <div class="nav-tabs" id="tabs"></div>
+    <div class="navbar-right">
+      <select id="workspace" class="nav-select" aria-label="Workspace"></select>
+      <span class="live-status" id="live-status" role="status"></span>
+      <button type="button" class="btn btn-sm btn-outline" id="btn-big">Big screen</button>
+      <form method="post" action="/auth/logout"><button type="submit" class="btn btn-sm btn-outline">Log out</button></form>
+    </div>
+  </nav>
+  <main id="app"></main>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ racing, built as plain ES modules on a shared design layer.
 
 - `apps/track-planner`: design Kyosho Mini-Z Grand Prix Circuit 30 layouts and
   cost them against the pieces you own.
+- `apps/timing`: lap timing for a workspace's track, live on every screen, from a decoder on USB or Wi-Fi.
 
     pnpm install
     pnpm test                                    # every package
@@ -70,6 +71,31 @@ Then give the planner `TINYLAP_ISSUER`, `TINYLAP_CLIENT_ID`, `TINYLAP_CLIENT_SEC
 ### Another OIDC provider
 
 The planner needs `TINYLAP_ISSUER`, a client id and a secret for a confidential client (`TINYLAP_CLIENT_ID`, `TINYLAP_CLIENT_SECRET`), `TINYLAP_TOKEN_KEYS`, `TINYLAP_PUBLIC_URL` and `TINYLAP_FEED_TOKEN`; it refuses to start with log-in half configured. The provider must support the authorization code flow with PKCE and refresh tokens, and issue **RS256 JWT access tokens** (`typ` `at+jwt`) with `aud` set to the planner's origin (RFC 8707 `resource`) and a `workspaces` claim, `[{ "id", "role" }]` with roles `owner`, `admin` or `member`, which the planner reads for access. The JWKS must be at `{issuer}/jwks` (the planner does not read `jwks_uri` from discovery), and discovery must name a `userinfo_endpoint` that answers the user's `name`: a save is refused while the name can't be looked up. An `end_session_endpoint` is optional; without one, logging out ends only the planner's session. The deletions feed is TinyLap-specific, an `accounts` feature: another provider has to offer the same `GET /deletions?after=<seq>` (bearer `TINYLAP_FEED_TOKEN`, answering `{ "deletions": [{ "seq", "kind": "user" | "workspace", "id", "deletedAt" }] }`), or deleted workspaces and users stay in the planner. See [packages/auth](packages/auth/README.md).
+
+## Self-hosting timing
+
+`apps/timing` is one Node 24 process with a SQLite file. It needs accounts (or another OIDC provider, as for the planner) and a planner to import tracks from.
+
+```sh
+docker build -f apps/timing/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEAD) -t tinylap-timing .
+docker run -p 8080:8080 -v tinylap-timing:/data -e TINYLAP_PUBLIC_URL=https://timing.example \
+  -e TINYLAP_ISSUER=https://accounts.example -e TINYLAP_CLIENT_ID=timing -e TINYLAP_CLIENT_SECRET=<random> \
+  -e TINYLAP_TOKEN_KEYS=1:$(openssl rand -base64 32) -e TINYLAP_FEED_TOKEN=<random> \
+  -e TINYLAP_PLANNER_URL=https://planner.example tinylap-timing
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `PORT` | `8080` | Port to listen on |
+| `TINYLAP_DB` | `/data/timing.sqlite` | SQLite file |
+| `TINYLAP_PUBLIC_URL` | required | The `https://` origin timing is served at |
+| `TINYLAP_ISSUER`, `TINYLAP_CLIENT_ID`, `TINYLAP_CLIENT_SECRET` | required | Timing's client at accounts |
+| `TINYLAP_TOKEN_KEYS` | required | Keys that seal stored tokens, as for the planner |
+| `TINYLAP_FEED_TOKEN` | required | Bearer token for accounts' deletions feed |
+| `TINYLAP_PLANNER_URL` | required | The planner tracks are imported from; timing fetches nothing else |
+| `TINYLAP_CLIENT_IP_HEADER` | none | Header carrying the client IP behind a proxy |
+
+It refuses to start unless all required variables are set. Decoders: [docs/timing.md](docs/timing.md).
 
 ## License
 

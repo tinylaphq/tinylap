@@ -1,0 +1,30 @@
+{
+  "name": "@tinylap/timing-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "files": [
+    "index.html",
+    "css",
+    "js"
+  ],
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test 'test/*.test.js' 'test/server/*.test.js'",
+    "dev": "node --disable-warning=ExperimentalWarning server/main.js --dev",
+    "start": "node --disable-warning=ExperimentalWarning server/main.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test:browser": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 'test/browser/*.test.js'"
+  },
+  "dependencies": {
+    "@tinylap/auth": "workspace:*",
+    "@tinylap/design": "workspace:*",
+    "@tinylap/timing": "workspace:*",
+    "@tinylap/track-format": "workspace:*",
+    "palace-ui": "^0.10.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TinyLap timing API",
+    "version": "1.0.0",
+    "license": { "name": "AGPL-3.0-or-later", "identifier": "AGPL-3.0-or-later" },
+    "description": "Lap timing for a workspace's track. Decoders post passings, over the internet with their own token or through a logged-in browser tab connected by USB; the server stores each passing once, turns passings into laps, practice, qualifying and race results, and streams them as Server-Sent Events. A read-only watchers view needs no log-in."
+  },
+  "externalDocs": { "description": "The passing format, the ingest API and the ZRound extension", "url": "https://github.com/tinylaphq/tinylap/blob/main/docs/timing.md" },
+  "paths": {
+    "/auth/login": { "get": { "summary": "Log in through TinyLap accounts", "responses": { "302": { "description": "To the issuer." }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/auth/callback": { "get": { "summary": "Finish logging in", "responses": { "302": { "description": "Back to the page that asked." }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/auth/logout": { "post": { "summary": "Log out", "responses": { "302": { "description": "To the issuer's end-session page." }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/auth/me": { "get": { "summary": "Who is logged in, and their workspaces", "responses": { "200": { "description": "The log-in state.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}": { "get": { "summary": "The workspace's live state: track, session, standings, recent crossings, drivers, personal bests", "security": [{ "session": [] }], "responses": { "200": { "description": "A snapshot.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}/live": { "get": { "summary": "Live events as Server-Sent Events", "description": "Events: snapshot, session, crossing, standings, results, drivers, track, setup. Reconnect with Last-Event-ID to get what you missed in the last 10 minutes; older, you get a snapshot.", "security": [{ "session": [] }], "responses": { "200": { "description": "An event stream.", "content": { "text/event-stream": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}/drivers": {
+      "get": { "summary": "The drivers", "security": [{ "session": [] }], "responses": { "200": { "description": "Drivers.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } },
+      "post": { "summary": "Add a driver", "security": [{ "session": [] }], "requestBody": { "content": { "application/json": {} } }, "responses": { "201": { "description": "The driver.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/workspaces/{workspace}/drivers/{driver}": {
+      "patch": { "summary": "Rename or recolour a driver", "security": [{ "session": [] }], "requestBody": { "content": { "application/json": {} } }, "responses": { "200": { "description": "The driver.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } },
+      "delete": { "summary": "Delete a driver; their transponders become unassigned, their laps stay", "security": [{ "session": [] }], "responses": { "204": { "description": "Deleted." }, "default": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/workspaces/{workspace}/transponders": { "get": { "summary": "Every transponder seen or assigned", "security": [{ "session": [] }], "responses": { "200": { "description": "Transponders.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}/transponders/{code}": { "put": { "summary": "Assign a transponder to a driver, or unassign it", "description": "Assigning gives the driver the transponder's unassigned laps.", "security": [{ "session": [] }], "requestBody": { "content": { "application/json": {} } }, "responses": { "200": { "description": "The transponder.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}/decoders": {
+      "get": { "summary": "The paired decoders", "security": [{ "session": [] }], "responses": { "200": { "description": "Decoders.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } },
+      "post": { "summary": "Pair a new decoder: answers its id and its token, once", "security": [{ "session": [] }], "requestBody": { "content": { "application/json": {} } }, "responses": { "201": { "description": "The decoder and its token.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/workspaces/{workspace}/decoders/{decoder}": { "delete": { "summary": "Unpair a decoder; its token stops working, its passings stay", "security": [{ "session": [] }], "responses": { "204": { "description": "Unpaired." }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}/track": { "put": { "summary": "Set the current track from a planner link, and the direction", "security": [{ "session": [] }], "requestBody": { "content": { "application/json": {} } }, "responses": { "200": { "description": "The track.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}/watch-token": {
+      "get": { "summary": "The watchers link token, or null", "security": [{ "session": [] }], "responses": { "200": { "description": "The token.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } },
+      "post": { "summary": "Make a new watchers link; the old one stops working", "security": [{ "session": [] }], "responses": { "200": { "description": "The new token.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/workspaces/{workspace}/sessions": {
+      "get": { "summary": "Recent sessions, newest first", "security": [{ "session": [] }], "responses": { "200": { "description": "Sessions.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } },
+      "post": { "summary": "Start a qualifying or a race", "security": [{ "session": [] }], "requestBody": { "content": { "application/json": {} } }, "responses": { "201": { "description": "The session.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/workspaces/{workspace}/sessions/{session}": { "get": { "summary": "A session with its standings and crossings", "security": [{ "session": [] }], "responses": { "200": { "description": "The session.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}/sessions/{session}/abort": { "post": { "summary": "Abort a qualifying or race", "security": [{ "session": [] }], "responses": { "200": { "description": "The session.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}/tap": { "post": { "summary": "Record a passing by hand for a driver (tap entry)", "security": [{ "session": [] }], "requestBody": { "content": { "application/json": {} } }, "responses": { "200": { "description": "Stored.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/decoders/{decoder}/passings": { "post": { "summary": "Post a batch of passings of one boot", "description": "Repeating a batch is safe. The answer's `through` is the highest t of this boot the server holds; drop everything up to it from your outbox.", "security": [{ "decoderToken": [] }, { "session": [] }], "requestBody": { "content": { "application/json": {} } }, "responses": { "200": { "description": "What was stored.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/watch/{token}": { "get": { "summary": "The watchers view's snapshot", "responses": { "200": { "description": "A snapshot without setup.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/watch/{token}/live": { "get": { "summary": "The watchers view's live events", "responses": { "200": { "description": "An event stream without setup events.", "content": { "text/event-stream": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/openapi.json": { "get": { "summary": "This description", "responses": { "200": { "description": "OpenAPI 3.1.", "content": { "application/vnd.oai.openapi+json": {} } } } } },
+    "/.well-known/api-catalog": { "get": { "summary": "RFC 9727 API catalog", "responses": { "200": { "description": "A linkset.", "content": { "application/linkset+json": {} } } } } },
+    "/problems/{name}": { "get": { "summary": "A problem type's documentation", "responses": { "302": { "description": "To its entry on /api." }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/api": { "get": { "summary": "This description as a page", "responses": { "200": { "description": "HTML.", "content": { "text/html": {} } } } } }
+  },
+  "components": {
+    "responses": {
+      "Problem": { "description": "RFC 9457 Problem Details; the type ends in one of the problem names below.", "content": { "application/problem+json": {} } }
+    },
+    "securitySchemes": {
+      "session": { "type": "apiKey", "in": "cookie", "name": "__Host-tinylap-session", "description": "The log-in session. Writes must come from the app's own pages." },
+      "decoderToken": { "type": "http", "scheme": "bearer", "description": "A decoder's token, from pairing. It can only post that decoder's passings." }
+    }
+  },
+  "x-tinylap-problems": {
+    "not-found": { "status": 404, "title": "Not found", "description": "No such route, workspace, driver, decoder, session or watchers link, or it is not one of yours." },
+    "method-not-allowed": { "status": 405, "title": "Method not allowed", "description": "The Allow header lists the methods this URL supports." },
+    "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Timing data cannot be read or stored right now, or log-in is unavailable." },
+    "unauthorized": { "status": 401, "title": "Not logged in", "description": "Log in, or send a valid decoder token." },
+    "forbidden": { "status": 403, "title": "Forbidden", "description": "Your role may not do this, or the request did not come from the app's own pages." },
+    "invalid-request": { "status": 422, "title": "The request is not valid", "description": "A field is missing or out of range; the detail says which." },
+    "unsupported-media-type": { "status": 415, "title": "Unsupported media type", "description": "Send application/json." },
+    "too-large": { "status": 413, "title": "The request is too large", "description": "A request body may be at most 64 KiB." },
+    "rate-limited": { "status": 429, "title": "Too many requests", "description": "Wait for the number of seconds in Retry-After." },
+    "conflict": { "status": 409, "title": "Something else is running", "description": "A qualifying or race is already running in this workspace; abort it or wait for it to end." },
+    "not-a-circuit": { "status": 422, "title": "The layout is not a closed circuit", "description": "Only a closed circuit has a track to time. Close the loop in the planner and share it again." },
+    "planner-unavailable": { "status": 502, "title": "The planner cannot be reached", "description": "The planner did not answer or answered with an error; try again." },
+    "login-failed": { "status": 400, "title": "The log-in could not be completed", "description": "The log-in expired or was tampered with; log in again." }
+  }
+}

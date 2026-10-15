@@ -18,6 +18,9 @@ const MATRIX = {
   'owner.transfer': ['owner'],
   'club.manage':    ['owner'],
   'club.leave':     ['admin', 'member'],
+  'timing.run':     ['owner', 'admin', 'member'],
+  'timing.setup':   ['owner', 'admin', 'member'],
+  'timing.delete':  ['owner', 'admin'],
 };
 
 const claims = (role) => ({ sub: 'u', iss: 'i', aud: 'a', exp: 0, workspaces: [{ id: 'w1', role }] });

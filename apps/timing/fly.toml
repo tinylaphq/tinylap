@@ -1,0 +1,32 @@
+# Single Node app, one region. SQLite on one volume means exactly one machine.
+app = 'tinylap-timing'
+primary_region = 'fra'
+
+[build]
+
+[env]
+  TINYLAP_PUBLIC_URL = 'https://tinylap-timing.fly.dev'
+  TINYLAP_CLIENT_IP_HEADER = 'Fly-Client-IP'
+  TINYLAP_ISSUER = 'https://tinylap-accounts.fly.dev'
+  TINYLAP_CLIENT_ID = 'timing'
+  TINYLAP_PLANNER_URL = 'https://circuit30-planner.fly.dev'
+
+# Create it once (apps/timing/README.md):
+#   fly volumes create timing_data --app tinylap-timing --region fra --size 1
+[mounts]
+  source = 'timing_data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Open event streams and decoder posts keep the machine up; when nobody
+  # watches and nothing is posted it stops, and the next request wakes it.
+  # A decoder buffers what it can't send during the second of cold start.
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'
