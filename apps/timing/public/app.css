@@ -143,7 +143,27 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
   cursor: pointer;
 }
 .tap-tile.is-tapped { background: var(--driver, var(--p-accent-1)); }
-.tap-result { font: 700 1.25rem var(--p-font-mono); }
+/* The result bar: sticky above the tiles, a fixed height so the tiles never jump. The driver's colour is its left edge; the state is also a word. */
+.tap-bar {
+  position: sticky; top: 0; z-index: 2;
+  min-height: 5.5rem; box-sizing: border-box;
+  display: grid; align-content: center;
+  padding: var(--p-space-sm) var(--p-space-md);
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text);
+  border-left: 0.75rem solid var(--driver, var(--p-text-faint));
+}
+.tap-bar[data-state="idle"] { color: var(--p-text-muted); border-left-color: var(--p-text-faint); }
+.tap-bar[data-state="error"] { border-left-color: var(--p-error); }
+.tap-bar .tap-result, .tap-bar .status { margin: 0; text-transform: none; letter-spacing: 0; }
+.tap-bar .status { border: 0; padding: 0; background: none; color: var(--p-text); font-size: 1.5rem; }
+.tap-bar .tap-result { font: 700 1.75rem/1.2 var(--p-font-mono); }
+.tap-bar[data-state="idle"] .tap-result { font: 400 1.125rem var(--p-font); }
+.tap-state { display: inline-block; padding: 0.1em 0.5em; margin-right: 0.35em; border: var(--p-border-width) solid var(--p-text); font: 700 0.75rem/1.4 var(--p-font); text-transform: uppercase; letter-spacing: 0.08em; vertical-align: middle; background: var(--p-surface); color: var(--p-text); }
+[data-state="started"] .tap-state, [data-state="lap"] .tap-state { background: var(--p-success); }
+[data-state="again"] .tap-state { background: var(--p-warning); }
+[data-state="error"] .tap-state { background: var(--p-error); color: #fff; }
+.tap-bar:has(#tap-alert > *) .tap-result:empty { display: none; }
 
 /* Selects, styled like palace's text inputs (palace 0.10 leaves them native); belongs upstream in palace-ui. */
 .field select, td select {

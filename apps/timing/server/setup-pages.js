@@ -10,6 +10,7 @@ import * as ops from './operations.js';
 import { readForm } from './form.js';
 import { pageRoute } from './page-access.js';
 import { page, seeOther } from './respond.js';
+import { retryHeaders } from './responses.js';
 import { spacePath } from './spaces.js';
 import { confirmPage } from './views/confirm.js';
 import { setupPage } from './views/setup.js';
@@ -40,7 +41,7 @@ export function renderSetup(request, status, { headers = {}, ...extras } = {}) {
  */
 export function afterForm(request, result, { key, values, section, fieldId = null }) {
   if (!result.error) return seeOther(`${request.space.base}/setup#${section}`);
-  const headers = result.error.retryAfter ? { 'Retry-After': String(result.error.retryAfter) } : undefined;
+  const headers = retryHeaders(result.error);
   return renderSetup(request, result.error.status, { errors: { [key]: result.error }, values: { [key]: values }, failed: { error: result.error, fieldId }, headers });
 }
 

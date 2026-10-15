@@ -9,7 +9,7 @@ import * as ops from './operations.js';
 import { readForm } from './form.js';
 import { pageRoute } from './page-access.js';
 import { page, seeOther } from './respond.js';
-import { json } from './responses.js';
+import { json, retryHeaders } from './responses.js';
 import { spacePath } from './spaces.js';
 import { tapPage, tapResultText } from './views/tap.js';
 
@@ -21,7 +21,9 @@ function showTap(request) {
   const q = request.url.searchParams;
   const driver = drivers.find((d) => d.id === q.get('driver'));
   const kind = q.get('result');
-  const result = driver && RESULTS.has(kind) ? { result: kind, ms: q.has('ms') ? Number(q.get('ms')) : null, driver } : null;
+  // A lap needs its time, as digits; the other results carry none. Anything else is no result.
+  const ms = /^\d{1,9}$/.test(q.get('ms') ?? '') ? Number(q.get('ms')) : null;
+  const result = driver && RESULTS.has(kind) && (kind !== 'lap' || ms !== null) ? { result: kind, ms: kind === 'lap' ? ms : null, driver } : null;
   return page(request, 200, tapPage(request, { drivers, result }));
 }
 
@@ -35,8 +37,7 @@ async function postTap(request) {
   const result = ops.tap(request, { driverId });
   const drivers = request.store.drivers(request.workspaceId);
   if (result.error) {
-    const retryAfter = /** @type {any} */ (result.error).retryAfter;
-    const headers = retryAfter ? { 'Retry-After': String(retryAfter) } : {};
+    const headers = retryHeaders(result.error);
     if (wantsJson(request.req)) return { ...json(result.error.status, { error: result.error.message }, { 'Cache-Control': 'no-store', ...headers }), credentials: true };
     return page(request, result.error.status, tapPage(request, { drivers, error: result.error }), { headers });
   }

@@ -22,8 +22,10 @@ const KINDS = new Set(['qualifying', 'race']);
 /** SHA-256, hex: what is stored of a decoder token. @param {string} token */
 export const tokenHash = (token) => createHash('sha256').update(token).digest('hex');
 
-/** @param {string} problem @param {number} status @param {string} message @param {string} [field] */
-const fail = (problem, status, message, field) => ({ error: { problem, status, message, ...(field ? { field } : {}) } });
+/** @param {string} problem @param {number} status @param {string} message @param {string} [field] @param {number} [retryAfter] seconds, for a 429 */
+const fail = (problem, status, message, field, retryAfter) => ({ error: { problem, status, message, ...(field ? { field } : {}), ...(retryAfter ? { retryAfter } : {}) } });
+/** @param {string} message @param {number} retryAfter seconds */
+const limited = (message, retryAfter) => fail('rate-limited', 429, message, undefined, retryAfter);
 const invalid = (message, field) => fail('invalid-request', 422, message, field);
 const missing = (what) => fail('not-found', 404, `There is no such ${what} here.`);
 
@@ -112,7 +114,7 @@ export async function setTrack(request, { link, name: rawName, direction }) {
 
 export function pairDecoder(request, { name: rawName }) {
   const wait = request.limiters.pair.take(request.userId);
-  if (wait) return { error: { problem: 'rate-limited', status: 429, message: `You paired a lot of decoders just now. Try again in ${wait} seconds.`, retryAfter: wait } };
+  if (wait) return limited(`You paired a lot of decoders just now. Try again in ${wait} seconds.`, wait);
   const name = rawName === undefined ? 'Decoder' : nameOf(rawName);
   if (!name) return invalid('A decoder name is 1 to 60 characters.', 'name');
   const id = randomUUID();
@@ -156,7 +158,7 @@ export function abortSession(request, { id }) {
 export function tap(request, { driverId }) {
   if (typeof driverId !== 'string' || !request.store.driver(request.workspaceId, driverId)) return invalid('Pick one of this space’s drivers.', 'driver');
   const wait = request.limiters.tap.take(request.userId);
-  if (wait) return { error: { problem: 'rate-limited', status: 429, message: `That's a lot of taps. Try again in ${wait} seconds.`, retryAfter: wait } };
+  if (wait) return limited(`That's a lot of taps. Try again in ${wait} seconds.`, wait);
   const row = request.engine.tap(request.workspaceId, driverId);
   return { value: { stored: row !== null, lapMs: row?.lapMs ?? null } };
 }
