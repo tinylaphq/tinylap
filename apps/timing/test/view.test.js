@@ -71,3 +71,9 @@ test('the clock for each state', () => {
   assert.deepEqual(clockOf({ ...race, state: 'done' }, 400_000), { label: 'Finished', ms: 0 });
   assert.deepEqual(clockOf({ ...race, state: 'aborted' }, 400_000), { label: 'Aborted', ms: 0 });
 });
+
+test('a replayed session event with an old `now` leaves the skew alone', () => {
+  const view = applyEvent(createView(), 'snapshot', snapshot(), 45_000);
+  applyEvent(view, 'session', { ...practice, now: 50_000 - 600_000 }, 46_000);
+  assert.equal(view.skew, 5000);
+});

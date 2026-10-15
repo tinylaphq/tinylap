@@ -48,8 +48,12 @@ function live(url, onStatus) {
 
 function bigScreen() {
   document.body.classList.toggle('big');
-  if (document.body.classList.contains('big')) document.documentElement.requestFullscreen?.().catch(() => {});
-  else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (document.body.classList.contains('big')) {
+    // Without a fullscreen API (iOS Safari) or if it is refused, the hidden navbar must not trap the user.
+    const leave = () => document.body.classList.remove('big');
+    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(leave);
+    else leave();
+  } else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
 function watch(token) {

@@ -27,8 +27,9 @@ export function applyEvent(view, type, data, clientNow = Date.now()) {
       });
       break;
     case 'session': {
-      const { now, ...session } = data;
-      view.skew = now - clientNow;
+      // `now` is stamped at publish and replayed after a reconnect: only a snapshot sets the skew.
+      const session = { ...data };
+      delete session.now;
       if (view.session?.id !== session.id) {
         view.standings = [];
         view.crossings = [];
