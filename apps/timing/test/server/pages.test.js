@@ -58,6 +58,8 @@ test('signed out, / is the start page with Sign in', async () => {
   assert.match(res.headers.get('content-type'), /^text\/html/);
   assert.match(res.headers.get('content-security-policy'), /script-src 'self'/);
   assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(res.headers.get('content-security-policy'), /form-action 'self'/);
   const body = await res.text();
   assert.match(body, /<title>TinyLap Timing<\/title>/);
   assert.match(body, /href="\/auth\/login\?returnTo=%2F">Sign in</);
@@ -76,6 +78,14 @@ test('signed in, / goes to your personal board, or the space you used last', asy
   // A space you aren't in is ignored.
   res = await get(zedLogin, '/', { cookie: `${zedLogin.jar.header()}; ${cookie.split(';')[0]}` });
   assert.equal(locationOf(res), '/personal/board');
+});
+
+test('a malformed space cookie is ignored', async () => {
+  for (const bad of ['%E0%A4%A', '%']) {
+    const res = await get(anaLogin, '/', { cookie: `${anaLogin.jar.header()}; __Host-tl-space=${bad}` });
+    assert.equal(res.status, 303, bad);
+    assert.equal(locationOf(res), '/personal/board');
+  }
 });
 
 test('a space path names the space; its own id under /clubs goes to /personal', async () => {

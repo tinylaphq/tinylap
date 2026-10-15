@@ -64,18 +64,33 @@ test('rapid taps: a stale answer does not overwrite the latest', async (t) => {
   const { context, page } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/tap');
+  // Hold the first answer until the second has arrived. The clock moves only
+  // once the server has handled the first tap, so each tap sees its own time.
   let first = true;
+  let handled;
+  let release;
+  const firstHandled = new Promise((resolve) => { handled = resolve; });
+  const firstReleased = new Promise((resolve) => { release = resolve; });
   await page.route('**/personal/tap', async (route) => {
     const response = await route.fetch();
-    if (first) { first = false; await new Promise((resolve) => setTimeout(resolve, 500)); }
+    if (first) {
+      first = false;
+      handled();
+      await firstReleased;
+    }
     await route.fulfill({ response });
   });
   clock.now += 5000;
   await page.getByRole('button', { name: 'Ana' }).click();
+  await firstHandled;
   clock.now += 7000;
   await page.getByRole('button', { name: 'Ana' }).click();
   await page.getByRole('status').filter({ hasText: 'Ana: 7.000' }).waitFor();
-  await page.waitForTimeout(800);
+  const settled = page.waitForEvent('requestfinished');
+  release();
+  await settled;
+  // Two frames: the stale answer's script has run by then.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.match(await page.getByRole('status').innerText(), /Ana: 7\.000/);
   assert.equal(await page.getByRole('alert').count(), 0);
 });

@@ -21,7 +21,8 @@ const COOKIE = new RegExp(`(?:^|;\\s*)${SPACE_COOKIE}=([^;]+)`);
 /** The cookie's space, if it is still one of yours. */
 function lastSpace(request) {
   const raw = COOKIE.exec(String(request.req.headers.cookie ?? ''))?.[1];
-  const base = raw ? decodeURIComponent(raw) : null;
+  let base = null;
+  try { base = raw ? decodeURIComponent(raw) : null; } catch { /* a malformed cookie is ignored */ }
   const spaces = spacesOf(request.session.claims);
   return spaces.find((s) => s.base === base) ?? spaces.find((s) => s.kind === 'personal') ?? spaces[0] ?? null;
 }

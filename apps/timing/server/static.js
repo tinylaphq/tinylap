@@ -8,7 +8,7 @@
 // an edit shows on the next reload.
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname } from 'node:path';
 import { packageRoots, resolveUrl, within } from '../../../tools/serve-map.js';
 import { matchesEtag } from './negotiate.js';
 
@@ -62,9 +62,7 @@ export function staticFiles({ root, appDir, formAction = [] }) {
       return { status: 405, headers: { Allow: 'GET, HEAD', 'Cache-Control': 'no-store' }, body: '' };
     }
     const { pathname } = url;
-    const file = dev
-      ? resolveUrl(appDir, roots, pathname)
-      : pathname === '/' ? join(root, 'index.html') : within(root, pathname.slice(1));
+    const file = dev ? resolveUrl(appDir, roots, pathname) : within(root, pathname.slice(1));
     if (!file || file.endsWith('.gz') || !(await isFile(file))) return missing;
 
     const type = TYPES[extname(file)] ?? 'application/octet-stream';
