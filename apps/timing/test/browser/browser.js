@@ -11,8 +11,8 @@ import { launchOptions } from '../../../accounts/playwright.config.js';
 export const openBrowser = () => chromium.launch(launchOptions);
 
 /** A page as `who` (a login from startTiming, or null), collecting script errors and CSP violations. */
-export async function pageAs(browser, app, who, { viewport = { width: 1280, height: 800 } } = {}) {
-  const context = await browser.newContext({ baseURL: app.base, viewport });
+export async function pageAs(browser, app, who, { viewport = { width: 1280, height: 800 }, javaScriptEnabled = true } = {}) {
+  const context = await browser.newContext({ baseURL: app.base, viewport, javaScriptEnabled });
   if (who) {
     // The app sets a Secure __Host- cookie; Playwright takes it for a plain-http host by domain and path, not url.
     const cookies = [...who.jar.cookies].map(([name, value]) => ({ name, value, domain: new URL(app.base).hostname, path: '/', secure: true, httpOnly: true, sameSite: 'Lax' }));

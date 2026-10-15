@@ -221,9 +221,11 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 /* The bridge screen: the status strip is the loud part, like the lamp on a decoder. */
 .bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-surface); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
 .bridge-state p { margin: 0; }
+.bridge-state [data-bridge-status] { overflow-wrap: anywhere; min-width: 0; }
+.bridge-preview { margin-right: var(--p-space-sm); }
 .bridge-outbox { font: 700 1.5rem var(--p-font-mono); }
 .bridge-state.is-offline { box-shadow: var(--p-shadow-lg) var(--p-warning); }
-.bridge-preview { max-width: 32rem; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-xs) var(--p-space-md); }
+.bridge-preview { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-xs) var(--p-space-md); }
 .bridge-preview li { justify-content: space-between; }
 .bridge-preview .num:first-child { text-align: left; margin-left: 0; }
 .bridge-preview li:last-child { border-bottom: 0; }
