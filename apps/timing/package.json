@@ -10,7 +10,7 @@
     "js"
   ],
   "scripts": {
-    "test": "node --disable-warning=ExperimentalWarning --test 'test/server/*.test.js'",
+    "test": "node --disable-warning=ExperimentalWarning --test 'test/*.test.js' 'test/server/*.test.js'",
     "dev": "node --disable-warning=ExperimentalWarning server/main.js --dev",
     "start": "node --disable-warning=ExperimentalWarning server/main.js",
     "typecheck": "tsc -p tsconfig.json",
