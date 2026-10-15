@@ -5,8 +5,8 @@
 // Live events per workspace (spec §7): a log of the last ten minutes, so a
 // reconnecting client gets what it missed, and fan-out to subscribers.
 // Watchers see a redacted version of each event, or none (setup events).
-// Ids restart with the process; an id the log doesn't hold means "send a
-// snapshot", which is also right after a restart.
+// Ids are globally unique across restarts via firstId (e.g. timestamp * 1000);
+// an id the log doesn't hold means "send a snapshot".
 
 /**
  * @typedef {{ id: number, type: string, data: unknown, watcher: unknown, at: number }} LiveEvent
@@ -14,18 +14,25 @@
  * @typedef {{ watcher: boolean, tag: string | null, send: (event: Sent) => void, onClose: (() => void) | null }} Subscriber
  */
 
-/** @param {{ now?: () => number, keepMs?: number }} [options] */
-export function createHub({ now = Date.now, keepMs = 600_000 } = {}) {
-  let next = 1;
+/** @param {{ now?: () => number, keepMs?: number, firstId?: number }} [options] */
+export function createHub({ now = Date.now, keepMs = 600_000, firstId = Date.now() * 1000 } = {}) {
+  let next = firstId;
   /** @type {Map<string, LiveEvent[]>} */
   const log = new Map();
   /** @type {Map<string, Set<Subscriber>>} */
   const subscribers = new Map();
 
-  /** @param {Subscriber} sub @param {LiveEvent} event */
-  const deliver = (sub, event) => {
+  /** @param {string} workspaceId @param {Subscriber} sub @param {LiveEvent} event */
+  const deliver = (workspaceId, sub, event) => {
     const data = sub.watcher ? event.watcher : event.data;
-    if (data !== null) sub.send({ id: event.id, type: event.type, data });
+    if (data !== null) {
+      try {
+        sub.send({ id: event.id, type: event.type, data });
+      } catch {
+        const set = subscribers.get(workspaceId);
+        if (set) set.delete(sub);
+      }
+    }
   };
   /** @param {string} workspaceId */
   const events = (workspaceId) => {
@@ -41,7 +48,7 @@ export function createHub({ now = Date.now, keepMs = 600_000 } = {}) {
     publish(workspaceId, type, data, watcherData) {
       const event = { id: next++, type, data, watcher: watcherData === undefined ? data : watcherData, at: now() };
       events(workspaceId).push(event);
-      for (const sub of subscribers.get(workspaceId) ?? []) deliver(sub, event);
+      for (const sub of subscribers.get(workspaceId) ?? []) deliver(workspaceId, sub, event);
     },
     /**
      * @param {string} workspaceId
@@ -58,7 +65,7 @@ export function createHub({ now = Date.now, keepMs = 600_000 } = {}) {
         const i = list.findIndex((e) => e.id === lastEventId);
         if (i !== -1) {
           replay = 'events';
-          for (const event of list.slice(i + 1)) deliver(sub, event);
+          for (const event of list.slice(i + 1)) deliver(workspaceId, sub, event);
         }
       }
       const set = subscribers.get(workspaceId) ?? new Set();
@@ -77,7 +84,11 @@ export function createHub({ now = Date.now, keepMs = 600_000 } = {}) {
       for (const sub of [...set]) {
         if (sub.tag !== tag) continue;
         set.delete(sub);
-        sub.onClose?.();
+        try {
+          sub.onClose?.();
+        } catch {
+          // Ignore errors in onClose callbacks
+        }
       }
     },
   };

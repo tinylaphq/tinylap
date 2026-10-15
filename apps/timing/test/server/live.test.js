@@ -12,7 +12,7 @@ const collect = () => {
 };
 
 test('subscribers get what is published in their workspace', () => {
-  const hub = createHub();
+  const hub = createHub({ firstId: 1 });
   const a = collect();
   const b = collect();
   hub.subscribe('w1', { lastEventId: null, watcher: false }, a.send);
@@ -23,7 +23,7 @@ test('subscribers get what is published in their workspace', () => {
 });
 
 test('watchers get the watcher version, or nothing for members-only events', () => {
-  const hub = createHub();
+  const hub = createHub({ firstId: 1 });
   const w = collect();
   hub.subscribe('w1', { lastEventId: null, watcher: true }, w.send);
   hub.publish('w1', 'crossing', { transponder: '0A', lapMs: 8000 }, { lapMs: 8000 });
@@ -33,7 +33,7 @@ test('watchers get the watcher version, or nothing for members-only events', () 
 });
 
 test('a reconnect gets the events after its last id, or a snapshot', () => {
-  const hub = createHub();
+  const hub = createHub({ firstId: 1 });
   hub.publish('w1', 'a', 1);
   hub.publish('w1', 'b', 2);
   hub.publish('w1', 'c', 3);
@@ -47,7 +47,7 @@ test('a reconnect gets the events after its last id, or a snapshot', () => {
 
 test('events older than the window are forgotten', () => {
   let t = 0;
-  const hub = createHub({ now: () => t, keepMs: 1000 });
+  const hub = createHub({ now: () => t, keepMs: 1000, firstId: 1 });
   hub.publish('w1', 'old', 1);
   t = 2000;
   hub.publish('w1', 'new', 2);
@@ -56,7 +56,7 @@ test('events older than the window are forgotten', () => {
 });
 
 test('unsubscribe and closeTagged stop delivery', () => {
-  const hub = createHub();
+  const hub = createHub({ firstId: 1 });
   const a = collect();
   const b = collect();
   let closed = 0;
@@ -68,4 +68,36 @@ test('unsubscribe and closeTagged stop delivery', () => {
   assert.deepEqual(a.got, []);
   assert.deepEqual(b.got, []);
   assert.equal(closed, 1);
+});
+
+test('two hubs with different firstId bases never share ids', () => {
+  const hub1 = createHub({ firstId: 1 });
+  const hub2 = createHub({ firstId: 1000 });
+  hub1.publish('w1', 'a', 1);
+  hub2.publish('w1', 'b', 2);
+  assert.equal(hub1.lastId(), 1);
+  assert.equal(hub2.lastId(), 1000);
+  const r = collect();
+  assert.equal(hub2.subscribe('w1', { lastEventId: 1, watcher: false }, r.send).replay, 'snapshot');
+  assert.deepEqual(r.got, []);
+});
+
+test('a subscriber whose send throws does not stop a second subscriber, and is not called again', () => {
+  const hub = createHub({ firstId: 1 });
+  const good = collect();
+  let throwCount = 0;
+  const thrower = {
+    send: () => {
+      throwCount += 1;
+      throw new Error('boom');
+    },
+  };
+  hub.subscribe('w1', { lastEventId: null, watcher: false }, thrower.send);
+  hub.subscribe('w1', { lastEventId: null, watcher: false }, good.send);
+  hub.publish('w1', 'event1', { data: 1 });
+  assert.equal(throwCount, 1);
+  assert.deepEqual(good.got, [{ id: 1, type: 'event1', data: { data: 1 } }]);
+  hub.publish('w1', 'event2', { data: 2 });
+  assert.equal(throwCount, 1, 'thrower should not be called again');
+  assert.deepEqual(good.got.length, 2);
 });

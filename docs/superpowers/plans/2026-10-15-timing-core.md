@@ -4471,7 +4471,7 @@ const WATCH_TOKEN = /^[A-Za-z0-9_-]{22}$/;
 
 const lastEventIdOf = (req) => {
   const value = req.headers['last-event-id'];
-  return typeof value === 'string' && /^\d{1,15}$/.test(value) ? Number(value) : null;
+  return typeof value === 'string' && /^\d{1,16}$/.test(value) ? Number(value) : null;
 };
 
 /** @param {any} request @param {string} workspaceId @param {{ watcher: boolean, tag?: string }} options */
