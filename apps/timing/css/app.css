@@ -142,3 +142,15 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
   color: var(--p-text);
 }
 .field select:focus-visible, td select:focus-visible { outline: none; border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); }
+
+/* The bridge screen: the status strip is the loud part, like the lamp on a decoder. */
+.bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: #fff; box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
+.bridge-state p { margin: 0; }
+.bridge-outbox { font: 700 1.5rem var(--p-font-mono); }
+.bridge-preview { max-width: 32rem; }
+.field input { font: inherit; font-weight: 400; }
+.bridge-state.is-offline { box-shadow: var(--p-shadow-lg) var(--p-warning); }
+.bridge-preview { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-xs) var(--p-space-md); }
+.bridge-preview li { justify-content: space-between; }
+.bridge-preview .num:first-child { text-align: left; margin-left: 0; }
+.bridge-preview li:last-child { border-bottom: 0; }

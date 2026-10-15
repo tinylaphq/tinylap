@@ -6,6 +6,7 @@
 // leaves the fragment), otherwise log-in, a workspace, and its screens.
 import { api } from './api.js';
 import { mountBoard } from './board.js';
+import { mountBridge } from './bridge-view.js';
 import { mountControl } from './control.js';
 import { h } from './dom.js';
 import { connect } from './live.js';
@@ -19,6 +20,7 @@ export const SCREENS = [
   { id: 'control', label: 'Race', mount: mountControl },
   { id: 'tap', label: 'Tap', mount: mountTap },
   { id: 'setup', label: 'Setup', mount: mountSetup },
+  { id: 'bridge', label: 'Bridge', mount: mountBridge },
 ];
 
 const app = document.querySelector('#app');
