@@ -94,3 +94,18 @@ test('rapid taps: a stale answer does not overwrite the latest', async (t) => {
   assert.match(await page.getByRole('status').innerText(), /Ana: 7\.000/);
   assert.equal(await page.getByRole('alert').count(), 0);
 });
+
+test('an expired session says to sign in again, with a link back to the page', async (t) => {
+  const user = await app.signUp('Ben');
+  const who = await app.login(user);
+  await app.form(who, '/personal/drivers', { name: 'Ben' });
+  const { context, page } = await pageAs(browser, app, who, { viewport: { width: 390, height: 844 } });
+  t.after(() => context.close());
+  await page.goto('/personal/tap');
+  await context.clearCookies();
+  await page.getByRole('button', { name: 'Ben' }).click();
+  const alert = page.getByRole('alert');
+  await alert.filter({ hasText: 'Sign in again to keep tapping.' }).waitFor();
+  assert.equal(await alert.getByRole('link', { name: 'Sign in again' }).getAttribute('href'), '/personal/tap');
+  assert.equal(new URL(page.url()).pathname, '/personal/tap');
+});
