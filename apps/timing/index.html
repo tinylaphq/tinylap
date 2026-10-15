@@ -17,10 +17,12 @@
     <span class="navbar-brand">TinyLap Timing</span>
     <div class="nav-tabs" id="tabs"></div>
     <div class="navbar-right">
-      <select id="workspace" class="nav-select" aria-label="Workspace"></select>
       <span class="live-status" id="live-status" role="status"></span>
       <button type="button" class="btn btn-sm btn-outline" id="btn-big">Big screen</button>
-      <form method="post" action="/auth/logout"><button type="submit" class="btn btn-sm btn-outline">Log out</button></form>
+      <div class="nav-account">
+        <select id="workspace" class="nav-select" aria-label="Workspace"></select>
+        <form method="post" action="/auth/logout"><button type="submit" class="btn btn-sm btn-outline">Log out</button></form>
+      </div>
     </div>
   </nav>
   <main id="app"></main>

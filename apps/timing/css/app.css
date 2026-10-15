@@ -36,6 +36,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 }
 .nav-select option { color: var(--p-text); background: var(--p-surface); }
 .navbar-right form { margin: 0; }
+/* Board controls first, then who and where you are, set apart. */
+.nav-account { display: flex; align-items: center; gap: var(--p-space-sm); margin-left: var(--p-space-md); padding-left: var(--p-space-md); border-left: var(--p-border-thin) solid var(--p-border-dark); }
 .navbar .btn-outline { color: var(--p-surface); border-color: var(--p-surface); background: transparent; }
 .navbar .btn-outline:hover { background: var(--p-surface); color: var(--p-text); }
 .live-status { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--p-surface); white-space: nowrap; }
@@ -109,6 +111,7 @@ body.big .board-table th, body.big .board-table td { padding-block: 0.35em; }
   .board-table th, .board-table td { padding: var(--p-space-sm); }
   .navbar { height: auto; flex-wrap: wrap; padding: var(--p-space-sm) var(--p-space-md); }
   .navbar-right { flex-wrap: wrap; gap: var(--p-space-sm); }
+  .nav-account { margin-left: 0; padding-left: 0; border-left: 0; }
   .nav-tabs { margin-left: 0; }
 }
 
