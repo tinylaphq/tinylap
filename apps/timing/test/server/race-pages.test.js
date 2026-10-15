@@ -42,7 +42,7 @@ test('start a race from the form, then abort it after confirming', async () => {
   assert.deepEqual([session.kind, session.durationMs, session.roster], ['race', 120_000, [a.id, b.id]]);
 
   const running = await (await get(`${base}/race`)).text();
-  assert.match(running, /<h2[^>]*>Race<\/h2>/);
+  assert.match(running, /<h2[^>]*>Race, running<\/h2>/);
   assert.match(running, new RegExp(`<a[^>]*href="${base}/sessions/${session.id}/abort"`));
   assert.doesNotMatch(running, /<form[^>]*action="\/clubs/, 'abort needs the confirmation page first');
 
@@ -92,4 +92,31 @@ test('a bad form comes back with one summary and what was chosen', async () => {
   const text = await long.text();
   assert.match(text, /<a href="#race-duration">/);
   assert.match(text, /id="race-duration"[^>]*value="120"[^>]*aria-invalid="true"/);
+});
+
+test('a bad minutes or countdown value says what is allowed and keeps the input', async () => {
+  const [a] = app.store.drivers(office.id);
+  for (const duration of ['abc', '1e3', '-5', '0.0001']) {
+    const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', duration], ['countdown', '10']]);
+    assert.equal(res.status, 422, duration);
+    const body = await res.text();
+    assert.match(body, /<p class="status status-error" role="alert"><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/p>/, duration);
+    assert.match(body, /id="race-duration"[^>]*aria-invalid="true"/, duration);
+    if (duration !== 'abc') assert.match(body, new RegExp(`id="race-duration"[^>]*value="${duration}"`), duration);
+  }
+  const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '5'], ['countdown', '2.5']]);
+  assert.equal(res.status, 422);
+  const body = await res.text();
+  assert.match(body, /<a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a>/);
+  assert.match(body, /id="race-countdown"[^>]*value="2.5"[^>]*aria-invalid="true"/);
+  assert.equal(app.store.activeSession(office.id), null);
+});
+
+test('a running session names its drivers and length', async () => {
+  const drivers = app.store.drivers(office.id);
+  await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ...drivers.map((d) => ['roster', d.id]), ['duration', '3']]);
+  const body = await (await get(`${base}/race`)).text();
+  assert.match(body, /<h2[^>]*>Qualifying, running<\/h2>/);
+  assert.match(body, /Ana, Ben\. 3 minutes\./);
+  await app.form(member, `${base}/sessions/${app.store.activeSession(office.id).id}/abort`, {});
 });

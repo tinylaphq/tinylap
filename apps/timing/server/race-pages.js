@@ -13,11 +13,11 @@ import { racePage } from './views/race.js';
 
 const NO_SESSION = { message: 'There is no running qualifying or race here.' };
 
-/** @param {any} request @param {number} status @param {{ error?: any, values?: any, headers?: Record<string, any> }} [extras] */
-function renderRace(request, status, { error = null, values = null, headers } = {}) {
+/** @param {any} request @param {number} status @param {{ error?: any, values?: any }} [extras] */
+function renderRace(request, status, { error = null, values = null } = {}) {
   const ws = request.workspaceId;
   const session = request.store.activeSession(ws);
-  return page(request, status, racePage(request, { session, drivers: request.store.drivers(ws), error, values }), { headers });
+  return page(request, status, racePage(request, { session, drivers: request.store.drivers(ws), error, values }));
 }
 
 async function start(request) {
@@ -25,16 +25,19 @@ async function start(request) {
   if (error) return error;
   const values = { kind: form.get('kind') ?? '', roster: form.getAll('roster'), duration: form.get('duration') ?? '', countdown: form.get('countdown') ?? '' };
   // A blank box is "use the default" on a form; the operation only takes a missing value.
+  // The box takes whole minutes, as its min and max say.
   const minutes = values.duration === '' ? undefined : Number(values.duration);
+  if (minutes !== undefined && !(Number.isInteger(minutes) && minutes >= 1 && minutes <= 60)) {
+    return renderRace(request, 422, { error: { problem: 'invalid-request', status: 422, field: 'duration', message: 'A session lasts 1 to 60 minutes.' }, values });
+  }
   const result = ops.startSession(request, {
     kind: values.kind,
     roster: values.roster,
-    durationSeconds: minutes === undefined ? undefined : Math.round(minutes * 60),
+    durationSeconds: minutes === undefined ? undefined : minutes * 60,
     countdownSeconds: values.countdown === '' ? undefined : values.countdown,
   });
   if (!result.error) return seeOther(`${request.space.base}/board`);
-  const headers = result.error.retryAfter ? { 'Retry-After': String(result.error.retryAfter) } : undefined;
-  return renderRace(request, result.error.status, { error: result.error, values, headers });
+  return renderRace(request, result.error.status, { error: result.error, values });
 }
 
 function askAbort(request, match) {

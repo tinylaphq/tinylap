@@ -9,11 +9,13 @@ import { html } from './html.js';
 /** @param {{ field?: string, message: string } | null | undefined} error @param {string} name */
 const errorFor = (error, name) => (error && error.field === name ? error.message : null);
 
-export function textField({ label, name, value = '', error = null, type = 'text', required = false, maxlength = null, placeholder = null, readonly = false, labelHidden = false, min = null, max = null, id }) {
+export function textField({ label, name, value = '', error = null, type = 'text', required = false, maxlength = null, placeholder = null, readonly = false, labelHidden = false, min = null, max = null, inputmode = null, hint = null, id }) {
   const message = errorFor(error, name);
+  const described = [message ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(' ');
   return html`<div class="field">
   <label for="${id}"${labelHidden ? html` class="visually-hidden"` : null}>${label}</label>
-  <input type="${type}" id="${id}" name="${name}" value="${value}"${required ? html` required` : null}${readonly ? html` readonly` : null}${min !== null ? html` min="${min}"` : null}${max !== null ? html` max="${max}"` : null}${maxlength ? html` maxlength="${maxlength}"` : null}${placeholder ? html` placeholder="${placeholder}"` : null}${message ? html` aria-invalid="true" aria-describedby="${id}-error"` : null}>
+  <input type="${type}" id="${id}" name="${name}" value="${value}"${required ? html` required` : null}${readonly ? html` readonly` : null}${min !== null ? html` min="${min}"` : null}${max !== null ? html` max="${max}"` : null}${maxlength ? html` maxlength="${maxlength}"` : null}${placeholder ? html` placeholder="${placeholder}"` : null}${inputmode ? html` inputmode="${inputmode}"` : null}${message ? html` aria-invalid="true"` : null}${described ? html` aria-describedby="${described}"` : null}>
+  ${hint ? html`<p class="field-hint" id="${id}-hint">${hint}</p>` : null}
   ${message ? html`<p class="field-error" id="${id}-error">${message}</p>` : null}
 </div>`;
 }
