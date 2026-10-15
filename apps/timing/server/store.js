@@ -59,7 +59,14 @@ CREATE INDEX IF NOT EXISTS crossing_transponder ON crossing (workspace_id, trans
 
 const ACTIVE = "('countdown', 'running', 'finishing')";
 
-/** @param {DatabaseSync} db */
+/**
+ * @typedef {import('@tinylap/auth').SessionStore & {
+ *   getName(id: string): string | null,
+ *   setName(id: string, name: string): void,
+ * }} TimingSessions
+ */
+
+/** @param {DatabaseSync} db @returns {TimingSessions} */
 function sessionStore(db) {
   const select = db.prepare('SELECT user_id, sealed_tokens, created_at, expires_at FROM bff_session WHERE id = ?');
   const upsert = db.prepare(`INSERT INTO bff_session (id, user_id, sealed_tokens, created_at, expires_at) VALUES (?, ?, ?, ?, ?)
