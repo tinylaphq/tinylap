@@ -7,9 +7,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import openapi from '../../server/openapi.json' with { type: 'json' };
+import { pageRoutes } from '../../server/page-routes.js';
 import { routes } from '../../server/routes.js';
 
-const real = routes.filter((r) => !r.unknown);
+// Pages are not part of the JSON API.
+const real = routes.filter((r) => !r.unknown && !pageRoutes.includes(r));
 const sample = (path) => path.replace(/\{[^}]+\}/g, 'x1');
 
 test('every documented operation has a route', () => {

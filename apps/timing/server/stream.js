@@ -6,7 +6,11 @@
 // stream starts with what the client missed (Last-Event-ID) or a snapshot.
 // Watcher streams are tagged with their token, so rotating it ends them.
 import { NO_STORE, workspaceRoute } from './access.js';
+import { prefersHtml } from './negotiate.js';
 import { json, problem } from './responses.js';
+import { page } from './respond.js';
+import { boardPage } from './views/board.js';
+import { watchGonePage } from './views/notice.js';
 
 export const HEARTBEAT_MS = 15_000;
 const SSE_HEADERS = { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' };
@@ -39,6 +43,28 @@ function eventStream(request, workspaceId, { watcher, tag }) {
 
 const watched = (request, token) => (WATCH_TOKEN.test(token) && request.store ? request.store.workspaceByWatchToken(token) : null);
 const noWatch = (request) => problem(request, 'not-found', 'There is no such watchers link; ask for a new one.');
+const wantsPage = (req) => req.headers['sec-fetch-mode'] === 'navigate' || prefersHtml(req.headers.accept);
+
+const VARY = ['Accept', 'Sec-Fetch-Mode'];
+/** Adds what /watch/<token> negotiates on to any Vary the response has. */
+const varied = (response) => {
+  const have = String(response.headers?.Vary ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+  const extra = VARY.filter((v) => !have.some((h) => h.toLowerCase() === v.toLowerCase()));
+  return { ...response, headers: { ...response.headers, Vary: [...have, ...extra].join(', ') } };
+};
+
+// The token is a secret in the path: never referred onward, never cached. The
+// JSON branch is the plain API and never touches log-in; a watcher page needs
+// no account either (layout shows watchers no menu and no sign-in).
+const watchBoard = (request, [, token]) => {
+  const workspaceId = watched(request, token);
+  if (!wantsPage(request.req)) {
+    return varied(workspaceId ? json(200, request.engine.snapshot(workspaceId, { watcher: true }), NO_STORE) : noWatch(request));
+  }
+  const headers = { 'Referrer-Policy': 'no-referrer' };
+  if (!workspaceId) return varied(page(request, 404, watchGonePage(request), { headers }));
+  return varied(page(request, 200, boardPage(request, request.engine.snapshot(workspaceId, { watcher: true }), { watcher: true, big: request.url.searchParams.has('big'), token }), { headers }));
+};
 
 export const streamRoutes = [
   {
@@ -49,10 +75,7 @@ export const streamRoutes = [
   {
     pattern: /^\/watch\/([^/]+)$/,
     methods: {
-      GET: (request, [, token]) => {
-        const workspaceId = watched(request, token);
-        return workspaceId ? json(200, request.engine.snapshot(workspaceId, { watcher: true }), NO_STORE) : noWatch(request);
-      },
+      GET: watchBoard,
     },
   },
   {

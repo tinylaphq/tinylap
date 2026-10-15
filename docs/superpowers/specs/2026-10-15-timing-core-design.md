@@ -1,5 +1,7 @@
 # Timing Core — Design Specification
 
+> The browser app (§7 watchers page, §8) is replaced by `docs/superpowers/specs/2026-10-15-timing-ui-server-rendered-design.md`.
+
 Date: 2026-10-15
 Extends: `docs/superpowers/specs/2026-10-13-track-identity-design.md`,
 `docs/superpowers/specs/2026-10-14-planner-server-design.md`,

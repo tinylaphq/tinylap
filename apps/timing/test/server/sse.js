@@ -2,8 +2,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/** Reads a text/event-stream response as { id, type, data } events. @param {Response} res */
-export async function* events(res) {
+/**
+ * Reads a text/event-stream response as { id, type, data } events. Data
+ * lines are joined with "\n"; `raw` keeps them as text instead of JSON.
+ * @param {Response} res @param {{ raw?: boolean }} [options]
+ */
+export async function* events(res, { raw = false } = {}) {
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = '';
   try {
@@ -15,13 +19,19 @@ export async function* events(res) {
       while ((end = buffer.indexOf('\n\n')) !== -1) {
         const block = buffer.slice(0, end);
         buffer = buffer.slice(end + 2);
-        const fields = {};
+        let id = null;
+        let type = null;
+        const data = [];
         for (const line of block.split('\n')) {
           if (!line || line.startsWith(':')) continue;
           const colon = line.indexOf(':');
-          fields[line.slice(0, colon)] = line.slice(colon + 1).trimStart();
+          const key = line.slice(0, colon);
+          const val = line.slice(colon + 1).replace(/^ /, '');
+          if (key === 'id') id = Number(val);
+          else if (key === 'event') type = val;
+          else if (key === 'data') data.push(val);
         }
-        if (fields.event) yield { id: Number(fields.id), type: fields.event, data: JSON.parse(fields.data) };
+        if (type) yield { id, type, data: raw ? data.join('\n') : JSON.parse(data.join('\n')) };
       }
     }
   } finally {

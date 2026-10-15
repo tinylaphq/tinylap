@@ -7,36 +7,20 @@
 import { NO_STORE, workspaceRoute } from './access.js';
 import { readJson } from './body.js';
 import { publicSession } from './engine.js';
-import { json, problem } from './responses.js';
+import * as ops from './operations.js';
+import { json, opProblem, problem } from './responses.js';
 
-const KINDS = new Set(['qualifying', 'race']);
-const MAX_ROSTER = 20;
 const invalid = (request, detail) => problem(request, 'invalid-request', detail);
-const notFound = (request) => problem(request, 'not-found', 'There is no such session in this workspace.');
-
-/** An integer in [min, max], `fallback` when absent, or null. */
-const intIn = (value, min, max, fallback) => {
-  if (value === undefined) return fallback;
-  return Number.isInteger(value) && value >= min && value <= max ? value : null;
-};
+const notFound = (request) => problem(request, 'not-found', 'There is no such session here.');
 
 async function startSession(request) {
   const { body, error } = await readJson(request);
   if (error) return error;
-  if (!KINDS.has(body.kind)) return invalid(request, '`kind` must be "qualifying" or "race".');
-  const { roster } = body;
-  if (!Array.isArray(roster) || roster.length < 1 || roster.length > MAX_ROSTER) return invalid(request, `\`roster\` must list 1 to ${MAX_ROSTER} drivers.`);
-  if (new Set(roster).size !== roster.length) return invalid(request, 'A driver can be on the roster only once.');
-  if (!roster.every((id) => typeof id === 'string' && request.store.driver(request.workspaceId, id))) return invalid(request, 'Every roster entry must be a driver of this workspace.');
-  const duration = intIn(body.durationSeconds, 10, 3600, 300);
-  if (duration === null) return invalid(request, '`durationSeconds` must be a whole number from 10 to 3600.');
-  const countdown = intIn(body.countdownSeconds, 0, 30, 10);
-  if (countdown === null) return invalid(request, '`countdownSeconds` must be a whole number from 0 to 30.');
-  const result = request.engine.start(request.workspaceId, {
-    kind: body.kind, roster, durationMs: duration * 1000, countdownMs: body.kind === 'race' ? countdown * 1000 : 0,
-  });
-  if (result.error) return problem(request, 'conflict', 'A qualifying or race is already running here.');
-  return json(201, publicSession(result.session), NO_STORE);
+  for (const key of ['durationSeconds', 'countdownSeconds']) {
+    if (typeof body[key] === 'string') return invalid(request, `\`${key}\` must be a whole number.`);
+  }
+  const r = ops.startSession(request, { kind: body.kind, roster: body.roster, durationSeconds: body.durationSeconds, countdownSeconds: body.countdownSeconds });
+  return r.error ? opProblem(request, r.error) : json(201, r.value, NO_STORE);
 }
 
 function listSessions(request) {
@@ -53,8 +37,8 @@ function getSession(request, match) {
 
 function abortSession(request, match) {
   request.req.resume();
-  const ended = request.engine.abort(request.workspaceId, match[2]);
-  return ended ? json(200, publicSession(ended), NO_STORE) : problem(request, 'not-found', 'There is no running qualifying or race with this id.');
+  const r = ops.abortSession(request, { id: match[2] });
+  return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
 }
 
 const path = (rest) => new RegExp(`^/workspaces/([^/]+)/${rest}$`);

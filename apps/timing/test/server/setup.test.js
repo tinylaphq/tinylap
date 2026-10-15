@@ -18,7 +18,7 @@ let path;
 
 before(async () => {
   planner = await startPlannerStub();
-  app = await startTiming({ plannerUrl: planner.url, limits: { pair: 3 } });
+  app = await startTiming({ plannerUrl: planner.url, limits: { pair: 4 } });
   const [ana, ben, cy, zed] = await Promise.all(['Ana', 'Ben', 'Cy', 'Zed'].map((n) => app.signUp(n)));
   office = app.club(ana, 'Office');
   app.join(ana, office.id, ben);
@@ -73,6 +73,7 @@ test('assigning a transponder; deleting its driver unassigns it', async () => {
 });
 
 test('pairing a decoder answers its token once', async () => {
+  await problemOf(await app.api(member, 'POST', path('decoders'), { name: '' }), 422, 'invalid-request');
   const res = await app.api(member, 'POST', path('decoders'), { name: 'Start line' });
   assert.equal(res.status, 201);
   const decoder = await res.json();
@@ -87,7 +88,7 @@ test('pairing a decoder answers its token once', async () => {
 });
 
 test('pairing is rate limited per member', async () => {
-  // The limit is 3 per hour here; the test above used one.
+  // The limit is 4 per hour here; the test above used two (one refused for its name).
   assert.equal((await app.api(member, 'POST', path('decoders'), {})).status, 201);
   assert.equal((await app.api(member, 'POST', path('decoders'), {})).status, 201);
   const res = await app.api(member, 'POST', path('decoders'), {});
@@ -102,6 +103,7 @@ test('the current track comes from a planner link', async () => {
   assert.deepEqual([snapshot.track, snapshot.direction], [{ id: closed.track.id, name: 'Office loop' }, 'cw']);
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${OPEN}`, direction: 'cw' }), 422, 'not-a-circuit');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, direction: 'up' }), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name: '', direction: 'cw' }), 422, 'invalid-request');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: 'https://elsewhere.example/layouts/x', direction: 'cw' }), 422, 'invalid-request');
 });
 
@@ -113,4 +115,15 @@ test('a new watchers token replaces the old one', async () => {
   assert.notEqual(first, second);
   assert.equal(app.store.workspaceByWatchToken(first), null);
   assert.equal(app.store.workspaceByWatchToken(second), office.id);
+});
+
+test('names with control characters are refused for drivers, tracks and decoders', async () => {
+  for (const name of ['A\rB', 'A\nB', 'A\u0000B', 'A\u007fB']) {
+    await problemOf(await app.api(member, 'POST', path('drivers'), { name }), 422, 'invalid-request');
+    await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name, direction: 'cw' }), 422, 'invalid-request');
+  }
+  const ok = await (await app.api(member, 'POST', path('drivers'), { name: 'Ctl' })).json();
+  await problemOf(await app.api(member, 'PATCH', path(`drivers/${ok.id}`), { name: 'Ctl\r\nevent: x' }), 422, 'invalid-request');
+  await problemOf(await app.api(admin, 'POST', path('decoders'), { name: 'Gate\r' }), 422, 'invalid-request');
+  assert.ok(app.store.drivers(office.id).every((d) => ![...d.name].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)));
 });

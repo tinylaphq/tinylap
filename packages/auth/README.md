@@ -20,7 +20,7 @@ const claims = await verifyAccessToken(token, {
 });
 
 console.log(claims.sub); // user ID
-console.log(claims.workspaces); // [{ id, role }]
+console.log(claims.workspaces); // [{ id, role, name?, kind? }]
 ```
 
 ## `can(claims, workspaceId, action)`

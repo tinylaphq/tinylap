@@ -242,7 +242,7 @@ export function authOptions(config, db = null) {
         // Every workspace the user is in, read live at each issuance, so
         // a refresh picks up role changes (spec §3).
         customAccessTokenClaims: ({ user }) => ({
-          workspaces: user && db ? listMemberships(db, user.id).map(({ id, role, name }) => ({ id, role, name })) : [],
+          workspaces: user && db ? listMemberships(db, user.id).map(({ id, role, name, kind }) => ({ id, role, name, kind })) : [],
         }),
       }),
       passkeyPlugin(config, db),

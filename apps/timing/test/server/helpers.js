@@ -13,7 +13,7 @@ import { createEngine } from '../../server/engine.js';
 import { createAuth } from '../../server/auth.js';
 import { driveAuthorize, Jar, startSuite } from '../../../../tools/test-env.js';
 import { testSession } from '../../../accounts/test/helpers.js';
-import { createClub, createInvite, redeemInvite, setRole } from '../../../accounts/server/workspaces.js';
+import { createClub, createInvite, createPersonalWorkspace, redeemInvite, setRole } from '../../../accounts/server/workspaces.js';
 
 export const appDir = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
@@ -44,16 +44,21 @@ export async function startTiming(options = {}) {
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   const base = `http://127.0.0.1:${server.address().port}`;
   const suite = await startSuite({ plannerPort: server.address().port, hostname, env });
+  const keys = [{ id: 'k1', key: randomBytes(32) }];
   const auth = createAuth({
     issuer: suite.issuer, clientId: suite.clientId, clientSecret: suite.clientSecret,
-    keys: [{ id: 'k1', key: randomBytes(32) }], publicUrl: base, sessions: store.sessions,
+    keys, publicUrl: base, sessions: store.sessions,
     logger: { warn: () => {} },
   });
-  handler = createHandler({ appDir, log: false, store, hub, engine, auth, publicUrl: base, now, ...rest });
+  handler = createHandler({ appDir, log: false, store, hub, engine, auth, keys, publicUrl: base, now, ...rest });
   const db = suite.accounts.db;
 
-  /** A new accounts user. */
-  const signUp = async (name) => (await suite.signInUser(undefined, name)).user;
+  /** A new accounts user with their personal space, as a real sign-up makes. */
+  const signUp = async (name) => {
+    const { user } = await suite.signInUser(undefined, name);
+    createPersonalWorkspace(db, user.id, name);
+    return user;
+  };
   /** A club owned by `owner`. */
   const club = (owner, name = 'Office') => createClub(db, owner.id, name);
   /** Adds `member` to `clubId` with `role`. */
@@ -77,6 +82,7 @@ export async function startTiming(options = {}) {
   function api(who, method, path, body, headers = {}) {
     return fetch(base + path, {
       method,
+      redirect: 'manual',
       headers: {
         origin: base,
         ...(who ? { cookie: who.jar.header() } : {}),
@@ -87,8 +93,18 @@ export async function startTiming(options = {}) {
     });
   }
 
+  /** A form post as `who` from the app's own pages; redirects are not followed. */
+  function form(who, path, fields, headers = {}) {
+    return fetch(base + path, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { origin: base, 'content-type': 'application/x-www-form-urlencoded', ...(who ? { cookie: who.jar.header() } : {}), ...headers },
+      body: new URLSearchParams(fields),
+    });
+  }
+
   return {
-    base, store, hub, engine, suite, clock, signUp, club, join, login, api,
+    base, store, hub, engine, suite, clock, signUp, club, join, login, api, form,
     close: async () => {
       server.closeAllConnections();
       await new Promise((done) => server.close(done));

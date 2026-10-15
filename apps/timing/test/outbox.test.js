@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { memoryOutbox, openOutbox } from '../js/outbox.js';
+import { memoryOutbox, openOutbox } from '../public/outbox.js';
 
 const p = (t, transponder = '0A', boot = 'b00tb00t', decoder = 'd1') => ({ decoder, boot, transponder, t });
 

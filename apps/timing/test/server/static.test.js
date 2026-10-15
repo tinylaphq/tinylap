@@ -10,12 +10,13 @@ const server = await startServer();
 after(() => server.close());
 const get = (path, init) => fetch(server.base + path, init);
 
-test('the app page carries its CSP and security headers', async () => {
-  const res = await get('/');
-  assert.equal(res.status, 200);
-  assert.match(res.headers.get('content-security-policy'), /script-src 'self' 'sha256-/);
-  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
-  assert.match(await res.text(), /<title>TinyLap Timing<\/title>/);
+test('the app CSS, the mark and the timing package are served as files', async () => {
+  for (const [path, type] of [['/public/app.css', /css/], ['/public/mark.svg', /svg/], ['/pkg/timing/index.js', /javascript/], ['/pkg/palace-ui/palace.css', /css/]]) {
+    const res = await get(path);
+    assert.equal(res.status, 200, path);
+    assert.match(res.headers.get('content-type'), type, path);
+    await res.body?.cancel();
+  }
 });
 
 test('the timing package is served to the browser, auth is not', async () => {

@@ -36,6 +36,8 @@ test('bad session requests say what is wrong', async () => {
   await problemOf(await bad({ kind: 'race', roster: ['nobody'] }), 422, 'invalid-request');
   await problemOf(await bad({ kind: 'race', roster: [ana.id], durationSeconds: 5 }), 422, 'invalid-request');
   await problemOf(await bad({ kind: 'race', roster: [ana.id], countdownSeconds: 31 }), 422, 'invalid-request');
+  await problemOf(await bad({ kind: 'race', roster: [ana.id], durationSeconds: null }), 422, 'invalid-request');
+  await problemOf(await bad({ kind: 'race', roster: [ana.id], countdownSeconds: null }), 422, 'invalid-request');
 });
 
 test('start, list, read and abort a race; one at a time', async () => {

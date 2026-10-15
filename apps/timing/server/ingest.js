@@ -10,7 +10,8 @@ import { readBatch } from '@tinylap/timing';
 import { NO_STORE, workspaceRoute } from './access.js';
 import { withSession } from './auth.js';
 import { rateLimited, readJson } from './body.js';
-import { json, problem } from './responses.js';
+import * as ops from './operations.js';
+import { json, opProblem, problem } from './responses.js';
 import { tokenHash } from './setup.js';
 
 const BEARER = /^Bearer ([A-Za-z0-9_-]{43})$/;
@@ -34,7 +35,7 @@ const postPassings = withSession(async (request, match) => {
   } else {
     decoder = request.store.decoder(decoderId);
     if (!request.session || !decoder || !can(request.session.claims, decoder.workspaceId, 'timing.run')) {
-      return refuse('unauthorized', 'This decoder is not paired in one of your workspaces, or you are not logged in.');
+      return refuse('unauthorized', 'This decoder is not paired in one of your clubs or your personal space, or you are not signed in.');
     }
     if (!request.auth.bff.requireSameOrigin(request.req)) return refuse('forbidden', "Forward passings from the app's own pages.");
     via = 'serial';
@@ -54,13 +55,8 @@ const postPassings = withSession(async (request, match) => {
 async function postTap(request) {
   const { body, error } = await readJson(request);
   if (error) return error;
-  if (typeof body.driverId !== 'string' || !request.store.driver(request.workspaceId, body.driverId)) {
-    return problem(request, 'invalid-request', '`driverId` must be a driver of this workspace.');
-  }
-  const wait = request.limiters.tap.take(request.userId);
-  if (wait) return rateLimited(request, wait);
-  const row = request.engine.tap(request.workspaceId, body.driverId);
-  return json(200, { stored: row !== null, lapMs: row?.lapMs ?? null }, NO_STORE);
+  const r = ops.tap(request, { driverId: body.driverId });
+  return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
 }
 
 export const ingestRoutes = [

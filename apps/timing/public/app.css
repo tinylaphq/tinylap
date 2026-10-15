@@ -1,0 +1,358 @@
+/* SPDX-FileCopyrightText: 2026 The TinyLap contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later */
+
+/* TinyLap Timing on top of palace-ui. Every colour, space and border comes
+ * from a --p-* token; numbers are tabular so columns don't jitter as times
+ * change. Body class `big` scales the board for a wall screen.
+ *
+ * The one loud thing is the clock: a dark slab with a hard accent shadow,
+ * like the display at a track's start line. The table around it stays plain. */
+
+body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-text); font-family: var(--p-font); }
+
+.navbar { gap: var(--p-space-md); }
+.navbar[hidden] { display: none; }
+.nav-tabs { display: flex; gap: var(--p-space-xs); align-self: stretch; margin-right: auto; margin-left: var(--p-space-lg); }
+.nav-tab {
+  display: flex; align-items: center; color: var(--p-surface); text-decoration: none; padding: 0 var(--p-space-md);
+  font-size: 13px; font-weight: 600; opacity: 0.7; transition: var(--p-transition);
+}
+.nav-tab, .nav-tab:hover { border-bottom: 0; }
+.nav-tab:hover { opacity: 1; }
+.nav-tab[aria-current="page"] { opacity: 1; box-shadow: inset 0 -3px 0 var(--p-accent-1); }
+.nav-tab:focus-visible { outline: 2px solid var(--p-accent-3); outline-offset: -2px; }
+.navbar .btn-outline { color: var(--p-surface); border-color: var(--p-surface); background: transparent; }
+.navbar .btn-outline:hover { background: var(--p-surface); color: var(--p-text); }
+.live-status { color: var(--p-surface); white-space: nowrap; }
+/* The stream's state as a square lamp, like a timing desk's: green live,
+ * amber blinking while it reconnects, red once it has given up. */
+.live-status:not(:empty)::before { content: ''; display: inline-block; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); }
+.live-status[data-state="live"]::before { background: var(--p-success); }
+.live-status[data-state="reconnecting"]::before { background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
+.live-status[data-state="off"]::before { background: var(--p-error); }
+@keyframes live-blink { to { opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) { .live-status[data-state="reconnecting"]::before { animation: none; } }
+
+.notice { padding-block: var(--p-space-2xl); margin-inline: auto; padding-inline: var(--p-space-md); }
+
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  gap: var(--p-space-lg);
+  padding: var(--p-space-lg);
+  max-width: 1400px;
+  margin-inline: auto;
+}
+.board-head, .board-unknown { grid-column: 1 / -1; }
+.board-unknown { margin: 0; }
+.board-head {
+  display: flex; justify-content: space-between; align-items: stretch; gap: var(--p-space-md); flex-wrap: wrap;
+}
+.board-head .eyebrow { margin: 0 0 var(--p-space-xs); color: var(--p-text-secondary); }
+.board-title { margin: 0; font-size: clamp(1.75rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -0.02em; }
+.board-clock {
+  display: grid; justify-items: end; align-content: center; gap: var(--p-space-xs);
+  padding: var(--p-space-sm) var(--p-space-lg); background: var(--p-dark); color: var(--p-surface);
+  box-shadow: var(--p-shadow-lg) var(--p-accent-1);
+}
+.board-clock-label { color: var(--p-accent-3); margin: 0; }
+.board-clock-time { font: 700 clamp(2.5rem, 9vw, 6rem) / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
+
+/* Wide tables scroll inside the board, not the page; the padding keeps the hard shadow in view. */
+.board-scroll { overflow-x: auto; padding: 0 4px 4px 0; }
+.board-main { display: grid; gap: var(--p-space-lg); align-content: start; min-width: 0; }
+.board-results-title { display: flex; gap: var(--p-space-sm); align-items: baseline; margin: 0 0 var(--p-space-sm); }
+.board-results-title .tag { font-size: 10px; padding: 1px 6px; }
+.board-results .empty { margin: 0; }
+.board-table { font-size: 1em; width: 100%; border-collapse: collapse; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
+.board-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-surface); background: var(--p-dark); }
+.board-table th, .board-table td { padding: var(--p-space-sm) var(--p-space-md); text-align: left; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
+.board-table th.num, .board-table td.num { text-align: right; }
+.board-table td, .board-table th { font-size: inherit; }
+.board-table th { font-size: 0.7em; }
+.board-table tbody tr:first-child .pos { box-shadow: inset 4px 0 0 var(--p-accent-1); }
+.board-table .pos { font: 700 1.25em var(--p-font-mono); width: 3.5em; }
+.num { text-align: right; font-family: var(--p-font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.is-finished td { color: var(--p-text-muted); }
+.pb { margin-left: var(--p-space-xs); background: var(--p-accent-1); vertical-align: middle; }
+.board-empty { margin: 0; padding: var(--p-space-xl) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) dashed var(--p-border-dashed); text-align: center; }
+
+.driver { font-weight: 600; }
+.driver::before {
+  content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: var(--p-space-xs);
+  background: var(--driver, var(--p-text-faint)); border: var(--p-border-thin) solid var(--p-text);
+}
+
+.board-feed { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-md); align-self: start; }
+.board-feed h2 { margin: 0 0 var(--p-space-sm); }
+.board-laps { list-style: none; margin: 0; padding: 0; }
+.board-laps li { display: flex; gap: var(--p-space-sm); align-items: baseline; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-border-light); }
+.board-laps .num { margin-left: auto; }
+.board-laps .tag { font-size: 10px; padding: 1px 6px; }
+
+/* palace's .status upper-cases its text; the notice reads as prose. */
+.board-unknown { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.board-unknown a { color: inherit; text-decoration-color: currentColor; }
+
+/* The wall screen (?big, spec 6.1): every part follows .board's font size, which
+   follows the smaller of the screen's width and height; only the way out stays fixed. */
+body.big .board {
+  font-size: clamp(1rem, min(2.4vw, 3.6vh), 2.6rem);
+  min-height: 100dvh; box-sizing: border-box; max-width: none; align-content: start;
+  /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
+  padding-top: calc(0.5rem + 44px + var(--p-space-md));
+}
+body.big .board-head .eyebrow, body.big .board-clock-label { font-size: 0.6em; }
+body.big .board .h3 { font-size: 1.1em; }
+body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
+body.big .board-table th, body.big .board-table td { padding-block: 0.6em; }
+body.big .board-feed { font-size: 0.7em; }
+/* The way out: a dark pill at the top right, always there, big enough to hit by touch. */
+body.big .navbar { position: fixed; top: 0.5rem; right: 0.5rem; left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
+body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; }
+body.big .navbar-brand, body.big .nav-tabs, body.big .nav-account, body.big .live-status, body.big .board-unknown { display: none; }
+body.big .navbar-right { margin: 0; gap: 0; }
+/* The pill's buttons share one border instead of showing the pill between them. */
+body.big .navbar-right > * + * { margin-left: calc(-1 * var(--p-border-thin)); }
+/* A wall screen nobody watches closely still shows when it has gone stale. */
+body.big .navbar-right .live-status:not([data-state="live"]):not([hidden]) { display: inline-flex; min-height: 44px; font-size: 16px; padding-inline: var(--p-space-md); }
+body.big .navbar-right .live-status::before { width: 0.75em; height: 0.75em; }
+body.big .navbar:has(.live-status:not([data-state="live"]):not([hidden])) { opacity: 1; }
+body.big .navbar-right .btn { font-size: 16px; min-height: 44px; padding-inline: var(--p-space-md); color: var(--p-surface); }
+@media (max-width: 640px) {
+  body.big .board { font-size: 0.9rem; }
+  body.big .board-table th, body.big .board-table td { padding-inline: 0.3em; }
+}
+
+@media (max-width: 720px) {
+  .board { grid-template-columns: 1fr; padding: var(--p-space-md); }
+  .board-clock { width: 100%; box-sizing: border-box; grid-template-columns: auto auto; justify-content: space-between; justify-items: start; align-items: center; }
+  .board-table th, .board-table td { padding: var(--p-space-sm); }
+  .navbar { height: auto; flex-wrap: wrap; padding: var(--p-space-sm) var(--p-space-md); }
+  .navbar-right { flex-wrap: wrap; gap: var(--p-space-sm); }
+  .nav-tabs { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) { .nav-tab { transition: none; } }
+
+.screen { padding-block: var(--p-space-lg); }
+.field { display: grid; gap: var(--p-space-xs); font-weight: 600; }
+.choice { display: flex; align-items: center; gap: var(--p-space-xs); }
+.inline-form { display: flex; gap: var(--p-space-sm); align-items: flex-start; flex-wrap: wrap; }
+ul.setup-list { list-style: none; margin: 0; padding: 0; } /* the element selector outweighs palace's ul padding */
+.setup-row { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); align-items: center; padding-block: var(--p-space-xs); }
+.setup-row .meta { color: var(--p-text-muted); font-size: 12px; margin-left: auto; }
+fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
+.choice input { width: 1.25rem; height: 1.25rem; margin: 0; accent-color: var(--p-text); }
+.choice { min-height: 2.5rem; }
+/* belongs upstream in palace-ui: a choice reads as body text, not a label */
+.choice { text-transform: none; letter-spacing: 0; font-size: 1rem; font-weight: 400; color: var(--p-text); }
+.tap-tile:focus-visible { outline: 3px solid var(--p-accent-3); outline-offset: 2px; }
+
+.tap-screen { padding: var(--p-space-md); display: grid; gap: var(--p-space-md); }
+.tap-form { display: contents; }
+.tap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--p-space-md); }
+.tap-tile {
+  min-height: 7rem;
+  font: 700 1.5rem var(--p-font);
+  text-transform: uppercase;
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text);
+  box-shadow: var(--p-shadow-md) var(--p-text), inset 0 -0.5rem 0 var(--driver, var(--p-text-faint));
+  touch-action: manipulation;
+  color: var(--p-text);
+  cursor: pointer;
+}
+.tap-tile.is-tapped { background: var(--driver, var(--p-accent-1)); }
+/* The result bar: sticky above the tiles, a fixed height so the tiles never jump. The driver's colour is its left edge; the state is also a word. */
+.tap-bar {
+  position: sticky; top: 0; z-index: 2;
+  min-height: 5.5rem; box-sizing: border-box;
+  display: grid; align-content: center;
+  padding: var(--p-space-sm) var(--p-space-md);
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text);
+  border-left: 0.75rem solid var(--driver, var(--p-text-faint));
+}
+.tap-bar[data-state="idle"] { color: var(--p-text-muted); border-left-color: var(--p-text-faint); }
+.tap-bar[data-state="error"] { border-left-color: var(--p-error); }
+.tap-bar .tap-result, .tap-bar .status { margin: 0; text-transform: none; letter-spacing: 0; }
+.tap-bar .status { border: 0; padding: 0; background: none; color: var(--p-text); font-size: 1.5rem; }
+.tap-bar .tap-result { font: 700 1.75rem/1.2 var(--p-font-mono); }
+.tap-bar[data-state="idle"] .tap-result { font: 400 1.125rem var(--p-font); }
+.tap-state { display: inline-block; padding: 0.1em 0.5em; margin-right: 0.35em; border: var(--p-border-width) solid var(--p-text); font: 700 0.75rem/1.4 var(--p-font); text-transform: uppercase; letter-spacing: 0.08em; vertical-align: middle; background: var(--p-surface); color: var(--p-text); }
+[data-state="started"] .tap-state, [data-state="lap"] .tap-state { background: var(--p-success); }
+[data-state="again"] .tap-state { background: var(--p-warning); }
+[data-state="error"] .tap-state { background: var(--p-error); color: #fff; }
+.tap-bar:has(#tap-alert > *) .tap-result:empty { display: none; }
+
+/* Selects, styled like palace's text inputs (palace 0.10 leaves them native); belongs upstream in palace-ui. */
+.field select, td select {
+  appearance: none;
+  padding: 12px 2.5rem 12px 12px;
+  border: var(--p-border-width) solid var(--p-text);
+  border-radius: 0;
+  background-color: var(--p-surface);
+  background-image: linear-gradient(45deg, transparent 50%, var(--p-text) 50%), linear-gradient(135deg, var(--p-text) 50%, transparent 50%);
+  background-position: calc(100% - 1.25rem) 50%, calc(100% - 0.9rem) 50%;
+  background-size: 0.35rem 0.35rem;
+  background-repeat: no-repeat;
+  font-family: var(--p-font);
+  font-size: 1rem;
+  color: var(--p-text);
+}
+.field select:focus-visible, td select:focus-visible { outline: none; border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); }
+
+/* The bridge screen: the status strip is the loud part, like the lamp on a decoder. */
+.bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-surface); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
+.bridge-state p { margin: 0; }
+.bridge-state [data-bridge-status] { overflow-wrap: anywhere; min-width: 0; }
+.bridge-state.is-offline { box-shadow: var(--p-shadow-lg) var(--p-warning); }
+/* A stat: the label small, the count under it, at the right of the strip. */
+.bridge-stat { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.bridge-stat-label { font-size: 0.8125rem; opacity: 0.8; }
+.bridge-outbox { font: 700 1.5rem/1 var(--p-font-mono); }
+/* The preview shares the strip's edges; the strip's shadow hangs outside both. */
+.bridge-preview { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-xs) var(--p-space-md); }
+.bridge-head { display: flex; justify-content: space-between; margin: 0; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-text); font-size: 0.8125rem; font-weight: 600; color: var(--p-text-muted, var(--p-text)); }
+.container .bridge-preview ol { padding: 0; margin: 0; }
+.bridge-preview li { justify-content: space-between; }
+.bridge-code { font-family: var(--p-font-mono); font-variant-ligatures: none; }
+.bridge-first { color: var(--p-text-muted, var(--p-text)); font-style: italic; }
+.bridge-preview li:last-child { border-bottom: 0; }
+
+/* An empty board, for members: the three things to do before the first
+ * car. It is a real sequence, so it is numbered; a done step goes quiet. */
+.board-steps { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: 4px 4px 0 var(--p-text); padding: var(--p-space-lg); }
+.board-steps > h2 { margin: 0 0 var(--p-space-md); }
+.board-steps ol { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: var(--p-space-md); }
+.board-step { counter-increment: step; display: grid; grid-template-columns: 2.25rem 1fr; column-gap: var(--p-space-md); }
+.board-step::before {
+  content: counter(step); grid-row: span 3; align-self: start;
+  display: grid; place-items: center; width: 2.25rem; height: 2.25rem;
+  font: 700 1rem var(--p-font-mono); color: var(--p-surface); background: var(--p-text);
+}
+.board-step h3 { margin: 0; font-size: 1rem; }
+.board-step p { margin: 2px 0 0; color: var(--p-text-secondary); }
+.board-step-links { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-md); }
+.board-step.is-done::before { content: '\2713'; background: var(--p-success); color: var(--p-text); }
+.board-step.is-done p { color: var(--p-text); font-weight: 600; }
+
+/* The navbar's right side: the live status, Big screen, the account menu's
+ * summary and Sign in all take the btn-sm box (same padding, 1px border,
+ * line height), so they share one height and baseline. */
+.navbar-right { display: flex; align-items: center; gap: var(--p-space-sm); }
+.navbar-right > *, .nav-account > summary { margin: 0; }
+.navbar-right .btn, .navbar-right .live-status, .nav-account > summary {
+  display: inline-flex; align-items: center; box-sizing: border-box;
+  padding: 6px 14px; border: var(--p-border-thin) solid transparent;
+  font: 600 11px/1.4 var(--p-font); letter-spacing: 1px; text-transform: uppercase;
+}
+.navbar-right .btn, .nav-account > summary { border-color: var(--p-surface); }
+.navbar-right .live-status[hidden] { display: none; }
+.navbar-brand img { display: block; }
+.nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
+.nav-tabs li { display: flex; }
+
+/* belongs upstream in palace-ui */
+.nav-account { position: relative; }
+.nav-account > summary { list-style: none; cursor: pointer; color: var(--p-surface); max-width: 12rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.nav-account > summary::-webkit-details-marker { display: none; }
+.nav-account > summary:hover, .nav-account[open] > summary { background: var(--p-surface); color: var(--p-text); }
+.nav-account > summary:focus-visible { outline: 2px solid var(--p-accent-3); outline-offset: 2px; }
+.nav-account-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); min-width: 14rem; z-index: 10;
+  background: var(--p-surface); color: var(--p-text);
+  border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-md) var(--p-text);
+  padding: var(--p-space-md); display: grid; gap: var(--p-space-sm);
+}
+.nav-account-menu ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.nav-account-menu form { margin: 0; }
+.nav-account-label { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--p-text-secondary); }
+.nav-account-menu a, .nav-account-signout {
+  display: block; width: 100%; padding: var(--p-space-xs) 0; border: 0; border-bottom: 0; background: none;
+  font: 600 13px/1.4 var(--p-font); text-transform: none; letter-spacing: 0; color: var(--p-text); text-align: left; text-decoration: none; cursor: pointer;
+}
+.nav-account-menu a:hover, .nav-account-signout:hover { color: var(--p-accent-1); }
+.nav-account-menu a[aria-current="true"] { box-shadow: inset 3px 0 0 var(--p-accent-1); padding-left: var(--p-space-sm); }
+.nav-account-menu :focus-visible { outline: 2px solid var(--p-accent-1); outline-offset: 2px; }
+.notice .brand-lockup { display: flex; align-items: center; gap: var(--p-space-sm); margin: 0 0 var(--p-space-md); }
+.notice .card-static p { margin: 0; }
+
+@media (max-width: 640px) {
+  .navbar { flex-wrap: wrap; height: auto; padding: var(--p-space-sm) var(--p-space-md); row-gap: var(--p-space-xs); }
+  .nav-tabs { order: 3; flex-basis: 100%; margin: 0; overflow-x: auto; }
+  .nav-tab { padding: var(--p-space-sm) var(--p-space-md); }
+  .navbar-right { margin-left: auto; }
+  .navbar-right .live-status { padding-inline: 0; }
+}
+
+/* Forms and the setup page. Palace styles the inputs and labels; these lay them out. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.field { min-width: 0; }
+.field-error { margin: 0; color: var(--p-error); font-size: 13px; font-weight: 600; }
+.field input[aria-invalid="true"], .field select[aria-invalid="true"] { border-color: var(--p-error); }
+.field label { margin-bottom: 0; }
+.field input[type="text"], .field input[type="url"] { max-width: 100%; }
+.inline-form > .field { flex: 1 1 14rem; }
+.inline-form > .status { flex-basis: 100%; margin: 0; }
+.field, .inline-form { --label-line: 16px; }
+.field label { line-height: var(--label-line); }
+/* A button sits at the input's height and top; a visible label (--label-line plus the field's gap) pushes it down to the input. */
+.inline-form .btn, .inline-form input, .inline-form select { box-sizing: border-box; height: 3rem; }
+.inline-form .btn { margin: 0; }
+.inline-form > .field:has(> label:not(.visually-hidden)) ~ .btn { margin-top: calc(var(--label-line) + var(--p-space-xs)); }
+.button-row { display: flex; gap: var(--p-space-sm); flex-wrap: wrap; align-items: center; }
+.setup-row > .driver { flex: 0 0 auto; }
+/* The swatch alone names nothing; the rename field next to it carries the name. */
+.setup-row > .driver::before { width: 1.25rem; height: 1.25rem; margin: 0; display: block; }
+/* A link-button in a row stands as tall as the inline form's buttons. */
+.setup-row > .btn { box-sizing: border-box; height: 3rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
+.setup-row > .inline-form { flex: 1 1 18rem; }
+.setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
+.setup-table { width: 100%; border-collapse: collapse; }
+.setup-table th, .setup-table td { padding: var(--p-space-xs) var(--p-space-sm) var(--p-space-xs) 0; text-align: left; vertical-align: middle; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
+.setup-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
+.setup-table th.num, .setup-table td.num { text-align: left; padding-right: var(--p-space-md); width: 1%; }
+/* The marker is the first cell's inset shadow; the code keeps its place under the header. */
+.setup-table tr.is-unknown td:first-child { box-shadow: -8px 0 0 var(--p-warning); font-weight: 700; }
+.setup-table tr.is-unknown td { background: transparent; }
+.setup-table .inline-form { gap: var(--p-space-xs); }
+.setup-table .inline-form > .field { flex: 1 1 8rem; }
+.setup-table select { width: 100%; min-width: 0; }
+.setup-row > .inline-form > .field { flex: 1 1 8rem; }
+.token { display: block; overflow-wrap: anywhere; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
+/* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
+.token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
+/* Every status line here is prose, not a label. */
+.status { text-transform: none; letter-spacing: 0; }
+/* A failed form's summary is a sentence; its link keeps the box's colour. */
+.status-error { font-weight: 600; }
+.status-error a { color: inherit; text-decoration-color: currentColor; }
+.status-info p { font-weight: 400; margin: 0; }
+.status-info p + p { margin-top: var(--p-space-xs); }
+.status .token { margin: 0; }
+.decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
+.decoder-info .meta { margin: 0; }
+@media (max-width: 520px) {
+  /* The swatch stays beside the rename form; a delete link sits under it. */
+  /* Swatch, rename form and delete stay on one row. */
+  .setup-row:has(> .driver) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--p-space-xs); }
+  .setup-row > .driver + .inline-form { flex: none; min-width: 0; flex-wrap: nowrap; }
+  .setup-row > .driver + .inline-form > .field { flex: 1 1 0; }
+  .setup-row > .driver ~ .btn { padding-inline: var(--p-space-sm); }
+  /* A labelled field and its button stack, so the button needs no offset. */
+  .inline-form:has(> .field > label:not(.visually-hidden)) { flex-direction: column; align-items: stretch; }
+  .inline-form:has(> .field > label:not(.visually-hidden)) > .field { flex: 0 0 auto; }
+  .inline-form:has(> .field > label:not(.visually-hidden)) > .btn { margin-top: 0; align-self: flex-start; }
+}
+
+/* Race control: choice groups are fieldsets; the length boxes sit in a row. */
+.choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.choices-inline { display: flex; flex-wrap: wrap; gap: var(--p-space-lg); }
+.race-times { display: flex; flex-wrap: wrap; gap: var(--p-space-lg); align-items: flex-start; }
+.race-times input[type="number"] { width: 5.5rem; font-variant-numeric: tabular-nums; }
+.field-hint { margin: 0; color: var(--p-text-muted); font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdown) { opacity: 0.5; }

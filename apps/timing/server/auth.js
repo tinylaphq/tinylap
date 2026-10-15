@@ -10,7 +10,9 @@
 import { AuthError, createBff } from '@tinylap/auth';
 import { prefersHtml } from './negotiate.js';
 import { esc, page } from './pages.js';
+import { page as screen } from './respond.js';
 import { html, json, problem } from './responses.js';
+import { serverErrorPage, unavailablePage } from './views/notice.js';
 
 /**
  * @typedef {{
@@ -22,7 +24,7 @@ import { html, json, problem } from './responses.js';
  * }} Auth
  */
 
-const UNAVAILABLE = 'Log-in is unavailable right now.';
+const UNAVAILABLE = 'Sign-in is unavailable right now.';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const isOutage = (/** @type {unknown} */ error) => error instanceof AuthError && error.code === 'unavailable';
 
@@ -94,17 +96,22 @@ const unavailable = (request) => problem(request, 'unavailable', UNAVAILABLE);
 
 /**
  * Wraps a route handler: `request.session` is the BFF session, or null when
- * logged out or log-in is off. An outage at the issuer answers 503.
+ * logged out or log-in is off. An outage at the issuer answers 503. A page
+ * route answers its failures as pages (503, or 500 for anything unexpected,
+ * logged here); the API keeps Problem Details.
  * @param {(request: any, match: RegExpExecArray) => any} handler
+ * @param {{ pages?: boolean }} [options]
  */
-export function withSession(handler) {
+export function withSession(handler, { pages = false } = {}) {
   return async (/** @type {any} */ request, /** @type {RegExpExecArray} */ match) => {
     try {
       request.session = request.auth ? await request.auth.bff.session(request.req) : null;
       return await handler(request, match);
     } catch (error) {
-      if (isOutage(error)) return unavailable(request);
-      throw error;
+      if (isOutage(error)) return pages ? screen(request, 503, unavailablePage(request)) : unavailable(request);
+      if (!pages) throw error;
+      console.error(error);
+      return screen(request, 500, serverErrorPage(request));
     }
   };
 }
@@ -114,19 +121,19 @@ function failure(request, name, title, detail, extra = {}) {
   const res = prefersHtml(request.req.headers.accept)
     ? html(problem(request, name, detail).status, page(title, `<h1>${esc(title)}</h1>
 <p>${esc(detail)}</p>
-<p><a href="/auth/login">Log in again</a> &middot; <a href="/">Back to timing</a></p>`), NO_STORE)
+<p><a href="/auth/login">Sign in again</a> &middot; <a href="/">Back to timing</a></p>`), NO_STORE)
     : problem(request, name, detail);
   return { ...res, headers: { ...res.headers, ...extra } };
 }
 
-const off = (request) => problem(request, 'not-found', 'Log-in is not set up on this server.');
+const off = (request) => problem(request, 'not-found', 'Sign-in is not set up on this server.');
 
 /** The BFF's own response, or a 503 when the issuer can't be reached. */
 async function viaBff(request, step) {
   try {
     return await step(request.auth.bff);
   } catch (error) {
-    if (isOutage(error)) return failure(request, 'unavailable', "Can't log in right now", `${UNAVAILABLE} Timing keeps recording; try again in a minute.`);
+    if (isOutage(error)) return failure(request, 'unavailable', "Can't sign in right now", `${UNAVAILABLE} Timing keeps recording; try again in a minute.`);
     throw error;
   }
 }
@@ -143,13 +150,13 @@ async function callback(request) {
     if (res.status !== 400) return res;
     // The BFF's text says why; the cookie it clears must still go out.
     const cookies = res.headers['Set-Cookie'];
-    return failure(request, 'login-failed', "The log-in didn't finish", res.body ?? 'Please log in again.', cookies ? { 'Set-Cookie': cookies } : {});
+    return failure(request, 'login-failed', "The sign-in didn't finish", res.body ?? 'Please sign in again.', cookies ? { 'Set-Cookie': cookies } : {});
   });
 }
 
 async function logout(request) {
   if (!request.auth) return off(request);
-  if (!request.auth.bff.requireSameOrigin(request.req)) return problem(request, 'forbidden', "Log out from the app's own page.");
+  if (!request.auth.bff.requireSameOrigin(request.req)) return problem(request, 'forbidden', "Sign out from the app's own page.");
   return request.auth.bff.logout(request.req);
 }
 

@@ -49,7 +49,7 @@ async function login(userId) {
   return oidc.authorizationCodeGrant(config, new URL(res.headers.get('location')), { pkceCodeVerifier, expectedNonce, expectedState }, { resource: accounts.client.resource });
 }
 
-/** @returns {{ id: string, role: string, name: string }[]} */
+/** @returns {{ id: string, role: string, name: string, kind: string }[]} */
 const claimOf = (tokens) => /** @type {any} */ (decodeJwt(tokens.access_token).workspaces);
 
 async function setUp() {
@@ -62,13 +62,14 @@ async function setUp() {
   return { owner, member, club };
 }
 
-test('the access token names every workspace with its id, role and name', async () => {
+test('the access token names every workspace with its id, role, name and kind', async () => {
   const { member, club } = await setUp();
   const tokens = await login(member);
-  const expected = listMemberships(accounts.db, member).map(({ id, role, name }) => ({ id, role, name }));
+  const expected = listMemberships(accounts.db, member).map(({ id, role, name, kind }) => ({ id, role, name, kind }));
   assert.equal(expected.length, 2);
   assert.deepEqual(claimOf(tokens), expected);
-  assert.ok(claimOf(tokens).some((w) => w.id === club.id && w.role === 'member' && w.name === 'Kart Club'));
+  assert.ok(claimOf(tokens).some((w) => w.id === club.id && w.role === 'member' && w.name === 'Kart Club' && w.kind === 'club'));
+  assert.ok(claimOf(tokens).some((w) => w.kind === 'personal' && w.name === 'Member'));
 });
 
 test('a refreshed token re-reads the memberships', async () => {

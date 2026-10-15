@@ -75,7 +75,7 @@ const ticker = setInterval(() => {
 }, TICK_MS);
 
 const handler = createHandler({
-  store, hub, engine, auth,
+  store, hub, engine, auth, keys,
   root: dev ? undefined : env.TINYLAP_ROOT ?? '/srv',
   appDir: resolve(fileURLToPath(new URL('..', import.meta.url))),
   publicUrl,

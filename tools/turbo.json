@@ -8,6 +8,8 @@
         "$TURBO_ROOT$/apps/*/index.html",
         "$TURBO_ROOT$/apps/*/package.json",
         "$TURBO_ROOT$/apps/*/js/**",
+        "$TURBO_ROOT$/apps/*/public/**",
+        "$TURBO_ROOT$/apps/*/server/**",
         "$TURBO_ROOT$/packages/*/package.json"
       ]
     }

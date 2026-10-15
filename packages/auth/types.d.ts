@@ -24,6 +24,8 @@ export interface WorkspaceClaim {
   role: Role;
   /** The workspace's display name, as accounts issues it. */
   name?: string;
+  /** A person's own space or a club. Tokens from before 2026-10-15 lack it. */
+  kind?: 'personal' | 'club';
 }
 
 export interface AccessClaims {
