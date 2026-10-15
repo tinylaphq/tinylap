@@ -37,7 +37,7 @@ function table(view) {
   const race = view.session?.kind === 'race';
   const last = new Map();
   for (const c of view.crossings) if (c.lapMs !== null && c.driverId && !last.has(c.driverId)) last.set(c.driverId, c.lapMs);
-  return h('table', { class: 'board-table' },
+  return h('div', { class: 'board-scroll' }, h('table', { class: 'board-table' },
     h('thead', {}, h('tr', {},
       h('th', { scope: 'col' }, 'Pos'), h('th', { scope: 'col' }, 'Driver'), h('th', { scope: 'col', class: 'num' }, 'Laps'),
       h('th', { scope: 'col', class: 'num' }, 'Best'), h('th', { scope: 'col', class: 'num' }, 'Last'),
@@ -48,7 +48,29 @@ function table(view) {
       h('td', { class: 'num' }, String(row.laps)),
       h('td', { class: 'num' }, formatLap(row.bestMs), row.bestMs !== null && view.bests.get(row.driverId) === row.bestMs ? h('span', { class: 'badge pb' }, 'PB') : null),
       h('td', { class: 'num' }, formatLap(last.get(row.driverId))),
-      race && h('td', { class: 'num' }, formatLap(row.elapsedMs))))));
+      race && h('td', { class: 'num' }, formatLap(row.elapsedMs)))))));
+}
+
+/** The last qualifying or race, kept on the board while practice runs or nothing does. */
+function results(view) {
+  const r = view.results;
+  if (!r?.session || view.session?.id === r.sessionId) return null;
+  const race = r.session.kind === 'race';
+  const outcome = r.session.state === 'aborted' ? 'Aborted' : 'Finished';
+  return h('section', { class: 'board-results', 'aria-label': 'Results' },
+    h('h2', { class: 'h3 board-results-title' }, `${KIND[r.session.kind]} results`, h('span', { class: 'tag' }, outcome)),
+    r.standings.length === 0
+      ? h('p', { class: 'empty' }, 'No laps were counted.')
+      : h('div', { class: 'board-scroll' }, h('table', { class: 'board-table' },
+        h('thead', {}, h('tr', {},
+          h('th', { scope: 'col' }, 'Pos'), h('th', { scope: 'col' }, 'Driver'), h('th', { scope: 'col', class: 'num' }, 'Laps'),
+          h('th', { scope: 'col', class: 'num' }, 'Best'), race && h('th', { scope: 'col', class: 'num' }, 'Time'))),
+        h('tbody', {}, r.standings.map((row) => h('tr', {},
+          h('td', { class: 'pos' }, String(row.position)),
+          h('td', {}, driverChip(view, row.driverId)),
+          h('td', { class: 'num' }, String(row.laps)),
+          h('td', { class: 'num' }, formatLap(row.bestMs)),
+          race && h('td', { class: 'num' }, formatLap(row.elapsedMs))))))));
 }
 
 function feed(view) {
@@ -70,7 +92,7 @@ export function renderBoard(section, view, now, { watcher = false } = {}) {
     ? h('p', { class: 'status status-warning board-unknown', role: 'status' },
       `Unknown ${view.unknown.length === 1 ? 'car' : 'cars'}: ${view.unknown.join(', ')}. `, h('a', { href: '#setup' }, 'Assign in Setup'))
     : null;
-  section.replaceChildren(header(view, now), unknown ?? '', h('div', { class: 'board-main' }, table(view)), feed(view));
+  section.replaceChildren(header(view, now), unknown ?? '', h('div', { class: 'board-main' }, results(view), table(view)), feed(view));
 }
 
 /** Mounts the board; it redraws on every change and ticks its clock. */

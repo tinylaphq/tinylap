@@ -74,7 +74,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const ended = { ...session, state, endedAt };
     states.delete(session.id);
     publishSession(ended);
-    if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, standings: standingsOf(ended) });
+    if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, session: publicSession(ended), standings: standingsOf(ended) });
     return ended;
   }
   /** The open practice, or a new one after a long enough pause (spec §6). */
@@ -222,6 +222,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const session = store.activeSession(workspaceId) ?? store.openPractice(workspaceId);
     const track = ws.trackId ? store.track(workspaceId, ws.trackId) : null;
     const recent = session ? store.recentCrossings(session.id, 30) : [];
+    const ended = store.activeSession(workspaceId) ? null : store.lastEnded(workspaceId);
     return {
       now: now(),
       track: track && { id: track.id, name: track.name },
@@ -231,6 +232,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),
       drivers: store.drivers(workspaceId),
       bests: track ? store.personalBests(workspaceId, track.id, ws.direction) : [],
+      lastResults: ended && { session: publicSession(ended), standings: standingsOf(ended) },
       ...(watcher ? {} : { unknown: unknownOf(workspaceId) }),
     };
   }

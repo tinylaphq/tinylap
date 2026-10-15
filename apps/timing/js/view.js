@@ -23,7 +23,8 @@ export function applyEvent(view, type, data, clientNow = Date.now()) {
       Object.assign(view, {
         skew: data.now - clientNow, session: data.session, standings: data.standings, crossings: data.crossings,
         drivers: byId(data.drivers), bests: bestsOf(data.bests), track: data.track, direction: data.direction,
-        unknown: data.unknown ?? [], results: null,
+        unknown: data.unknown ?? [],
+        results: data.lastResults ? { sessionId: data.lastResults.session.id, ...data.lastResults } : null,
       });
       break;
     case 'session': {
@@ -33,6 +34,8 @@ export function applyEvent(view, type, data, clientNow = Date.now()) {
       if (view.session?.id !== session.id) {
         view.standings = [];
         view.crossings = [];
+        // A new qualifying or race replaces the last results.
+        if (session.kind !== 'practice') view.results = null;
       }
       view.session = session;
       break;
@@ -50,7 +53,7 @@ export function applyEvent(view, type, data, clientNow = Date.now()) {
       if (data.sessionId === view.session?.id) view.standings = data.standings;
       break;
     case 'results':
-      view.results = data;
+      view.results = { session: view.session?.id === data.sessionId ? view.session : null, ...data };
       if (data.sessionId === view.session?.id) view.standings = data.standings;
       break;
     case 'drivers':

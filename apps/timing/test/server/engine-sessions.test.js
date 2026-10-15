@@ -154,3 +154,29 @@ test('assigning a transponder leaves finished races frozen', () => {
   assert.deepEqual(engine.sessionDetail(W, session.id).standings, before.standings);
   assert.deepEqual(events.slice(seen).filter((e) => e.type === 'standings' && e.data.sessionId === session.id), []);
 });
+
+test('the snapshot keeps the last results until a new qualifying or race opens', () => {
+  const { engine, clock, pass } = rig();
+  assert.equal(engine.snapshot(W).lastResults, null);
+  const { session } = engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 30_000, countdownMs: 0 });
+  pass(1000);
+  pass(9000);
+  assert.equal(engine.snapshot(W).lastResults, null, 'not while the race runs');
+  clock.now = T0 + 31_000;
+  engine.tick();
+  clock.now = T0 + 100_000;
+  engine.tick();
+  pass(200_000); // a car crosses: a new practice
+  const member = engine.snapshot(W);
+  assert.equal(member.session.kind, 'practice');
+  assert.deepEqual([member.lastResults.session.id, member.lastResults.session.state], [session.id, 'done']);
+  assert.equal('workspaceId' in member.lastResults.session, false);
+  assert.deepEqual(member.lastResults.standings.map((s) => [s.driverId, s.laps]), [['ana', 1]]);
+  assert.deepEqual(engine.snapshot(W, { watcher: true }).lastResults, member.lastResults);
+
+  const next = engine.start(W, { kind: 'qualifying', roster: ['ana'], durationMs: 30_000 }).session;
+  assert.equal(engine.snapshot(W).lastResults, null, 'a new qualifying clears them');
+  clock.now += 1000;
+  engine.abort(W, next.id);
+  assert.deepEqual(engine.snapshot(W).lastResults.session.state, 'aborted');
+});

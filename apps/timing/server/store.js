@@ -169,6 +169,7 @@ export function openStore(path) {
     updateSession: q('UPDATE session SET state = ?, ended_at = COALESCE(?, ended_at) WHERE id = ?'),
     activeSession: q(`SELECT * FROM session WHERE workspace_id = ? AND kind != 'practice' AND state IN ${ACTIVE} ORDER BY created_at DESC LIMIT 1`),
     openPractice: q("SELECT * FROM session WHERE workspace_id = ? AND kind = 'practice' AND state = 'running' ORDER BY created_at DESC LIMIT 1"),
+    lastNonPractice: q("SELECT * FROM session WHERE workspace_id = ? AND kind != 'practice' ORDER BY created_at DESC, rowid DESC LIMIT 1"),
     activeAll: q(`SELECT * FROM session WHERE kind != 'practice' AND state IN ${ACTIVE} ORDER BY created_at`),
     listSessions: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?'),
     // SQLite: with one MIN(), the bare column `at` comes from the row holding the minimum.
@@ -333,6 +334,12 @@ export function openStore(path) {
     openPractice(ws) {
       const r = s.openPractice.get(ws);
       return r ? sessionOf(r) : null;
+    },
+    /** The latest qualifying or race, if it has ended (done or aborted); null while one is open. */
+    lastEnded(ws) {
+      const r = s.lastNonPractice.get(ws);
+      const session = r ? sessionOf(r) : null;
+      return session && (session.state === 'done' || session.state === 'aborted') ? session : null;
     },
     activeAll: () => s.activeAll.all().map(sessionOf),
     listSessions: (ws, limit) => s.listSessions.all(ws, limit).map(sessionOf),

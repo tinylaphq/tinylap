@@ -77,3 +77,19 @@ test('a replayed session event with an old `now` leaves the skew alone', () => {
   applyEvent(view, 'session', { ...practice, now: 50_000 - 600_000 }, 46_000);
   assert.equal(view.skew, 5000);
 });
+
+test('the last results: from the snapshot or a results event, cleared by a new qualifying or race', () => {
+  const race = { id: 'r1', kind: 'race', state: 'done', opensAt: 1, closesAt: 2 };
+  const lastResults = { session: race, standings: [{ driverId: 'ana', position: 1 }] };
+  const view = applyEvent(createView(), 'snapshot', snapshot({ lastResults }), 50_000);
+  assert.deepEqual(view.results, { sessionId: 'r1', session: race, standings: lastResults.standings });
+  applyEvent(view, 'session', { id: 'p2', kind: 'practice', state: 'running', opensAt: 3, closesAt: null, now: 50_000 });
+  assert.equal(view.results.sessionId, 'r1', 'a practice keeps them');
+  applyEvent(view, 'session', { id: 'q1', kind: 'qualifying', state: 'running', opensAt: 4, closesAt: 5, now: 50_000 });
+  assert.equal(view.results, null);
+  applyEvent(view, 'session', { id: 'q1', kind: 'qualifying', state: 'aborted', opensAt: 4, closesAt: 5, now: 50_000 });
+  applyEvent(view, 'results', { sessionId: 'q1', session: { id: 'q1', kind: 'qualifying', state: 'aborted' }, standings: [] });
+  assert.deepEqual([view.results.sessionId, view.results.session.state], ['q1', 'aborted']);
+  applyEvent(view, 'snapshot', snapshot(), 50_000);
+  assert.equal(view.results, null);
+});
