@@ -64,6 +64,8 @@ test('drivers, track and setup events', () => {
 test('the clock for each state', () => {
   assert.equal(clockOf(null, 0), null);
   assert.deepEqual(clockOf(practice, 61_000), { label: 'Practice', ms: 60_000 });
+  assert.deepEqual(clockOf({ ...practice, state: 'done' }, 61_000), { label: 'Practice ended', ms: 0 });
+  assert.deepEqual(clockOf({ ...practice, state: 'aborted' }, 61_000), { label: 'Practice ended', ms: 0 });
   const race = { kind: 'race', opensAt: 10_000, closesAt: 310_000 };
   assert.deepEqual(clockOf({ ...race, state: 'running' }, 70_000), { label: 'Remaining', ms: 240_000 });
   assert.deepEqual(clockOf({ ...race, state: 'running' }, 400_000), { label: 'Remaining', ms: 0 });

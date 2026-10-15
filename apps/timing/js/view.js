@@ -79,6 +79,7 @@ export const serverNow = (view, clientNow = Date.now()) => clientNow + view.skew
 export function clockOf(session, now) {
   if (!session) return null;
   if (session.state === 'countdown') return { label: 'Starts in', ms: session.opensAt - now };
+  if (session.kind === 'practice' && (session.state === 'done' || session.state === 'aborted')) return { label: 'Practice ended', ms: 0 };
   if (session.kind === 'practice') return { label: 'Practice', ms: now - session.opensAt };
   if (session.state === 'running') return { label: 'Remaining', ms: Math.max(0, session.closesAt - now) };
   if (session.state === 'finishing') return { label: 'Last lap', ms: 0 };
