@@ -89,3 +89,17 @@ test('tap entry records laps by hand', async (t) => {
   await page.locator('.board-laps').getByText('tap').first().waitFor();
   assert.deepEqual(errors, []);
 });
+
+test('setup keeps what is being typed while drivers arrive', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.goto('/#setup');
+  const input = page.getByLabel('New driver');
+  await input.focus();
+  await input.pressSequentially('Dan');
+  await app.api(member, 'POST', `/workspaces/${office.id}/drivers`, { name: 'Eve' });
+  await page.getByRole('listitem').filter({ hasText: 'Eve' }).waitFor();
+  assert.equal(await input.inputValue(), 'Dan');
+  assert.equal(await input.evaluate((el) => el === document.activeElement), true);
+  assert.deepEqual(errors, []);
+});

@@ -125,3 +125,20 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 }
 .tap-tile.is-tapped { background: var(--driver, var(--p-accent-1)); }
 .tap-result { font: 700 1.25rem var(--p-font-mono); }
+
+/* Selects, styled like palace's text inputs (palace 0.10 leaves them native); belongs upstream in palace-ui. */
+.field select, td select {
+  appearance: none;
+  padding: 12px 2.5rem 12px 12px;
+  border: var(--p-border-width) solid var(--p-text);
+  border-radius: 0;
+  background-color: var(--p-surface);
+  background-image: linear-gradient(45deg, transparent 50%, var(--p-text) 50%), linear-gradient(135deg, var(--p-text) 50%, transparent 50%);
+  background-position: calc(100% - 1.25rem) 50%, calc(100% - 0.9rem) 50%;
+  background-size: 0.35rem 0.35rem;
+  background-repeat: no-repeat;
+  font-family: var(--p-font);
+  font-size: 1rem;
+  color: var(--p-text);
+}
+.field select:focus-visible, td select:focus-visible { outline: none; border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); }

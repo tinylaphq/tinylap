@@ -66,6 +66,7 @@ export function mountSetup(root, ctx) {
     });
   });
   const driversCard = card('Drivers', driversList, driverForm, driversError);
+  parts.drivers.append(driversCard);
   function drawDrivers() {
     const error = driversError;
     const item = (driver) => {
@@ -83,7 +84,6 @@ export function mountSetup(root, ctx) {
       return h('li', { class: 'setup-row' }, chip, rename, remove);
     };
     driversList.replaceChildren(...[...ctx.view.drivers.values()].map(item));
-    parts.drivers.replaceChildren(driversCard);
   }
 
   async function drawTransponders() {
