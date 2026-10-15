@@ -175,7 +175,7 @@ function renderStatus() {
   const open = openPorts(state.layout).length;
   const closed = isClosedCircuit(state.layout);
   status.textContent =
-    state.layout.pieces.length === 0 ? 'Empty — drag a piece from the left'
+    state.layout.pieces.length === 0 ? 'Empty — drag a piece onto the canvas'
     : closed ? 'Closed circuit'
     : `${open} open end${open === 1 ? '' : 's'}`;
   status.className = `status ${closed ? 'status-success' : ''}`.trim();
