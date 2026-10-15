@@ -244,13 +244,18 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .field input[type="text"], .field input[type="url"] { max-width: 100%; }
 .inline-form > .field { flex: 1 1 14rem; }
 .inline-form > .status { flex-basis: 100%; margin: 0; }
-.field label { line-height: 16px; }
-/* A button sits at the input's height and top; a visible label (16px plus the field's gap) pushes it down to the input. */
+.field, .inline-form { --label-line: 16px; }
+.field label { line-height: var(--label-line); }
+/* A button sits at the input's height and top; a visible label (--label-line plus the field's gap) pushes it down to the input. */
 .inline-form .btn, .inline-form input, .inline-form select { box-sizing: border-box; height: 3rem; }
 .inline-form .btn { margin: 0; }
-.inline-form > .field:has(> label:not(.visually-hidden)) ~ .btn { margin-top: calc(16px + var(--p-space-xs)); }
+.inline-form > .field:has(> label:not(.visually-hidden)) ~ .btn { margin-top: calc(var(--label-line) + var(--p-space-xs)); }
 .button-row { display: flex; gap: var(--p-space-sm); flex-wrap: wrap; align-items: center; }
-.setup-row > .driver { flex: 0 0 9rem; overflow-wrap: anywhere; }
+.setup-row > .driver { flex: 0 0 auto; }
+/* The swatch alone names nothing; the rename field next to it carries the name. */
+.setup-row > .driver::before { width: 1.25rem; height: 1.25rem; margin: 0; display: block; }
+/* A link-button in a row stands as tall as the inline form's buttons. */
+.setup-row > .btn { box-sizing: border-box; height: 3rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
 .setup-row > .inline-form { flex: 1 1 18rem; }
 .setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
 .setup-table { width: 100%; border-collapse: collapse; }
@@ -264,9 +269,12 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .setup-table .inline-form > .field { flex: 1 1 8rem; }
 .setup-table select { width: 100%; min-width: 0; }
 .setup-row > .inline-form > .field { flex: 1 1 8rem; }
-.token { display: block; overflow-wrap: anywhere; font-family: var(--p-font-mono); }
+.token { display: block; overflow-wrap: anywhere; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
+.status .token { margin: 0; }
 @media (max-width: 520px) {
-  .setup-row > .driver { flex-basis: 100%; }
+  /* The swatch stays beside the rename form; a delete link sits under it. */
+  .setup-row:has(> .driver) { display: grid; grid-template-columns: auto 1fr; }
+  .setup-row > .driver + .inline-form + .btn { grid-column: 2; justify-self: start; }
   /* A labelled field and its button stack, so the button needs no offset. */
   .inline-form:has(> .field > label:not(.visually-hidden)) { flex-direction: column; align-items: stretch; }
   .inline-form:has(> .field > label:not(.visually-hidden)) > .field { flex: 0 0 auto; }

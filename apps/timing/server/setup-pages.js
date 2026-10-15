@@ -5,7 +5,7 @@
 // Setup's pages and forms (spec §3, §6.4). Every form posts to a resource
 // URL and answers 303 to the setup section it changed; a failure renders the
 // page again with the error and what was typed.
-import { can } from '@tinylap/auth';
+import { can, open, seal } from '@tinylap/auth';
 import * as ops from './operations.js';
 import { readForm } from './form.js';
 import { pageRoute } from './page-access.js';
@@ -81,13 +81,85 @@ const assignTransponder = withForm((request, form, match) => {
   return afterForm(request, ops.assignTransponder(request, { code, driverId: driver === '' ? null : driver }), { key: `transponder:${code}`, values: { driver }, section: 'transponders', fieldId: `transponder-${code}` });
 });
 
+export const PAIRED_COOKIE = '__Host-tl-paired';
+const PAIRED = new RegExp(`(?:^|;\\s*)${PAIRED_COOKIE}=([^;]+)`);
+const clearPaired = `${PAIRED_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
+const NO_SUCH_DECODER = { failed: { error: { message: 'There is no such decoder here.' } } };
+
+/** GET setup: the page, and once after pairing, the new decoder's token. */
+function showSetup(request) {
+  const id = request.url.searchParams.get('paired');
+  const raw = PAIRED.exec(String(request.req.headers.cookie ?? ''))?.[1];
+  if (!id || !raw || !request.keys) return renderSetup(request, 200);
+  let paired = null;
+  try {
+    const value = JSON.parse(open(request.keys, decodeURIComponent(raw), 'paired'));
+    const decoder = request.store.decoder(value.id);
+    if (value.id === id && decoder?.workspaceId === request.workspaceId) paired = { id: value.id, name: decoder.name, token: value.token };
+  } catch {
+    // A tampered or stale cookie shows nothing.
+  }
+  return renderSetup(request, 200, { paired, headers: { 'Set-Cookie': [clearPaired] } });
+}
+
+const setTrack = withForm(async (request, form) => {
+  const values = { link: form.get('link') ?? '', name: form.get('name') ?? '', direction: form.get('direction') ?? '' };
+  // A blank name is "use the default" on a form; the operation only takes a missing one.
+  const result = await ops.setTrack(request, { ...values, name: values.name || undefined });
+  return afterForm(request, result, { key: 'track', values, section: 'track', fieldId: result.error?.field ? `track-${result.error.field}` : null });
+});
+
+const pairDecoder = withForm((request, form) => {
+  const values = { name: form.get('name') ?? '' };
+  const result = ops.pairDecoder(request, { name: values.name || undefined });
+  if (result.error) return afterForm(request, result, { key: 'pair', values, section: 'decoders', fieldId: 'pair-name' });
+  const { id, token } = result.value;
+  const sealed = encodeURIComponent(seal(request.keys, JSON.stringify({ id, token }), 'paired'));
+  return seeOther(`${request.space.base}/setup?paired=${id}#decoders`, {
+    'Set-Cookie': [`${PAIRED_COOKIE}=${sealed}; Path=/; Max-Age=300; HttpOnly; Secure; SameSite=Strict`],
+  });
+});
+
+function askUnpair(request, match) {
+  const decoder = request.store.decoder(match[2]);
+  if (!decoder || decoder.workspaceId !== request.workspaceId) return renderSetup(request, 404, NO_SUCH_DECODER);
+  const base = request.space.base;
+  return page(request, 200, confirmPage(request, {
+    title: `Unpair ${decoder.name}?`,
+    text: 'Its token stops working at once. Its passings stay.',
+    action: `${base}/decoders/${decoder.id}/unpair`,
+    button: 'Unpair',
+    back: `${base}/setup#decoders`,
+  }));
+}
+
+const unpair = withForm((request, _form, match) => afterForm(request, ops.unpairDecoder(request, { id: match[2] }), { key: 'pair', values: {}, section: 'decoders' }));
+
+const makeWatchLink = withForm((request) => afterForm(request, ops.rotateWatchLink(request), { key: 'watchers', values: {}, section: 'watchers' }));
+
+function askNewWatchLink(request) {
+  const base = request.space.base;
+  if (!request.store.workspace(request.workspaceId).watchToken) return seeOther(`${base}/setup#watchers`);
+  return page(request, 200, confirmPage(request, {
+    title: 'Make a new watchers link?',
+    text: 'The old link stops working, and anyone watching with it is cut off.',
+    action: `${base}/watch-link`,
+    button: 'Make a new link',
+    back: `${base}/setup#watchers`,
+  }));
+}
+
 const write = { write: true };
 
-/** @type {any[]} Task 6 adds the track, decoder and watchers-link routes here. */
 export const setupPageRoutes = [
-  { pattern: spacePath('setup'), credentials: true, methods: { GET: pageRoute('timing.run', (request) => renderSetup(request, 200)) } },
+  { pattern: spacePath('setup'), credentials: true, methods: { GET: pageRoute('timing.run', showSetup) } },
   { pattern: spacePath('drivers'), credentials: true, methods: { POST: pageRoute('timing.setup', addDriver, write) } },
   { pattern: spacePath('drivers/([^/]+)'), credentials: true, methods: { POST: pageRoute('timing.setup', renameDriver, write) } },
   { pattern: spacePath('drivers/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteDriver), POST: pageRoute('timing.delete', deleteDriver, write) } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { POST: pageRoute('timing.setup', assignTransponder, write) } },
+  { pattern: spacePath('track'), credentials: true, methods: { POST: pageRoute('timing.setup', setTrack, write) } },
+  { pattern: spacePath('decoders'), credentials: true, methods: { POST: pageRoute('timing.setup', pairDecoder, write) } },
+  { pattern: spacePath('decoders/([^/]+)/unpair'), credentials: true, methods: { GET: pageRoute('timing.delete', askUnpair), POST: pageRoute('timing.delete', unpair, write) } },
+  { pattern: spacePath('watch-link'), credentials: true, methods: { POST: pageRoute('timing.setup', makeWatchLink, write) } },
+  { pattern: spacePath('watch-link/new'), credentials: true, methods: { GET: pageRoute('timing.setup', askNewWatchLink) } },
 ];

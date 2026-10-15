@@ -12,7 +12,8 @@ const DIRECTIONS = [{ value: 'ccw', label: 'Anticlockwise' }, { value: 'cw', lab
 const DIRECTION_NAME = { cw: 'clockwise', ccw: 'anticlockwise' };
 const when = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
 
-const driverChip = (d) => html`<span class="driver" style="--driver: ${d.colour}">${d.name}</span>`;
+// The colour swatch only: the rename field beside it already carries the name.
+const driverChip = (d) => html`<span class="driver" style="--driver: ${d.colour}" aria-hidden="true"></span>`;
 
 function trackSection(request, m) {
   const base = request.space.base;
