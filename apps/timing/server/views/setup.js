@@ -4,13 +4,13 @@
 
 // The setup page (spec §6.4): the track, drivers, transponders, decoders
 // and the watchers link, each its own card-static section and forms.
+import { formatAgo } from '../../public/format.js';
 import { html } from './html.js';
 import { errorSummary, selectField, textField } from './form-parts.js';
 import { layout } from './layout.js';
 
 const DIRECTIONS = [{ value: 'ccw', label: 'Anticlockwise' }, { value: 'cw', label: 'Clockwise' }];
 const DIRECTION_NAME = { cw: 'clockwise', ccw: 'anticlockwise' };
-const when = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
 
 // The colour swatch only: the rename field beside it already carries the name.
 const driverChip = (d) => html`<span class="driver" style="--driver: ${d.colour}" aria-hidden="true"></span>`;
@@ -90,7 +90,7 @@ function decodersSection(request, m) {
   ${m.decoders.length ? html`<ul class="setup-list">${m.decoders.map((d) => html`<li class="setup-row">
     <div class="decoder-info">
       <span>${d.name}</span>
-      <span class="meta">${d.lastSeenAt ? html`seen <time datetime="${new Date(d.lastSeenAt).toISOString()}">${when(d.lastSeenAt)}</time>` : 'never seen'}</span>
+      <span class="meta">${d.lastSeenAt ? html`seen <time datetime="${new Date(d.lastSeenAt).toISOString()}">${formatAgo(d.lastSeenAt, request.now())}</time>` : 'never seen'}</span>
     </div>
     ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/decoders/${d.id}/unpair">Unpair</a>` : null}
   </li>`)}</ul>` : null}
