@@ -25,10 +25,12 @@ TinyLap's own commands, which ZRound never sends (fields separated by one space)
 | Direction | Message | Meaning |
 | --- | --- | --- |
 | PC → decoder | `%TLHELLO&` | who are you? |
-| decoder → PC | `%TLID <decoder id or -> <boot>&` | `-` while unpaired |
+| decoder → PC | `%TLID <decoder id or -> <boot>&` | `-` while unpaired; also sent unprompted whenever the boot changes |
 | PC → decoder | `%TLPAIR <decoder id> <token>&` | store the id and the 43-character token; answer `%TLOK&` |
 | PC → decoder | `%TLWIFI <base64url ssid> <base64url password>&` | store Wi-Fi; answer `%TLOK&` |
 | decoder → PC | `%TLOK&`, `%TLERR <text>&` | done, or why not |
+
+A TinyLap decoder sends `%TLID` on its own whenever its boot changes (power-up, a reset, `%I&`), so a connected bridge never stamps passings with an old boot. If a `%T…&` clock comes in lower than the one before, the bridge sends `%TLHELLO&` again, in case that `%TLID` got lost.
 
 ## Over Wi-Fi: the ingest API
 
@@ -38,4 +40,4 @@ TinyLap's own commands, which ZRound never sends (fields separated by one space)
 
     { "boot": "x7Qm2LbV0aE", "passings": [{ "transponder": "4A1F", "t": 81234 }] }
 
-At most 500 passings per batch, all of one boot. The answer is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds. Keep every passing in an outbox until a `through` covers it; resending is always safe. `401` means the token is wrong or the decoder was unpaired: keep the outbox and stop sending until it is paired again. `429` comes with `Retry-After`. The whole API is described at `/openapi.json` and `/api` on any timing server.
+At most 500 passings per batch, all of one boot. The answer is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds. Keep every passing in an outbox until a batch that carried it is answered with a `through` that covers it; drop only the passings you sent, since a passing of the same boot you never sent can lie below `through` too (the cable and Wi-Fi copies race). Resending is always safe. `401` means the token is wrong or the decoder was unpaired: keep the outbox and stop sending until it is paired again. `429` comes with `Retry-After`. The whole API is described at `/openapi.json` and `/api` on any timing server.

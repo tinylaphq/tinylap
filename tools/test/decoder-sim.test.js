@@ -38,6 +38,21 @@ test('the sender keeps passings until the server holds them', async () => {
   assert.deepEqual(await sender.flush(), { sent: 0 });
 });
 
+test('the sender keeps a passing it did not send, even below `through`', async () => {
+  let sender;
+  const fetch = async (_url, init) => {
+    const { passings } = JSON.parse(init.body);
+    if (passings.length === 1 && passings[0].t === 9000) sender.add([{ transponder: '11', t: 5000 }]);
+    return Response.json({ stored: passings.length, duplicates: 0, through: 9000 });
+  };
+  sender = createSender({ url: 'http://timing.test', decoder: 'd1', token: 't'.repeat(43), boot: 'b00tb00t', fetch });
+  sender.add([{ transponder: '10', t: 9000 }]);
+  await sender.flush();
+  assert.equal(sender.pending, 1, 'added while the batch was in flight');
+  await sender.flush();
+  assert.equal(sender.pending, 0);
+});
+
 const settle = () => new Promise((done) => setImmediate(done));
 
 test('the serial mode answers commands and writes laps', async () => {

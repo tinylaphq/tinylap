@@ -5,7 +5,7 @@
 // The bridge screen (spec §8): connect the decoder on USB, pair it, watch
 // the outbox and a local preview. The Bridge outlives the screen, so the
 // board can be shown while it forwards.
-import { Bridge } from './bridge.js';
+import { Bridge, sendOutbox } from './bridge.js';
 import { h } from './dom.js';
 import { formatLap } from './format.js';
 import { openOutbox } from './outbox.js';
@@ -19,6 +19,37 @@ const views = new Set();
 const notify = (kind) => { for (const view of views) view(kind); };
 let guarded = false;
 
+/** Passings an earlier tab left in the outbox, while no decoder is connected: a count, and why they wait. */
+const earlier = { count: 0, error: null, sending: null };
+
+// Redraws only while no bridge runs: a connected bridge's screen (a half-filled pair form) is left alone.
+const notifyEarlier = () => { if (!bridge) notify('state'); };
+
+const postFor = (ctx) => (decoderId, batch) => ctx.api('POST', `/decoders/${encodeURIComponent(decoderId)}/passings`, batch);
+
+/** Sends what an earlier tab left in the outbox (a reload, a crash) without waiting for the cable. */
+function sendEarlier(ctx) {
+  earlier.sending ??= (async () => {
+    const outbox = await openOutbox();
+    try {
+      earlier.count = await outbox.count();
+      if (earlier.count === 0) return;
+      notifyEarlier();
+      ({ refusal: earlier.error } = await sendOutbox(outbox, postFor(ctx), async () => {
+        earlier.count = await outbox.count();
+        notifyEarlier();
+      }));
+    } catch (error) {
+      earlier.error = error;
+    } finally {
+      earlier.count = await outbox.count().catch(() => earlier.count);
+      earlier.sending = null;
+      notifyEarlier();
+    }
+  })();
+  return earlier.sending;
+}
+
 const simulate = () => new URLSearchParams(location.search).get('simulate');
 
 async function connectPort(ctx) {
@@ -28,7 +59,7 @@ async function connectPort(ctx) {
   const next = new Bridge({
     port,
     outbox: await openOutbox(),
-    post: (decoderId, batch) => ctx.api('POST', `/decoders/${encodeURIComponent(decoderId)}/passings`, batch),
+    post: postFor(ctx),
   });
   next.addEventListener('state', () => {
     // Not a TinyLap decoder: the bridge stops and lets go of the port.
@@ -106,11 +137,15 @@ export function mountBridge(root, ctx) {
     const state = h('div', {});
     const text = h('p', { role: 'status' });
     const outbox = h('span', { class: 'bridge-outbox num' }, '…');
+    const refused = h('p', { class: 'status status-error', role: 'alert', hidden: true });
     const list = h('div', {});
     state.append(text, h('p', {}, 'Waiting to send: ', outbox));
     const update = () => {
       state.className = `bridge-state${bridge.online ? '' : ' is-offline'}`;
       text.textContent = bridge.online ? `Forwarding from decoder ${bridge.decoder}` : `Offline: passings wait here. ${bridge.lastError?.message ?? ''}`;
+      // Offline, the error is the reason above; online, it is a group the server refused for good.
+      refused.hidden = !(bridge.online && bridge.lastError);
+      refused.textContent = bridge.online && bridge.lastError ? `Some passings were refused: ${bridge.lastError.message}` : '';
       void bridge.outbox.count().then((n) => { outbox.textContent = String(n); });
       list.replaceChildren(preview.length
         ? h('ol', { class: 'board-laps bridge-preview' }, preview.map((p) => h('li', {}, h('span', { class: 'num' }, p.transponder), h('span', { class: 'num' }, formatLap(p.lapMs)))))
@@ -118,7 +153,14 @@ export function mountBridge(root, ctx) {
     };
     update();
     liveUpdate = update;
-    return h('div', { class: 'stack-md' }, state, h('h2', { class: 'h3' }, 'Straight from the cable'), list);
+    return h('div', { class: 'stack-md' }, state, refused, h('h2', { class: 'h3' }, 'Straight from the cable'), list);
+  }
+
+  function earlierNote() {
+    if (earlier.count === 0) return null;
+    const waiting = `${earlier.count} ${earlier.count === 1 ? 'passing' : 'passings'} from earlier ${earlier.count === 1 ? 'is' : 'are'} waiting`;
+    const why = earlier.sending ? 'Sending them now…' : earlier.error ? `They couldn't be sent: ${earlier.error.message}` : '';
+    return h('p', { class: 'status status-warning', role: 'status' }, `${waiting}. ${why}`.trim());
   }
 
   function draw() {
@@ -126,7 +168,7 @@ export function mountBridge(root, ctx) {
     const supported = 'serial' in /** @type {any} */ (navigator) || simulate() !== null;
     let body;
     if (!supported) body = h('p', { class: 'status status-warning' }, 'The bridge needs Chrome or Edge on a laptop: it uses Web Serial to read the decoder over USB.');
-    else if (!bridge) body = h('div', { class: 'stack-md' }, h('p', {}, 'Plug the decoder in by USB, then connect. Keep this tab open while racing.'), connectButton('Connect decoder'));
+    else if (!bridge) body = h('div', { class: 'stack-md' }, earlierNote(), h('p', {}, 'Plug the decoder in by USB, then connect. Keep this tab open while racing.'), connectButton('Connect decoder'));
     else if (bridge.state === 'connecting' || bridge.state === 'idle') body = h('p', { role: 'status' }, 'Talking to the decoder…');
     else if (bridge.state === 'not-tinylap') body = h('div', { class: 'stack-md' }, h('p', { class: 'status status-error' }, "This device doesn't answer like a TinyLap decoder."), connectButton('Try another port'));
     else if (bridge.state === 'unpaired') body = pairForm();
@@ -136,6 +178,7 @@ export function mountBridge(root, ctx) {
   }
 
   draw();
+  if (!bridge) void sendEarlier(ctx);
   const view = (kind) => (kind === 'state' ? draw() : liveUpdate?.());
   views.add(view);
   return () => {

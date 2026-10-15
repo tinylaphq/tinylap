@@ -21,8 +21,9 @@ export function memoryOutbox() {
     async count() {
       return items.size;
     },
-    async removeThrough(decoder, boot, t) {
-      for (const [key, p] of items) if (p.decoder === decoder && p.boot === boot && p.t <= t) items.delete(key);
+    /** Drops these passings (the ones a batch carried). @param {{ decoder: string, boot: string, transponder: string, t: number }[]} passings */
+    async remove(passings) {
+      for (const p of passings) items.delete(keyOf(p));
     },
   };
 }
@@ -55,15 +56,8 @@ export async function openOutbox(name = 'tinylap-timing') {
     add: (p) => inTransaction(db, 'readwrite', (store) => store.put(p)).then(() => {}),
     list: () => inTransaction(db, 'readonly', (store) => store.getAll()),
     count: () => inTransaction(db, 'readonly', (store) => store.count()),
-    // Every key starting [decoder, boot]: arrays sort after strings, so [d, b, []] ends the range.
-    removeThrough: (decoder, boot, t) => inTransaction(db, 'readwrite', (store) => {
-      const cursor = store.openCursor(IDBKeyRange.bound([decoder, boot], [decoder, boot, []]));
-      cursor.onsuccess = () => {
-        const at = cursor.result;
-        if (!at) return;
-        if (at.value.t <= t) at.delete();
-        at.continue();
-      };
+    remove: (passings) => inTransaction(db, 'readwrite', (store) => {
+      for (const p of passings) store.delete([p.decoder, p.boot, p.transponder, p.t]);
       return null;
     }),
   };

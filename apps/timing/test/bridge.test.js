@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { commands, createReader, createSimulator } from '@tinylap/timing';
-import { Bridge } from '../js/bridge.js';
+import { Bridge, sendOutbox } from '../js/bridge.js';
 import { memoryOutbox } from '../js/outbox.js';
 
 /** A serial port whose other end is `sim` (or silence). */
@@ -106,4 +106,47 @@ test('a group the server refuses for good does not block the others', async () =
   assert.deepEqual((await outbox.list()).map((x) => x.decoder), ['d1']);
   assert.equal(bridge.lastError.message, 'no');
   await bridge.close();
+});
+
+test('a decoder that reboots with the port open is asked again who it is', async () => {
+  const sim = createSimulator({ cars: [], decoder: 'dec_1' });
+  const { port, send } = fakePort(sim);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }) });
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  const before = bridge.boot;
+  send(commands.clock(5000));
+  send(commands.clock(9000));
+  sim.reply({ type: 'reset' }, 9000); // the reset's own %TLID got lost on the cable
+  send(commands.clock(100));
+  await until(() => bridge.state === 'ready' && bridge.boot === sim.boot);
+  assert.notEqual(bridge.boot, before);
+  await bridge.close();
+});
+
+test('a reply that came too late does not answer the next request', async () => {
+  const { port, send } = fakePort(null);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }), helloMs: 10_000, replyMs: 30 });
+  await bridge.start();
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43)), /didn't answer/);
+  const second = bridge.pair('dec_1', 't'.repeat(43));
+  send(commands.ok);
+  await second;
+  await bridge.close();
+});
+
+test('sending drops only the passings a batch carried, up to `through`', async () => {
+  const outbox = memoryOutbox();
+  const p = (t) => ({ decoder: 'd1', boot: 'b1', transponder: '0A', t });
+  await outbox.add(p(1000));
+  await outbox.add(p(9000));
+  const posted = [];
+  await sendOutbox(outbox, async (_decoder, batch) => {
+    posted.push(batch.passings.map((x) => x.t));
+    // The cable reads an older passing while the Wi-Fi copy already put 9000 on the server.
+    if (posted.length === 1) await outbox.add(p(5000));
+    return { through: 9000 };
+  });
+  assert.deepEqual(posted, [[1000, 9000], [5000]]);
+  assert.equal(await outbox.count(), 0);
 });

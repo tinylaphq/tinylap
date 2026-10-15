@@ -4,7 +4,7 @@
 
 // The bridge (spec §5): a decoder on USB, read with Web Serial, forwarded
 // to the server with the member's session. It asks the decoder who it is
-// (%TLHELLO&), so its passings carry the same key as the copies the decoder
+// (%TLHELLO&) — again whenever its clock goes back, a reboot — so its passings carry the same key as the copies the decoder
 // sends over Wi-Fi, pairs unpaired decoders, keeps an outbox while offline,
 // and computes laps locally for an instant preview.
 import { MAX_BATCH, ZROUND_BAUD, commands, createReader, nextLap } from '@tinylap/timing';
@@ -18,6 +18,8 @@ export class Bridge extends EventTarget {
   #writer = null;
   #reader = null;
   #closed = false;
+  /** The last %T…& clock the decoder sent. @type {number | null} */
+  #clock = null;
   /** @type {any} */ port;
   /** @type {ReturnType<typeof import('./outbox.js').memoryOutbox>} */ outbox;
   /** @type {(decoderId: string, batch: any) => Promise<{ through: number | null }>} */ post;
@@ -110,11 +112,19 @@ export class Bridge extends EventTarget {
   async #handle(message) {
     if (message.type === 'hello') {
       clearTimeout(this.#helloTimer);
-      if (message.boot !== this.boot) this.references.clear();
+      if (message.boot !== this.boot) {
+        this.references.clear();
+        this.#clock = null;
+      }
       this.decoder = message.decoder;
       this.boot = message.boot;
       this.#set(message.decoder ? 'ready' : 'unpaired');
       if (message.decoder) void this.flush();
+    } else if (message.type === 'clock') {
+      // A clock that went back means the decoder rebooted (power, %I&) with the port open: ask who it is now.
+      const back = this.#clock !== null && message.t < this.#clock;
+      this.#clock = message.t;
+      if (back) await this.hello();
     } else if (message.type === 'ok' || message.type === 'error') {
       this.#replies.shift()?.(message);
     } else if (message.type === 'lap' && this.state === 'ready') {
@@ -130,12 +140,18 @@ export class Bridge extends EventTarget {
   /** The decoder's next %TLOK& or %TLERR&, or a timeout. */
   #reply() {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("The decoder didn't answer.")), this.replyMs);
-      this.#replies.push((message) => {
+      const answer = (message) => {
         clearTimeout(timer);
         if (message.type === 'ok') resolve(message);
         else reject(new Error(`The decoder said: ${message.text}`));
-      });
+      };
+      // A request that timed out leaves the queue, so later replies match later requests.
+      const timer = setTimeout(() => {
+        const i = this.#replies.indexOf(answer);
+        if (i !== -1) this.#replies.splice(i, 1);
+        reject(new Error("The decoder didn't answer."));
+      }, this.replyMs);
+      this.#replies.push(answer);
     });
   }
 
@@ -152,7 +168,7 @@ export class Bridge extends EventTarget {
     await this.hello();
   }
 
-  /** Sends the outbox, one decoder and boot at a time; retries later when the server can't be reached. */
+  /** Sends the outbox; retries later when the server can't be reached. */
   flush() {
     if (this.#flushing) {
       this.#again = true;
@@ -161,31 +177,10 @@ export class Bridge extends EventTarget {
     clearTimeout(this.#retryTimer);
     this.#flushing = (async () => {
       try {
-        // Groups the server refused for good (a 4xx) stay in the outbox but must not block the others.
-        const refused = new Set();
-        let refusal = null;
-        for (;;) {
-          const items = (await this.outbox.list()).filter((p) => !refused.has(`${p.decoder} ${p.boot}`));
-          if (items.length === 0) break;
-          const [first] = items;
-          const group = items.filter((p) => p.decoder === first.decoder && p.boot === first.boot).sort((a, b) => a.t - b.t).slice(0, MAX_BATCH);
-          let through;
-          try {
-            ({ through } = await this.post(first.decoder, { boot: first.boot, passings: group.map(({ transponder, t }) => ({ transponder, t })) }));
-          } catch (error) {
-            const status = /** @type {any} */ (error)?.status;
-            if (typeof status !== 'number' || status < 400 || status > 499 || status === 429) throw error;
-            refused.add(`${first.decoder} ${first.boot}`);
-            refusal = error;
-            this.lastError = error;
-            continue;
-          }
-          await this.outbox.removeThrough(first.decoder, first.boot, through ?? -1);
+        const { refusal } = await sendOutbox(this.outbox, this.post, () => {
           this.#setOnline(true);
           this.dispatchEvent(new Event('outbox'));
-          // The server stores what it is sent, so `through` covers the group; if not, stop rather than loop.
-          if (through === null || through < group.at(-1).t) break;
-        }
+        });
         if (refusal) this.lastError = refusal;
       } catch (error) {
         this.#setOnline(false, error);
@@ -210,4 +205,40 @@ export class Bridge extends EventTarget {
     this.#writer?.releaseLock();
     await this.port.close().catch(() => {});
   }
+}
+
+/**
+ * Sends an outbox one decoder and boot at a time (spec §5), and drops the passings it sent, up to the
+ * server's `through`. Throws when the server can't be reached. Groups the server refused for good
+ * (a 4xx) stay in the outbox but don't block the others; the last refusal is returned.
+ * @param {ReturnType<typeof import('./outbox.js').memoryOutbox>} outbox
+ * @param {(decoderId: string, batch: { boot: string, passings: { transponder: string, t: number }[] }) => Promise<{ through: number | null }>} post
+ * @param {() => void} [onSent] called after each batch the server took
+ * @returns {Promise<{ refusal: any }>}
+ */
+export async function sendOutbox(outbox, post, onSent = () => {}) {
+  const refused = new Set();
+  let refusal = null;
+  for (;;) {
+    const items = (await outbox.list()).filter((p) => !refused.has(`${p.decoder} ${p.boot}`));
+    if (items.length === 0) break;
+    const [first] = items;
+    const group = items.filter((p) => p.decoder === first.decoder && p.boot === first.boot).sort((a, b) => a.t - b.t).slice(0, MAX_BATCH);
+    let through;
+    try {
+      ({ through } = await post(first.decoder, { boot: first.boot, passings: group.map(({ transponder, t }) => ({ transponder, t })) }));
+    } catch (error) {
+      const status = /** @type {any} */ (error)?.status;
+      if (typeof status !== 'number' || status < 400 || status > 499 || status === 429) throw error;
+      refused.add(`${first.decoder} ${first.boot}`);
+      refusal = error;
+      continue;
+    }
+    // Only what this batch carried: a passing of the same boot that wasn't sent stays, whatever `through` says.
+    await outbox.remove(group.filter((p) => through !== null && p.t <= through));
+    onSent();
+    // The server stores what it is sent, so `through` covers the group; if not, stop rather than loop.
+    if (through === null || through < group.at(-1).t) break;
+  }
+  return { refusal };
 }

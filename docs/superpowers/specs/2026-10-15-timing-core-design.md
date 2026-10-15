@@ -151,7 +151,10 @@ personal bests.
   answers with its `decoder` id and current `boot`. ZRound software never
   sends that command, so it doesn't disturb existing software. Without that
   answer the bridge can't build keys; it shows "not a TinyLap decoder" and
-  stops.
+  stops. The decoder also sends `%TLID <decoder|-> <boot>&` unprompted
+  whenever its boot changes (power-up, reset, `%I&`), and the bridge sends
+  `%TLHELLO&` again whenever a `%T<hex>&` clock is lower than the one before,
+  so a reboot with the port open never mixes two boots.
 - Passing lines are parsed by `packages/timing/zround`, shown at once in the
   local preview, appended to an IndexedDB outbox and posted in batches.
 - Offline: the outbox grows, the banner says "offline, N passings waiting",
@@ -176,7 +179,7 @@ personal bests.
 - Repeating a batch is safe. Duplicates by key are ignored.
 - Answers `200` with `{ "stored": n, "duplicates": m, "through": t }`, where
   `through` is the highest `t` of this boot the server holds. A sender drops
-  everything up to `through` from its outbox.
+  the passings it sent, up to `through`, from its outbox.
 - At most 500 passings per batch.
 
 ### Pairing a decoder

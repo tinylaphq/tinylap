@@ -17,8 +17,8 @@ import { MAX_BATCH, commands, createReader, createSimulator } from '@tinylap/tim
 export const carsOf = (n) => Array.from({ length: n }, (_, i) => ({ transponder: (0x10 + i).toString(16).toUpperCase(), lapMs: 7500 + i * 400 }));
 
 /**
- * Posts passings in batches and keeps each until the server's `through`
- * covers it, as a decoder's outbox does (spec §5).
+ * Posts passings in batches and keeps each until a batch carried it and the
+ * server's `through` covers it, as a decoder's outbox does (spec §5).
  * @param {{ url: string, decoder: string, token: string, boot: string, fetch?: typeof fetch }} options
  */
 export function createSender({ url, decoder, token, boot, fetch: fetchImpl = fetch }) {
@@ -43,7 +43,9 @@ export function createSender({ url, decoder, token, boot, fetch: fetchImpl = fet
       });
       if (!res.ok) throw new Error(`timing answered ${res.status}: ${await res.text()}`);
       const { through } = await res.json();
-      outbox = outbox.filter((p) => through === null || p.t > through);
+      // Drop what this batch carried, up to `through`; a passing it didn't carry stays (spec §5).
+      const sent = new Set(batch.filter((p) => through !== null && p.t <= through));
+      outbox = outbox.filter((p) => !sent.has(p));
       return { sent: batch.length };
     },
   };

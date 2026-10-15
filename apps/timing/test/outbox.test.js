@@ -8,7 +8,7 @@ import { memoryOutbox, openOutbox } from '../js/outbox.js';
 
 const p = (t, transponder = '0A', boot = 'b00tb00t', decoder = 'd1') => ({ decoder, boot, transponder, t });
 
-test('the memory outbox keeps one copy and drops up to a time per boot', async () => {
+test('the memory outbox keeps one copy and drops exactly the passings it is given', async () => {
   const box = memoryOutbox();
   await box.add(p(1000));
   await box.add(p(1000));
@@ -16,7 +16,7 @@ test('the memory outbox keeps one copy and drops up to a time per boot', async (
   await box.add(p(500, '0B'));
   await box.add(p(100, '0A', 'otherboot'));
   assert.equal(await box.count(), 4);
-  await box.removeThrough('d1', 'b00tb00t', 1000);
+  await box.remove([p(1000), p(500, '0B')]);
   assert.deepEqual((await box.list()).map((x) => [x.boot, x.transponder, x.t]), [['b00tb00t', '0A', 9000], ['otherboot', '0A', 100]]);
 });
 
