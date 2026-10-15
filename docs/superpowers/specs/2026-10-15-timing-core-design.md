@@ -81,8 +81,29 @@ own Fly app, the planner's structure (`server/app.js`, `store.js`,
 - **Login:** `createBff` from `@tinylap/auth`, as in the planner; the
   deletions feed from `accounts` purges deleted workspaces.
 - **Tracks:** fetched from the planner by share link (`/layouts/<key>`, JSON
-  by content negotiation).
+  by content negotiation). The server fetches only from its configured planner
+  origin (`TINYLAP_PLANNER_URL`), never from an arbitrary URL.
 - **The browser app**, served by the same server (§8).
+
+### Data
+
+SQLite, every row scoped to a workspace; the deletions feed removes a deleted
+workspace's rows.
+
+- `decoders`: id, workspace, name, SHA-256 of its token, created, last seen.
+- `drivers`: id, workspace, name, colour.
+- `transponders`: workspace, code, driver (null while unassigned), first seen.
+- `passings`: decoder, boot, transponder, `t`, `receivedAt`, `via`; unique on
+  the key (§4).
+- `tracks`: track id and shape from the planner file, workspace, name,
+  planner snapshot key, the layout JSON. `workspace_settings` holds the
+  current track and direction and the watchers token.
+- `sessions`: kind, track, direction, duration, roster, state, start, "go",
+  time-up and end times.
+- `crossings`: one row per stored passing: its session, driver (null while
+  the transponder is unassigned), transponder, server-mapped time, lap time
+  (null for a start, a double read or a parked car) and whether it counts.
+  Laps and results are derived from these and can be rebuilt from passings.
 
 ### `tools/decoder-sim`
 
@@ -101,11 +122,13 @@ A passing is one car crossing the line:
 ```
 
 - `decoder`: the decoder's id, assigned at pairing.
-- `boot`: a random 64-bit id, base64url, the decoder picks at every power-up.
-  The decoder clock restarts at boot, so times from different boots are never
-  compared.
-- `transponder`: the transponder code, a string.
-- `t`: microseconds on the decoder's clock since boot, an integer.
+- `boot`: a random 64-bit id, base64url, the decoder picks at every power-up
+  and whenever its clock is reset (ZRound's `%I&` race start sets the clock
+  to zero). Times from different boots are never compared.
+- `transponder`: the transponder code, upper-case hex, as ZRound sends it.
+- `t`: milliseconds on the decoder's clock since boot, an integer. That is
+  ZRound's resolution, so the cable and the Wi-Fi copy of a passing carry the
+  same value.
 
 **Key:** `(decoder, boot, transponder, t)`. The same passing arriving over
 the cable and over Wi-Fi has the same key; the server stores it once.
@@ -114,8 +137,8 @@ The server adds `receivedAt` (its own clock) and `via` (`serial`, `net` or
 `tap`) for the first copy it stores.
 
 **Tap entry** has no decoder. Each workspace has one virtual tap decoder,
-`boot` = the session id, and `t` = the server's receive time in
-microseconds. Tap laps are marked `via: 'tap'` and never count towards
+`boot` = the session id, the driver's id as the transponder, and `t` = the
+server's receive time in milliseconds. Tap laps are marked `via: 'tap'` and never count towards
 personal bests.
 
 ## 5. Transports
@@ -212,8 +235,9 @@ spec requires (§ "Requirements this places on the timing app").
 
 ## 7. Live updates
 
-`GET /workspaces/{id}/live` (member session) and `GET /watch/{token}`
-(watchers view) stream Server-Sent Events:
+`GET /workspaces/{id}/live` (member session) and `GET /watch/{token}/live`
+(watchers view) stream Server-Sent Events. The watchers page is
+`/#watch=<token>`: in the fragment, the token never reaches a server log.
 
 - `passing`, `lap`, `session` (state changes), `results`, `setup` (drivers,
   transponders, track; members only).
