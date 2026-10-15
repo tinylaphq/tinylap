@@ -222,12 +222,18 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-surface); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
 .bridge-state p { margin: 0; }
 .bridge-state [data-bridge-status] { overflow-wrap: anywhere; min-width: 0; }
-.bridge-preview { margin-right: var(--p-space-sm); }
-.bridge-outbox { font: 700 1.5rem var(--p-font-mono); }
 .bridge-state.is-offline { box-shadow: var(--p-shadow-lg) var(--p-warning); }
+/* A stat: the label small, the count under it, at the right of the strip. */
+.bridge-stat { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.bridge-stat-label { font-size: 0.8125rem; opacity: 0.8; }
+.bridge-outbox { font: 700 1.5rem/1 var(--p-font-mono); }
+/* The preview shares the strip's edges; the strip's shadow hangs outside both. */
 .bridge-preview { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-xs) var(--p-space-md); }
+.bridge-head { display: flex; justify-content: space-between; margin: 0; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-text); font-size: 0.8125rem; font-weight: 600; color: var(--p-text-muted, var(--p-text)); }
+.container .bridge-preview ol { padding: 0; margin: 0; }
 .bridge-preview li { justify-content: space-between; }
-.bridge-preview .num:first-child { text-align: left; margin-left: 0; }
+.bridge-code { font-family: var(--p-font-mono); font-variant-ligatures: none; }
+.bridge-first { color: var(--p-text-muted, var(--p-text)); font-style: italic; }
 .bridge-preview li:last-child { border-bottom: 0; }
 
 /* An empty board, for members: the three things to do before the first

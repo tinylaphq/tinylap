@@ -26,6 +26,8 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
   assert.match(body, /<section data-bridge-state="connect" hidden/);
   assert.match(body, /Pair over Wi-Fi only/);
+  assert.match(body, /token for your personal timing/);
+  assert.doesNotMatch(body, /this space/);
   const map = /<script type="importmap">([\s\S]*?)<\/script>/.exec(body)[1];
   assert.deepEqual(JSON.parse(map), { imports: { '@tinylap/timing': '/pkg/timing/index.js' } });
   const hash = createHash('sha256').update(map).digest('base64');

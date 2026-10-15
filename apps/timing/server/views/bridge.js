@@ -20,6 +20,7 @@ const connect = (label) => html`<button type="button" class="btn btn-primary btn
 /** @param {any} request @param {{ tag: unknown }} importMap */
 export function bridgePage(request, importMap) {
   const base = request.space.base;
+  const where = request.space.kind === 'personal' ? 'your personal timing' : 'this club';
   return layout(request, {
     title: 'Bridge',
     screen: 'bridge',
@@ -28,7 +29,8 @@ export function bridgePage(request, importMap) {
     body: html`<div class="container stack-lg screen">
   <h1>Bridge</h1>
   <div id="bridge" data-workspace="${request.workspaceId}">
-    <p class="status status-warning" data-bridge-earlier role="status" hidden></p>
+    <p class="visually-hidden" role="status" data-bridge-live></p>
+    <p class="status status-warning" data-bridge-earlier hidden></p>
     <section data-bridge-state="unsupported" class="card-static stack-md">
       <p>The bridge reads the decoder over USB with Web Serial, which needs Chrome or Edge on a laptop, with JavaScript on.</p>
       <p>Timing still works without it: the decoder can send its passings over Wi-Fi (<a href="${base}/setup">Pair over Wi-Fi only</a> on Setup), and you can <a href="${base}/tap">tap laps by hand</a>.</p>
@@ -37,14 +39,14 @@ export function bridgePage(request, importMap) {
       <p>Plug the decoder in by USB, then connect. Keep this tab open while racing; the board runs in any other tab or screen.</p>
       ${connect('Connect decoder')}
     </section>
-    <section data-bridge-state="connecting" hidden class="card-static"><p role="status">Talking to the decoder…</p></section>
+    <section data-bridge-state="connecting" hidden class="card-static"><p>Talking to the decoder…</p></section>
     <section data-bridge-state="not-tinylap" hidden class="card-static stack-md">
       <p class="status status-error">This device doesn't answer like a TinyLap decoder.</p>
       ${connect('Try another port')}
     </section>
     <section data-bridge-state="unpaired" hidden class="card-static stack-md">
       <h2 class="h3">Pair this decoder</h2>
-      <p>It gets its own token for this space. Wi-Fi is optional: with it, the decoder also sends passings over the internet when the cable is out.</p>
+      <p>It gets its own token for ${where}. Wi-Fi is optional: with it, the decoder also sends passings over the internet when the cable is out.</p>
       <form data-bridge-pair class="stack-sm">
         <div class="field"><label for="bridge-name">Decoder name</label><input type="text" id="bridge-name" name="name" value="Decoder" maxlength="60" required></div>
         <div class="field"><label for="bridge-ssid">Wi-Fi name (optional)</label><input type="text" id="bridge-ssid" name="ssid" autocomplete="off"></div>
@@ -54,12 +56,15 @@ export function bridgePage(request, importMap) {
     </section>
     <section data-bridge-state="ready" hidden class="stack-md">
       <div class="bridge-state" data-bridge-status-box>
-        <p role="status" data-bridge-status></p>
-        <p>Waiting to send: <span class="bridge-outbox num" data-bridge-outbox>…</span></p>
+        <p data-bridge-status></p>
+        <p class="bridge-stat"><span class="bridge-stat-label">Waiting to send</span><span class="bridge-outbox num" data-bridge-outbox>…</span></p>
       </div>
       <p class="status status-error" role="alert" data-bridge-refused hidden></p>
       <h2 class="h3">Straight from the cable</h2>
-      <ol class="board-laps bridge-preview" data-bridge-preview></ol>
+      <div class="bridge-preview">
+        <p class="bridge-head"><span>Transponder</span><span>Lap</span></p>
+        <ol class="board-laps" data-bridge-preview></ol>
+      </div>
       <p class="empty" data-bridge-preview-empty>Passings show up here the moment the decoder reports them.</p>
     </section>
     <section data-bridge-state="disconnected" hidden class="card-static stack-md">
