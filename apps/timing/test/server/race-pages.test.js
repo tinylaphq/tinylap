@@ -120,3 +120,13 @@ test('a running session names its drivers and length', async () => {
   assert.match(body, /Ana, Ben\. 3 minutes\./);
   await app.form(member, `${base}/sessions/${app.store.activeSession(office.id).id}/abort`, {});
 });
+
+test('a session of 30 seconds, started through the API, does not read as a minute', async () => {
+  const [a] = app.store.drivers(office.id);
+  const started = await app.api(member, 'POST', `/workspaces/${office.id}/sessions`, { kind: 'qualifying', roster: [a.id], durationSeconds: 30 });
+  assert.equal(started.status, 201);
+  const body = await (await get(`${base}/race`)).text();
+  assert.match(body, /\. 30 seconds\./);
+  assert.doesNotMatch(body, /1 minute/);
+  await app.form(member, `${base}/sessions/${app.store.activeSession(office.id).id}/abort`, {});
+});

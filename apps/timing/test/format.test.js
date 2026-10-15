@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatAgo, formatClock, formatLap } from '../public/format.js';
+import { formatAgo, formatClock, formatLap, formatLength } from '../public/format.js';
 
 test('lap times to the millisecond, minutes past a minute', () => {
   assert.equal(formatLap(8000), '8.000');
@@ -32,4 +32,13 @@ test('formatAgo says how long ago, then the date', () => {
   assert.equal(formatAgo(now - 3_600_000, now), '1 h ago');
   assert.equal(formatAgo(now - 23 * 3_600_000 - 59 * 60_000, now), '23 h ago');
   assert.equal(formatAgo(Date.UTC(2026, 9, 14, 11, 0, 0), now), '14 Oct 2026');
+});
+
+test('formatLength says seconds under a minute, and minutes plus seconds when not whole', () => {
+  assert.equal(formatLength(30_000), '30 seconds');
+  assert.equal(formatLength(1000), '1 second');
+  assert.equal(formatLength(60_000), '1 minute');
+  assert.equal(formatLength(180_000), '3 minutes');
+  assert.equal(formatLength(90_000), '1 minute 30 seconds');
+  assert.equal(formatLength(121_000), '2 minutes 1 second');
 });

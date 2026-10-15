@@ -24,3 +24,12 @@ export function formatAgo(ms, now) {
   if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`;
   return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
+
+/** A session's length in words: seconds under a minute, else minutes and any seconds over. @param {number} ms */
+export function formatLength(ms) {
+  const total = Math.round(ms / 1000);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  const unit = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  return [minutes ? unit(minutes, 'minute') : '', seconds || !minutes ? unit(seconds, 'second') : ''].filter(Boolean).join(' ');
+}

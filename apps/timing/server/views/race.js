@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Race control (spec §6.2): the start form, or the running session with Abort.
+import { formatLength } from '../../public/format.js';
 import { html } from './html.js';
 import { errorSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
@@ -46,10 +47,9 @@ function startForm(request, { drivers, error, values }) {
 function runningPanel(request, session, drivers) {
   const base = request.space.base;
   const names = (session.roster ?? []).map((id) => drivers.find((d) => d.id === id)?.name ?? 'Former driver');
-  const minutes = Math.round((session.durationMs ?? 0) / 60_000);
   return html`<div class="card-static stack-md">
   <h2 class="h3">${KIND[session.kind]}, ${STATE[session.state] ?? session.state}</h2>
-  <p>${names.join(', ')}. ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.</p>
+  <p>${names.join(', ')}. ${formatLength(session.durationMs ?? 0)}.</p>
   <div class="button-row">
     <a class="btn btn-outline" href="${base}/board">Show the board</a>
     <a class="btn btn-danger" href="${base}/sessions/${session.id}/abort">Abort</a>
