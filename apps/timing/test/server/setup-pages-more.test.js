@@ -7,6 +7,9 @@
 // the watchers link.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { open, seal } from '@tinylap/auth';
+import { readFileSync } from 'node:fs';
 import { startTiming } from './helpers.js';
 import { CLOSED, OPEN, closed, startPlannerStub } from './planner-stub.js';
 
@@ -16,13 +19,16 @@ let owner;
 let member;
 let office;
 let base;
+let ana;
+let ben;
+const keys = [{ id: 'k1', key: randomBytes(32) }];
 const lines = [];
 
 before(async () => {
   planner = await startPlannerStub();
-  app = await startTiming({ plannerUrl: planner.url, log: (line) => lines.push(line) });
-  const ana = await app.signUp('Ana');
-  const ben = await app.signUp('Ben');
+  app = await startTiming({ plannerUrl: planner.url, log: (line) => lines.push(line), keys });
+  ana = await app.signUp('Ana');
+  ben = await app.signUp('Ben');
   office = app.club(ana, 'Office');
   app.join(ana, office.id, ben);
   owner = await app.login(ana);
@@ -61,6 +67,9 @@ test('pairing over Wi-Fi shows the token once, never in a URL or a log', async (
   const cookie = res.headers.getSetCookie().find((c) => c.startsWith('__Host-tl-paired='));
   assert.match(cookie, /Path=\/; Max-Age=300; HttpOnly; Secure; SameSite=Strict/);
   const pair = cookie.split(';')[0];
+  const payload = JSON.parse(open(keys, decodeURIComponent(pair.split('=')[1]), 'paired'));
+  assert.equal(payload.sub, ben.id, 'the cookie is for this user');
+  assert.ok(payload.exp > Date.now() && payload.exp <= Date.now() + 300_000, 'and expires with it');
   const shown = await get(member, `${base}/setup?paired=${decoder.id}`, pair);
   const body = await shown.text();
   const token = /<code class="token">([A-Za-z0-9_-]{43})<\/code>/.exec(body)?.[1];
@@ -119,4 +128,46 @@ test('the watchers link: make one, then replace it after confirming', async () =
   assert.match(ask, /The old link stops working/);
   await app.form(member, `${base}/watch-link`, {});
   assert.notEqual(app.store.workspace(office.id).watchToken, first);
+});
+
+const forged = (payload) => `__Host-tl-paired=${encodeURIComponent(seal(keys, JSON.stringify(payload), 'paired'))}`;
+
+test('a paired cookie that is expired or for another user shows nothing and is still cleared', async () => {
+  app.store.addDecoder(office.id, { id: 'dec-forged', name: 'Forged', tokenHash: 'x', createdAt: 1 });
+  const url = `${base}/setup?paired=dec-forged`;
+  const good = { id: 'dec-forged', token: 'T'.repeat(43), sub: ben.id, exp: Date.now() + 60_000 };
+  assert.match(await (await get(member, url, forged(good))).text(), /<code class="token">T{43}<\/code>/, 'a fresh cookie for this user shows');
+  for (const [why, payload, who] of [['expired', { ...good, exp: Date.now() - 1 }, member], ['another user', good, owner], ['no user or expiry', { id: good.id, token: good.token }, member]]) {
+    const res = await get(who, url, forged(payload));
+    assert.equal(res.status, 200, why);
+    assert.doesNotMatch(await res.text(), /class="token"/, why);
+    assert.ok(res.headers.getSetCookie().some((c) => c.startsWith('__Host-tl-paired=;') && /Max-Age=0/.test(c)), `${why}: cookie cleared`);
+  }
+});
+
+test('forms from another site change nothing, as for the other setup forms', async () => {
+  const foreign = { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' };
+  const before = app.store.decoders(office.id).length;
+  const [decoder] = app.store.decoders(office.id);
+  const token = app.store.workspace(office.id).watchToken;
+  for (const path of [`${base}/decoders`, `${base}/decoders/${decoder.id}/unpair`, `${base}/watch-link`]) {
+    const res = await app.form(owner, path, { name: 'Mallory' }, foreign);
+    assert.equal(res.status, 403, path);
+    assert.match(await res.text(), /<h1>Not allowed<\/h1>/, path);
+  }
+  assert.equal(app.store.decoders(office.id).length, before);
+  assert.equal(app.store.workspace(office.id).watchToken, token);
+});
+
+test('a member cannot unpair a decoder', async () => {
+  const [decoder] = app.store.decoders(office.id);
+  const res = await app.form(member, `${base}/decoders/${decoder.id}/unpair`, {});
+  assert.equal(res.status, 403);
+  assert.ok(app.store.decoders(office.id).some((d) => d.id === decoder.id));
+});
+
+test('the token and decoder id are shown exactly as they are, not styled upper-case', () => {
+  const css = readFileSync(new URL('../../public/app.css', import.meta.url), 'utf8');
+  const rule = /\.token, \.token-id \{([^}]*)\}/.exec(css)?.[1] ?? '';
+  for (const declaration of ['text-transform: none', 'letter-spacing: 0', 'font-weight: 400', 'font-variant-ligatures: none']) assert.ok(rule.includes(declaration), declaration);
 });

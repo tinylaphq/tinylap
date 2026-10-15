@@ -270,11 +270,20 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .setup-table select { width: 100%; min-width: 0; }
 .setup-row > .inline-form > .field { flex: 1 1 8rem; }
 .token { display: block; overflow-wrap: anywhere; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
+/* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
+.token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
+.status-info p { text-transform: none; letter-spacing: 0; font-weight: 400; margin: 0; }
+.status-info p + p { margin-top: var(--p-space-xs); }
 .status .token { margin: 0; }
+.decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
+.decoder-info .meta { margin: 0; }
 @media (max-width: 520px) {
   /* The swatch stays beside the rename form; a delete link sits under it. */
-  .setup-row:has(> .driver) { display: grid; grid-template-columns: auto 1fr; }
-  .setup-row > .driver + .inline-form + .btn { grid-column: 2; justify-self: start; }
+  /* Swatch, rename form and delete stay on one row. */
+  .setup-row:has(> .driver) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--p-space-xs); }
+  .setup-row > .driver + .inline-form { flex: none; min-width: 0; flex-wrap: nowrap; }
+  .setup-row > .driver + .inline-form > .field { flex: 1 1 0; }
+  .setup-row > .driver ~ .btn { padding-inline: var(--p-space-sm); }
   /* A labelled field and its button stack, so the button needs no offset. */
   .inline-form:has(> .field > label:not(.visually-hidden)) { flex-direction: column; align-items: stretch; }
   .inline-form:has(> .field > label:not(.visually-hidden)) > .field { flex: 0 0 auto; }

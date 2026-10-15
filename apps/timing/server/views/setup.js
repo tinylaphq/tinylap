@@ -82,13 +82,16 @@ function decodersSection(request, m) {
   return html`<section class="card-static stack-md" id="decoders" aria-labelledby="decoders-title">
   <h2 class="h3" id="decoders-title">Decoders</h2>
   ${m.paired ? html`<div class="status status-info" role="status">
-    <p><strong>${m.paired.name}</strong> is paired. Its token, shown only this once:</p>
+    <p>${m.paired.name} is paired. Its token is shown only this once:</p>
     <p><code class="token">${m.paired.token}</code></p>
-    <p>Decoder id: <code>${m.paired.id}</code>. Put both on the decoder now.</p>
+    <p>Decoder id: <code class="token-id">${m.paired.id}</code></p>
+    <p>Put both on the decoder now.</p>
   </div>` : null}
   ${m.decoders.length ? html`<ul class="setup-list">${m.decoders.map((d) => html`<li class="setup-row">
-    <span>${d.name}</span>
-    <span class="meta">${d.lastSeenAt ? html`seen <time datetime="${new Date(d.lastSeenAt).toISOString()}">${when(d.lastSeenAt)}</time>` : 'never seen'}</span>
+    <div class="decoder-info">
+      <span>${d.name}</span>
+      <span class="meta">${d.lastSeenAt ? html`seen <time datetime="${new Date(d.lastSeenAt).toISOString()}">${when(d.lastSeenAt)}</time>` : 'never seen'}</span>
+    </div>
     ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/decoders/${d.id}/unpair">Unpair</a>` : null}
   </li>`)}</ul>` : null}
   <p>Pair a decoder by USB on the <a href="${base}/bridge">Bridge</a> page, or here if it only uses Wi-Fi:</p>

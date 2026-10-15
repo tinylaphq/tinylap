@@ -82,6 +82,7 @@ const assignTransponder = withForm((request, form, match) => {
 });
 
 export const PAIRED_COOKIE = '__Host-tl-paired';
+const PAIRED_TTL_SECONDS = 300;
 const PAIRED = new RegExp(`(?:^|;\\s*)${PAIRED_COOKIE}=([^;]+)`);
 const clearPaired = `${PAIRED_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
 const NO_SUCH_DECODER = { failed: { error: { message: 'There is no such decoder here.' } } };
@@ -95,7 +96,8 @@ function showSetup(request) {
   try {
     const value = JSON.parse(open(request.keys, decodeURIComponent(raw), 'paired'));
     const decoder = request.store.decoder(value.id);
-    if (value.id === id && decoder?.workspaceId === request.workspaceId) paired = { id: value.id, name: decoder.name, token: value.token };
+    const fresh = Number.isFinite(value.exp) && value.exp > request.now() && value.sub === request.userId;
+    if (fresh && value.id === id && decoder?.workspaceId === request.workspaceId) paired = { id: value.id, name: decoder.name, token: value.token };
   } catch {
     // A tampered or stale cookie shows nothing.
   }
@@ -114,9 +116,9 @@ const pairDecoder = withForm((request, form) => {
   const result = ops.pairDecoder(request, { name: values.name || undefined });
   if (result.error) return afterForm(request, result, { key: 'pair', values, section: 'decoders', fieldId: 'pair-name' });
   const { id, token } = result.value;
-  const sealed = encodeURIComponent(seal(request.keys, JSON.stringify({ id, token }), 'paired'));
+  const sealed = encodeURIComponent(seal(request.keys, JSON.stringify({ id, token, sub: request.userId, exp: request.now() + PAIRED_TTL_SECONDS * 1000 }), 'paired'));
   return seeOther(`${request.space.base}/setup?paired=${id}#decoders`, {
-    'Set-Cookie': [`${PAIRED_COOKIE}=${sealed}; Path=/; Max-Age=300; HttpOnly; Secure; SameSite=Strict`],
+    'Set-Cookie': [`${PAIRED_COOKIE}=${sealed}; Path=/; Max-Age=${PAIRED_TTL_SECONDS}; HttpOnly; Secure; SameSite=Strict`],
   });
 });
 
