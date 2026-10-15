@@ -46,6 +46,12 @@ export const unavailablePage = (request) => notice(request, {
   text: "Timing can't read or store anything right now. Try again in a minute.",
 });
 
+export const serverErrorPage = (request) => notice(request, {
+  title: 'Something went wrong',
+  text: 'Timing hit a problem it did not expect. Try again in a minute.',
+  action: { href: '/', label: 'Go to your board' },
+});
+
 export const watchGonePage = (request) => notice(request, {
   title: 'Link no longer works',
   text: 'This watchers link no longer works. Ask someone at the track for the new one.',

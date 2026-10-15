@@ -35,7 +35,7 @@ const home = withSession(async (request) => {
     return page(request, 404, notFoundPage(request));
   }
   return seeOther(`${space.base}/board`);
-});
+}, { pages: true });
 
 /** @type {any[]} Feature tasks add their page and form routes here. */
 export const SCREEN_ROUTES = [...boardPageRoutes, ...boardStreamRoutes, ...setupPageRoutes, ...racePageRoutes, ...tapPageRoutes, ...bridgePageRoutes];

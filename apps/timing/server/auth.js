@@ -10,7 +10,9 @@
 import { AuthError, createBff } from '@tinylap/auth';
 import { prefersHtml } from './negotiate.js';
 import { esc, page } from './pages.js';
+import { page as screen } from './respond.js';
 import { html, json, problem } from './responses.js';
+import { serverErrorPage, unavailablePage } from './views/notice.js';
 
 /**
  * @typedef {{
@@ -94,17 +96,22 @@ const unavailable = (request) => problem(request, 'unavailable', UNAVAILABLE);
 
 /**
  * Wraps a route handler: `request.session` is the BFF session, or null when
- * logged out or log-in is off. An outage at the issuer answers 503.
+ * logged out or log-in is off. An outage at the issuer answers 503. A page
+ * route answers its failures as pages (503, or 500 for anything unexpected,
+ * logged here); the API keeps Problem Details.
  * @param {(request: any, match: RegExpExecArray) => any} handler
+ * @param {{ pages?: boolean }} [options]
  */
-export function withSession(handler) {
+export function withSession(handler, { pages = false } = {}) {
   return async (/** @type {any} */ request, /** @type {RegExpExecArray} */ match) => {
     try {
       request.session = request.auth ? await request.auth.bff.session(request.req) : null;
       return await handler(request, match);
     } catch (error) {
-      if (isOutage(error)) return unavailable(request);
-      throw error;
+      if (isOutage(error)) return pages ? screen(request, 503, unavailablePage(request)) : unavailable(request);
+      if (!pages) throw error;
+      console.error(error);
+      return screen(request, 500, serverErrorPage(request));
     }
   };
 }
