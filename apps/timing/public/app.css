@@ -97,7 +97,15 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-laps .num { margin-left: auto; }
 .board-laps .tag { font-size: 10px; padding: 1px 6px; }
 
-body.big .navbar, body.watching .navbar { display: none; }
+/* The wall screen: the navbar shrinks to the way out, faint until it is pointed at or focused. */
+body.big .navbar { position: fixed; inset: auto 0 0 auto; z-index: 1; background: none; border: 0; padding: var(--p-space-sm); opacity: 0.25; }
+body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; background: var(--p-dark); }
+body.big .navbar-brand, body.big .nav-tabs, body.big .nav-account, body.big .live-status { display: none; }
+@media (max-width: 640px) { body.big .board-table th, body.big .board-table td { padding-inline: 0.3em; } body.big .board { font-size: 0.9rem; } }
+body.big .board-clock-label, body.big .board-head .eyebrow { font-size: 0.6em; }
+/* palace's .status upper-cases its text; the notice reads as prose. */
+.board-unknown { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.board-unknown a { color: inherit; text-decoration-color: currentColor; }
 body.big .board { font-size: clamp(1rem, 2.4vw, 2.25rem); min-height: 100dvh; box-sizing: border-box; max-width: none; align-content: start; }
 body.big .board-feed { font-size: 0.75em; }
 body.big .board-table th, body.big .board-table td { padding-block: 0.35em; }

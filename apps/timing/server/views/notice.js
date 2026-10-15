@@ -45,3 +45,8 @@ export const unavailablePage = (request) => notice(request, {
   title: 'Not available',
   text: "Timing can't read or store anything right now. Try again in a minute.",
 });
+
+export const watchGonePage = (request) => notice(request, {
+  title: 'Link no longer works',
+  text: 'This watchers link no longer works. Ask someone at the track for the new one.',
+});

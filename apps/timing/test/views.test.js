@@ -25,10 +25,23 @@ test('safe() passes trusted markup through', () => {
 });
 
 import { textField } from '../server/views/form-parts.js';
+import { clockOf } from '../server/views/board.js';
 
 test('fields escape their values and mark their errors', () => {
   const out = String(textField({ id: 'n', label: 'Name', name: 'name', value: '"><script>', error: { field: 'name', message: 'Too <long>' } }));
   assert.match(out, /value="&quot;&gt;&lt;script&gt;"/);
   assert.match(out, /aria-invalid="true" aria-describedby="n-error"/);
   assert.match(out, /<p class="field-error" id="n-error">Too &lt;long&gt;<\/p>/);
+});
+
+test('the clock for each state, on the server', () => {
+  const race = { kind: 'race', opensAt: 10_000, closesAt: 310_000 };
+  assert.equal(clockOf(null, 0), null);
+  assert.deepEqual(clockOf({ kind: 'practice', state: 'running', opensAt: 1000 }, 61_000), { label: 'Practice', ms: 60_000 });
+  assert.deepEqual(clockOf({ kind: 'practice', state: 'done', opensAt: 1000 }, 61_000), { label: 'Practice ended', ms: 0 });
+  assert.deepEqual(clockOf({ ...race, state: 'countdown' }, 5000), { label: 'Starts in', ms: 5000 });
+  assert.deepEqual(clockOf({ ...race, state: 'running' }, 70_000), { label: 'Remaining', ms: 240_000 });
+  assert.deepEqual(clockOf({ ...race, state: 'finishing' }, 400_000), { label: 'Last lap', ms: 0 });
+  assert.deepEqual(clockOf({ ...race, state: 'aborted' }, 400_000), { label: 'Aborted', ms: 0 });
+  assert.deepEqual(clockOf({ ...race, state: 'done' }, 400_000), { label: 'Finished', ms: 0 });
 });
