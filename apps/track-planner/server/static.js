@@ -29,10 +29,12 @@ const digest = (body) => createHash('sha256').update(body).digest('base64url').s
 /**
  * The planner's policy: everything from its own origin, plus the inline
  * import map, allowed by its hash. Styles may be inline (SVG thumbnails
- * carry style attributes); scripts may not.
- * @param {string} html
+ * carry style attributes); scripts may not. `formAction` adds origins a
+ * form may end up at: logging out posts to the planner, which redirects to
+ * accounts' end-session page, and browsers check form-action on redirects.
+ * @param {string} html @param {{ formAction?: string[] }} [options]
  */
-export function plannerCsp(html) {
+export function plannerCsp(html, { formAction = [] } = {}) {
   const map = /<script type="importmap">([\s\S]*?)<\/script>/.exec(html)?.[1];
   const scripts = map === undefined ? "'self'" : `'self' 'sha256-${createHash('sha256').update(map).digest('base64')}'`;
   return [
@@ -42,13 +44,13 @@ export function plannerCsp(html) {
     "img-src 'self' data:",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    ["form-action 'self'", ...formAction].join(' '),
     "frame-ancestors 'none'",
   ].join('; ');
 }
 
-/** @param {{ root?: string, appDir: string }} options */
-export function staticFiles({ root, appDir }) {
+/** @param {{ root?: string, appDir: string, formAction?: string[] }} options */
+export function staticFiles({ root, appDir, formAction = [] }) {
   const dev = !root;
   const roots = dev ? packageRoots(appDir) : null;
   /** @type {Map<string, string>} */
@@ -70,7 +72,7 @@ export function staticFiles({ root, appDir }) {
     /** @type {Record<string, string>} */
     const headers = { 'Content-Type': type, 'Cache-Control': cache };
     let body = await readFile(file);
-    if (type.startsWith('text/html')) headers['Content-Security-Policy'] = plannerCsp(body.toString('utf8'));
+    if (type.startsWith('text/html')) headers['Content-Security-Policy'] = plannerCsp(body.toString('utf8'), { formAction });
     if (dev) return { status: 200, headers, body };
 
     let tag = etags.get(file);

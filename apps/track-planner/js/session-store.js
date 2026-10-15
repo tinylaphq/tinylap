@@ -60,3 +60,31 @@ export function clearLayout(storage) {
     /* as above */
   }
 }
+
+// Which library track the canvas came from, so "Save" adds a version to it.
+// Kept beside the layout for the same reason: a reload, or the log-in round
+// trip, must not turn the next Save into a new track. Opening a file or a
+// shared link, or starting a new layout, forgets it.
+export const TRACK_STORAGE_KEY = 'circuit30.libraryTrack';
+
+/** @returns {{ id: string, name: string, workspaceId: string } | null} */
+export function loadTrackRef(storage) {
+  try {
+    const ref = JSON.parse(storage.getItem(TRACK_STORAGE_KEY) ?? 'null');
+    return ref && typeof ref.id === 'string' && typeof ref.name === 'string' && typeof ref.workspaceId === 'string'
+      ? { id: ref.id, name: ref.name, workspaceId: ref.workspaceId }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** @param {{ id: string, name: string, workspaceId: string } | null} ref */
+export function saveTrackRef(storage, ref) {
+  try {
+    if (ref) storage.setItem(TRACK_STORAGE_KEY, JSON.stringify({ id: ref.id, name: ref.name, workspaceId: ref.workspaceId }));
+    else storage.removeItem(TRACK_STORAGE_KEY);
+  } catch {
+    /* as above */
+  }
+}

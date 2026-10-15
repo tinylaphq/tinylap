@@ -7,14 +7,19 @@
 // two in agreement, and checks the rules the versioned deploy depends on.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packageRoots, jsEntry } from '../serve-map.js';
 import { stripComments } from '../js-source.js';
 
 const APPS = fileURLToPath(new URL('../../apps/', import.meta.url));
-const apps = readdirSync(APPS, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(APPS, d.name));
+// Only apps with a browser page have an import map; apps/accounts renders
+// every page on the server.
+const apps = readdirSync(APPS, { withFileTypes: true })
+  .filter((d) => d.isDirectory())
+  .map((d) => join(APPS, d.name))
+  .filter((app) => existsSync(join(app, 'index.html')));
 
 const importMap = (html) => {
   const m = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);

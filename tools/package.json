@@ -3,5 +3,8 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
-  "scripts": { "test": "node --test 'test/**/*.test.js'", "typecheck": "tsc -p tsconfig.json", "lint": "eslint ." }
+  "scripts": { "test": "node --test 'test/**/*.test.js'", "typecheck": "tsc -p tsconfig.json", "lint": "eslint ." },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  }
 }

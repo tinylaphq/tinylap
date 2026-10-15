@@ -86,7 +86,7 @@ test('a browser gets the page, everything else gets json', async () => {
     assert.equal(res.headers.get('content-type'), 'application/json', String(accept));
     assert.equal(res.headers.get('cache-control'), 'public, max-age=31536000, immutable');
     assert.equal(res.headers.get('etag'), `"${key}"`);
-    assert.equal(res.headers.get('vary'), 'Accept');
+    assert.equal(res.headers.get('vary'), 'Accept, Cookie', 'the route reads the session for private snapshots');
     // Stored in canonical form: pieces sorted, so compare against that.
     assert.deepEqual(await res.json(), JSON.parse(canonicalJson(layout)));
   }

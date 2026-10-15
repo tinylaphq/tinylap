@@ -12,7 +12,8 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "check": "turbo run test lint typecheck"
+    "check": "turbo run test lint typecheck",
+    "test:e2e": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 'tools/e2e/*.test.js'"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",

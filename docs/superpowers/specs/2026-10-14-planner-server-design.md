@@ -131,7 +131,7 @@ planner's bill of materials and nothing else needs it.
 ## 5. API
 
 All API responses carry `Link: </openapi.json>; rel="service-desc"` and
-`Access-Control-Allow-Origin: *`. No route uses cookies or credentials.
+`Access-Control-Allow-Origin: *`. None of these routes uses cookies or credentials; the library and login routes added by the identity spec (2026-10-14-identity-design.md §9) do, and do not send that header.
 `OPTIONS` preflights are answered for `POST /layouts` (`Content-Type` allowed).
 
 ### `POST /layouts`

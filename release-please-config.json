@@ -9,6 +9,9 @@
     },
     "packages/design": {
       "component": "design"
+    },
+    "packages/auth": {
+      "component": "auth"
     }
   }
 }

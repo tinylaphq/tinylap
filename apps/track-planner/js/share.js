@@ -8,7 +8,8 @@ import { parseLayout, KEY_PATTERN } from '@tinylap/track-format';
 
 /** @import { Layout } from '@tinylap/track-format' */
 
-async function request(fetch, url, init) {
+/** A fetch that throws `Error(problem.title)`, carrying the HTTP status. */
+export async function request(fetch, url, init) {
   let res;
   try {
     res = await fetch(url, init);
@@ -17,7 +18,7 @@ async function request(fetch, url, init) {
   }
   if (res.ok) return res;
   const problem = await res.json().catch(() => null);
-  throw new Error(problem?.title ?? `The planner server answered ${res.status}.`);
+  throw Object.assign(new Error(problem?.title ?? `The planner server answered ${res.status}.`), { status: res.status });
 }
 
 /**
@@ -39,4 +40,18 @@ export async function fetchShared(key, { fetch = globalThis.fetch } = {}) {
   if (!KEY_PATTERN.test(key)) throw new Error('This link does not point to a layout.');
   const res = await request(fetch, `/layouts/${key}.json`);
   return parseLayout(await res.text());
+}
+
+/**
+ * Asks before anything is published ("Publishing makes this layout public
+ * at a permanent link. It cannot be undone."): `dialog` (#share-dialog) closes with
+ * "publish" or anything else. Resolves true only for "publish".
+ * @param {HTMLDialogElement} dialog @returns {Promise<boolean>}
+ */
+export function confirmPublish(dialog) {
+  return new Promise((resolve) => {
+    dialog.returnValue = '';
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'publish'), { once: true });
+    dialog.showModal();
+  });
 }

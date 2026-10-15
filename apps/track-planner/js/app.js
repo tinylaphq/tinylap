@@ -7,12 +7,14 @@ import { createLayout, occupiedSet, cellKey, openPorts, placeAgainst, portKey, m
 import { drawLayout, drawGhost, drawMarquee, layoutToSvgString } from './render.js';
 import { billOfMaterials, diffStock, stockFromKits, recommendKit, KITS } from './inventory.js';
 import { prepareExport, carryTrack } from './storage.js';
-import { shareLayout, fetchShared } from './share.js';
+import { shareLayout, fetchShared, confirmPublish } from './share.js';
 import { PRESETS } from './presets.js';
 import { loadKits, saveKits } from './kits-store.js';
 import { loadLayout, saveLayout } from './session-store.js';
 import { generateLayouts, outOfReach, outlineName, hasCachedLayouts, scoreLayouts } from './generate.js';
 import { orderSuggestions, availableFamilies } from './suggestions.js';
+import { initAccount, refreshAccount } from './account.js';
+import { initLibrary, forgetTrack, linkedHistory } from './library.js';
 
 const canvas = document.querySelector('#canvas');
 
@@ -34,7 +36,7 @@ const state = {
   tool: null,     // { type, rot }
   ghost: null,    // { cells, valid }
   hoverCell: null, // [x, y] last cell hovered while dragging
-  history: [],
+  history: linkedHistory(), // each entry keeps the library track link it had
   selection: [], // indices into layout.pieces; empty when nothing is selected
   dragging: false, // true while a piece move-drag or port-handle drag is in flight
   lastPlaced: null, // { type, x, y, rot } of the most recently placed piece
@@ -888,6 +890,7 @@ document.querySelector('#presets-list').addEventListener('click', (e) => {
   const preset = PRESETS.find((p) => p.id === button.dataset.presetId);
   if (!preset) return;
   commit((l) => { l.pieces = structuredClone(preset.pieces); });
+  forgetTrack();
   // A loaded preset invalidates anything computed against the previous
   // layout — same clearing this file does when a file is opened (see loadFile below).
   state.selection = [];
@@ -1186,6 +1189,7 @@ document.querySelector('#suggestions-list').addEventListener('click', (e) => {
   const chosen = state.suggestions.pool.find((r) => r.key === button.dataset.suggestionKey);
   if (!chosen) return;
   commit((l) => { l.pieces = chosen.pieces.map((p) => ({ ...p })); });
+  forgetTrack();
   // A loaded suggestion is ordinary pieces. Clear the interaction state the
   // same way the preset and file-open paths do — anything computed against
   // the previous layout is meaningless now.
@@ -1210,7 +1214,11 @@ document.querySelector('#suggestions-list').addEventListener('click', (e) => {
 // listener sees a bubbled palette-drop event, files.length is 0 and it
 // returns immediately without touching state. There is no conflict to
 // prevent, so no stopPropagation() is added.
-document.querySelector('#btn-save').addEventListener('click', () => {
+// Logged in, Save goes to the library (library.js) and Download is this.
+let library = null;
+document.querySelector('#btn-save').addEventListener('click', () => (library ? library.save() : download()));
+document.querySelector('#btn-download').addEventListener('click', () => download());
+function download() {
   const { layout, html } = prepareExport(state.layout);
   state.layout = layout;
   saveLayout(sessionStorage, state.layout);
@@ -1224,11 +1232,12 @@ document.querySelector('#btn-save').addEventListener('click', () => {
   // is a known cause of silently-failing downloads outside Chrome — some
   // browsers haven't started the download yet. Defer it a tick instead.
   setTimeout(() => URL.revokeObjectURL(a.href), 0);
-});
+}
 
 // Sharing settles the track exactly as Save does, then stores the result as
 // a snapshot. The layout itself is never touched by a failed share.
 document.querySelector('#btn-share').addEventListener('click', async () => {
+  if (!(await confirmPublish(document.querySelector('#share-dialog')))) return;
   const { layout } = prepareExport(state.layout);
   state.layout = layout;
   saveLayout(sessionStorage, state.layout);
@@ -1301,6 +1310,7 @@ async function loadFile(file) {
   }
 
   adoptLayout(imported);
+  forgetTrack();       // after the push, so undo brings the link back
 }
 
 document.addEventListener('dragover', (e) => {
@@ -1526,8 +1536,26 @@ document.addEventListener('keydown', (e) => {
 const sharedKey = new URLSearchParams(location.search).get('layout');
 if (sharedKey) {
   history.replaceState(null, '', location.pathname);
-  fetchShared(sharedKey).then(adoptLayout, (error) => {
+  fetchShared(sharedKey).then((shared) => { adoptLayout(shared); forgetTrack(); }, (error) => {
     state.error = error.message;
     render();
   });
 }
+
+initAccount().then((view) => {
+  if (view?.state !== 'in') return;
+  library = initLibrary({
+    settle() {
+      state.layout = prepareExport(state.layout).layout;
+      saveLayout(sessionStorage, state.layout);
+      return state.layout;
+    },
+    adopt: adoptLayout,
+    unauthorized: () => void refreshAccount(),
+    report({ error = null, notice = null }) {
+      state.error = error;
+      state.notice = notice;
+      render();
+    },
+  });
+});

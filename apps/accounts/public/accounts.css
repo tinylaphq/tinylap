@@ -1,0 +1,387 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The TinyLap contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/* accounts pages: palace-ui's narrow auth layout (palace SPEC "Auth
+ * Pages"), plus the few pieces palace has no pattern for: a step
+ * indicator, the recovery code sheet and a checkbox row. Every value is a
+ * --p-* token; no radius, no blurred shadows, transitions 0.1s. */
+
+.accounts-brand {
+  gap: var(--p-space-sm);
+  margin-bottom: var(--p-space-lg);
+}
+
+.accounts-brand img {
+  width: 32px;
+  height: 32px;
+}
+
+.accounts-brand .brand {
+  color: var(--p-text);
+}
+
+/* Where you are in sign-up or recovery. */
+.container-narrow .accounts-progress {
+  display: flex;
+  gap: var(--p-space-md);
+  list-style: none;
+  padding: 0;
+  margin-bottom: var(--p-space-md);
+}
+
+.accounts-progress li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--p-text-faint);
+}
+
+.accounts-progress .step-num {
+  width: auto;
+  font-size: 18px;
+}
+
+.accounts-progress [aria-current="step"] {
+  color: var(--p-text);
+}
+
+.accounts-progress [aria-current="step"] .step-num {
+  color: var(--p-accent-1);
+}
+
+.accounts-hint {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--p-text-muted);
+}
+
+.accounts-mono,
+input[type="text"].accounts-mono {
+  font-family: var(--p-font-mono);
+}
+
+/* The recovery code sheet: ten codes, one per line, on palace's dark reveal. */
+.container-narrow .accounts-codes {
+  display: grid;
+  gap: var(--p-space-sm);
+  list-style: none;
+  padding: 0;
+  margin-bottom: var(--p-space-md);
+}
+
+.container-narrow .accounts-codes li {
+  margin: 0;
+  font-family: var(--p-font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--p-code-highlight);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.accounts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--p-space-sm);
+}
+
+.btn-outline.accounts-on-dark {
+  color: #fff;
+  border-color: #fff;
+}
+
+.btn-outline.accounts-on-dark:hover {
+  border-color: var(--p-accent-3);
+  box-shadow: var(--p-shadow-md) var(--p-accent-3);
+}
+
+.accounts-check {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-sm);
+  margin-bottom: 0;
+  font-size: 13px;
+  color: var(--p-text);
+  cursor: pointer;
+}
+
+.accounts-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--p-accent-1);
+}
+
+.container-narrow .accounts-links {
+  list-style: none;
+  padding: 0;
+  margin-top: var(--p-space-lg);
+}
+
+.container-narrow .accounts-links li {
+  font-size: 13px;
+  color: var(--p-text-muted);
+  margin-bottom: var(--p-space-sm);
+}
+
+.accounts [hidden] {
+  display: none;
+}
+
+/* ── Clubs (/clubs, /clubs/:id, /invite/:token) ─────────────────────────
+ * Palace's 640px container. Workspaces and members are rows with a 2px
+ * frame; the workspace rows take palace's pink/purple/cyan list rotation as
+ * a thick left edge, like a lane colour. */
+
+.accounts-wide .accounts-links {
+  list-style: none;
+  padding: 0;
+  margin-top: var(--p-space-lg);
+}
+
+.accounts-wide .accounts-links li {
+  font-size: 13px;
+  color: var(--p-text-muted);
+}
+
+.accounts-back {
+  margin-bottom: var(--p-space-lg);
+  font-size: 13px;
+}
+
+.accounts .accounts-list {
+  display: grid;
+  gap: var(--p-space-sm);
+  list-style: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+
+.accounts .accounts-list > li {
+  margin: 0;
+}
+
+.accounts-workspace,
+.accounts-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--p-space-sm) var(--p-space-md);
+  padding: 12px var(--p-space-md);
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text);
+}
+
+.accounts-workspace {
+  border-left-width: 8px;
+}
+
+.accounts-workspace:nth-child(3n+1) { border-left-color: var(--p-accent-1); }
+.accounts-workspace:nth-child(3n+2) { border-left-color: var(--p-accent-2); }
+.accounts-workspace:nth-child(3n+3) { border-left-color: var(--p-accent-3); }
+
+.accounts-workspace-name,
+.accounts-row-main {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.accounts-workspace-meta,
+.accounts-row-sub,
+.accounts-you {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--p-text-muted);
+}
+
+.accounts-row-sub {
+  display: block;
+}
+
+.accounts-row-main time {
+  font-weight: 700;
+}
+
+.accounts-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--p-space-sm);
+}
+
+/* Roles: the owner's tag is solid, an admin's carries the purple. */
+.accounts-role-owner {
+  color: #fff;
+  background: var(--p-dark);
+  border-color: var(--p-dark);
+}
+
+.accounts-role-admin {
+  border-color: var(--p-accent-2);
+  color: var(--p-accent-2);
+  background: var(--p-surface);
+}
+
+.accounts-count {
+  color: var(--p-text-faint);
+  font-weight: 400;
+}
+
+.accounts-subhead {
+  font-size: 15px;
+  margin-bottom: 0;
+}
+
+.accounts-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--p-space-md) var(--p-space-lg);
+}
+
+.accounts-field label {
+  display: block;
+}
+
+.accounts select {
+  padding: 10px 12px;
+  border: var(--p-border-width) solid var(--p-text);
+  border-radius: var(--p-radius);
+  font-family: var(--p-font);
+  font-size: 1rem;
+  background: var(--p-surface);
+  color: var(--p-text);
+  max-width: 100%;
+  transition: var(--p-transition);
+}
+
+.accounts select:focus-visible {
+  outline: none;
+  border-color: var(--p-accent-2);
+  box-shadow: var(--p-shadow-md) var(--p-accent-2);
+}
+
+.accounts select:disabled {
+  background: var(--p-disabled-bg);
+  color: var(--p-disabled-text);
+  border-color: var(--p-disabled-border);
+}
+
+/* The new invite link, shown once: palace's dark reveal. */
+.accounts-reveal:focus {
+  outline: none;
+  box-shadow: var(--p-shadow-lg) var(--p-accent-3);
+}
+
+.accounts-reveal-note {
+  font-weight: 700;
+  color: var(--p-accent-3);
+  margin-bottom: 10px;
+}
+
+.accounts-reveal-meta {
+  font-size: 13px;
+  color: var(--p-code-text);
+  margin-bottom: 12px;
+}
+
+.accounts-reveal .status {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+/* The confirm dialog for remove, transfer, delete and leave. */
+.accounts-dialog {
+  width: min(420px, calc(100vw - 32px));
+  margin: auto;
+  color: var(--p-text);
+  box-shadow: var(--p-shadow-lg) var(--p-error);
+}
+
+.accounts-dialog::backdrop {
+  background: var(--p-overlay);
+}
+
+.accounts-dialog p {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.accounts-dialog .accounts-actions {
+  justify-content: flex-end;
+}
+
+/* A club's name is a link only as wide as its text; its role tag sits right. */
+a.accounts-workspace-name {
+  flex: 0 1 auto;
+  margin-right: auto;
+}
+
+/* ── Account (/account) ────────────────────────────────────────────────
+ * The one accent: ten marks for a set of recovery codes, filled pink while
+ * a code is unused, like a lap counter. */
+
+.accounts-gauge-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--p-space-sm) var(--p-space-md);
+  font-size: 15px;
+}
+
+.accounts-gauge {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.accounts-gauge-mark {
+  width: 12px;
+  height: 24px;
+  border: var(--p-border-width) solid var(--p-text);
+  background: var(--p-surface);
+}
+
+.accounts-gauge-mark.is-left {
+  background: var(--p-accent-1);
+}
+
+/* Adding a passkey is the page's prominent action: the pink hard shadow. */
+.accounts-add {
+  box-shadow: var(--p-shadow-lg) var(--p-accent-1);
+}
+
+/* The re-authentication dialog asks, it does not warn: no red shadow. */
+.accounts-dialog-calm {
+  box-shadow: var(--p-shadow-lg) var(--p-accent-2);
+}
+
+.accounts-reveal .accounts-codes {
+  display: grid;
+  gap: var(--p-space-sm);
+  list-style: none;
+  padding: 0;
+  margin-bottom: var(--p-space-md);
+}
+
+.accounts-reveal .accounts-codes li {
+  margin: 0;
+  font-family: var(--p-font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--p-code-highlight);
+  overflow-wrap: anywhere;
+}
+
+.accounts-row-sub time {
+  font-weight: 400;
+}

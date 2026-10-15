@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The TinyLap contributors
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 
 // A fixed window per client, in memory only: a restart forgets everyone,
 // and an address is dropped once its window is over, so nothing about a

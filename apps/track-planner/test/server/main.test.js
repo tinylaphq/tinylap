@@ -47,3 +47,38 @@ test('0 is a valid rate limit, and SIGTERM and SIGINT shut the server down clean
     assert.equal(code, 0, `${signal}: ${sig}`);
   }
 });
+
+const KEYS = `k1:${Buffer.alloc(32, 7).toString('base64')}`;
+const LOGIN = { TINYLAP_ISSUER: 'http://127.0.0.1:1', TINYLAP_CLIENT_ID: 'planner', TINYLAP_CLIENT_SECRET: 's', TINYLAP_TOKEN_KEYS: KEYS, TINYLAP_FEED_TOKEN: 'f' };
+
+test('with TINYLAP_ISSUER set, missing or bad log-in settings stop the server at startup', async () => {
+  const cases = [
+    [{ TINYLAP_CLIENT_SECRET: '' }, /log-in also needs TINYLAP_CLIENT_SECRET/],
+    [{ TINYLAP_TOKEN_KEYS: '' }, /log-in also needs TINYLAP_TOKEN_KEYS/],
+    [{ TINYLAP_FEED_TOKEN: '', TINYLAP_CLIENT_ID: '' }, /log-in also needs TINYLAP_CLIENT_ID, TINYLAP_FEED_TOKEN/],
+    [{ TINYLAP_TOKEN_KEYS: 'k1:short' }, /TINYLAP_TOKEN_KEYS: /],
+    [{ TINYLAP_ISSUER: 'ftp://accounts.test' }, /log-in: /],
+  ];
+  for (const [env, message] of cases) {
+    const child = run({ ...LOGIN, ...env, PORT: '0' });
+    let err = '';
+    child.stderr.on('data', (d) => { err += d; });
+    const [code] = await once(child, 'exit');
+    assert.equal(code, 1, JSON.stringify(env));
+    assert.match(err, message, JSON.stringify(env));
+  }
+});
+
+test('/auth/me says whether log-in is set up', async () => {
+  for (const [env, available] of [[{}, false], [LOGIN, true]]) {
+    const port = await freePort();
+    const child = run({ ...env, PORT: String(port) });
+    child.stdout.setEncoding('utf8');
+    child.stderr.resume();
+    await new Promise((resolve) => child.stdout.on('data', (d) => d.includes('planner on') && resolve()));
+    assert.deepEqual(await (await fetch(`http://127.0.0.1:${port}/auth/me`)).json(), { loggedIn: false, available });
+    child.kill('SIGTERM');
+    const [code] = await once(child, 'exit');
+    assert.equal(code, 0);
+  }
+});

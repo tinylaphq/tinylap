@@ -43,6 +43,16 @@ test('every dependency gets a root, resolved through its symlink', () => {
   assert.equal(roots.get('palace-ui'), css);
 });
 
+test('a package marked "tinylap": { "serve": false } is never served', () => {
+  const { app } = fixture();
+  const server = join(app, '..', 'auth');
+  mkdirSync(server);
+  writeFileSync(join(server, 'package.json'), JSON.stringify({ exports: { '.': './index.js' }, tinylap: { serve: false } }));
+  symlinkSync(server, join(app, 'node_modules', '@tinylap', 'auth'));
+  writeFileSync(join(app, 'package.json'), JSON.stringify({ dependencies: { '@tinylap/auth': 'workspace:*', 'palace-ui': '^0.10.0' } }));
+  assert.deepEqual([...packageRoots(app).keys()], ['palace-ui']);
+});
+
 test('urls map to app files and package files', () => {
   const { app, fmt } = fixture();
   const roots = packageRoots(app);
