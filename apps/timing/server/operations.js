@@ -43,6 +43,7 @@ const intIn = (value, min, max, fallback) => {
 
 const publishDrivers = (request) => request.hub.publish(request.workspaceId, 'drivers', request.store.drivers(request.workspaceId));
 
+/** @param {any} request @param {{ name: any, colour?: any }} input */
 export function addDriver(request, { name: raw, colour: rawColour }) {
   const name = nameOf(raw);
   if (!name) return invalid('Give the driver a name of 1 to 60 characters.', 'name');
@@ -56,6 +57,7 @@ export function addDriver(request, { name: raw, colour: rawColour }) {
   return { value: driver };
 }
 
+/** @param {any} request @param {{ id: string, name?: any, colour?: any }} input */
 export function renameDriver(request, { id, name: rawName, colour: rawColour }) {
   const current = request.store.driver(request.workspaceId, id);
   if (!current) return missing('driver');

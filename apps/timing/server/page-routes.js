@@ -7,6 +7,7 @@
 import { withSession } from './auth.js';
 import { SPACE_COOKIE, pageRoute, withAccount } from './page-access.js';
 import { page, seeOther } from './respond.js';
+import { setupPageRoutes } from './setup-pages.js';
 import { spacesOf } from './spaces.js';
 import { notFoundPage, startPage } from './views/notice.js';
 
@@ -31,7 +32,7 @@ const home = withSession(async (request) => {
 });
 
 /** @type {any[]} Feature tasks add their page and form routes here. */
-export const SCREEN_ROUTES = [];
+export const SCREEN_ROUTES = [...setupPageRoutes];
 
 export const pageRoutes = [
   { pattern: /^\/$/, credentials: true, methods: { GET: home } },

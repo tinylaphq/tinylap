@@ -93,8 +93,18 @@ export async function startTiming(options = {}) {
     });
   }
 
+  /** A form post as `who` from the app's own pages; redirects are not followed. */
+  function form(who, path, fields, headers = {}) {
+    return fetch(base + path, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { origin: base, 'content-type': 'application/x-www-form-urlencoded', ...(who ? { cookie: who.jar.header() } : {}), ...headers },
+      body: new URLSearchParams(fields),
+    });
+  }
+
   return {
-    base, store, hub, engine, suite, clock, signUp, club, join, login, api,
+    base, store, hub, engine, suite, clock, signUp, club, join, login, api, form,
     close: async () => {
       server.closeAllConnections();
       await new Promise((done) => server.close(done));

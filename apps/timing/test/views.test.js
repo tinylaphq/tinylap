@@ -23,3 +23,12 @@ test('safe() passes trusted markup through', () => {
   assert.equal(String(html`<p>${safe('<br>')}</p>`), '<p><br></p>');
   assert.equal(safe('<i>').text, '<i>');
 });
+
+import { textField } from '../server/views/form-parts.js';
+
+test('fields escape their values and mark their errors', () => {
+  const out = String(textField({ id: 'n', label: 'Name', name: 'name', value: '"><script>', error: { field: 'name', message: 'Too <long>' } }));
+  assert.match(out, /value="&quot;&gt;&lt;script&gt;"/);
+  assert.match(out, /aria-invalid="true" aria-describedby="n-error"/);
+  assert.match(out, /<p class="field-error" id="n-error">Too &lt;long&gt;<\/p>/);
+});
