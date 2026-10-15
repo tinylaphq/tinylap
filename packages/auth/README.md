@@ -53,6 +53,9 @@ if (can(claims, workspaceId, 'admin.manage')) {
 | `owner.transfer` | ✓ | | |
 | `club.manage` (rename, delete) | ✓ | | |
 | `club.leave` | | ✓ | ✓ |
+| `timing.run` (watch, run sessions, tap, bridge) | ✓ | ✓ | ✓ |
+| `timing.setup` (drivers, transponders, pairing, track) | ✓ | ✓ | ✓ |
+| `timing.delete` (drivers, decoders) | ✓ | ✓ | |
 
 ## `createBff(options)`
 

@@ -21,6 +21,9 @@ const MATRIX = {
   'owner.transfer': ['owner'],
   'club.manage': ['owner'],
   'club.leave': ['admin', 'member'],
+  'timing.run': ['owner', 'admin', 'member'],
+  'timing.setup': ['owner', 'admin', 'member'],
+  'timing.delete': ['owner', 'admin'],
 };
 
 export const ACTIONS = Object.freeze(Object.keys(MATRIX));

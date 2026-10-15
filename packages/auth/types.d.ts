@@ -14,7 +14,10 @@ export type Action =
   | 'admin.manage'
   | 'owner.transfer'
   | 'club.manage'
-  | 'club.leave';
+  | 'club.leave'
+  | 'timing.run'
+  | 'timing.setup'
+  | 'timing.delete';
 
 export interface WorkspaceClaim {
   id: string;
