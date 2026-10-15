@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @tinylap/track-planner dev",
+    "dev:timing": "pnpm --filter @tinylap/timing-app dev",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
