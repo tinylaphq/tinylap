@@ -52,3 +52,11 @@ test('the reader does not grow without an end', () => {
   reader.push(`%${'x'.repeat(5000)}`);
   assert.deepEqual(reader.push('%A&'), [{ type: 'ack' }]);
 });
+
+test('line noise that a batch would refuse is unknown, not a lap or clock', () => {
+  const noise = 'L0123456789ABCDEF01,FFFFFFFFFFFFFFFFFFFF';
+  assert.deepEqual(parseMessage(noise), { type: 'unknown', raw: noise });
+  assert.deepEqual(parseMessage('L0A,FFFFFFFFFFFFFF'), { type: 'unknown', raw: 'L0A,FFFFFFFFFFFFFF' });
+  assert.deepEqual(parseMessage('TFFFFFFFFFFFFFF'), { type: 'unknown', raw: 'TFFFFFFFFFFFFFF' });
+  assert.deepEqual(parseMessage('L0123456789ABCDEF,1F'), { type: 'lap', transponder: '0123456789ABCDEF', t: 31 });
+});

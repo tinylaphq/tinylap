@@ -13,7 +13,8 @@ import { BOOT_ID, DECODER_ID, base64url } from './passing.js';
 
 export const ZROUND_BAUD = 19200;
 export const TOKEN = /^[A-Za-z0-9_-]{43}$/;
-const HEX = /^[0-9A-Fa-f]+$/;
+const TRANSPONDER_HEX = /^[0-9A-Fa-f]{1,16}$/;
+const TIME_HEX = /^[0-9A-Fa-f]{1,13}$/;
 const MAX_PENDING = 1024;
 
 /** @param {string} text */
@@ -51,11 +52,17 @@ export function parseMessage(body) {
     }
     return unknown;
   }
-  if (body[0] === 'T' && HEX.test(body.slice(1))) return { type: 'clock', t: parseInt(body.slice(1), 16) };
+  if (body[0] === 'T' && TIME_HEX.test(body.slice(1))) {
+    const t = parseInt(body.slice(1), 16);
+    if (Number.isSafeInteger(t)) return { type: 'clock', t };
+  }
   if (body[0] === 'L') {
     const rest = body.slice(1);
     const [transponder, time] = rest.includes(',') ? rest.split(',', 2) : [rest.slice(0, 2), rest.slice(2)];
-    if (HEX.test(transponder) && HEX.test(time)) return { type: 'lap', transponder: transponder.toUpperCase(), t: parseInt(time, 16) };
+    if (TRANSPONDER_HEX.test(transponder) && TIME_HEX.test(time)) {
+      const t = parseInt(time, 16);
+      if (Number.isSafeInteger(t)) return { type: 'lap', transponder: transponder.toUpperCase(), t };
+    }
   }
   return unknown;
 }
