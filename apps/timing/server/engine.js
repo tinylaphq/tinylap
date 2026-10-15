@@ -153,5 +153,93 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     });
   }
 
-  return { ingest, tap };
+  function setState(session, state) {
+    store.updateSession(session.id, { state });
+    const next = { ...session, state };
+    publishSession(next);
+    return next;
+  }
+
+  /** Starts a qualifying or race (spec §6); one at a time per workspace. */
+  function start(workspaceId, { kind, roster, durationMs, countdownMs = 0 }) {
+    return store.transaction(() => {
+      if (store.activeSession(workspaceId)) return { error: 'conflict' };
+      const t = now();
+      const open = store.openPractice(workspaceId);
+      if (open) endSession(open, store.lastCrossingAt(open.id) ?? t);
+      const opensAt = kind === 'race' ? t + countdownMs : t;
+      const state = kind === 'race' && countdownMs > 0 ? 'countdown' : 'running';
+      return { session: createSession(workspaceId, { kind, roster, durationMs, state, opensAt, closesAt: opensAt + durationMs }) };
+    });
+  }
+
+  function abort(workspaceId, sessionId) {
+    const session = store.session(sessionId);
+    if (!session || session.workspaceId !== workspaceId || session.kind === 'practice' || !ACTIVE.has(session.state)) return null;
+    return endSession(session, now(), 'aborted');
+  }
+
+  /** Moves sessions along their states as time passes. */
+  function tick() {
+    const t = now();
+    for (let session of store.activeAll()) {
+      if (session.state === 'countdown' && t >= session.opensAt) session = setState(session, 'running');
+      if (session.state === 'running' && t >= session.closesAt) session = setState(session, 'finishing');
+      if (session.state === 'finishing' && isComplete(rulesOf(session), stateOf(session), t, maxLap)) endSession(session, t);
+    }
+  }
+
+  /** Recounts a session's crossings from scratch, after drivers changed. */
+  function rebuild(sessionId) {
+    const session = store.session(sessionId);
+    const rules = rulesOf(session);
+    const state = emptyState();
+    for (const c of store.crossings(sessionId)) {
+      const counts = applyCrossing(rules, state, c);
+      if (counts !== c.counts) store.setCrossingCounts(c.seq, counts);
+    }
+    if (ACTIVE.has(session.state)) states.set(sessionId, state);
+    else states.delete(sessionId);
+    publishStandings(session);
+  }
+
+  function assign(workspaceId, code, driverId) {
+    store.transaction(() => {
+      store.assignTransponder(workspaceId, code, driverId, now());
+      if (driverId !== null) for (const id of store.assignCrossings(workspaceId, code, driverId)) rebuild(id);
+    });
+    hub.publish(workspaceId, 'setup', { unknown: unknownOf(workspaceId) }, null);
+  }
+
+  /** A new track or direction starts a new practice (spec §6). */
+  function restartPractice(workspaceId) {
+    const open = store.openPractice(workspaceId);
+    if (open) endSession(open, store.lastCrossingAt(open.id) ?? now());
+  }
+
+  function snapshot(workspaceId, { watcher = false } = {}) {
+    const ws = store.ensureWorkspace(workspaceId);
+    const session = store.activeSession(workspaceId) ?? store.openPractice(workspaceId);
+    const track = ws.trackId ? store.track(workspaceId, ws.trackId) : null;
+    const recent = session ? store.recentCrossings(session.id, 30) : [];
+    return {
+      now: now(),
+      track: track && { id: track.id, name: track.name },
+      direction: ws.direction,
+      session: session && publicSession(session),
+      standings: session ? standingsOf(session) : [],
+      crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),
+      drivers: store.drivers(workspaceId),
+      bests: track ? store.personalBests(workspaceId, track.id, ws.direction) : [],
+      ...(watcher ? {} : { unknown: unknownOf(workspaceId) }),
+    };
+  }
+
+  function sessionDetail(workspaceId, sessionId) {
+    const session = store.session(sessionId);
+    if (!session || session.workspaceId !== workspaceId) return null;
+    return { session: publicSession(session), standings: standingsOf(session), crossings: store.crossings(sessionId).map(memberCrossing) };
+  }
+
+  return { ingest, tap, start, abort, tick, assign, restartPractice, snapshot, sessionDetail };
 }
