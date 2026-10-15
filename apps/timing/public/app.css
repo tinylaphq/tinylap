@@ -129,6 +129,7 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .tap-tile:focus-visible { outline: 3px solid var(--p-accent-3); outline-offset: 2px; }
 
 .tap-screen { padding: var(--p-space-md); display: grid; gap: var(--p-space-md); }
+.tap-form { display: contents; }
 .tap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--p-space-md); }
 .tap-tile {
   min-height: 7rem;

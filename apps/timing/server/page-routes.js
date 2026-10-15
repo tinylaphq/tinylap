@@ -10,6 +10,7 @@ import { racePageRoutes } from './race-pages.js';
 import { page, seeOther } from './respond.js';
 import { setupPageRoutes } from './setup-pages.js';
 import { spacesOf } from './spaces.js';
+import { tapPageRoutes } from './tap-pages.js';
 import { notFoundPage, startPage } from './views/notice.js';
 
 const COOKIE = new RegExp(`(?:^|;\\s*)${SPACE_COOKIE}=([^;]+)`);
@@ -33,7 +34,7 @@ const home = withSession(async (request) => {
 });
 
 /** @type {any[]} Feature tasks add their page and form routes here. */
-export const SCREEN_ROUTES = [...setupPageRoutes, ...racePageRoutes];
+export const SCREEN_ROUTES = [...setupPageRoutes, ...racePageRoutes, ...tapPageRoutes];
 
 export const pageRoutes = [
   { pattern: /^\/$/, credentials: true, methods: { GET: home } },
