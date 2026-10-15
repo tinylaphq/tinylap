@@ -60,3 +60,9 @@ test('line noise that a batch would refuse is unknown, not a lap or clock', () =
   assert.deepEqual(parseMessage('TFFFFFFFFFFFFFF'), { type: 'unknown', raw: 'TFFFFFFFFFFFFFF' });
   assert.deepEqual(parseMessage('L0123456789ABCDEF,1F'), { type: 'lap', transponder: '0123456789ABCDEF', t: 31 });
 });
+
+test('a cut-off message resyncs at the last % before the &', () => {
+  const reader = createReader();
+  assert.deepEqual(reader.push('%L01,2%A&'), [{ type: 'ack' }]);
+  assert.deepEqual(reader.push('%L01,2%TLID dec bootid12&'), [{ type: 'hello', decoder: 'dec', boot: 'bootid12' }]);
+});

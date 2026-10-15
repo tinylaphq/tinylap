@@ -87,7 +87,9 @@ export function createReader() {
           pending = pending.slice(start);
           break;
         }
-        out.push(parseMessage(pending.slice(start + 1, end)));
+        // A cut-off message restarts at the last "%" before the "&".
+        const from = pending.lastIndexOf('%', end);
+        out.push(parseMessage(pending.slice(from + 1, end)));
         pending = pending.slice(end + 1);
       }
       if (pending.length > MAX_PENDING) pending = '';
