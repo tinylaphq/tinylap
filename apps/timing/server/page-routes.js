@@ -6,6 +6,7 @@
 // SCREEN_ROUTES; the catch-all stays last.
 import { withSession } from './auth.js';
 import { SPACE_COOKIE, pageRoute, withAccount } from './page-access.js';
+import { racePageRoutes } from './race-pages.js';
 import { page, seeOther } from './respond.js';
 import { setupPageRoutes } from './setup-pages.js';
 import { spacesOf } from './spaces.js';
@@ -32,7 +33,7 @@ const home = withSession(async (request) => {
 });
 
 /** @type {any[]} Feature tasks add their page and form routes here. */
-export const SCREEN_ROUTES = [...setupPageRoutes];
+export const SCREEN_ROUTES = [...setupPageRoutes, ...racePageRoutes];
 
 export const pageRoutes = [
   { pattern: /^\/$/, credentials: true, methods: { GET: home } },

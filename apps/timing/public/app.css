@@ -289,3 +289,12 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
   .inline-form:has(> .field > label:not(.visually-hidden)) > .field { flex: 0 0 auto; }
   .inline-form:has(> .field > label:not(.visually-hidden)) > .btn { margin-top: 0; align-self: flex-start; }
 }
+
+/* Race control: two number fields side by side; the choice groups are fieldsets. */
+.race-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--p-space-md); align-items: start; }
+.field input[type="number"] { max-width: 100%; box-sizing: border-box; }
+.choice { text-transform: none; letter-spacing: 0; font-size: 1rem; font-weight: 400; color: var(--p-text); } /* belongs upstream in palace-ui */
+@media (max-width: 520px) { .race-times { grid-template-columns: 1fr; } }
+/* A failed form's summary is a sentence, not a label; its link keeps the box's colour. */
+.status-error { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.status-error a { color: inherit; }
