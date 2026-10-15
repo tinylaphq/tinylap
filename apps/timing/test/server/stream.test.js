@@ -4,7 +4,7 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTiming } from './helpers.js';
+import { startServer, startTiming } from './helpers.js';
 import { events, next } from './sse.js';
 
 const clock = { now: 1_000_000_000_000 };
@@ -84,4 +84,20 @@ test('unknown API paths answer a problem', async () => {
   const res = await fetch(`${app.base}/workspaces/${office.id}/nothing`);
   assert.equal(res.status, 404);
   assert.equal(res.headers.get('content-type'), 'application/problem+json');
+});
+
+test('the request log never holds a watchers token', async () => {
+  const lines = [];
+  const server = await startServer({ log: (line) => lines.push(line) });
+  const token = 'w'.repeat(32);
+  try {
+    await (await fetch(`${server.base}/watch/${token}`)).arrayBuffer();
+    await (await fetch(`${server.base}/watch/${token}/live`)).arrayBuffer();
+  } finally {
+    await server.close();
+  }
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], /^GET \/watch\/… \d{3} \d+ms$/);
+  assert.match(lines[1], /^GET \/watch\/…\/live \d{3} \d+ms$/);
+  assert.ok(lines.every((line) => !line.includes(token)));
 });

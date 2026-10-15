@@ -17,6 +17,7 @@ const API_HEADERS = {
   'Access-Control-Expose-Headers': 'Location, Link, ETag, Retry-After',
   Link: '</openapi.json>; rel="service-desc"',
 };
+const WATCH_PATH = /^\/watch\/[^/]+/;
 const CREDENTIAL_HEADERS = { Link: API_HEADERS.Link };
 
 function send(req, res, { status, headers = {}, body, stream }) {
@@ -77,10 +78,11 @@ const LIMITS = { ingest: 600, tap: 120, pair: 10 };
 
 /**
  * @param {{ store?: any, engine?: any, hub?: any, auth?: any, root?: string, appDir: string, publicUrl?: string,
- *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean,
+ *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
  *   routes?: any[], fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number } }} options
  */
 export function createHandler(options) {
+  const log = typeof options.log === 'function' ? options.log : options.log === false ? null : (line) => console.log(line);
   const now = options.now ?? Date.now;
   const limits = { ...LIMITS, ...options.limits };
   const context = {
@@ -119,7 +121,7 @@ export function createHandler(options) {
       response = { ...problem(request, 'unavailable', 'The server could not complete the request.'), headers: { ...API_HEADERS, 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' } };
     }
     send(req, res, response);
-    // No client addresses in the log, ever.
-    if (options.log !== false) console.log(`${req.method} ${url.pathname} ${response.status} ${Math.round(performance.now() - started)}ms`);
+    // No client addresses in the log, ever, and no watchers tokens (spec §7): the token is the whole secret.
+    log?.(`${req.method} ${url.pathname.replace(WATCH_PATH, '/watch/…')} ${response.status} ${Math.round(performance.now() - started)}ms`);
   };
 }
