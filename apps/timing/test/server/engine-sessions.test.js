@@ -132,3 +132,25 @@ test('the snapshot: members get setup, watchers do not', () => {
   assert.equal(watcher.crossings.length, 2);
   assert.ok(watcher.crossings.every((c) => !('transponder' in c)));
 });
+
+test('assigning a transponder leaves finished races frozen', () => {
+  const { engine, store, clock, events, pass } = rig();
+  store.addDriver(W, { id: 'cy', name: 'Cy', colour: '#2dff9b' });
+  const { session } = engine.start(W, { kind: 'race', roster: ['ana', 'cy'], durationMs: 30_000, countdownMs: 0 });
+  pass(1000, '0C');
+  pass(9000, '0C');
+  pass(2000);
+  pass(10_000);
+  clock.now = T0 + 31_000;
+  engine.tick();
+  clock.now = T0 + 100_000;
+  engine.tick();
+  assert.equal(store.session(session.id).state, 'done');
+  const counts = () => store.crossings(session.id).map((c) => c.counts);
+  const before = { counts: counts(), standings: engine.sessionDetail(W, session.id).standings };
+  const seen = events.length;
+  engine.assign(W, '0C', 'cy');
+  assert.deepEqual(counts(), before.counts);
+  assert.deepEqual(engine.sessionDetail(W, session.id).standings, before.standings);
+  assert.deepEqual(events.slice(seen).filter((e) => e.type === 'standings' && e.data.sessionId === session.id), []);
+});

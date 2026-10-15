@@ -152,8 +152,9 @@ export function openStore(path) {
     crossings: q('SELECT * FROM crossing WHERE session_id = ? ORDER BY seq'),
     recentCrossings: q('SELECT * FROM crossing WHERE session_id = ? ORDER BY seq DESC LIMIT ?'),
     setCounts: q('UPDATE crossing SET counts = ? WHERE seq = ?'),
-    unassignedSessions: q("SELECT DISTINCT session_id FROM crossing WHERE workspace_id = ? AND transponder = ? AND driver_id IS NULL AND via != 'tap'"),
-    assignCrossings: q("UPDATE crossing SET driver_id = ? WHERE workspace_id = ? AND transponder = ? AND driver_id IS NULL AND via != 'tap'"),
+    // Results freeze at done (spec §6): crossings of ended qualifying and races keep their driver.
+    unassignedSessions: q(`SELECT DISTINCT session_id FROM crossing WHERE workspace_id = ? AND transponder = ? AND driver_id IS NULL AND via != 'tap' AND session_id IN (SELECT id FROM session WHERE kind = 'practice' OR state IN ${ACTIVE})`),
+    assignCrossings: q(`UPDATE crossing SET driver_id = ? WHERE workspace_id = ? AND transponder = ? AND driver_id IS NULL AND via != 'tap' AND session_id IN (SELECT id FROM session WHERE kind = 'practice' OR state IN ${ACTIVE})`),
     lastCrossingAt: q('SELECT MAX(at) AS at FROM crossing WHERE session_id = ?'),
     addSession: q(`INSERT INTO session (id, workspace_id, kind, track_id, direction, roster, state, created_at, opens_at, closes_at, ended_at, duration_ms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
