@@ -21,20 +21,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .nav-tab, .nav-tab:hover { border-bottom: 0; }
 .nav-tab:hover { opacity: 1; }
 .nav-tab[aria-current="page"] { opacity: 1; box-shadow: inset 0 -3px 0 var(--p-accent-1); }
-.nav-tab:focus-visible, .nav-select:focus-visible { outline: 2px solid var(--p-accent-3); outline-offset: -2px; }
-/* The workspace switcher sits between outline buttons, so it takes their
- * size and border (palace's .btn-sm) and a drawn chevron instead of the
- * native arrow, which never lines up. */
-.nav-select {
-  appearance: none; max-width: 12rem; margin: 0;
-  font: 600 11px/1.4 var(--p-font); letter-spacing: 1px;
-  padding: 6px 30px 6px 14px; border: var(--p-border-thin) solid var(--p-surface); border-radius: 0;
-  color: var(--p-surface); background-color: transparent;
-  background-image: linear-gradient(45deg, transparent 50%, var(--p-surface) 50%), linear-gradient(135deg, var(--p-surface) 50%, transparent 50%);
-  background-position: right 15px center, right 10px center; background-size: 5px 5px; background-repeat: no-repeat;
-  cursor: pointer;
-}
-.nav-select option { color: var(--p-text); background: var(--p-surface); }
+.nav-tab:focus-visible { outline: 2px solid var(--p-accent-3); outline-offset: -2px; }
 .navbar .btn-outline { color: var(--p-surface); border-color: var(--p-surface); background: transparent; }
 .navbar .btn-outline:hover { background: var(--p-surface); color: var(--p-text); }
 .live-status { color: var(--p-surface); white-space: nowrap; }
@@ -339,10 +326,12 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .token { display: block; overflow-wrap: anywhere; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
 /* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
 .token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
-/* A failed form's summary is a sentence, not a label; its link keeps the box's colour. */
-.status-error { text-transform: none; letter-spacing: 0; font-weight: 600; }
+/* Every status line here is prose, not a label. */
+.status { text-transform: none; letter-spacing: 0; }
+/* A failed form's summary is a sentence; its link keeps the box's colour. */
+.status-error { font-weight: 600; }
 .status-error a { color: inherit; text-decoration-color: currentColor; }
-.status-info p { text-transform: none; letter-spacing: 0; font-weight: 400; margin: 0; }
+.status-info p { font-weight: 400; margin: 0; }
 .status-info p + p { margin-top: var(--p-space-xs); }
 .status .token { margin: 0; }
 .decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }

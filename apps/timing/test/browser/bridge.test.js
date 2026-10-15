@@ -130,3 +130,12 @@ test('a bad name shows the server error as an alert and a blank name is refused 
   assert.equal(await page.getByLabel('Decoder name').isEditable(), true);
   assert.equal(app.store.decoders(personal).length, before);
 });
+
+test('status lines on the bridge read as sentences, not in capitals', async (t) => {
+  const { context, page } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.goto('/personal/bridge');
+  const styles = await page.locator('.status').evaluateAll((els) => els.map((el) => [el.className, getComputedStyle(el).textTransform]));
+  assert.ok(styles.some(([name]) => name.includes('status-warning')));
+  for (const [name, transform] of styles) assert.equal(transform, 'none', name);
+});
