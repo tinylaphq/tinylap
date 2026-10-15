@@ -17,7 +17,7 @@ import { setupPage } from './views/setup.js';
 /**
  * The setup page from the store, with any errors and kept values.
  * @param {any} request @param {number} status
- * @param {{ headers?: Record<string, any>, errors?: Record<string, any>, values?: Record<string, any>, paired?: { id: string, name: string, token: string } | null }} [extras]
+ * @param {{ headers?: Record<string, any>, failed?: { error: any, fieldId?: string | null }, errors?: Record<string, any>, values?: Record<string, any>, paired?: { id: string, name: string, token: string } | null }} [extras]
  */
 export function renderSetup(request, status, { headers = {}, ...extras } = {}) {
   const ws = request.workspaceId;
@@ -38,10 +38,10 @@ export function renderSetup(request, status, { headers = {}, ...extras } = {}) {
  * Runs an operation from a form: 303 to `section` on success, the setup page
  * with the error otherwise (422, or the operation's own status).
  */
-export function afterForm(request, result, { key, values, section }) {
+export function afterForm(request, result, { key, values, section, fieldId = null }) {
   if (!result.error) return seeOther(`${request.space.base}/setup#${section}`);
   const headers = result.error.retryAfter ? { 'Retry-After': String(result.error.retryAfter) } : undefined;
-  return renderSetup(request, result.error.status, { errors: { [key]: result.error }, values: { [key]: values }, headers });
+  return renderSetup(request, result.error.status, { errors: { [key]: result.error }, values: { [key]: values }, failed: { error: result.error, fieldId }, headers });
 }
 
 /** A form handler: read the body, then `run(request, form, match)`. */
@@ -52,17 +52,17 @@ const withForm = (run) => async (request, match) => {
 
 const addDriver = withForm((request, form) => {
   const values = { name: form.get('name') ?? '' };
-  return afterForm(request, ops.addDriver(request, { name: values.name }), { key: 'add-driver', values, section: 'drivers' });
+  return afterForm(request, ops.addDriver(request, { name: values.name }), { key: 'add-driver', values, section: 'drivers', fieldId: 'add-driver-name' });
 });
 
 const renameDriver = withForm((request, form, match) => {
   const values = { name: form.get('name') ?? '' };
-  return afterForm(request, ops.renameDriver(request, { id: match[2], name: values.name }), { key: `rename:${match[2]}`, values, section: 'drivers' });
+  return afterForm(request, ops.renameDriver(request, { id: match[2], name: values.name }), { key: `rename:${match[2]}`, values, section: 'drivers', fieldId: `rename-${match[2]}` });
 });
 
 function askDeleteDriver(request, match) {
   const driver = request.store.driver(request.workspaceId, match[2]);
-  if (!driver) return renderSetup(request, 404);
+  if (!driver) return renderSetup(request, 404, { failed: { error: { message: 'There is no such driver here.' } } });
   const base = request.space.base;
   return page(request, 200, confirmPage(request, {
     title: `Delete ${driver.name}?`,
@@ -73,12 +73,12 @@ function askDeleteDriver(request, match) {
   }));
 }
 
-const deleteDriver = withForm((request, _form, match) => afterForm(request, ops.deleteDriver(request, { id: match[2] }), { key: 'add-driver', values: {}, section: 'drivers' }));
+const deleteDriver = withForm((request, _form, match) => afterForm(request, ops.deleteDriver(request, { id: match[2] }), { key: 'delete', values: {}, section: 'drivers' }));
 
 const assignTransponder = withForm((request, form, match) => {
   const driver = form.get('driver') ?? '';
   const code = match[2].toUpperCase();
-  return afterForm(request, ops.assignTransponder(request, { code, driverId: driver === '' ? null : driver }), { key: `transponder:${code}`, values: { driver }, section: 'transponders' });
+  return afterForm(request, ops.assignTransponder(request, { code, driverId: driver === '' ? null : driver }), { key: `transponder:${code}`, values: { driver }, section: 'transponders', fieldId: `transponder-${code}` });
 });
 
 const write = { write: true };

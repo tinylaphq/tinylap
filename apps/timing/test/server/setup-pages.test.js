@@ -117,3 +117,38 @@ test('after signing out, resubmitting a form sends you to sign in and changes no
   assert.equal(res.headers.get('location'), '/auth/login?returnTo=%2F');
   assert.equal(drivers().length, before);
 });
+
+test('a member sees no Delete links, an admin does', async () => {
+  const added = await app.form(owner, `${base}/drivers`, { name: 'Fay' });
+  assert.equal(added.status, 303);
+  const asMember = await (await get(member, `${base}/setup`)).text();
+  assert.match(asMember, />Fay</);
+  assert.doesNotMatch(asMember, /\/delete"/);
+  assert.match(await (await get(owner, `${base}/setup`)).text(), /\/delete"/);
+});
+
+test('a blank rename is a 422 with the summary linking the field, and the input kept', async () => {
+  const fay = drivers().find((d) => d.name === 'Fay');
+  const res = await app.form(member, `${base}/drivers/${fay.id}`, { name: '   ' });
+  assert.equal(res.status, 422);
+  const body = await res.text();
+  assert.match(body, new RegExp(`<p class="status status-error" role="alert"><a href="#rename-${fay.id}">Give the driver a name of 1 to 60 characters\\.</a></p>`));
+  assert.match(body, new RegExp(`<input[^>]*id="rename-${fay.id}"[^>]*value="   "[^>]*aria-invalid="true"`));
+  assert.equal(drivers().find((d) => d.id === fay.id).name, 'Fay');
+});
+
+test('an error without a field shows in the summary, also for a vanished driver\'s delete and confirm page', async () => {
+  const gone = drivers().find((d) => d.name === 'Fay');
+  assert.equal((await app.form(owner, `${base}/drivers/${gone.id}/delete`, {})).status, 303);
+  const rename = await app.form(member, `${base}/drivers/${gone.id}`, { name: 'Fay again' });
+  assert.equal(rename.status, 404);
+  assert.match(await rename.text(), /<p class="status status-error" role="alert">There is no such driver here\.<\/p>/);
+  const del = await app.form(owner, `${base}/drivers/${gone.id}/delete`, {});
+  assert.equal(del.status, 404);
+  const body = await del.text();
+  assert.match(body, /<p class="status status-error" role="alert">There is no such driver here\.<\/p>/);
+  assert.doesNotMatch(body, /aria-invalid/);
+  const ask = await get(owner, `${base}/drivers/${gone.id}/delete`);
+  assert.equal(ask.status, 404);
+  assert.match(await ask.text(), /role="alert">There is no such driver here\./);
+});

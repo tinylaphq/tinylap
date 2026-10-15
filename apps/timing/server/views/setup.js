@@ -22,7 +22,6 @@ function trackSection(request, m) {
   <h2 class="h3" id="track-title">Track</h2>
   <p>${m.track ? html`Now: <strong>${m.track.name}</strong>, ${DIRECTION_NAME[m.direction]}.` : 'No track yet. Share a closed track from the planner and paste its link here.'}</p>
   <form method="post" action="${base}/track" class="stack-sm">
-    ${errorSummary(error)}
     ${textField({ id: 'track-link', label: 'Planner link', name: 'link', type: 'url', required: true, placeholder: 'https://…/layouts/…', value: values.link ?? '', error })}
     ${textField({ id: 'track-name', label: 'Track name', name: 'name', maxlength: 60, value: values.name ?? m.track?.name ?? '', error })}
     ${selectField({ id: 'track-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error })}
@@ -48,7 +47,6 @@ function driversSection(request, m) {
   </li>`;
   })}</ul>` : html`<p class="empty">No drivers yet.</p>`}
   <form method="post" action="${base}/drivers" class="inline-form">
-    ${errorSummary(addError)}
     ${textField({ id: 'add-driver-name', label: 'New driver', name: 'name', maxlength: 60, required: true, value: m.values['add-driver']?.name ?? '', error: addError })}
     <button type="submit" class="btn btn-primary">Add driver</button>
   </form>
@@ -94,7 +92,6 @@ function decodersSection(request, m) {
   </li>`)}</ul>` : null}
   <p>Pair a decoder by USB on the <a href="${base}/bridge">Bridge</a> page, or here if it only uses Wi-Fi:</p>
   <form method="post" action="${base}/decoders" class="inline-form">
-    ${errorSummary(error)}
     ${textField({ id: 'pair-name', label: 'Decoder name', name: 'name', maxlength: 60, value: m.values.pair?.name ?? '', placeholder: 'Start line', error })}
     <button type="submit" class="btn btn-outline">Pair over Wi-Fi only</button>
   </form>
@@ -115,12 +112,13 @@ function watchersSection(request, m) {
 }
 
 export function setupPage(request, model) {
-  const m = { errors: {}, values: {}, paired: null, ...model };
+  const m = { errors: {}, values: {}, paired: null, failed: null, ...model };
   return layout(request, {
     title: 'Setup',
     screen: 'setup',
     body: html`<div class="container stack-xl screen">
   <h1>Setup</h1>
+  ${m.failed ? errorSummary(m.failed.error, m.failed.fieldId) : null}
   ${trackSection(request, m)}
   ${driversSection(request, m)}
   ${transpondersSection(request, m)}

@@ -29,5 +29,10 @@ export function selectField({ label, name, options, value = '', error = null, la
 </div>`;
 }
 
-/** A form-level message for errors that aren't about one field (rate limits, conflicts). */
-export const errorSummary = (error) => (error && !error.field ? html`<p class="status status-error" role="alert">${error.message}</p>` : null);
+/**
+ * The page-level message for a failed form (spec §5): role="alert", with a link to
+ * the field when the error names one. @param {{ field?: string, message: string } | null | undefined} error @param {string | null} [fieldId]
+ */
+export const errorSummary = (error, fieldId = null) => (error
+  ? html`<p class="status status-error" role="alert">${error.field && fieldId ? html`<a href="#${fieldId}">${error.message}</a>` : error.message}</p>`
+  : null);
