@@ -63,7 +63,8 @@ export function createSimulator({ cars, jitterMs = 150, random = Math.random, de
         case 'reset':
           boot = randomBoot();
           for (const car of next) car.at -= now;
-          return [];
+          // A TinyLap decoder says who it is whenever its boot changes (spec §5).
+          return [commands.id(paired, boot)];
         default:
           return [];
       }

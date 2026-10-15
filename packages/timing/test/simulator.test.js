@@ -36,12 +36,13 @@ test('the simulator answers hello, pairing, Wi-Fi and a ZRound startup', () => {
   assert.deepEqual(sim.reply({ type: 'hello-request' }, 0), [`%TLID dec_1 ${sim.boot}&`]);
 });
 
-test('a ZRound reset starts a new boot with its clock at zero', () => {
+test('a ZRound reset starts a new boot with its clock at zero, and announces it', () => {
   const sim = createSimulator({ cars: [{ transponder: '0A', lapMs: 8000 }], jitterMs: 0, random: () => 0.5 });
   sim.advance(30_000);
   const before = sim.boot;
-  assert.deepEqual(sim.reply({ type: 'reset' }, 30_000), []);
+  const reply = sim.reply({ type: 'reset' }, 30_000);
   assert.notEqual(sim.boot, before);
+  assert.deepEqual(reply, [`%TLID - ${sim.boot}&`], 'it says who it is now, unprompted');
   const next = sim.advance(10_000);
   assert.ok(next.length >= 1);
   assert.ok(next.every((p) => p.t <= 10_000));
