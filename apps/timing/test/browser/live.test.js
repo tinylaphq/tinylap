@@ -120,8 +120,10 @@ test('a board whose stream is refused reloads itself', async (t) => {
   await page.goto('/personal/board');
   await page.locator('#live-status[data-state="live"]').waitFor();
   const reloaded = page.waitForEvent('load');
+  // "off" lasts only tinylapReloadMs before the reload, shorter than a locator's polling interval: check it every frame.
+  const off = page.waitForFunction(() => document.querySelector('#live-status')?.getAttribute('data-state') === 'off', null, { polling: 'raf' });
   streams.drop();
-  await page.locator('#live-status[data-state="off"]').waitFor();
+  await off;
   await reloaded;
   assert.equal(new URL(page.url()).pathname, '/personal/board');
   await page.locator('#live-status[data-state="live"]').waitFor();
