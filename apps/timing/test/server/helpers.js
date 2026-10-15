@@ -62,7 +62,8 @@ export async function startTiming(options = {}) {
     redeemInvite(db, member.id, link.split('/').pop());
     if (role !== 'member') setRole(db, owner.id, clubId, member.id, role);
   }
-  /** Logs `user` in through the app's routes. Memberships must exist first: the token carries them. */
+  /** Logs `user` in through the app's routes. Memberships must exist first: the token carries them.
+   * Await one call at a time: parallel log-ins against the test accounts give random 401s. */
   async function login(user) {
     const jar = new Jar();
     const start = await fetch(`${base}/auth/login?returnTo=%2F`, { redirect: 'manual' });

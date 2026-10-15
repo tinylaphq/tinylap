@@ -5,6 +5,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from './helpers.js';
+import { tokenHash } from '../../server/setup.js';
 import { CLOSED, OPEN, closed, startPlannerStub } from './planner-stub.js';
 
 let app;
@@ -22,7 +23,7 @@ before(async () => {
   office = app.club(ana, 'Office');
   app.join(ana, office.id, ben);
   app.join(ana, office.id, cy, 'admin');
-  // One at a time: parallel log-ins against the test accounts are flaky (401s).
+  // Serial on purpose, see `login` in helpers.js.
   member = await app.login(ben); admin = await app.login(cy); stranger = await app.login(zed);
   path = (rest) => `/workspaces/${office.id}/${rest}`;
 });
@@ -77,10 +78,12 @@ test('pairing a decoder answers its token once', async () => {
   const decoder = await res.json();
   assert.match(decoder.token, /^[A-Za-z0-9_-]{43}$/);
   assert.equal(app.store.decoderByTokenHash(decoder.token), null, 'only a hash is stored');
+  assert.deepEqual(app.store.decoderByTokenHash(tokenHash(decoder.token)), { id: decoder.id, workspaceId: office.id });
   const { decoders } = await (await app.api(member, 'GET', path('decoders'))).json();
   assert.deepEqual(decoders.map((d) => [d.id, d.name, 'token' in d]), [[decoder.id, 'Start line', false]]);
   await problemOf(await app.api(member, 'DELETE', path(`decoders/${decoder.id}`)), 403, 'forbidden');
   assert.equal((await app.api(admin, 'DELETE', path(`decoders/${decoder.id}`))).status, 204);
+  assert.equal(app.store.decoderByTokenHash(tokenHash(decoder.token)), null);
 });
 
 test('pairing is rate limited per member', async () => {
