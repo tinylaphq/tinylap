@@ -218,9 +218,9 @@ admin command (`node apps/accounts/admin.js transfer-ownership <workspace>
   revoke) and members per §5; opening an invite link while logged out goes
   through sign-in or sign-up first; an expired, used or revoked link says so
   and suggests asking the club for a new one.
-- **Leaving or removal:** the club keeps its tracks. `saved_by` and
-  `updated_by` keep the bare user id and display as "former member". A
-  stored name is cleared only by the deletions feed (a deleted user); a save
+- **Leaving or removal:** the club keeps its tracks. Saves keep the
+  name they were stored with. A stored name is cleared only by the deletions
+  feed (a deleted user), and only then does the save show as "former member"; a save
   whose name lookup at `accounts` fails is refused with 503 and writes
   nothing. There is
   no "take my tracks with me"; a member can copy tracks to their personal

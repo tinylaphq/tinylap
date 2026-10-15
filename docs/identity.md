@@ -115,7 +115,8 @@ A person can create up to five clubs.
 
 People join a club through an invite link (valid 7 days, single use by
 default, shown once). When someone leaves or is removed, the club keeps their
-tracks; their saves show as "former member". Copy tracks to your personal
+tracks, and their saves keep the name they had. Only a deleted account's
+saves show as "former member". Copy tracks to your personal
 workspace before leaving if you want them.
 
 ## Private and public snapshots
