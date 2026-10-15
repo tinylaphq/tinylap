@@ -19,3 +19,10 @@ export function h(tag, attrs = {}, ...children) {
   for (const child of children.flat()) if (child !== null && child !== undefined && child !== false) el.append(child);
   return el;
 }
+
+/**
+ * A link to a screen of this page. A bare "#id" would resolve against the
+ * page's <base href="/v/<sha>/"> in production and lead to a 404, so the
+ * link carries the page's own path and query. @param {string} id
+ */
+export const screenHref = (id) => `${location.pathname}${location.search}#${id}`;

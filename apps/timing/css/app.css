@@ -18,10 +18,23 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   display: flex; align-items: center; color: var(--p-surface); text-decoration: none; padding: 0 var(--p-space-md);
   font-size: 13px; font-weight: 600; opacity: 0.7; transition: var(--p-transition);
 }
+.nav-tab, .nav-tab:hover { border-bottom: 0; }
 .nav-tab:hover { opacity: 1; }
 .nav-tab[aria-current="page"] { opacity: 1; box-shadow: inset 0 -3px 0 var(--p-accent-1); }
 .nav-tab:focus-visible, .nav-select:focus-visible { outline: 2px solid var(--p-accent-3); outline-offset: -2px; }
-.nav-select { font: inherit; font-size: 12px; max-width: 12rem; padding: 4px var(--p-space-sm); border: var(--p-border-thin) solid var(--p-border-dark); background: var(--p-dark); color: var(--p-surface); }
+/* The workspace switcher sits between outline buttons, so it takes their
+ * size and border (palace's .btn-sm) and a drawn chevron instead of the
+ * native arrow, which never lines up. */
+.nav-select {
+  appearance: none; max-width: 12rem; margin: 0;
+  font: 600 11px/1.4 var(--p-font); letter-spacing: 1px;
+  padding: 6px 30px 6px 14px; border: var(--p-border-thin) solid var(--p-surface); border-radius: 0;
+  color: var(--p-surface); background-color: transparent;
+  background-image: linear-gradient(45deg, transparent 50%, var(--p-surface) 50%), linear-gradient(135deg, var(--p-surface) 50%, transparent 50%);
+  background-position: right 15px center, right 10px center; background-size: 5px 5px; background-repeat: no-repeat;
+  cursor: pointer;
+}
+.nav-select option { color: var(--p-text); background: var(--p-surface); }
 .navbar-right form { margin: 0; }
 .navbar .btn-outline { color: var(--p-surface); border-color: var(--p-surface); background: transparent; }
 .navbar .btn-outline:hover { background: var(--p-surface); color: var(--p-text); }
@@ -158,3 +171,20 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .bridge-preview li { justify-content: space-between; }
 .bridge-preview .num:first-child { text-align: left; margin-left: 0; }
 .bridge-preview li:last-child { border-bottom: 0; }
+
+/* An empty board, for members: the three things to do before the first
+ * car. It is a real sequence, so it is numbered; a done step goes quiet. */
+.board-steps { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: 4px 4px 0 var(--p-text); padding: var(--p-space-lg); }
+.board-steps > h2 { margin: 0 0 var(--p-space-md); }
+.board-steps ol { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: var(--p-space-md); }
+.board-step { counter-increment: step; display: grid; grid-template-columns: 2.25rem 1fr; column-gap: var(--p-space-md); }
+.board-step::before {
+  content: counter(step); grid-row: span 3; align-self: start;
+  display: grid; place-items: center; width: 2.25rem; height: 2.25rem;
+  font: 700 1rem var(--p-font-mono); color: var(--p-surface); background: var(--p-text);
+}
+.board-step h3 { margin: 0; font-size: 1rem; }
+.board-step p { margin: 2px 0 0; color: var(--p-text-secondary); }
+.board-step-links { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-md); }
+.board-step.is-done::before { content: '\2713'; background: var(--p-success); color: var(--p-text); }
+.board-step.is-done p { color: var(--p-text); font-weight: 600; }

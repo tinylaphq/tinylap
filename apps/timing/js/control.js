@@ -4,7 +4,7 @@
 
 // Race control (spec §8): start a qualifying or race for chosen drivers, or
 // abort the one running. Practice needs no control; it is always on.
-import { h } from './dom.js';
+import { h, screenHref } from './dom.js';
 
 const ACTIVE = new Set(['countdown', 'running', 'finishing']);
 const KIND = { qualifying: 'Qualifying', race: 'Race' };
@@ -21,7 +21,7 @@ export function mountControl(root, ctx) {
 
   function startForm() {
     const drivers = [...ctx.view.drivers.values()];
-    if (drivers.length === 0) return h('div', { class: 'card stack-md' }, h('h1', {}, 'Race control'), h('p', { class: 'empty' }, 'Add drivers in Setup first. '), h('a', { href: '#setup' }, 'Setup'));
+    if (drivers.length === 0) return h('div', { class: 'card stack-md' }, h('h1', {}, 'Race control'), h('p', { class: 'empty' }, 'Add drivers in Setup first. '), h('a', { href: screenHref('setup') }, 'Setup'));
     const error = errorBox();
     const radio = (value, label, checked) => h('label', { class: 'choice' }, h('input', { type: 'radio', name: 'kind', value, checked }), label);
     const form = /** @type {HTMLFormElement} */ (h('form', { class: 'card stack-md' },
@@ -62,7 +62,7 @@ export function mountControl(root, ctx) {
     return h('div', { class: 'card stack-md' },
       h('h1', {}, KIND[session.kind]),
       h('p', { class: 'subtitle' }, session.state === 'countdown' ? 'Counting down' : session.state === 'finishing' ? 'Finishing the last lap' : 'Running'),
-      h('a', { class: 'btn btn-secondary', href: '#board' }, 'Show the board'),
+      h('a', { class: 'btn btn-secondary', href: screenHref('board') }, 'Show the board'),
       error, abort);
   }
 

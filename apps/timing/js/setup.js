@@ -4,7 +4,7 @@
 
 // Setup (spec §8): the track, drivers, transponders, decoders and the
 // watchers link. Deleting needs owner or admin, as the server enforces.
-import { h } from './dom.js';
+import { h, screenHref } from './dom.js';
 
 const DIRECTIONS = [['ccw', 'Anticlockwise'], ['cw', 'Clockwise']];
 
@@ -122,7 +122,7 @@ export function mountSetup(root, ctx) {
     };
     parts.decoders.replaceChildren(card('Decoders',
       h('ul', { class: 'setup-list' }, decoders.map(item)),
-      h('p', {}, 'Pair a decoder over USB in ', h('a', { href: '#bridge' }, 'Bridge'), '.'),
+      h('p', {}, 'Pair a decoder over USB in ', h('a', { href: screenHref('bridge') }, 'Bridge'), '.'),
       wifiOnly, shown, error));
   }
 

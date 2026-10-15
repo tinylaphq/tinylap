@@ -8,7 +8,7 @@ import { api } from './api.js';
 import { mountBoard } from './board.js';
 import { mountBridge } from './bridge-view.js';
 import { mountControl } from './control.js';
-import { h } from './dom.js';
+import { h, screenHref } from './dom.js';
 import { connect } from './live.js';
 import { mountSetup } from './setup.js';
 import { mountTap } from './tap.js';
@@ -96,7 +96,7 @@ function member(me) {
   const show = () => {
     const id = location.hash.slice(1);
     const screen = SCREENS.find((s) => s.id === id) ?? SCREENS[0];
-    tabs.replaceChildren(...SCREENS.map((s) => h('a', { class: 'nav-tab', href: `#${s.id}`, 'aria-current': s === screen ? 'page' : null }, s.label)));
+    tabs.replaceChildren(...SCREENS.map((s) => h('a', { class: 'nav-tab', href: screenHref(s.id), 'aria-current': s === screen ? 'page' : null }, s.label)));
     unmount();
     app.replaceChildren();
     unmount = screen.mount(app, ctx);

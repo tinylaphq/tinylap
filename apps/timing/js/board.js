@@ -5,7 +5,7 @@
 // The live board (spec §8): session and clock, standings, the last laps.
 // One layout from a phone to the wall; the watchers view is the same board
 // without setup hints.
-import { h } from './dom.js';
+import { h, screenHref } from './dom.js';
 import { formatClock, formatLap } from './format.js';
 import { clockOf, driverName, serverNow } from './view.js';
 
@@ -86,13 +86,33 @@ function feed(view) {
         !c.counts && c.driverId ? h('span', { class: 'tag' }, 'not counted') : null))));
 }
 
+/**
+ * What a member sees on a board with no laps yet: the three things to do
+ * before the first car, each marked done once it is. Watchers don't get it.
+ */
+function steps(view) {
+  const drivers = view.drivers.size;
+  const where = view.track && `${view.track.name}, ${DIRECTION[view.direction]}`;
+  const step = (title, done, text, ...links) => h('li', { class: done ? 'board-step is-done' : 'board-step' },
+    h('h3', {}, title),
+    h('p', {}, done ?? text),
+    links.length ? h('p', { class: 'board-step-links' }, links) : null);
+  const link = (screen, label) => h('a', { href: screenHref(screen) }, label);
+  return h('section', { class: 'board-steps', 'aria-labelledby': 'board-steps-title' },
+    h('h2', { class: 'h3', id: 'board-steps-title' }, 'Get the track ready'),
+    h('ol', {},
+      step('Choose the track', where, 'Paste a share link from the planner, and pick the direction you race.', where ? null : link('setup', 'Set the track')),
+      step('Add drivers', drivers ? `${drivers} ${drivers === 1 ? 'driver' : 'drivers'}` : null, 'Give everyone a name, then their car\u2019s transponder once it has crossed the line.', drivers ? null : link('setup', 'Add drivers')),
+      step('Start timing', null, 'Connect the decoder by USB, or tap each crossing by hand.', link('bridge', 'Connect the decoder'), ' ', link('tap', 'Tap laps by hand'))));
+}
+
 /** Draws the board into `section`. */
 export function renderBoard(section, view, now, { watcher = false } = {}) {
   const unknown = !watcher && view.unknown.length > 0
     ? h('p', { class: 'status status-warning board-unknown', role: 'status' },
-      `Unknown ${view.unknown.length === 1 ? 'car' : 'cars'}: ${view.unknown.join(', ')}. `, h('a', { href: '#setup' }, 'Assign in Setup'))
+      `Unknown ${view.unknown.length === 1 ? 'car' : 'cars'}: ${view.unknown.join(', ')}. `, h('a', { href: screenHref('setup') }, 'Assign in Setup'))
     : null;
-  section.replaceChildren(header(view, now), unknown ?? '', h('div', { class: 'board-main' }, results(view), table(view)), feed(view));
+  section.replaceChildren(header(view, now), unknown ?? '', h('div', { class: 'board-main' }, results(view), !watcher && view.standings.length === 0 ? steps(view) : table(view)), feed(view));
 }
 
 /** Mounts the board; it redraws on every change and ticks its clock. */
