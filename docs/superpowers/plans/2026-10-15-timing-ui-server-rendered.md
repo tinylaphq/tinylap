@@ -1806,12 +1806,13 @@ function showSetup(request) {
 
 const setTrack = withForm(async (request, form) => {
   const values = { link: form.get('link') ?? '', name: form.get('name') ?? '', direction: form.get('direction') ?? '' };
-  return afterForm(request, await ops.setTrack(request, values), { key: 'track', values, section: 'track' });
+  // A blank name is "use the default" on a form; the operation only takes a missing one.
+  return afterForm(request, await ops.setTrack(request, { ...values, name: values.name || undefined }), { key: 'track', values, section: 'track' });
 });
 
 const pairDecoder = withForm((request, form) => {
   const values = { name: form.get('name') ?? '' };
-  const result = ops.pairDecoder(request, values);
+  const result = ops.pairDecoder(request, { name: values.name || undefined });
   if (result.error) return afterForm(request, result, { key: 'pair', values, section: 'decoders' });
   const { id, token } = result.value;
   const sealed = encodeURIComponent(seal(request.keys, JSON.stringify({ id, token }), 'paired'));
@@ -2063,7 +2064,7 @@ async function start(request) {
     kind: values.kind,
     roster: values.roster,
     durationSeconds: minutes === undefined ? undefined : minutes * 60,
-    countdownSeconds: values.countdown,
+    countdownSeconds: values.countdown === '' ? undefined : values.countdown,
   });
   if (!result.error) return seeOther(`${request.space.base}/board`);
   return renderRace(request, result.error.status, { error: result.error, values });
