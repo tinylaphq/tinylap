@@ -14,31 +14,58 @@ import { simulatedPort } from './sim-port.js';
 /** @type {Bridge | null} */
 let bridge = null;
 const preview = [];
+/** Redraw callbacks of the mounted screens: 'state' redraws the screen, 'live' updates the ready panel in place. */
+const views = new Set();
+const notify = (kind) => { for (const view of views) view(kind); };
+let guarded = false;
 
 const simulate = () => new URLSearchParams(location.search).get('simulate');
 
 async function connectPort(ctx) {
   const mode = simulate();
   const port = mode !== null ? simulatedPort({ lapMs: mode === 'fast' ? 2000 : 8000 }) : await /** @type {any} */ (navigator).serial.requestPort();
-  bridge = new Bridge({
+  await bridge?.close();
+  const next = new Bridge({
     port,
     outbox: await openOutbox(),
     post: (decoderId, batch) => ctx.api('POST', `/decoders/${encodeURIComponent(decoderId)}/passings`, batch),
   });
-  bridge.addEventListener('passing', (event) => {
+  next.addEventListener('state', () => {
+    // Not a TinyLap decoder: the bridge stops and lets go of the port.
+    if (next.state === 'not-tinylap') void next.close();
+    notify('state');
+  });
+  for (const type of ['outbox', 'online']) next.addEventListener(type, () => notify('live'));
+  next.addEventListener('passing', (event) => {
     preview.unshift(/** @type {CustomEvent} */ (event).detail);
     preview.length = Math.min(preview.length, 20);
+    notify('live');
   });
-  window.addEventListener('beforeunload', (event) => {
-    if (bridge && bridge.state === 'ready') event.preventDefault();
-  });
-  await bridge.start();
+  if (!guarded) {
+    guarded = true;
+    window.addEventListener('beforeunload', (event) => {
+      if (bridge && bridge.state === 'ready') event.preventDefault();
+    });
+  }
+  // Set before start() so the events its first replies cause are drawn.
+  bridge = next;
+  try {
+    await next.start();
+  } catch (error) {
+    await next.close();
+    if (bridge === next) bridge = null;
+    notify('state');
+    throw error;
+  }
 }
 
 export function mountBridge(root, ctx) {
   const section = h('section', { class: 'container stack-lg screen' });
   root.append(section);
+  /** @type {(() => void) | null} */
+  let liveUpdate = null;
   const error = h('p', { class: 'status status-error', role: 'alert', hidden: true });
+  const ok = () => { error.hidden = true; };
   const fail = (caught) => {
     error.textContent = caught.message;
     error.hidden = false;
@@ -46,7 +73,7 @@ export function mountBridge(root, ctx) {
 
   const connectButton = (label) => {
     const button = h('button', { type: 'button', class: 'btn btn-primary btn-lg' }, label);
-    button.addEventListener('click', () => connectPort(ctx).then(draw, fail));
+    button.addEventListener('click', () => connectPort(ctx).then(ok, fail));
     return button;
   };
 
@@ -66,6 +93,7 @@ export function mountBridge(root, ctx) {
       try {
         const decoder = await ctx.api('POST', `/workspaces/${encodeURIComponent(ctx.workspaceId)}/decoders`, { name: name.value });
         await bridge.pair(decoder.id, decoder.token, ssid.value ? { ssid: ssid.value, password: password.value } : null);
+        ok();
       } catch (caught) {
         fail(caught);
       }
@@ -73,21 +101,28 @@ export function mountBridge(root, ctx) {
     return form;
   }
 
+  /** The ready panel and a function that refreshes its parts in place. */
   function readyPanel() {
+    const state = h('div', {});
+    const text = h('p', { role: 'status' });
     const outbox = h('span', { class: 'bridge-outbox num' }, '…');
-    void bridge.outbox.count().then((n) => { outbox.textContent = String(n); });
-    return h('div', { class: 'stack-md' },
-      h('div', { class: `bridge-state${bridge.online ? '' : ' is-offline'}` },
-        h('p', { role: 'status' },
-          bridge.online ? `Forwarding from decoder ${bridge.decoder}` : `Offline: passings wait here. ${bridge.lastError?.message ?? ''}`),
-        h('p', {}, 'Waiting to send: ', outbox)),
-      h('h2', { class: 'h3' }, 'Straight from the cable'),
-      preview.length
+    const list = h('div', {});
+    state.append(text, h('p', {}, 'Waiting to send: ', outbox));
+    const update = () => {
+      state.className = `bridge-state${bridge.online ? '' : ' is-offline'}`;
+      text.textContent = bridge.online ? `Forwarding from decoder ${bridge.decoder}` : `Offline: passings wait here. ${bridge.lastError?.message ?? ''}`;
+      void bridge.outbox.count().then((n) => { outbox.textContent = String(n); });
+      list.replaceChildren(preview.length
         ? h('ol', { class: 'board-laps bridge-preview' }, preview.map((p) => h('li', {}, h('span', { class: 'num' }, p.transponder), h('span', { class: 'num' }, formatLap(p.lapMs)))))
         : h('p', { class: 'empty' }, 'Passings show up here the moment the decoder reports them.'));
+    };
+    update();
+    liveUpdate = update;
+    return h('div', { class: 'stack-md' }, state, h('h2', { class: 'h3' }, 'Straight from the cable'), list);
   }
 
   function draw() {
+    liveUpdate = null;
     const supported = 'serial' in /** @type {any} */ (navigator) || simulate() !== null;
     let body;
     if (!supported) body = h('p', { class: 'status status-warning' }, 'The bridge needs Chrome or Edge on a laptop: it uses Web Serial to read the decoder over USB.');
@@ -101,18 +136,10 @@ export function mountBridge(root, ctx) {
   }
 
   draw();
-  const events = ['state', 'passing', 'outbox', 'online'];
-  let attached = null;
-  const attach = () => {
-    if (!bridge || attached === bridge) return;
-    for (const type of events) bridge.addEventListener(type, draw);
-    attached = bridge;
-  };
-  attach();
-  const poll = setInterval(attach, 200);
+  const view = (kind) => (kind === 'state' ? draw() : liveUpdate?.());
+  views.add(view);
   return () => {
-    clearInterval(poll);
-    if (attached) for (const type of events) attached.removeEventListener(type, draw);
+    views.delete(view);
     section.remove();
   };
 }

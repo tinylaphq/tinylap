@@ -90,3 +90,20 @@ test('a device that does not answer is not a TinyLap decoder; a lost port is dis
   silent.end();
   await until(() => bridge.state === 'disconnected');
 });
+
+test('a group the server refuses for good does not block the others', async () => {
+  const outbox = memoryOutbox();
+  await outbox.add({ decoder: 'd1', boot: 'b1', transponder: '0A', t: 1 });
+  await outbox.add({ decoder: 'd2', boot: 'b2', transponder: '0B', t: 2 });
+  const posted = [];
+  const bridge = new Bridge({ port: fakePort(null).port, outbox, retryMs: 10_000, post: async (decoder, batch) => {
+    if (decoder === 'd1') throw Object.assign(new Error('no'), { status: 401 });
+    posted.push(decoder);
+    return { through: batch.passings.at(-1).t };
+  } });
+  await bridge.flush();
+  assert.deepEqual(posted, ['d2']);
+  assert.deepEqual((await outbox.list()).map((x) => x.decoder), ['d1']);
+  assert.equal(bridge.lastError.message, 'no');
+  await bridge.close();
+});

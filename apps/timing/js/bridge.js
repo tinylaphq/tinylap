@@ -17,6 +17,7 @@ export class Bridge extends EventTarget {
   #again = false;
   #writer = null;
   #reader = null;
+  #closed = false;
   /** @type {any} */ port;
   /** @type {ReturnType<typeof import('./outbox.js').memoryOutbox>} */ outbox;
   /** @type {(decoderId: string, batch: any) => Promise<{ through: number | null }>} */ post;
@@ -83,14 +84,26 @@ export class Bridge extends EventTarget {
       for (;;) {
         const { value, done } = await this.#reader.read();
         if (done) break;
-        for (const message of lines.push(text.decode(value, { stream: true }))) await this.#handle(message);
+        for (const message of lines.push(text.decode(value, { stream: true }))) {
+          try {
+            await this.#handle(message);
+          } catch (error) {
+            // A handler failure (say the outbox can't store) is not a lost port: say so and keep reading.
+            this.#setOnline(false, error);
+          }
+        }
       }
     } catch {
       // The port went away; answered below.
     } finally {
       this.#reader.releaseLock();
+      try {
+        this.#writer?.releaseLock();
+      } catch {
+        // Already released.
+      }
       clearTimeout(this.#helloTimer);
-      this.#set('disconnected');
+      if (!this.#closed) this.#set('disconnected');
     }
   }
 
@@ -148,18 +161,32 @@ export class Bridge extends EventTarget {
     clearTimeout(this.#retryTimer);
     this.#flushing = (async () => {
       try {
+        // Groups the server refused for good (a 4xx) stay in the outbox but must not block the others.
+        const refused = new Set();
+        let refusal = null;
         for (;;) {
-          const items = await this.outbox.list();
+          const items = (await this.outbox.list()).filter((p) => !refused.has(`${p.decoder} ${p.boot}`));
           if (items.length === 0) break;
           const [first] = items;
           const group = items.filter((p) => p.decoder === first.decoder && p.boot === first.boot).sort((a, b) => a.t - b.t).slice(0, MAX_BATCH);
-          const { through } = await this.post(first.decoder, { boot: first.boot, passings: group.map(({ transponder, t }) => ({ transponder, t })) });
+          let through;
+          try {
+            ({ through } = await this.post(first.decoder, { boot: first.boot, passings: group.map(({ transponder, t }) => ({ transponder, t })) }));
+          } catch (error) {
+            const status = /** @type {any} */ (error)?.status;
+            if (typeof status !== 'number' || status < 400 || status > 499 || status === 429) throw error;
+            refused.add(`${first.decoder} ${first.boot}`);
+            refusal = error;
+            this.lastError = error;
+            continue;
+          }
           await this.outbox.removeThrough(first.decoder, first.boot, through ?? -1);
           this.#setOnline(true);
           this.dispatchEvent(new Event('outbox'));
           // The server stores what it is sent, so `through` covers the group; if not, stop rather than loop.
           if (through === null || through < group.at(-1).t) break;
         }
+        if (refusal) this.lastError = refusal;
       } catch (error) {
         this.#setOnline(false, error);
         this.#retryTimer = setTimeout(() => void this.flush(), this.retryMs);
@@ -176,6 +203,7 @@ export class Bridge extends EventTarget {
   }
 
   async close() {
+    this.#closed = true;
     clearTimeout(this.#retryTimer);
     clearTimeout(this.#helloTimer);
     await this.#reader?.cancel().catch(() => {});
