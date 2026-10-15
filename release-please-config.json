@@ -11,8 +11,7 @@
       "component": "design"
     },
     "packages/auth": {
-      "component": "auth",
-      "release-as": "0.1.0"
+      "component": "auth"
     }
   }
 }
