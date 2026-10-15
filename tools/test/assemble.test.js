@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assemble } from '../assemble.js';
@@ -69,4 +69,14 @@ test('every text file gets a gzip twin, binaries do not', async () => {
   assert.ok(existsSync(join(out, 'index.html.gz')));
   assert.ok(existsSync(join(out, 'v', SHA, 'pkg', 'fmt', 'index.js.gz')));
   assert.ok(!existsSync(join(out, 'v', SHA, 'css', 'font.woff2.gz')));
+});
+
+test('an app without index.html gets its files and packages and no page', () => {
+  const { app, out } = fixture();
+  writeFileSync(join(app, 'package.json'), JSON.stringify({ files: ['css'], dependencies: { '@tinylap/fmt': 'workspace:*' } }));
+  rmSync(join(app, 'index.html'));
+  assemble(app, out, SHA);
+  assert.equal(existsSync(join(out, 'index.html')), false);
+  assert.equal(readFileSync(join(out, 'v', SHA, 'css', 'a.css'), 'utf8'), 'a{}');
+  assert.ok(existsSync(join(out, 'v', SHA, 'pkg', 'fmt', 'index.js')));
 });

@@ -6,7 +6,7 @@
 // /v/<sha>/, and everything it loads lives under that path. A deploy changes
 // every asset URL at once, so assets can be cached forever and a visitor can
 // never mix files from two deploys.
-import { cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -32,9 +32,13 @@ export function assemble(appDir, outDir, sha) {
   if (typeof sha !== 'string' || !/^[0-9a-f]{7,40}$/.test(sha)) {
     throw new Error(`assemble: expected a git sha (7-40 lowercase hex), got ${JSON.stringify(sha)}`);
   }
-  const html = readFileSync(join(appDir, 'index.html'), 'utf8');
-  const count = html.split(BASE).length - 1;
-  if (count !== 1) throw new Error(`assemble: index.html must contain exactly one ${BASE}, found ${count}`);
+  // Apps whose server renders every page (accounts, timing) have no index.html.
+  const page = join(appDir, 'index.html');
+  const html = existsSync(page) ? readFileSync(page, 'utf8') : null;
+  if (html !== null) {
+    const count = html.split(BASE).length - 1;
+    if (count !== 1) throw new Error(`assemble: index.html must contain exactly one ${BASE}, found ${count}`);
+  }
 
   const tree = join(outDir, 'v', sha);
   mkdirSync(tree, { recursive: true });
@@ -45,7 +49,7 @@ export function assemble(appDir, outDir, sha) {
   for (const [segment, root] of packageRoots(appDir)) {
     cpSync(root, join(tree, 'pkg', segment), { recursive: true, dereference: true, filter: skip });
   }
-  writeFileSync(join(outDir, 'index.html'), html.replace(BASE, `<base href="/v/${sha}/">`));
+  if (html !== null) writeFileSync(join(outDir, 'index.html'), html.replace(BASE, `<base href="/v/${sha}/">`));
   gzipTree(outDir);
 }
 

@@ -77,7 +77,7 @@ async function dispatch(request, routes, serveStatic) {
 const LIMITS = { ingest: 600, tap: 120, pair: 10 };
 
 /**
- * @param {{ store?: any, engine?: any, hub?: any, auth?: any, root?: string, appDir: string, publicUrl?: string,
+ * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string,
  *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
  *   routes?: any[], fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number } }} options
  */
@@ -90,6 +90,7 @@ export function createHandler(options) {
     engine: options.engine ?? null,
     hub: options.hub ?? null,
     auth: options.auth ?? null,
+    keys: options.keys ?? null,
     publicUrl: options.publicUrl?.replace(/\/$/, '') ?? null,
     plannerUrl: options.plannerUrl?.replace(/\/$/, '') ?? null,
     build: options.build ?? 'dev',

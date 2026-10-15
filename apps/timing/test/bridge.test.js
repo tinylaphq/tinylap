@@ -5,8 +5,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { commands, createReader, createSimulator } from '@tinylap/timing';
-import { Bridge, sendOutbox } from '../js/bridge.js';
-import { memoryOutbox } from '../js/outbox.js';
+import { Bridge, sendOutbox } from '../public/bridge.js';
+import { memoryOutbox } from '../public/outbox.js';
 
 /** A serial port whose other end is `sim` (or silence). */
 function fakePort(sim) {

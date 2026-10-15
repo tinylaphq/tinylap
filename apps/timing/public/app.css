@@ -35,10 +35,9 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   cursor: pointer;
 }
 .nav-select option { color: var(--p-text); background: var(--p-surface); }
-.navbar-right form { margin: 0; }
 .navbar .btn-outline { color: var(--p-surface); border-color: var(--p-surface); background: transparent; }
 .navbar .btn-outline:hover { background: var(--p-surface); color: var(--p-text); }
-.live-status { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--p-surface); white-space: nowrap; }
+.live-status { color: var(--p-surface); white-space: nowrap; }
 .live-status:not(:empty)::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); }
 
 .notice { padding-block: var(--p-space-2xl); margin-inline: auto; padding-inline: var(--p-space-md); }
@@ -188,3 +187,52 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .board-step-links { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-md); }
 .board-step.is-done::before { content: '\2713'; background: var(--p-success); color: var(--p-text); }
 .board-step.is-done p { color: var(--p-text); font-weight: 600; }
+
+/* The navbar's right side: the live status, Big screen, the account menu's
+ * summary and Sign in all take the btn-sm box (same padding, 1px border,
+ * line height), so they share one height and baseline. */
+.navbar-right { display: flex; align-items: center; gap: var(--p-space-sm); }
+.navbar-right > *, .nav-account > summary { margin: 0; }
+.navbar-right .btn, .navbar-right .live-status, .nav-account > summary {
+  display: inline-flex; align-items: center; box-sizing: border-box;
+  padding: 6px 14px; border: var(--p-border-thin) solid transparent;
+  font: 600 11px/1.4 var(--p-font); letter-spacing: 1px; text-transform: uppercase;
+}
+.navbar-right .btn, .nav-account > summary { border-color: var(--p-surface); }
+.navbar-right .live-status[hidden] { display: none; }
+.navbar-brand img { display: block; }
+.nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
+.nav-tabs li { display: flex; }
+
+/* belongs upstream in palace-ui */
+.nav-account { position: relative; }
+.nav-account > summary { list-style: none; cursor: pointer; color: var(--p-surface); max-width: 12rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.nav-account > summary::-webkit-details-marker { display: none; }
+.nav-account > summary:hover, .nav-account[open] > summary { background: var(--p-surface); color: var(--p-text); }
+.nav-account > summary:focus-visible { outline: 2px solid var(--p-accent-3); outline-offset: 2px; }
+.nav-account-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); min-width: 14rem; z-index: 10;
+  background: var(--p-surface); color: var(--p-text);
+  border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-md) var(--p-text);
+  padding: var(--p-space-md); display: grid; gap: var(--p-space-sm);
+}
+.nav-account-menu ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.nav-account-menu form { margin: 0; }
+.nav-account-label { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--p-text-secondary); }
+.nav-account-menu a, .nav-account-signout {
+  display: block; width: 100%; padding: var(--p-space-xs) 0; border: 0; border-bottom: 0; background: none;
+  font: 600 13px/1.4 var(--p-font); text-transform: none; letter-spacing: 0; color: var(--p-text); text-align: left; text-decoration: none; cursor: pointer;
+}
+.nav-account-menu a:hover, .nav-account-signout:hover { color: var(--p-accent-1); }
+.nav-account-menu a[aria-current="true"] { box-shadow: inset 3px 0 0 var(--p-accent-1); padding-left: var(--p-space-sm); }
+.nav-account-menu :focus-visible { outline: 2px solid var(--p-accent-1); outline-offset: 2px; }
+.notice .brand-lockup { display: flex; align-items: center; gap: var(--p-space-sm); margin: 0 0 var(--p-space-md); }
+.notice .card-static p { margin: 0; }
+
+@media (max-width: 640px) {
+  .navbar { flex-wrap: wrap; height: auto; padding: var(--p-space-sm) var(--p-space-md); row-gap: var(--p-space-xs); }
+  .nav-tabs { order: 3; flex-basis: 100%; margin: 0; overflow-x: auto; }
+  .nav-tab { padding: var(--p-space-sm) var(--p-space-md); }
+  .navbar-right { margin-left: auto; }
+  .navbar-right .live-status { display: none; }
+}

@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatClock, formatLap } from '../js/format.js';
+import { formatClock, formatLap } from '../public/format.js';
 
 test('lap times to the millisecond, minutes past a minute', () => {
   assert.equal(formatLap(8000), '8.000');

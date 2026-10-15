@@ -5,9 +5,7 @@
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "files": [
-    "index.html",
-    "css",
-    "js"
+    "public"
   ],
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --test 'test/*.test.js' 'test/server/*.test.js'",

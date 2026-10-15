@@ -7,12 +7,14 @@ import { authRoutes } from './auth.js';
 import { controlRoutes } from './control.js';
 import { discoveryRoutes } from './discovery.js';
 import { ingestRoutes } from './ingest.js';
+import { pageRoutes } from './page-routes.js';
 import { setupRoutes } from './setup.js';
 import { streamRoutes } from './stream.js';
 import { workspaceRoutes } from './workspace.js';
 
 export const routes = [
   ...authRoutes,
+  ...pageRoutes,
   ...workspaceRoutes,
   ...setupRoutes,
   ...controlRoutes,
