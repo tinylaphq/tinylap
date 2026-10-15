@@ -1,0 +1,22 @@
+{
+  "name": "@tinylap/timing",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Turn timing passings into laps, sessions and results, and read the ZRound lap counter protocol.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./index.js",
+      "default": "./index.js"
+    },
+    "./types": {
+      "types": "./types.d.ts"
+    }
+  },
+  "scripts": {
+    "test": "node --test 'test/**/*.test.js'",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint ."
+  }
+}
