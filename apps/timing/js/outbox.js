@@ -6,8 +6,9 @@
 // the server holds them, so an internet outage or a reload loses nothing.
 // Keyed by the passing key, so the same passing is kept once.
 
+import { passingKey as keyOf } from '@tinylap/timing';
+
 const STORE = 'outbox';
-const keyOf = (p) => `${p.decoder} ${p.boot} ${p.transponder} ${p.t}`;
 
 export function memoryOutbox() {
   const items = new Map();

@@ -58,6 +58,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   }
   const standingsOf = (session) => standings(rulesOf(session), ACTIVE.has(session.state) ? stateOf(session) : replay(session));
   const unknownOf = (workspaceId) => store.transponders(workspaceId).filter((t) => t.driverId === null).map((t) => t.code);
+  const publishUnknown = (workspaceId) => hub.publish(workspaceId, 'setup', { unknown: unknownOf(workspaceId) }, null);
 
   const publishSession = (session) => hub.publish(session.workspaceId, 'session', { ...publicSession(session), now: now() });
   const publishStandings = (session) => hub.publish(session.workspaceId, 'standings', { sessionId: session.id, standings: standingsOf(session) });
@@ -137,7 +138,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
         cross(workspaceId, passing, { at: mapped(decoder, batch.boot, p.t), driverId, via });
       }
       store.touchDecoder(decoder, receivedAt);
-      if (seen) hub.publish(workspaceId, 'setup', { unknown: unknownOf(workspaceId) }, null);
+      if (seen) publishUnknown(workspaceId);
       return { stored, duplicates: sorted.length - stored, through: store.through(decoder, batch.boot) };
     });
   }
@@ -208,7 +209,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       store.assignTransponder(workspaceId, code, driverId, now());
       if (driverId !== null) for (const id of store.assignCrossings(workspaceId, code, driverId)) rebuild(id);
     });
-    hub.publish(workspaceId, 'setup', { unknown: unknownOf(workspaceId) }, null);
+    publishUnknown(workspaceId);
   }
 
   /** A new track or direction starts a new practice (spec §6). */
@@ -243,5 +244,5 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return { session: publicSession(session), standings: standingsOf(session), crossings: store.crossings(sessionId).map(memberCrossing) };
   }
 
-  return { ingest, tap, start, abort, tick, assign, restartPractice, snapshot, sessionDetail };
+  return { ingest, tap, start, abort, tick, assign, publishUnknown, restartPractice, snapshot, sessionDetail };
 }

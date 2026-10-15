@@ -32,9 +32,6 @@ const invalid = (request, detail) => problem(request, 'invalid-request', detail)
 const notFound = (request, what) => problem(request, 'not-found', `There is no such ${what} in this workspace.`);
 
 const publishDrivers = (request) => request.hub.publish(request.workspaceId, 'drivers', request.store.drivers(request.workspaceId));
-const publishUnknown = (request) => request.hub.publish(request.workspaceId, 'setup', {
-  unknown: request.store.transponders(request.workspaceId).filter((t) => t.driverId === null).map((t) => t.code),
-}, null);
 
 const listDrivers = (request) => json(200, { drivers: request.store.drivers(request.workspaceId) }, NO_STORE);
 
@@ -70,7 +67,7 @@ async function updateDriver(request, match) {
 function deleteDriver(request, match) {
   if (!request.store.deleteDriver(request.workspaceId, match[2])) return notFound(request, 'driver');
   publishDrivers(request);
-  publishUnknown(request);
+  request.engine.publishUnknown(request.workspaceId);
   return { status: 204, headers: NO_STORE };
 }
 

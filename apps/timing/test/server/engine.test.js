@@ -90,3 +90,11 @@ test('tap entry makes tap laps that never count as personal bests', () => {
   assert.equal(engine.tap(W, 'ben'), null, 'same millisecond');
   assert.deepEqual(store.personalBests(W, 't1', 'ccw'), []);
 });
+
+test('publishUnknown announces the transponders without a driver', () => {
+  const { engine, events, pass } = rig();
+  pass(1000, '0C');
+  events.length = 0;
+  engine.publishUnknown(W);
+  assert.deepEqual(events.filter((e) => e.type === 'setup').map((e) => e.data), [{ unknown: ['0C'] }]);
+});
