@@ -75,7 +75,7 @@ permission matrix), and answers 303 on success.
 
 | Path | Fields | 303 to |
 | --- | --- | --- |
-| `<space>/sessions` | `kind`, `roster` (repeated), `minutes`, `countdown` | `<space>/board` |
+| `<space>/sessions` | `kind`, `roster` (repeated), `duration` (whole minutes), `countdown` | `<space>/board` |
 | `<space>/sessions/<s>/abort` | — | `<space>/race` |
 | `<space>/tap` | `driver` | `<space>/tap` |
 | `<space>/drivers` | `name` | `<space>/setup#drivers` |
