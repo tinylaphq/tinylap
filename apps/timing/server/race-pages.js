@@ -5,7 +5,7 @@
 // Race control's page and forms (spec §3, §6.2).
 import * as ops from './operations.js';
 import { readForm } from './form.js';
-import { pageRoute } from './page-access.js';
+import { pageRoute, toPage } from './page-access.js';
 import { page, seeOther } from './respond.js';
 import { spacePath } from './spaces.js';
 import { confirmPage } from './views/confirm.js';
@@ -65,6 +65,6 @@ const write = { write: true };
 
 export const racePageRoutes = [
   { pattern: spacePath('race'), credentials: true, methods: { GET: pageRoute('timing.run', (request) => renderRace(request, 200)) } },
-  { pattern: spacePath('sessions'), credentials: true, methods: { POST: pageRoute('timing.run', start, write) } },
+  { pattern: spacePath('sessions'), credentials: true, methods: { GET: toPage('race'), POST: pageRoute('timing.run', start, write) } },
   { pattern: spacePath('sessions/([^/]+)/abort'), credentials: true, methods: { GET: pageRoute('timing.run', askAbort), POST: pageRoute('timing.run', abort, write) } },
 ];

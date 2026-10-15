@@ -67,3 +67,6 @@ export function pageRoute(action, handler, { write = false } = {}) {
     return rememberSpace(await handler(request, match), space);
   });
 }
+
+/** A GET on a form's POST target (after a failed form the address bar shows it): on to the page the form is on. @param {string} path under the space */
+export const toPage = (path) => pageRoute('timing.run', (request) => seeOther(`${request.space.base}/${path}`));

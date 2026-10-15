@@ -8,7 +8,7 @@
 import { can, open, seal } from '@tinylap/auth';
 import * as ops from './operations.js';
 import { readForm } from './form.js';
-import { pageRoute } from './page-access.js';
+import { pageRoute, toPage } from './page-access.js';
 import { page, seeOther } from './respond.js';
 import { retryHeaders } from './responses.js';
 import { spacePath } from './spaces.js';
@@ -156,13 +156,13 @@ const write = { write: true };
 
 export const setupPageRoutes = [
   { pattern: spacePath('setup'), credentials: true, methods: { GET: pageRoute('timing.run', showSetup) } },
-  { pattern: spacePath('drivers'), credentials: true, methods: { POST: pageRoute('timing.setup', addDriver, write) } },
-  { pattern: spacePath('drivers/([^/]+)'), credentials: true, methods: { POST: pageRoute('timing.setup', renameDriver, write) } },
+  { pattern: spacePath('drivers'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', addDriver, write) } },
+  { pattern: spacePath('drivers/([^/]+)'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', renameDriver, write) } },
   { pattern: spacePath('drivers/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteDriver), POST: pageRoute('timing.delete', deleteDriver, write) } },
-  { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { POST: pageRoute('timing.setup', assignTransponder, write) } },
-  { pattern: spacePath('track'), credentials: true, methods: { POST: pageRoute('timing.setup', setTrack, write) } },
-  { pattern: spacePath('decoders'), credentials: true, methods: { POST: pageRoute('timing.setup', pairDecoder, write) } },
+  { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { GET: toPage('setup#transponders'), POST: pageRoute('timing.setup', assignTransponder, write) } },
+  { pattern: spacePath('track'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', setTrack, write) } },
+  { pattern: spacePath('decoders'), credentials: true, methods: { GET: toPage('setup#decoders'), POST: pageRoute('timing.setup', pairDecoder, write) } },
   { pattern: spacePath('decoders/([^/]+)/unpair'), credentials: true, methods: { GET: pageRoute('timing.delete', askUnpair), POST: pageRoute('timing.delete', unpair, write) } },
-  { pattern: spacePath('watch-link'), credentials: true, methods: { POST: pageRoute('timing.setup', makeWatchLink, write) } },
+  { pattern: spacePath('watch-link'), credentials: true, methods: { GET: toPage('setup#watchers'), POST: pageRoute('timing.setup', makeWatchLink, write) } },
   { pattern: spacePath('watch-link/new'), credentials: true, methods: { GET: pageRoute('timing.setup', askNewWatchLink) } },
 ];
