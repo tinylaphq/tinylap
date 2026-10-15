@@ -11,7 +11,7 @@ import * as ops from './operations.js';
 import { json, opProblem, problem } from './responses.js';
 
 const invalid = (request, detail) => problem(request, 'invalid-request', detail);
-const notFound = (request) => problem(request, 'not-found', 'There is no such session in this workspace.');
+const notFound = (request) => problem(request, 'not-found', 'There is no such session here.');
 
 async function startSession(request) {
   const { body, error } = await readJson(request);

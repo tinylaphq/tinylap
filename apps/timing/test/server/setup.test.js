@@ -102,6 +102,8 @@ test('the current track comes from a planner link', async () => {
   assert.deepEqual([snapshot.track, snapshot.direction], [{ id: closed.track.id, name: 'Office loop' }, 'cw']);
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${OPEN}`, direction: 'cw' }), 422, 'not-a-circuit');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, direction: 'up' }), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name: '', direction: 'cw' }), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'POST', path('decoders'), { name: '' }), 422, 'invalid-request');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: 'https://elsewhere.example/layouts/x', direction: 'cw' }), 422, 'invalid-request');
 });
 

@@ -36,7 +36,7 @@ const nameOf = (value) => {
 const colourOf = (value) => (typeof value === 'string' && COLOUR.test(value) ? value.toLowerCase() : null);
 /** An integer in [min, max], `fallback` when absent, or null. */
 const intIn = (value, min, max, fallback) => {
-  if (value === undefined || value === null || value === '') return fallback;
+  if (value === undefined) return fallback;
   const n = typeof value === 'string' ? Number(value) : value;
   return Number.isInteger(n) && n >= min && n <= max ? n : null;
 };
@@ -90,7 +90,7 @@ const TRACK_PROBLEMS = { invalid: ['invalid-request', 422], 'not-a-circuit': ['n
 
 export async function setTrack(request, { link, name: rawName, direction }) {
   if (!DIRECTIONS.includes(direction)) return invalid('Pick the direction you race.', 'direction');
-  const name = rawName === undefined || rawName === '' ? 'Track' : nameOf(rawName);
+  const name = rawName === undefined ? 'Track' : nameOf(rawName);
   if (!name) return invalid('A track name is 1 to 60 characters.', 'name');
   if (typeof link !== 'string' || link.trim() === '') return invalid('Paste a share link from the planner.', 'link');
   let track;
@@ -111,7 +111,7 @@ export async function setTrack(request, { link, name: rawName, direction }) {
 export function pairDecoder(request, { name: rawName }) {
   const wait = request.limiters.pair.take(request.userId);
   if (wait) return { error: { problem: 'rate-limited', status: 429, message: `You paired a lot of decoders just now. Try again in ${wait} seconds.`, retryAfter: wait } };
-  const name = rawName === undefined || rawName === '' ? 'Decoder' : nameOf(rawName);
+  const name = rawName === undefined ? 'Decoder' : nameOf(rawName);
   if (!name) return invalid('A decoder name is 1 to 60 characters.', 'name');
   const id = randomUUID();
   const token = randomBytes(32).toString('base64url');
