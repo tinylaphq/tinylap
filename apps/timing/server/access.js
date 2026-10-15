@@ -22,10 +22,10 @@ export function workspaceRoute(action, handler, { write = false } = {}) {
       request.req.resume();
       return problem(request, name, detail);
     };
-    if (!request.session) return refuse('unauthorized', 'Log in to use timing.');
+    if (!request.session) return refuse('unauthorized', 'Sign in to use timing.');
     const { claims } = request.session;
-    if (!(claims.workspaces ?? []).some((w) => w.id === workspaceId)) return refuse('not-found', 'There is no such workspace, or you are not a member.');
-    if (!can(claims, workspaceId, action)) return refuse('forbidden', 'Your role in this workspace may not do this.');
+    if (!(claims.workspaces ?? []).some((w) => w.id === workspaceId)) return refuse('not-found', 'There is no such club or personal space, or you are not a member.');
+    if (!can(claims, workspaceId, action)) return refuse('forbidden', 'Your role here may not do this.');
     if (write && !request.auth.bff.requireSameOrigin(request.req)) return refuse('forbidden', "Change timing from the app's own pages.");
     if (!request.store) return refuse('unavailable', 'Timing data cannot be read or stored right now.');
     request.workspaceId = workspaceId;

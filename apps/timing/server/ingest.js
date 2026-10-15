@@ -35,7 +35,7 @@ const postPassings = withSession(async (request, match) => {
   } else {
     decoder = request.store.decoder(decoderId);
     if (!request.session || !decoder || !can(request.session.claims, decoder.workspaceId, 'timing.run')) {
-      return refuse('unauthorized', 'This decoder is not paired in one of your workspaces, or you are not logged in.');
+      return refuse('unauthorized', 'This decoder is not paired in one of your clubs or your personal space, or you are not signed in.');
     }
     if (!request.auth.bff.requireSameOrigin(request.req)) return refuse('forbidden', "Forward passings from the app's own pages.");
     via = 'serial';
