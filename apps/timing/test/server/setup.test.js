@@ -18,7 +18,7 @@ let path;
 
 before(async () => {
   planner = await startPlannerStub();
-  app = await startTiming({ plannerUrl: planner.url, limits: { pair: 3 } });
+  app = await startTiming({ plannerUrl: planner.url, limits: { pair: 4 } });
   const [ana, ben, cy, zed] = await Promise.all(['Ana', 'Ben', 'Cy', 'Zed'].map((n) => app.signUp(n)));
   office = app.club(ana, 'Office');
   app.join(ana, office.id, ben);
@@ -73,6 +73,7 @@ test('assigning a transponder; deleting its driver unassigns it', async () => {
 });
 
 test('pairing a decoder answers its token once', async () => {
+  await problemOf(await app.api(member, 'POST', path('decoders'), { name: '' }), 422, 'invalid-request');
   const res = await app.api(member, 'POST', path('decoders'), { name: 'Start line' });
   assert.equal(res.status, 201);
   const decoder = await res.json();
@@ -87,7 +88,7 @@ test('pairing a decoder answers its token once', async () => {
 });
 
 test('pairing is rate limited per member', async () => {
-  // The limit is 3 per hour here; the test above used one.
+  // The limit is 4 per hour here; the test above used two (one refused for its name).
   assert.equal((await app.api(member, 'POST', path('decoders'), {})).status, 201);
   assert.equal((await app.api(member, 'POST', path('decoders'), {})).status, 201);
   const res = await app.api(member, 'POST', path('decoders'), {});
@@ -103,7 +104,6 @@ test('the current track comes from a planner link', async () => {
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${OPEN}`, direction: 'cw' }), 422, 'not-a-circuit');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, direction: 'up' }), 422, 'invalid-request');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name: '', direction: 'cw' }), 422, 'invalid-request');
-  await problemOf(await app.api(member, 'POST', path('decoders'), { name: '' }), 422, 'invalid-request');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: 'https://elsewhere.example/layouts/x', direction: 'cw' }), 422, 'invalid-request');
 });
 
