@@ -4,3 +4,4 @@
 
 export * from './passing.js';
 export * from './laps.js';
+export * from './sessions.js';
