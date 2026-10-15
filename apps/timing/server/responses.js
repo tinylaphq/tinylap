@@ -34,3 +34,7 @@ export function problem(request, name, detail, headers = {}) {
     body: JSON.stringify({ type: `${request.origin}/problems/${name}`, title, status, detail }),
   };
 }
+
+/** An operation's error as Problem Details. @param {{ origin: string }} request @param {{ problem: string, message: string, retryAfter?: number }} error */
+export const opProblem = (request, error) =>
+  problem(request, error.problem, error.message, error.retryAfter ? { 'Retry-After': String(error.retryAfter) } : {});
