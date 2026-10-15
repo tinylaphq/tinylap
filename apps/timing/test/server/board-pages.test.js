@@ -4,7 +4,11 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTiming } from './helpers.js';
+import { get as httpGet } from 'node:http';
+import { createEngine } from '../../server/engine.js';
+import { createHub } from '../../server/live.js';
+import { openStore } from '../../server/store.js';
+import { startServer, startTiming } from './helpers.js';
 
 const clock = { now: 1_000_000_000_000 };
 let app;
@@ -81,4 +85,75 @@ test('the watchers board: a page for browsers, JSON for programs, no codes', asy
   const gone = await get(null, '/watch/AAAAAAAAAAAAAAAAAAAAAA');
   assert.equal(gone.status, 404);
   assert.match(await gone.text(), /This watchers link no longer works/);
+});
+
+const VARY = 'Accept, Sec-Fetch-Mode';
+const watchToken = async () => {
+  await app.form(member, `${base}/watch-link`, {});
+  return app.store.workspace(office.id).watchToken;
+};
+
+test('the watchers URL varies on what it negotiates, in every outcome', async () => {
+  const token = await watchToken();
+  const json = { accept: 'application/json' };
+  const gone = 'AAAAAAAAAAAAAAAAAAAAAA';
+  for (const [name, path, headers] of [
+    ['JSON 200', `/watch/${token}`, json], ['page 200', `/watch/${token}`, {}],
+    ['page 404', `/watch/${gone}`, {}], ['JSON 404', `/watch/${gone}`, json],
+  ]) {
+    const res = await app.api(null, 'GET', path, undefined, name.startsWith('page') ? { accept: 'text/html', ...headers } : headers);
+    assert.ok((res.headers.get('vary') ?? '').includes(VARY), name);
+    await res.arrayBuffer();
+  }
+});
+
+test('the watchers page is never cached or passed on, and navigation gets it', async () => {
+  const token = await watchToken();
+  // fetch drops Sec-* request headers, so ask with http.
+  const res = await new Promise((done) => httpGet(`${app.base}/watch/${token}`, { headers: { 'sec-fetch-mode': 'navigate' } }, (r) => { r.resume(); done(r); }));
+  assert.match(res.headers['content-type'], /^text\/html/);
+  assert.equal(res.headers['referrer-policy'], 'no-referrer');
+  assert.equal(res.headers['cache-control'], 'no-store');
+});
+
+test('?big on the watchers URL is the wall layout with a way out', async () => {
+  const token = await watchToken();
+  const body = await (await get(null, `/watch/${token}?big`)).text();
+  assert.match(body, /<body class="big">/);
+  assert.match(body, new RegExp(`href="/watch/${token}">Leave big screen</a>`));
+});
+
+test('a replaced watchers link is a page for browsers and Problem Details for programs', async () => {
+  const old = await watchToken();
+  await watchToken();
+  const page = await get(null, `/watch/${old}`);
+  assert.equal(page.status, 404);
+  assert.match(await page.text(), /This watchers link no longer works/);
+  const data = await app.api(null, 'GET', `/watch/${old}`, undefined, { accept: 'application/json' });
+  assert.equal(data.status, 404);
+  assert.match(data.headers.get('content-type'), /^application\/problem\+json/);
+});
+
+test('JSON on the watchers URL does not depend on the log-in', async () => {
+  const store = openStore(':memory:');
+  const hub = createHub({ now: () => clock.now });
+  const engine = createEngine({ store, hub, now: () => clock.now });
+  store.ensureWorkspace('w1');
+  const token = 'T'.repeat(22);
+  store.setWatchToken('w1', token);
+  let asked = 0;
+  const auth = { issuer: 'http://issuer.invalid', bff: { session: async () => { asked += 1; throw new Error('issuer down'); } } };
+  const server = await startServer({ store, hub, engine, auth, now: () => clock.now });
+  try {
+    const res = await fetch(`${server.base}/watch/${token}`, { headers: { accept: 'application/json' } });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).session, null);
+    const gone = await fetch(`${server.base}/watch/${'U'.repeat(22)}`, { headers: { accept: 'application/json' } });
+    assert.equal(gone.status, 404);
+    const page = await fetch(`${server.base}/watch/${token}`, { headers: { accept: 'text/html' } });
+    assert.equal(page.status, 200);
+    assert.equal(asked, 0, 'the log-in is never asked');
+  } finally {
+    await server.close();
+  }
 });

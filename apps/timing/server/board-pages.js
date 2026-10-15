@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The board page (spec §6.1). Live updates come from board-stream.js.
+// The board page (spec §6.1). Live updates come from Task 10's stream.
 import { pageRoute } from './page-access.js';
 import { page } from './respond.js';
 import { spacePath } from './spaces.js';
