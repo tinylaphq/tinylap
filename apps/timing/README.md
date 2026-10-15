@@ -1,6 +1,6 @@
 # TinyLap Timing
 
-Lap timing for a workspace's track: decoders post passings over USB (through the bridge tab) and Wi-Fi, the server turns them into practice, qualifying and race results, and every screen shows them live. Design: `docs/superpowers/specs/2026-10-15-timing-core-design.md`. Decoder builders: `docs/timing.md`.
+Lap timing for a club's track: decoders post passings over USB (through the bridge tab) and Wi-Fi, the server turns them into practice, qualifying and race results, and every screen shows them live. Design: `docs/superpowers/specs/2026-10-15-timing-core-design.md`. Decoder builders: `docs/timing.md`.
 
 ## Development
 
@@ -14,7 +14,7 @@ Timing always needs log-in. Run accounts, the planner and timing side by side. A
       TINYLAP_FEED_TOKEN=timing-dev TINYLAP_TOKEN_KEYS=dev:$(openssl rand -base64 32) \
       TINYLAP_PLANNER_URL=http://localhost:8000 pnpm dev:timing
 
-Open http://localhost:8100. Without hardware: Setup → "Pair without USB", then `node tools/decoder-sim.js net --url http://localhost:8100 --decoder <id> --token <token>`, or the bridge with a simulated decoder at http://localhost:8100/?simulate=fast#bridge.
+Open http://localhost:8100 and sign in. Without hardware: Setup → "Pair over Wi-Fi only", then `node tools/decoder-sim.js net --url http://localhost:8100 --decoder <id> --token <token>`, or the bridge with a simulated decoder at http://localhost:8100/personal/bridge?simulate=fast.
 
 Tests: `pnpm --filter @tinylap/timing-app test`; in Chrome, `pnpm --filter @tinylap/timing-app test:browser`.
 

@@ -251,6 +251,8 @@ spec requires (§ "Requirements this places on the timing app").
 
 ## 8. Browser app
 
+Replaced by `docs/superpowers/specs/2026-10-15-timing-ui-server-rendered-design.md`.
+
 Built on palace-ui and `@tinylap/design`, plain ES modules, import maps, no
 bundler, like the planner. Screens:
 

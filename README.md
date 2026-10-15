@@ -5,7 +5,7 @@ racing, built as plain ES modules on a shared design layer.
 
 - `apps/track-planner`: design Kyosho Mini-Z Grand Prix Circuit 30 layouts and
   cost them against the pieces you own.
-- `apps/timing`: lap timing for a workspace's track, live on every screen, from a decoder on USB or Wi-Fi.
+- `apps/timing`: lap timing for a club's track, live on every screen, from a decoder on USB or Wi-Fi.
 
     pnpm install
     pnpm test                                    # every package

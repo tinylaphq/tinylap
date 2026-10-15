@@ -94,7 +94,7 @@ changed. It never selects a screen.
 
 | Path | Carries |
 | --- | --- |
-| `<space>/board/events` | `board` events: the rendered `<div id="board-live">` (§6.1), plus `retry`, heartbeat and replay as on `/live`. |
+| `<space>/board/events` | `board` events: the rendered `<div id="board-live">` (§6.1), plus `retry` and a heartbeat. After a reconnect the stream sends a full board, with no event ids and no replay. |
 | `/watch/<token>/events` | The same for watchers, closed when the token is replaced. |
 
 These sit beside the JSON `/workspaces/<id>/live` and `/watch/<token>/live`,
