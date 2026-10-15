@@ -29,9 +29,11 @@ const limited = (message, retryAfter) => fail('rate-limited', 429, message, unde
 const invalid = (message, field) => fail('invalid-request', 422, message, field);
 const missing = (what) => fail('not-found', 404, `There is no such ${what} here.`);
 
-/** A name: trimmed, 1 to 60 characters, or null. @param {unknown} value */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f]/;
+/** A name: trimmed, 1 to 60 characters, no control characters (line breaks included), or null. @param {unknown} value */
 const nameOf = (value) => {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== 'string' || CONTROL.test(value)) return null;
   const name = value.trim();
   return name.length >= 1 && name.length <= MAX_NAME ? name : null;
 };

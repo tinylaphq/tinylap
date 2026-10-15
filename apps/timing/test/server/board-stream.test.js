@@ -84,3 +84,52 @@ test('an unknown watchers link gets the gone page, not a stream', async () => {
   assert.equal(res.status, 404);
   assert.match(res.headers.get('content-type'), /^text\/html/);
 });
+
+/** The stream's raw text until `enough` matches it. */
+async function rawUntil(res, enough) {
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let text = '';
+  try {
+    while (!enough.test(text)) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += value;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return text;
+}
+
+test('a name with carriage returns cannot inject event or id fields', async () => {
+  // Past the name check on purpose: the stream must hold up on its own.
+  app.store.addDriver(office.id, { id: 'crlf', name: 'Eve\revent: ended\rid: 99\r\rdata: x', colour: '#123456' });
+  app.engine.assign(office.id, '20', 'crlf');
+  app.engine.ingest({ workspaceId: office.id, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings: [{ transponder: '20', t: 30000 }, { transponder: '20', t: 38000 }] } });
+  const text = await rawUntil(await app.api(owner, 'GET', `${base}/board/events`), /<\/div>\s*$/);
+  const lines = text.split(/\r\n|\r|\n/).filter(Boolean);
+  const fields = lines.filter((line) => !line.startsWith('data: ') && !line.startsWith(':'));
+  assert.deepEqual(fields, ['retry: 2000', 'event: board']);
+  app.store.deleteDriver(office.id, 'crlf');
+});
+
+test('a render that throws ends that stream, logs once and the server keeps going', async () => {
+  const it = events(await app.api(owner, 'GET', `${base}/board/events`), { raw: true });
+  await next(it, 'board');
+  const snapshot = app.engine.snapshot;
+  const logged = [];
+  const error = console.error;
+  console.error = (...args) => logged.push(args);
+  app.engine.snapshot = () => { throw new Error('the club is gone'); };
+  try {
+    pass(50000);
+    assert.equal(await next(it, 'board'), null);
+  } finally {
+    app.engine.snapshot = snapshot;
+    console.error = error;
+  }
+  assert.equal(logged.length, 1);
+  const again = events(await app.api(owner, 'GET', `${base}/board/events`), { raw: true });
+  assert.ok(await next(again, 'board'));
+  await again.return();
+});

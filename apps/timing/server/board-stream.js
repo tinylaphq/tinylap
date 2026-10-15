@@ -16,8 +16,8 @@ export const THROTTLE_MS = 250;
 const SSE = { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' };
 const WATCH_TOKEN = /^[A-Za-z0-9_-]{22}$/;
 
-/** @param {string} text */
-const sse = (text) => `event: board\n${text.split('\n').map((line) => `data: ${line}`).join('\n')}\n\n`;
+/** Every line ending SSE knows (CR, LF, CRLF) starts a new data line, so none can start a field. @param {string} text */
+const sse = (text) => `event: board\n${text.split(/\r\n|\r|\n/).map((line) => `data: ${line}`).join('\n')}\n\n`;
 
 /** @param {any} request @param {string} workspaceId @param {{ watcher: boolean, token?: string | null }} options */
 function boardStream(request, workspaceId, { watcher, token = null }) {
@@ -32,8 +32,15 @@ function boardStream(request, workspaceId, { watcher, token = null }) {
       let last = 0;
       const render = () => {
         timer = null;
+        if (res.writableEnded) return;
         last = Date.now();
-        res.write(sse(String(boardLive(request, request.engine.snapshot(workspaceId, { watcher }), { watcher, big, token }))));
+        try {
+          res.write(sse(String(boardLive(request, request.engine.snapshot(workspaceId, { watcher }), { watcher, big, token }))));
+        } catch (error) {
+          // The page reconnects and gets whatever the server answers now (the board, or a not-found page).
+          console.error('board stream: render failed', error);
+          res.end();
+        }
       };
       const changed = () => {
         if (timer) return;

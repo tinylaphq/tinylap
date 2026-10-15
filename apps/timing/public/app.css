@@ -113,7 +113,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 body.big .board {
   font-size: clamp(1rem, min(2.4vw, 3.6vh), 2.6rem);
   min-height: 100dvh; box-sizing: border-box; max-width: none; align-content: start;
-  padding-top: 3.5rem;
+  /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
+  padding-top: calc(0.5rem + 44px + var(--p-space-md));
 }
 body.big .board-head .eyebrow, body.big .board-clock-label { font-size: 0.6em; }
 body.big .board .h3 { font-size: 1.1em; }
@@ -124,7 +125,13 @@ body.big .board-feed { font-size: 0.7em; }
 body.big .navbar { position: fixed; top: 0.5rem; right: 0.5rem; left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
 body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; }
 body.big .navbar-brand, body.big .nav-tabs, body.big .nav-account, body.big .live-status, body.big .board-unknown { display: none; }
-body.big .navbar-right { margin: 0; }
+body.big .navbar-right { margin: 0; gap: 0; }
+/* The pill's buttons share one border instead of showing the pill between them. */
+body.big .navbar-right > * + * { margin-left: calc(-1 * var(--p-border-thin)); }
+/* A wall screen nobody watches closely still shows when it has gone stale. */
+body.big .navbar-right .live-status:not([data-state="live"]):not([hidden]) { display: inline-flex; min-height: 44px; font-size: 16px; padding-inline: var(--p-space-md); }
+body.big .navbar-right .live-status::before { width: 0.75em; height: 0.75em; }
+body.big .navbar:has(.live-status:not([data-state="live"]):not([hidden])) { opacity: 1; }
 body.big .navbar-right .btn { font-size: 16px; min-height: 44px; padding-inline: var(--p-space-md); color: var(--p-surface); }
 @media (max-width: 640px) {
   body.big .board { font-size: 0.9rem; }

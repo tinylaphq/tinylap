@@ -49,6 +49,16 @@ test('adding a driver is a form and a redirect back to the drivers', async () =>
   assert.doesNotMatch(body, /<b>Dan<\/b>/);
 });
 
+test('a name with a line break comes back as the page, 422, nothing saved', async () => {
+  const before = drivers().length;
+  for (const name of ['Dan\rid: 9', 'Dan\nevent: ended']) {
+    const res = await app.form(member, `${base}/drivers`, { name });
+    assert.equal(res.status, 422);
+    assert.match(await res.text(), /Give the driver a name of 1 to 60 characters\./);
+  }
+  assert.equal(drivers().length, before);
+});
+
 test('a bad name comes back as the page, 422, the input kept and the field marked', async () => {
   const long = 'x'.repeat(61);
   const res = await app.form(member, `${base}/drivers`, { name: long });

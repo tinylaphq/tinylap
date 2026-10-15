@@ -116,3 +116,14 @@ test('a new watchers token replaces the old one', async () => {
   assert.equal(app.store.workspaceByWatchToken(first), null);
   assert.equal(app.store.workspaceByWatchToken(second), office.id);
 });
+
+test('names with control characters are refused for drivers, tracks and decoders', async () => {
+  for (const name of ['A\rB', 'A\nB', 'A\u0000B', 'A\u007fB']) {
+    await problemOf(await app.api(member, 'POST', path('drivers'), { name }), 422, 'invalid-request');
+    await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name, direction: 'cw' }), 422, 'invalid-request');
+  }
+  const ok = await (await app.api(member, 'POST', path('drivers'), { name: 'Ctl' })).json();
+  await problemOf(await app.api(member, 'PATCH', path(`drivers/${ok.id}`), { name: 'Ctl\r\nevent: x' }), 422, 'invalid-request');
+  await problemOf(await app.api(admin, 'POST', path('decoders'), { name: 'Gate\r' }), 422, 'invalid-request');
+  assert.ok(app.store.drivers(office.id).every((d) => ![...d.name].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)));
+});

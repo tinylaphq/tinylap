@@ -79,3 +79,92 @@ test('the big screen offers full screen and keeps big mode through the stream', 
   assert.equal(await page.locator('#board-live').getAttribute('data-events'), '/personal/board/events?big');
   assert.deepEqual(errors, []);
 });
+
+/** Ends every board stream open now, as a server restart would. */
+function boardStreams() {
+  const open = [];
+  const subscribe = app.hub.subscribe;
+  app.hub.subscribe = (workspaceId, options, send) => {
+    const sub = subscribe.call(app.hub, workspaceId, options, send);
+    open.push(options.onClose);
+    return sub;
+  };
+  return {
+    drop: () => open.splice(0).forEach((close) => close?.()),
+    restore: () => { app.hub.subscribe = subscribe; },
+  };
+}
+
+test('a member board says when its stream drops and comes back live', async (t) => {
+  const streams = boardStreams();
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => { streams.restore(); return context.close(); });
+  await page.goto('/personal/board');
+  await page.locator('#live-status[data-state="live"]').waitFor();
+  streams.drop();
+  await page.locator('#live-status[data-state="reconnecting"]').waitFor();
+  await page.locator('#live-status[data-state="live"]').waitFor({ timeout: 5000 });
+  assert.deepEqual(errors, []);
+});
+
+test('a board whose stream is refused reloads itself', async (t) => {
+  const streams = boardStreams();
+  const { context, page } = await pageAs(browser, app, member);
+  t.after(() => { streams.restore(); return context.close(); });
+  await page.addInitScript(() => { globalThis.tinylapReloadMs = 300; });
+  let asked = 0;
+  await page.route('**/personal/board/events', (route) => {
+    asked += 1;
+    return asked === 2 ? route.fulfill({ status: 404, contentType: 'text/html', body: '<p>gone</p>' }) : route.continue();
+  });
+  await page.goto('/personal/board');
+  await page.locator('#live-status[data-state="live"]').waitFor();
+  const reloaded = page.waitForEvent('load');
+  streams.drop();
+  await page.locator('#live-status[data-state="off"]').waitFor();
+  await reloaded;
+  assert.equal(new URL(page.url()).pathname, '/personal/board');
+  await page.locator('#live-status[data-state="live"]').waitFor();
+  assert.equal(asked, 3);
+});
+
+test('focus stays on the same link, and the notice is not announced again, when the board is replaced', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await postPassings(app, decoder, [{ transponder: '55', t: 40000 }]);
+  await page.goto('/personal/board');
+  await page.locator('#live-status[data-state="live"]').waitFor();
+  const link = page.getByRole('link', { name: 'Assign in Setup' });
+  await link.focus();
+  await page.evaluate(() => {
+    /** @type {any} */ (document.querySelector('#board-live')).stale = true;
+    /** @type {any} */ (document.querySelector('.board-unknown')).kept = true;
+  });
+  await postPassings(app, decoder, [{ transponder: '10', t: 41000 }]);
+  await page.waitForFunction(() => !(/** @type {any} */ (document.querySelector('#board-live'))).stale);
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('href')), '/personal/setup#transponders');
+  assert.equal(await page.evaluate(() => /** @type {any} */ (document.querySelector('.board-unknown')).kept), true);
+  assert.deepEqual(errors, []);
+});
+
+test('the full-screen button toggles', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member, { viewport: { width: 1920, height: 1080 } });
+  t.after(() => context.close());
+  await page.goto('/personal/board?big');
+  await page.getByRole('button', { name: 'Full screen' }).click();
+  await page.getByRole('button', { name: 'Leave full screen' }).click();
+  await page.getByRole('button', { name: 'Full screen' }).waitFor();
+  assert.equal(await page.evaluate(() => document.fullscreenElement), null);
+  assert.deepEqual(errors, []);
+});
+
+test('the wall screen shows the lamp once the stream is not live', async (t) => {
+  const streams = boardStreams();
+  const { context, page } = await pageAs(browser, app, member, { viewport: { width: 1920, height: 1080 } });
+  t.after(() => { streams.restore(); return context.close(); });
+  await page.goto('/personal/board?big');
+  await page.locator('#live-status[data-state="live"]').waitFor({ state: 'attached' });
+  assert.equal(await page.locator('#live-status').isVisible(), false);
+  streams.drop();
+  await page.locator('#live-status[data-state="reconnecting"]').waitFor({ state: 'visible' });
+});
