@@ -26,7 +26,7 @@ and how it talks back.
 | Question | Decision |
 | --- | --- |
 | Where are pages made? | **On the server**, from the store, with an escaping HTML template helper (§4). No client-side rendering of pages. |
-| URLs | **Real paths**, one per screen (§3). No hash routes, no client router. The address bar is always a link to what you see. |
+| URLs | **Real paths**, one per screen, under the space they belong to: `/clubs/<id>/…` or `/personal/…` (§3). No hash routes, no client router. The address bar is always a link to what you see. |
 | How do changes reach the server? | **Plain `<form method="post">`** to the page's own resource URLs; the server answers **303 See Other** to the page that shows the result (POST/redirect/GET). A failed form comes back as the same page, **status 422**, with the error next to the field and the input kept. |
 | Where does JavaScript stay? | **Progressive enhancement only** (§7): live board updates over SSE, the ticking clock, instant tap entry, full-screen mode, and the USB bridge (Web Serial, which only exists in JavaScript). Every other page works fully without it. |
 | Live updates | The server **renders the board's HTML** and streams it over SSE to pages; a small script swaps it in. One renderer, on the server; the browser never rebuilds the board from JSON. |
@@ -38,23 +38,33 @@ and how it talks back.
 
 ## 3. URLs
 
-`<w>` is a club's or your personal space's id (an accounts workspace id). Every
-page that needs a member answers **303 to `/auth/login?returnTo=<path>`** when
-signed out, and a **404 page** when you are not a member.
+Every page belongs to one space, and its address says which: **`/clubs/<id>/…`**
+for a club (`<id>` is the club's accounts id) and **`/personal/…`** for your own
+space. Below, `<space>` stands for either prefix. A club link works for every
+member of that club; `/personal/…` always means the signed-in person's own
+space. Every page that needs a member answers **303 to
+`/auth/login?returnTo=<path>`** when signed out, and a **404 page** when you
+are not a member of that club.
+
+The app tells clubs from personal spaces by a `kind` field (`"personal"` or
+`"club"`) that accounts adds to each entry of the access token's `workspaces`
+claim (today it carries `id`, `role` and `name`; the change is additive, and
+`@tinylap/auth`'s `WorkspaceClaim` type gains `kind`). `/clubs/<id>` for your
+personal space's id redirects to `/personal`.
 
 ### Pages (GET, `text/html`)
 
 | Path | Page |
 | --- | --- |
-| `/` | Signed in: **303** to `/w/<last>/board`, where `<last>` is the space in the `tl-space` cookie (set on every `/w/<w>/…` page), else your first. Signed out: the start page (what TinyLap Timing is, Sign in). No space at all: a page that sends you to accounts to make a club. |
-| `/w/<w>/board` | The live board (§6.1). `?big` renders the wall-screen layout. |
-| `/w/<w>/race` | Race control: the start form, or the running session with Abort (§6.2). |
-| `/w/<w>/tap` | Tap entry: one button per driver (§6.3). |
-| `/w/<w>/setup` | Track, drivers, transponders, decoders, watchers link (§6.4). |
-| `/w/<w>/drivers/<d>/delete` | "Delete Ana?" confirmation with its form. |
-| `/w/<w>/decoders/<id>/unpair` | "Unpair Gate?" confirmation. |
-| `/w/<w>/watch-link/new` | "Make a new watchers link? The old one stops working." confirmation. |
-| `/w/<w>/bridge` | The USB bridge (§6.5). |
+| `/` | Signed in: **303** to `<last>/board`, where `<last>` is the space prefix in the `tl-space` cookie (set on every space page), else `/personal`. Signed out: the start page (what TinyLap Timing is, Sign in). Everyone has a personal space, so there is always somewhere to go. |
+| `<space>/board` | The live board (§6.1). `?big` renders the wall-screen layout. |
+| `<space>/race` | Race control: the start form, or the running session with Abort (§6.2). |
+| `<space>/tap` | Tap entry: one button per driver (§6.3). |
+| `<space>/setup` | Track, drivers, transponders, decoders, watchers link (§6.4). |
+| `<space>/drivers/<d>/delete` | "Delete Ana?" confirmation with its form. |
+| `<space>/decoders/<id>/unpair` | "Unpair Gate?" confirmation. |
+| `<space>/watch-link/new` | "Make a new watchers link? The old one stops working." confirmation. |
+| `<space>/bridge` | The USB bridge (§6.5). |
 | `/watch/<token>` | The watchers board for a browser; the same URL keeps answering JSON to API clients, by content negotiation as the planner's `/layouts/<key>` does (`Accept: text/html` or `Sec-Fetch-Mode: navigate` gets the page). `?big` as on the board. An unknown or replaced token gets a 404 page: "This watchers link no longer works." |
 
 ### Form targets (POST, `application/x-www-form-urlencoded`)
@@ -65,17 +75,17 @@ permission matrix), and answers 303 on success.
 
 | Path | Fields | 303 to |
 | --- | --- | --- |
-| `/w/<w>/sessions` | `kind`, `roster` (repeated), `minutes`, `countdown` | `/w/<w>/board` |
-| `/w/<w>/sessions/<s>/abort` | — | `/w/<w>/race` |
-| `/w/<w>/tap` | `driver` | `/w/<w>/tap` |
-| `/w/<w>/drivers` | `name` | `/w/<w>/setup#drivers` |
-| `/w/<w>/drivers/<d>` | `name` | `/w/<w>/setup#drivers` |
-| `/w/<w>/drivers/<d>/delete` | — | `/w/<w>/setup#drivers` |
-| `/w/<w>/transponders/<code>` | `driver` (empty = unassigned) | `/w/<w>/setup#transponders` |
-| `/w/<w>/track` | `link`, `name`, `direction` | `/w/<w>/setup#track` |
-| `/w/<w>/decoders` | `name` | `/w/<w>/setup?paired=<id>#decoders` (shows the token once, §6.4) |
-| `/w/<w>/decoders/<id>/unpair` | — | `/w/<w>/setup#decoders` |
-| `/w/<w>/watch-link` | — | `/w/<w>/setup#watchers` |
+| `<space>/sessions` | `kind`, `roster` (repeated), `minutes`, `countdown` | `<space>/board` |
+| `<space>/sessions/<s>/abort` | — | `<space>/race` |
+| `<space>/tap` | `driver` | `<space>/tap` |
+| `<space>/drivers` | `name` | `<space>/setup#drivers` |
+| `<space>/drivers/<d>` | `name` | `<space>/setup#drivers` |
+| `<space>/drivers/<d>/delete` | — | `<space>/setup#drivers` |
+| `<space>/transponders/<code>` | `driver` (empty = unassigned) | `<space>/setup#transponders` |
+| `<space>/track` | `link`, `name`, `direction` | `<space>/setup#track` |
+| `<space>/decoders` | `name` | `<space>/setup?paired=<id>#decoders` (shows the token once, §6.4) |
+| `<space>/decoders/<id>/unpair` | — | `<space>/setup#decoders` |
+| `<space>/watch-link` | — | `<space>/setup#watchers` |
 
 The `#…` in a redirect is a plain fragment: it scrolls to the section that
 changed. It never selects a screen.
@@ -84,10 +94,10 @@ changed. It never selects a screen.
 
 | Path | Carries |
 | --- | --- |
-| `/w/<w>/board/events` | `board` events: the rendered `<div id="board-live">` (§6.1), plus `retry`, heartbeat and replay as on `/live`. |
+| `<space>/board/events` | `board` events: the rendered `<div id="board-live">` (§6.1), plus `retry`, heartbeat and replay as on `/live`. |
 | `/watch/<token>/events` | The same for watchers, closed when the token is replaced. |
 
-These sit beside the JSON `/workspaces/<w>/live` and `/watch/<token>/live`,
+These sit beside the JSON `/workspaces/<id>/live` and `/watch/<token>/live`,
 which stay for API clients.
 
 ## 4. Rendering
@@ -109,7 +119,7 @@ which stay for API clients.
 
 - `<head>`: charset, viewport, `referrer` no-referrer, `<title>{Page} · TinyLap Timing</title>`, palace and design stylesheets, `app.css`, the TinyLap mark as favicon, and the page's enhancement script, if any, as `<script type="module" src>`.
 - The navbar: the mark and "TinyLap Timing" (linking to `/`), the screen links
-  (`<a href="/w/<w>/board">Board</a>` … with `aria-current="page"` on the
+  (`<a href="<space>/board">Board</a>` … with `aria-current="page"` on the
   current one), then the board controls (live status, Big screen) on board
   pages only, then the account menu: a `<details>` whose `<summary>` is your
   name, holding links to each club and your personal space (the current one
@@ -160,7 +170,7 @@ which stay for API clients.
 - Server-rendered from `engine.snapshot`: the header (kind, track and
   direction, the clock with its label), the results panel of the last
   qualifying or race, the standings table, the last laps, and, for members,
-  the unknown-car notice linking to `/w/<w>/setup#transponders` and the "Get
+  the unknown-car notice linking to `<space>/setup#transponders` and the "Get
   the track ready" steps on an empty board.
 - Everything that changes lives in one `<div id="board-live">`, so the
   stream can replace it whole.
@@ -171,7 +181,7 @@ which stay for API clients.
   `<noscript><meta http-equiv="refresh" content="10"></noscript>` in the head
   reloads it every ten seconds.
 - With JavaScript, `public/board.js`:
-  - opens `/w/<w>/board/events` (or `/watch/<token>/events`) and swaps in each
+  - opens `<space>/board/events` (or `/watch/<token>/events`) and swaps in each
     `board` event's HTML;
   - ticks the clock every 200 ms from its data attributes, using the server's
     `now` for the skew (as `view.js` does today);
@@ -199,7 +209,7 @@ which stay for API clients.
 
 ### 6.3 Tap entry
 
-- One `<form method="post" action="/w/<w>/tap">` per driver, a big button
+- One `<form method="post" action="<space>/tap">` per driver, a big button
   each. The response page says what the tap did ("Ana: 8.412", "Ana:
   started", "Too fast, tap again").
 - With JavaScript, `public/tap.js` submits the same forms with `fetch`
@@ -269,8 +279,9 @@ bridge, and touches only the page it is loaded on.
   `control.js` and `ingest.js`'s tap handler move their logic into
   `operations.js`; the JSON and SSE API and its tests; `openapi.json` (pages
   and form routes are not API and are not described there).
+- **Accounts:** the `workspaces` claim gains `kind` (§3), with a test; `@tinylap/auth`'s types follow.
 - `docs/timing.md` and the README: the page URLs, and the bridge at
-  `/w/<w>/bridge`.
+  `<space>/bridge`.
 
 ## 9. Security
 
