@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/tinylaphq/tinylap/compare/track-format-v0.2.0...track-format-v0.3.0) (2026-10-15)
+
+
+### Features
+
+* **track-format:** give closed layouts a track identity ([#2](https://github.com/tinylaphq/tinylap/issues/2)) ([521ae0d](https://github.com/tinylaphq/tinylap/commit/521ae0dbef2f12426018617976277647c63517bb))
+* **track-planner:** serve the planner from its own server and share layouts as links ([#4](https://github.com/tinylaphq/tinylap/issues/4)) ([71a5dbc](https://github.com/tinylaphq/tinylap/commit/71a5dbcfd1f849a364847ebe07fa0eb2c9f5c6c0))
+
 ## [0.2.0](https://github.com/tinylaphq/tinylap/compare/track-format-v0.1.0...track-format-v0.2.0) (2026-10-13)
 
 
