@@ -40,7 +40,17 @@ test('every screen loads its assets from /v/<build>/', async (t) => {
     await page.goto(`/personal/${screen}`);
     await page.locator('main h1, main .board-title').first().waitFor();
     const css = await page.evaluate(() => [...document.styleSheets].map((s) => s.href).filter(Boolean));
+    assert.ok(css.length, `${screen}: no stylesheets`);
     assert.ok(css.every((href) => new URL(href).pathname.startsWith(`/v/${SHA}/`)), `${screen}: ${css.join(', ')}`);
+    const scripts = await page.evaluate(() => [...document.querySelectorAll('script[src]')].map((el) => /** @type {HTMLScriptElement} */ (el).src));
+    assert.ok(scripts.every((src) => new URL(src).pathname.startsWith(`/v/${SHA}/`)), `${screen}: ${scripts.join(', ')}`);
+    if (screen === 'bridge') {
+      assert.ok(scripts.length, 'the bridge loads a script');
+      const map = JSON.parse(await page.locator('script[type="importmap"]').innerText());
+      const urls = Object.values(map.imports ?? {});
+      assert.ok(urls.length, 'the import map has entries');
+      assert.ok(urls.every((url) => new URL(url, page.url()).pathname.startsWith(`/v/${SHA}/`)), `import map: ${urls.join(', ')}`);
+    }
   }
   assert.deepEqual(failed, []);
   assert.deepEqual(errors, []);
