@@ -93,11 +93,13 @@ test('the request log never holds a watchers token', async () => {
   try {
     await (await fetch(`${server.base}/watch/${token}`)).arrayBuffer();
     await (await fetch(`${server.base}/watch/${token}/live`)).arrayBuffer();
+    await (await fetch(`${server.base}/watch/${token}/events`)).arrayBuffer();
   } finally {
     await server.close();
   }
-  assert.equal(lines.length, 2);
+  assert.equal(lines.length, 3);
   assert.match(lines[0], /^GET \/watch\/… \d{3} \d+ms$/);
   assert.match(lines[1], /^GET \/watch\/…\/live \d{3} \d+ms$/);
+  assert.match(lines[2], /^GET \/watch\/…\/events \d{3} \d+ms$/);
   assert.ok(lines.every((line) => !line.includes(token)));
 });

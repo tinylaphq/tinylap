@@ -38,7 +38,14 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .navbar .btn-outline { color: var(--p-surface); border-color: var(--p-surface); background: transparent; }
 .navbar .btn-outline:hover { background: var(--p-surface); color: var(--p-text); }
 .live-status { color: var(--p-surface); white-space: nowrap; }
-.live-status:not(:empty)::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); }
+/* The stream's state as a square lamp, like a timing desk's: green live,
+ * amber blinking while it reconnects, red once it has given up. */
+.live-status:not(:empty)::before { content: ''; display: inline-block; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); }
+.live-status[data-state="live"]::before { background: var(--p-success); }
+.live-status[data-state="reconnecting"]::before { background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
+.live-status[data-state="off"]::before { background: var(--p-error); }
+@keyframes live-blink { to { opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) { .live-status[data-state="reconnecting"]::before { animation: none; } }
 
 .notice { padding-block: var(--p-space-2xl); margin-inline: auto; padding-inline: var(--p-space-md); }
 
@@ -116,7 +123,7 @@ body.big .board-feed { font-size: 0.7em; }
 /* The way out: a dark pill at the top right, always there, big enough to hit by touch. */
 body.big .navbar { position: fixed; top: 0.5rem; right: 0.5rem; left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
 body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; }
-body.big .navbar-brand, body.big .nav-tabs, body.big .nav-account, body.big .live-status { display: none; }
+body.big .navbar-brand, body.big .nav-tabs, body.big .nav-account, body.big .live-status, body.big .board-unknown { display: none; }
 body.big .navbar-right { margin: 0; }
 body.big .navbar-right .btn { font-size: 16px; min-height: 44px; padding-inline: var(--p-space-md); color: var(--p-surface); }
 @media (max-width: 640px) {
@@ -277,7 +284,7 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
   .nav-tabs { order: 3; flex-basis: 100%; margin: 0; overflow-x: auto; }
   .nav-tab { padding: var(--p-space-sm) var(--p-space-md); }
   .navbar-right { margin-left: auto; }
-  .navbar-right .live-status { display: none; }
+  .navbar-right .live-status { padding-inline: 0; }
 }
 
 /* Forms and the setup page. Palace styles the inputs and labels; these lay them out. */

@@ -96,7 +96,7 @@ function steps(request, snap) {
 
 /** Everything on the board that changes, in one element the stream replaces. */
 export function boardLive(request, snap, { watcher = false, big = false, token = null } = {}) {
-  const events = watcher ? `/watch/${token}/events` : `${request.space.base}/board/events`;
+  const events = `${watcher ? `/watch/${token}` : `${request.space.base}/board`}/events${big ? '?big' : ''}`;
   const unknown = !watcher && !big && snap.unknown?.length
     ? html`<p class="status status-warning board-unknown" role="status">Unknown ${snap.unknown.length === 1 ? 'car' : 'cars'}: ${snap.unknown.join(', ')}. <a href="${request.space.base}/setup#transponders">Assign in Setup</a></p>`
     : null;
