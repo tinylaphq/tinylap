@@ -94,3 +94,34 @@ body.big .board-table th, body.big .board-table td { padding-block: 0.35em; }
 }
 
 @media (prefers-reduced-motion: reduce) { .nav-tab { transition: none; } }
+
+.screen { padding-block: var(--p-space-lg); }
+.field { display: grid; gap: var(--p-space-xs); font-weight: 600; }
+.choice { display: flex; gap: var(--p-space-sm); align-items: center; }
+.inline-form { display: flex; gap: var(--p-space-sm); align-items: end; flex-wrap: wrap; }
+.setup-list { list-style: none; margin: 0; padding: 0; }
+.setup-row { display: flex; gap: var(--p-space-sm); align-items: center; padding-block: var(--p-space-xs); }
+.setup-row .meta { color: var(--p-text-muted); font-size: 12px; margin-left: auto; }
+tr.is-unknown td { background: var(--p-warning); }
+fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
+.choice input { width: 1.25rem; height: 1.25rem; margin: 0; accent-color: var(--p-text); }
+.choice { min-height: 2.5rem; }
+.field input, .field select { font: inherit; font-weight: 400; }
+.tap-tile:focus-visible { outline: 3px solid var(--p-accent-3); outline-offset: 2px; }
+
+.tap-screen { padding: var(--p-space-md); display: grid; gap: var(--p-space-md); }
+.tap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--p-space-md); }
+.tap-tile {
+  min-height: 7rem;
+  font: 700 1.5rem var(--p-font);
+  text-transform: uppercase;
+  background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text);
+  box-shadow: var(--p-shadow-md) var(--p-text), inset 0 -0.5rem 0 var(--driver, var(--p-text-faint));
+  touch-action: manipulation;
+  color: var(--p-text);
+  cursor: pointer;
+}
+.tap-tile.is-tapped { background: var(--driver, var(--p-accent-1)); }
+.tap-result { font: 700 1.25rem var(--p-font-mono); }
