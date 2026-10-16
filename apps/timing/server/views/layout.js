@@ -30,9 +30,9 @@ function accountMenu(request) {
 
 /**
  * @param {any} request
- * @param {{ title: string, body: unknown, screen?: string | null, scripts?: string[], importMap?: unknown, head?: unknown, watcher?: boolean, big?: boolean }} page
+ * @param {{ title: string, body: unknown, screen?: string | null, scripts?: string[], modules?: string[], importMap?: unknown, head?: unknown, watcher?: boolean, big?: boolean }} page
  */
-export function layout(request, { title, body, screen = null, scripts = [], importMap = null, head = null, watcher = false, big = false }) {
+export function layout(request, { title, body, screen = null, scripts = [], modules = [], importMap = null, head = null, watcher = false, big = false }) {
   const space = watcher ? null : request.space;
   const signIn = !request.session && !watcher ? html`<a class="btn btn-sm btn-outline" href="/auth/login?${new URLSearchParams({ returnTo: request.url.pathname + request.url.search })}">Sign in</a>` : null;
   const bigLink = big ? request.url.pathname : `${request.url.pathname}?big`;
@@ -47,7 +47,7 @@ export function layout(request, { title, body, screen = null, scripts = [], impo
 <link rel="stylesheet" href="${asset(request, 'pkg/design/design.css')}">
 <link rel="stylesheet" href="${asset(request, 'public/app.css')}">
 <link rel="icon" href="${asset(request, 'public/mark.svg')}" type="image/svg+xml">
-${importMap}${scripts.map((s) => html`<script type="module" src="${asset(request, `public/${s}`)}"></script>\n`)}${head}</head>
+${importMap}${scripts.map((s) => html`<script type="module" src="${asset(request, `public/${s}`)}"></script>\n`)}${modules.map((m) => html`<script type="module" src="${asset(request, m)}"></script>\n`)}${head}</head>
 <body${big ? html` class="big"` : null}>
 <nav class="navbar">
   <a class="navbar-brand" href="/"><img src="${asset(request, 'public/mark.svg')}" alt="" width="24" height="24"> TinyLap Timing</a>

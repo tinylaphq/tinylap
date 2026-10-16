@@ -19,7 +19,7 @@ function trackSection(request, m) {
   const base = request.space.base;
   const error = m.errors.track ?? null;
   const values = m.values.track ?? {};
-  return html`<section class="card-static stack-md" id="track" aria-labelledby="track-title">
+  return html`<tl-frame id="track"><section class="card-static stack-md" aria-labelledby="track-title">
   <h2 class="h3" id="track-title">Track</h2>
   <p>${m.track ? html`Now: <strong>${m.track.name}</strong>, ${DIRECTION_NAME[m.direction]}.` : 'No track yet. Share a closed track from the planner and paste its link here.'}</p>
   <form method="post" action="${base}/track" class="stack-sm">
@@ -28,13 +28,13 @@ function trackSection(request, m) {
     ${selectField({ id: 'track-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error })}
     <button type="submit" class="btn btn-primary">Use this track</button>
   </form>
-</section>`;
+</section></tl-frame>`;
 }
 
 function driversSection(request, m) {
   const base = request.space.base;
   const addError = m.errors['add-driver'] ?? null;
-  return html`<section class="card-static stack-md" id="drivers" aria-labelledby="drivers-title">
+  return html`<tl-frame id="drivers" refreshes="transponders"><section class="card-static stack-md" aria-labelledby="drivers-title">
   <h2 class="h3" id="drivers-title">Drivers</h2>
   ${m.drivers.length ? html`<ul class="setup-list">${m.drivers.map((d) => {
     const error = m.errors[`rename:${d.id}`] ?? null;
@@ -51,14 +51,14 @@ function driversSection(request, m) {
     ${textField({ id: 'add-driver-name', label: 'New driver', name: 'name', maxlength: 60, required: true, value: m.values['add-driver']?.name ?? '', error: addError })}
     <button type="submit" class="btn btn-primary">Add driver</button>
   </form>
-</section>`;
+</section></tl-frame>`;
 }
 
 function transpondersSection(request, m) {
   const base = request.space.base;
   const options = [{ value: '', label: '— none' }, ...m.drivers.map((d) => ({ value: d.id, label: d.name }))];
   const rows = [...m.transponders].sort((a, b) => Number(a.driverId !== null) - Number(b.driverId !== null) || a.code.localeCompare(b.code));
-  return html`<section class="card-static stack-md" id="transponders" aria-labelledby="transponders-title">
+  return html`<tl-frame id="transponders"><section class="card-static stack-md" aria-labelledby="transponders-title">
   <h2 class="h3" id="transponders-title">Transponders</h2>
   ${rows.length ? html`<table class="setup-table">
     <thead><tr><th scope="col" class="num">Code</th><th scope="col">Driver</th></tr></thead>
@@ -73,7 +73,7 @@ function transpondersSection(request, m) {
     </tr>`;
     })}</tbody>
   </table>` : html`<p class="empty">Transponders show up here when a car first crosses the line.</p>`}
-</section>`;
+</section></tl-frame>`;
 }
 
 function decodersSection(request, m) {
@@ -96,7 +96,7 @@ function decodersSection(request, m) {
     ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/decoders/${d.id}/unpair">Unpair</a>` : null}
   </li>`)}</ul>` : null}
   <p>Pair a decoder by USB on the <a href="${base}/bridge">Bridge</a> page, or here if it only uses Wi-Fi:</p>
-  <form method="post" action="${base}/decoders" class="inline-form">
+  <form method="post" action="${base}/decoders" class="inline-form" data-frame="off">
     ${textField({ id: 'pair-name', label: 'Decoder name', name: 'name', maxlength: 60, value: m.values.pair?.name ?? '', placeholder: 'Start line', error })}
     <button type="submit" class="btn btn-outline">Pair over Wi-Fi only</button>
   </form>
@@ -106,14 +106,14 @@ function decodersSection(request, m) {
 function watchersSection(request, m) {
   const base = request.space.base;
   const link = m.watchToken ? `${request.origin}/watch/${m.watchToken}` : null;
-  return html`<section class="card-static stack-md" id="watchers" aria-labelledby="watchers-title">
+  return html`<tl-frame id="watchers"><section class="card-static stack-md" aria-labelledby="watchers-title">
   <h2 class="h3" id="watchers-title">Watchers link</h2>
   <p>Anyone with this link sees the board, read-only, without signing in.</p>
   ${link ? html`${textField({ id: 'watch-link', label: 'Watchers link', name: 'link', value: link, readonly: true, copy: true })}
   <p><a class="btn btn-outline" href="${base}/watch-link/new">Make a new watchers link</a></p>` : html`<form method="post" action="${base}/watch-link">
     <button type="submit" class="btn btn-primary">Make a watchers link</button>
   </form>`}
-</section>`;
+</section></tl-frame>`;
 }
 
 export function setupPage(request, model) {
@@ -121,9 +121,11 @@ export function setupPage(request, model) {
   return layout(request, {
     title: 'Setup',
     screen: 'setup',
+    modules: ['pkg/design/elements/frame.js', 'pkg/design/elements/copy.js'],
     body: html`<div class="container stack-xl screen">
   <h1>Setup</h1>
-  ${m.failed ? errorSummary(m.failed.error, m.failed.fieldId) : null}
+  <div id="page-status">${m.failed ? errorSummary(m.failed.error, m.failed.fieldId) : null}</div>
+  <p class="visually-hidden" role="status" id="frame-status"></p>
   ${trackSection(request, m)}
   ${driversSection(request, m)}
   ${transpondersSection(request, m)}
