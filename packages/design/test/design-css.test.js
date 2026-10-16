@@ -23,3 +23,17 @@ test('page loads cross-fade with the navbar held still, and not for reduced moti
   assert.match(css, /\.navbar \{ view-transition-name: navbar; \}/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*@view-transition \{ navigation: none; \}/);
 });
+
+test('the shared account menu: visible focus, also on the current club; fits a phone navbar', () => {
+  assert.match(css, /\.nav-account-signout:focus-visible \{ outline: 2px solid var\(--p-accent-2\); outline-offset: -2px; color: var\(--p-accent-2\); transform: none; box-shadow: none; \}/, 'buttons focus like links, without palace’s lift');
+  const current = /\.nav-account-menu a\[aria-current="true"\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.match(current, /box-shadow/);
+  assert.doesNotMatch(current, /outline/, 'the current club keeps the focus outline');
+  assert.match(css, /max-width: min\(14rem, 40vw\)/);
+  assert.match(css, /\.nav-account-menu a, \.nav-account-item, \.nav-account-signout \{[^}]*transition: none;/, 'no transition stuck in a closed menu');
+  assert.match(css, /\.nav-account-menu \{[^}]*z-index: 100;/);
+});
+
+test('the brand, lockup and visually-hidden rules are shared', () => {
+  for (const rule of ['.brand-lockup { gap: var(--p-space-sm); }', '.brand-lockup img { width: 32px; height: 32px; }', '.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }']) assert.ok(css.includes(rule), rule);
+});

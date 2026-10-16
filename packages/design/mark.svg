@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke-linecap="square" stroke-linejoin="miter">
+  <!-- SPDX-FileCopyrightText: 2026 The TinyLap contributors -->
+  <!-- SPDX-License-Identifier: MPL-2.0 -->
+  <rect width="32" height="32" fill="#0a0a0a"/>
+  <path d="M7 9h13l5 5v9h-6l-3-4h-5l-4 4H7z" stroke="#fff" stroke-width="2"/>
+  <path d="M11 7v4" stroke="#ff2d9b" stroke-width="2"/>
+</svg>
