@@ -10,8 +10,8 @@ const server = await startServer();
 after(() => server.close());
 const get = (path, init) => fetch(server.base + path, init);
 
-test('the app CSS, the mark and the timing package are served as files', async () => {
-  for (const [path, type] of [['/public/app.css', /css/], ['/public/mark.svg', /svg/], ['/pkg/timing/index.js', /javascript/], ['/pkg/palace-ui/palace.css', /css/]]) {
+test('the app CSS, the shared mark and the timing package are served as files', async () => {
+  for (const [path, type] of [['/public/app.css', /css/], ['/pkg/design/mark.svg', /svg/], ['/pkg/timing/index.js', /javascript/], ['/pkg/palace-ui/palace.css', /css/]]) {
     const res = await get(path);
     assert.equal(res.status, 200, path);
     assert.match(res.headers.get('content-type'), type, path);

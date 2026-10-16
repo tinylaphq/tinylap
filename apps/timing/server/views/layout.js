@@ -5,6 +5,8 @@
 // The shell every timing page shares (spec §4.2), modelled on accounts'
 // layout.js: palace's stylesheets, the TinyLap mark, a navbar with the
 // space's screens and the account menu, and only external scripts.
+import { accountMenu as sharedAccountMenu, signInLink } from '@tinylap/design/html/account.js';
+import { brand } from '@tinylap/design/html/brand.js';
 import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 import { html, safe } from './html.js';
 
@@ -13,20 +15,15 @@ export const SCREENS = /** @type {const} */ ([['board', 'Board'], ['race', 'Race
 /** An asset's URL: versioned under /v/<build>/ in production. @param {any} request @param {string} path without a leading slash */
 export const asset = (request, path) => (request.build && request.build !== 'dev' ? `/v/${request.build}/${path}` : `/${path}`);
 
+/** The shared account menu (@tinylap/design), with your clubs: personal first, then the clubs. */
 function accountMenu(request) {
   if (!request.session) return null;
   const current = request.space?.id;
-  return html`<details class="nav-account">
-  <summary class="btn btn-sm btn-outline">${request.displayName ?? 'Account'}</summary>
-  <div class="nav-account-menu">
-    <p class="nav-account-label">Your spaces</p>
-    <ul>${(request.spaces ?? []).map((s) => html`<li><a href="${s.base}/board"${s.id === current ? html` aria-current="true"` : null}>${s.name}</a></li>`)}</ul>
-    <a href="${request.auth.accountUrl}">Account</a>
-    <form method="post" action="/auth/logout">
-      <button type="submit" class="nav-account-signout">Sign out</button>
-    </form>
-  </div>
-</details>`;
+  return safe(sharedAccountMenu({
+    name: request.displayName ?? 'Account',
+    accountUrl: request.auth.accountUrl,
+    clubs: (request.spaces ?? []).map((s) => ({ href: `${s.base}/board`, name: s.name, current: s.id === current })),
+  }));
 }
 
 /**
@@ -35,7 +32,8 @@ function accountMenu(request) {
  */
 export function layout(request, { title, body, screen = null, scripts = [], modules = [], importMap = null, head = null, watcher = false, big = false }) {
   const space = watcher ? null : request.space;
-  const signIn = !request.session && !watcher ? html`<a class="btn btn-sm btn-outline" href="/auth/login?${new URLSearchParams({ returnTo: request.url.pathname + request.url.search })}">Sign in</a>` : null;
+  const signIn = !request.session && !watcher ? safe(signInLink({ href: `/auth/login?${new URLSearchParams({ returnTo: request.url.pathname + request.url.search })}` })) : null;
+  const menu = request.session && !watcher ? ['pkg/design/elements/menu.js'] : [];
   const bigLink = big ? request.url.pathname : `${request.url.pathname}?big`;
   return html`<!doctype html>
 <html lang="en">
@@ -47,12 +45,12 @@ export function layout(request, { title, body, screen = null, scripts = [], modu
 <link rel="stylesheet" href="${asset(request, 'pkg/palace-ui/palace.css')}">
 <link rel="stylesheet" href="${asset(request, 'pkg/design/design.css')}">
 <link rel="stylesheet" href="${asset(request, 'public/app.css')}">
-<link rel="icon" href="${asset(request, 'public/mark.svg')}" type="image/svg+xml">
+<link rel="icon" href="${asset(request, 'pkg/design/mark.svg')}" type="image/svg+xml">
 ${safe(SPECULATION_RULES)}
-${importMap}${scripts.map((s) => html`<script type="module" src="${asset(request, `public/${s}`)}"></script>\n`)}${modules.map((m) => html`<script type="module" src="${asset(request, m)}"></script>\n`)}${head}</head>
+${importMap}${scripts.map((s) => html`<script type="module" src="${asset(request, `public/${s}`)}"></script>\n`)}${[...menu, ...modules].map((m) => html`<script type="module" src="${asset(request, m)}"></script>\n`)}${head}</head>
 <body${big ? html` class="big"` : null}>
 <nav class="navbar">
-  <a class="navbar-brand" href="/"><img src="${asset(request, 'public/mark.svg')}" alt="" width="24" height="24"> TinyLap Timing</a>
+  ${safe(brand({ href: '/', name: 'TinyLap Timing', markSrc: asset(request, 'pkg/design/mark.svg') }))}
   ${space ? html`<ul class="nav-tabs">${SCREENS.map(([id, label]) => html`<li><a class="nav-tab" href="${space.base}/${id}"${id === screen ? html` aria-current="page"` : null}>${label}</a></li>`)}</ul>` : null}
   <div class="navbar-right">
     ${screen === 'board' || watcher ? html`<span class="live-status" id="live-status" data-state="off" hidden></span>
