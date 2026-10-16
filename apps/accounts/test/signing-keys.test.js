@@ -8,7 +8,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as oidc from 'openid-client';
-import { decodeProtectedHeader } from 'jose';
+import { createRemoteJWKSet, decodeProtectedHeader } from 'jose';
 import { verifyAccessToken } from '@tinylap/auth';
 import { JWKS_GRACE_SECONDS } from '../server/auth.js';
 import { createTestUser, driveAuthorize, startAccounts, testSession } from './helpers.js';
@@ -66,4 +66,16 @@ test('an expired key stays in the JWKS within the grace period, and its tokens s
 
   expireKey(kid, Date.now() - 31 * DAY);
   assert.ok(!(await kids()).includes(kid), 'past the grace period it is gone');
+});
+
+const liveRows = () => accounts.db.prepare('SELECT id FROM jwks WHERE expiresAt IS NULL OR expiresAt > ?').all(new Date().toISOString());
+
+test('concurrent token issues share one signing key', async () => {
+  for (const { id } of liveRows()) expireKey(id, Date.now() - DAY);
+  const tokens = await Promise.all(Array.from({ length: 6 }, accessToken));
+  assert.equal(new Set(tokens.map((t) => decodeProtectedHeader(t).kid)).size, 1, 'one kid across the tokens');
+  assert.equal(liveRows().length, 1, 'one live key in the table');
+  // Its own key set: the shared one was fetched within jose's 30 s cooldown.
+  const options = { issuer: accounts.issuer, audience: accounts.client.resource, jwks: createRemoteJWKSet(new URL(`${accounts.issuer}/jwks`)) };
+  for (const t of tokens) assert.ok(await verifyAccessToken(t, options));
 });
