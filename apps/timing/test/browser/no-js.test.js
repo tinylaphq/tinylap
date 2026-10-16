@@ -131,6 +131,18 @@ test('the bridge page offers its links without JavaScript', async (t) => {
   assert.equal(pathOf(page), '/personal/tap');
 });
 
+test('without JavaScript the watchers link and a pairing token show no Copy button or hint', async (t) => {
+  await app.form(member, '/personal/watch-link', {});
+  const page = await plainPage(t);
+  await page.goto('/personal/setup');
+  await page.locator('#pair-name').fill('No-JS gate');
+  await page.getByRole('button', { name: 'Pair over Wi-Fi only' }).click();
+  await page.locator('code.token').first().waitFor();
+  assert.ok(await page.locator('tl-copy').count() >= 3, 'the token, the decoder id and the link are copyable');
+  assert.equal(await page.getByRole('button', { name: 'Copy' }).filter({ visible: true }).count(), 0);
+  assert.equal(await page.getByText('Select it and copy it yourself.').filter({ visible: true }).count(), 0);
+});
+
 test('the watchers page works without JavaScript or a log-in', async (t) => {
   await app.form(member, '/personal/watch-link', {});
   const token = app.store.workspace(personal).watchToken;

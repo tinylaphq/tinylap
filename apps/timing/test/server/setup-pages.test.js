@@ -33,7 +33,8 @@ test('the setup page has a section per thing to set up', async () => {
   const res = await get(owner, `${base}/setup`);
   assert.equal(res.status, 200);
   const body = await res.text();
-  for (const id of ['track', 'drivers', 'transponders', 'decoders', 'watchers']) assert.match(body, new RegExp(`<section[^>]* id="${id}"`), id);
+  for (const id of ['track', 'drivers', 'transponders', 'watchers']) assert.match(body, new RegExp(`<tl-frame id="${id}"[^>]*><section`), id);
+  assert.match(body, /<section[^>]* id="decoders"/);
   assert.match(body, new RegExp(`<form method="post" action="${base}/drivers"`));
   assert.match(body, /<label for="add-driver-name">New driver<\/label>/);
   assert.doesNotMatch(body, /workspace/i);
