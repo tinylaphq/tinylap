@@ -23,8 +23,7 @@ before(async () => {
   office = app.club(ana, 'Office');
   app.join(ana, office.id, ben);
   app.join(ana, office.id, cy, 'admin');
-  // Serial on purpose, see `login` in helpers.js.
-  member = await app.login(ben); admin = await app.login(cy); stranger = await app.login(zed);
+  [member, admin, stranger] = await Promise.all([ben, cy, zed].map((u) => app.login(u)));
   path = (rest) => `/workspaces/${office.id}/${rest}`;
 });
 after(async () => {
