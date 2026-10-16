@@ -66,7 +66,7 @@ On `submit` from a form inside the frame:
 2. **One submit per page.** While any frame's submit is in flight, every further submit in any frame is `preventDefault()`ed and dropped, and `#frame-status` says "Still saving. Try again in a moment." It is never left to the browser, which would write a second time. A page restored from the back/forward cache (`pageshow` with `persisted`) clears the lock, `aria-busy` and the disabled buttons. Then:
    - `preventDefault()`;
    - mark the frame `aria-busy="true"`;
-   - disable the submitted form's buttons.
+   - disable the buttons of every frame on the page, so everyone can see nothing else saves yet, and re-enable them after the swap. Only the buttons the frame disabled come back; a button the server rendered `disabled` stays disabled.
 3. **Send:**
 
    ```js
