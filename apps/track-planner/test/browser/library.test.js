@@ -80,7 +80,7 @@ test('save, version, history, rename, share and log out', async (t) => {
 
   // Logged out, the navbar is as it always was: Save downloads, no library.
   await page.goto('/');
-  await page.locator('#btn-login').waitFor();
+  await page.locator('#account .nav-sign-in').waitFor();
   assert.equal(await page.locator('#btn-download').isHidden(), true);
   assert.equal(await page.locator('#library-current').isHidden(), true);
 
@@ -93,9 +93,9 @@ test('save, version, history, rename, share and log out', async (t) => {
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByText('Your account is ready').waitFor();
   await page.goto('/');
-  await page.locator('#btn-login').click();
-  await page.locator('#btn-account').waitFor();
-  assert.equal(await page.locator('#btn-account').textContent(), 'Ayrton');
+  await page.locator('#account .nav-sign-in').click();
+  await page.locator('#account summary').waitFor();
+  assert.equal(await page.locator('#account .nav-account-name').textContent(), 'Ayrton');
   assert.equal(await page.locator('#btn-download').isVisible(), true);
 
   // A layout on the canvas: the stock one.
@@ -126,8 +126,8 @@ test('save, version, history, rename, share and log out', async (t) => {
   assert.equal(await saveDialog.isHidden(), true, 'no name asked the second time');
 
   // The library: one track, its history has two versions; open the first.
-  await page.locator('#btn-account').click();
-  await page.getByRole('menuitem', { name: 'Library' }).click();
+  await page.locator('#account summary').click();
+  await page.getByRole('button', { name: 'Library' }).click();
   const dialog = page.locator('#library-dialog');
   const row = dialog.locator('.library-track', { hasText: 'Monza' });
   await row.waitFor();
@@ -161,8 +161,8 @@ test('save, version, history, rename, share and log out', async (t) => {
   await canvasHas(false);
 
   // Rename.
-  await page.locator('#btn-account').click();
-  await page.getByRole('menuitem', { name: 'Library' }).click();
+  await page.locator('#account summary').click();
+  await page.getByRole('button', { name: 'Library' }).click();
   await row.waitFor();
   // By keyboard: Enter on Rename puts the focus in the name; Enter saves it
   // and the focus is back on Rename.
@@ -179,6 +179,9 @@ test('save, version, history, rename, share and log out', async (t) => {
   assert.equal(await dialog.locator('.library-track').count(), 1);
   assert.equal(await page.locator('#library-current').textContent(), 'Imola');
   await dialog.getByRole('button', { name: 'Close' }).click();
+  // Library closed the account menu on the way in; on the way out focus is back on its summary.
+  assert.equal(await page.locator('#account details').evaluate((d) => /** @type {HTMLDetailsElement} */ (d).open), false);
+  await page.waitForFunction(() => document.activeElement?.matches('#account summary'));
 
   // The link belongs to the layout: a stock layout (no link), open Imola,
   // undo. The stock layout is back without a link, so Save asks for a name
@@ -186,8 +189,8 @@ test('save, version, history, rename, share and log out', async (t) => {
   await page.locator('#btn-presets').click();
   await page.locator('#presets-list button[data-preset-id]').first().click();
   await page.locator('#library-current').waitFor({ state: 'hidden' });
-  await page.locator('#btn-account').click();
-  await page.getByRole('menuitem', { name: 'Library' }).click();
+  await page.locator('#account summary').click();
+  await page.getByRole('button', { name: 'Library' }).click();
   await dialog.locator('.library-track', { hasText: 'Imola' }).getByRole('button', { name: 'Open', exact: true }).click();
   await page.getByText('Opened Imola.').waitFor();
   assert.equal(await page.locator('#library-current').textContent(), 'Imola');
@@ -233,16 +236,16 @@ test('save, version, history, rename, share and log out', async (t) => {
   await settled();
   assert.equal(await page.locator('.navbar').evaluate((n) => n.getBoundingClientRect().height), 52, 'desktop keeps the one-row bar');
 
-  // Log out: the planner is back to downloads.
-  await page.locator('#btn-account').click();
-  await page.getByRole('menuitem', { name: 'Log out' }).click();
-  await page.locator('#btn-login').waitFor();
+  // Sign out: the planner is back to downloads.
+  await page.locator('#account summary').click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.locator('#account .nav-sign-in').waitFor();
   assert.equal(await page.locator('#btn-download').isHidden(), true);
   assert.equal(await page.locator('#menu-library').isHidden(), true);
   assert.equal(await status.isVisible(), true);
 });
 
-test('a library call answered 401 brings the navbar back to "Log in"', async (t) => {
+test('a library call answered 401 brings the navbar back to "Sign in"', async (t) => {
   const context = await browser.newContext({ baseURL: planner.base, viewport: { width: 1280, height: 800 } });
   /** @type {string[]} */
   const errors = [];
@@ -264,15 +267,15 @@ test('a library call answered 401 brings the navbar back to "Log in"', async (t)
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByText('Your account is ready').waitFor();
   await page.goto('/');
-  await page.locator('#btn-login').click();
-  await page.locator('#btn-account').waitFor();
-  assert.equal(await page.locator('#btn-account').textContent(), 'Stale');
+  await page.locator('#account .nav-sign-in').click();
+  await page.locator('#account summary').waitFor();
+  assert.equal(await page.locator('#account .nav-account-name').textContent(), 'Stale');
 
   // The planner session ends behind the page's back (as the deletions feed
   // or an expired session would): the next library call is a 401.
   const { id } = planner.suite.accounts.db.prepare('SELECT id FROM "user" WHERE name = ?').get('Stale');
   await planner.store.sessions.deleteUser(String(id));
   await page.locator('#btn-save').click();
-  await page.locator('#btn-login').waitFor();
-  assert.equal(await page.locator('#btn-account').isHidden(), true, 'no stale name in the navbar');
+  await page.locator('#account .nav-sign-in').waitFor();
+  assert.equal(await page.locator('#account .nav-account').isHidden(), true, 'no stale name in the navbar');
 });

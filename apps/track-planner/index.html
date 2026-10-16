@@ -11,11 +11,12 @@
   <link rel="stylesheet" href="./pkg/palace-ui/palace.css">
   <link rel="stylesheet" href="./pkg/design/design.css">
   <link rel="stylesheet" href="./css/app.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0a0a'/%3E%3Crect x='3' y='3' width='10' height='10' fill='none' stroke='%23ff2d9b' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="icon" href="./pkg/design/mark.svg" type="image/svg+xml">
+  <script type="module" src="./pkg/design/elements/menu.js"></script>
 </head>
 <body>
   <nav class="navbar">
-    <span class="navbar-brand">Circuit 30 Planner</span>
+    <a class="navbar-brand" href="./"><img src="./pkg/design/mark.svg" alt="" width="24" height="24"> Circuit 30 Planner</a>
     <span class="library-current" id="library-current" hidden></span>
     <div class="navbar-right">
       <button type="button" class="btn btn-sm btn-outline" id="btn-presets">Layouts</button>
@@ -23,19 +24,28 @@
       <button type="button" class="btn btn-sm btn-secondary" id="btn-share">Share</button>
       <button type="button" class="btn btn-sm btn-outline" id="btn-download" hidden>Download</button>
       <button type="button" class="btn btn-sm btn-primary" id="btn-save">Save</button>
+      <!-- The shared account control (@tinylap/design html/account.js), written out
+           because this page is static; test/account-markup.test.js keeps it in step. -->
       <div class="account" id="account" hidden>
-        <a class="btn btn-sm btn-outline" id="btn-login" href="/auth/login">Log in</a>
-        <button type="button" class="btn btn-sm btn-outline account-name" id="btn-account"
-                popovertarget="account-menu" aria-haspopup="menu" hidden></button>
-        <span class="account-down" id="account-down" role="status" hidden>Log-in is unavailable right now</span>
+        <!-- sign-in -->
+        <a class="btn btn-sm btn-outline nav-sign-in" href="/auth/login">Sign in</a>
+        <!-- /sign-in -->
+        <span class="account-down" role="status" hidden>Sign-in is unavailable right now</span>
+        <!-- account-menu -->
+        <tl-menu class="nav-account">
+          <details name="tl-account">
+            <summary><span class="visually-hidden">Account: </span><span class="nav-account-name">Account</span></summary>
+            <div class="nav-account-menu">
+              <button type="button" class="nav-account-item" id="menu-library" hidden>Library</button>
+              <a class="nav-account-link" href="/">Account</a>
+              <form method="post" action="/auth/logout">
+                <button type="submit" class="nav-account-signout">Sign out</button>
+              </form>
+            </div>
+          </details>
+        </tl-menu>
+        <!-- /account-menu -->
       </div>
-    </div>
-    <div class="account-menu" id="account-menu" popover role="menu" aria-labelledby="btn-account">
-      <button type="button" role="menuitem" id="menu-library" hidden>Library</button>
-      <a role="menuitem" id="menu-account" href="/">Account</a>
-      <form method="post" action="/auth/logout">
-        <button type="submit" role="menuitem">Log out</button>
-      </form>
     </div>
     <input type="file" id="open-input" accept=".html,.json,text/html,application/json" hidden>
   </nav>
