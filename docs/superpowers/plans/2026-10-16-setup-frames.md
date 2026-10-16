@@ -28,7 +28,7 @@
 2. A submit while one is in flight must be prevented and dropped, also when it comes from another frame.
 3. An error status (422, 404, 409, 502) must swap in the message and the kept input. It must not silently load an unchanged page.
 4. The one-time pairing token must never be replaced by a swap.
-5. Without JS, nothing visible may change (no Copy button, no hint).
+5. Without JS, nothing visible may change (no Copy button, no hint), apart from the intended pairing-notice layout (decoder id on its own line).
 
 ---
 

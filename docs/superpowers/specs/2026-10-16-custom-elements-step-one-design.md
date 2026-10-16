@@ -58,12 +58,12 @@ On `submit` from a form inside the frame:
 1. **Leave the submit to the browser** (no `preventDefault`) when any of these holds:
    - the effective method (the submitter's `formMethod`, else the form's `method`) is not `post`;
    - the effective action (`event.submitter?.formAction`, else `form.action`) is not same-origin;
-   - the form has a `target`, or a file input;
+   - the form has a `target`, or the submitter a `formtarget`, or the form a file input;
    - the form has `data-frame="off"`;
    - the event is already `defaultPrevented`.
 
    Wi-Fi pairing carries `data-frame="off"`, and sits outside any frame anyway. Its 303 consumes the one-time token cookie, so a failed swap after that would lose the token for good. Pairing is rare, and the normal load lands on `#decoders`.
-2. **One submit per page.** While any frame's submit is in flight, every further submit in any frame is `preventDefault()`ed and dropped. It is never left to the browser, which would write a second time. Then:
+2. **One submit per page.** While any frame's submit is in flight, every further submit in any frame is `preventDefault()`ed and dropped, and `#frame-status` says "Still saving. Try again in a moment." It is never left to the browser, which would write a second time. A page restored from the back/forward cache (`pageshow` with `persisted`) clears the lock, `aria-busy` and the disabled buttons. Then:
    - `preventDefault()`;
    - mark the frame `aria-busy="true"`;
    - disable the submitted form's buttons.
@@ -84,7 +84,7 @@ On `submit` from a form inside the frame:
    - a 2xx after a followed 303 is a success;
    - a 4xx or 5xx re-renders the page with the error, so it is a failure. That covers 422, and the 404, 409, 429 and 502 the operations return.
 
-   The page is parsed with `DOMParser`, and `getElementById(id)` must be a `TL-FRAME`.
+   The page is parsed with `DOMParser`, and `getElementById(id)` must be a `TL-FRAME`. The action's fragment is dropped first, so the fallback's `location.assign` always loads instead of scrolling.
 5. **Swap:**
    - replace this frame's children with those of the response's frame;
    - replace each frame named in `refreshes` the same way, unless the user has changed one of its controls without submitting, or it holds focus;
@@ -120,7 +120,7 @@ That is better than no-JS, which returns to `/`. Do not "fix" this with `redirec
 **After a success:**
 1. Focus the first field of the submitted form, with `focus({ preventScroll: true })`, like every focus call below: the first `input`, `select` or `textarea` that is not hidden, readonly or disabled. It is found by id in the new frame. An assigned transponder row moves when the table re-sorts, which is why the focus call must not scroll. Example: "Add driver" leaves focus in the empty new-driver field, ready for the next name. Matching by id also works when the click focused the button, which has no id, or nothing at all, as in Safari.
 2. Otherwise focus the frame's heading. The script sets `tabindex="-1"`, and the call is `focus({ preventScroll: true })`.
-3. A visually hidden polite live region, created once, says "<heading> saved", e.g. "Drivers saved". Without JS, the page load itself is the feedback.
+3. The server-rendered, visually hidden live region `#frame-status` says "<heading> saved", e.g. "Drivers saved". Without JS, the page load itself is the feedback.
 
 **After a failure:**
 1. The new `#page-status` holds the `role="alert"` summary, which is announced.
@@ -141,14 +141,16 @@ That is better than no-JS, which returns to `/`. Do not "fix" this with `redirec
 <tl-copy class="copy">
   <code class="token">…</code>
   <button type="button" class="btn btn-outline" hidden>Copy</button>
-  <p class="hint" hidden>Select it and copy it yourself.</p>
+  <span class="visually-hidden" role="status"></span>
+  <p class="field-hint copy-hint" hidden>Select it and copy it yourself.</p>
 </tl-copy>
 ```
 
 - All of this markup is rendered by the server; the script only shows and hides it.
 - `.copy` lays it out in `app.css`:
-  - for the token and the decoder id, the button sits after the code, on the same line when it fits and wrapping below otherwise;
-  - for the watchers link, the read-only input and the button form one row, like `.inline-form`.
+  - a two-column grid keeps the button beside its value, also on a phone, where a long token wraps instead; one-line values and the button share the 3rem inline-form height;
+  - the hint spans both columns.
+- The pairing notice is no longer a live region of its own: it is rendered with the page, so it was never announced as a change, and nested regions would re-read the token when the hint appears. The decoder id moves onto its own line under "Decoder id:", styled like the token. That changes the no-JS look of the notice, intentionally.
 
 - The server renders the button `hidden`. The element unhides it when `navigator.clipboard?.writeText` exists, which needs a secure context.
 - It copies the value of the first input inside, otherwise the text of the first `code`.
@@ -200,7 +202,7 @@ New `test/browser/frames.test.js`; `page.on('request')` counts the POSTs:
 
 Other browser tests:
 - `assembled.test.js`: on Setup, `/v/<sha>/pkg/design/elements/frame.js` and `copy.js` load with no page errors.
-- `no-js.test.js` passes unchanged, which proves the fallback.
+- `no-js.test.js` keeps passing, which proves the fallback, and gains a test: no visible Copy button or hint.
 
 ## 6. Risks
 
