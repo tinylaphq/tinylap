@@ -44,6 +44,10 @@ test('every screen loads its assets from /v/<build>/', async (t) => {
     assert.ok(css.every((href) => new URL(href).pathname.startsWith(`/v/${SHA}/`)), `${screen}: ${css.join(', ')}`);
     const scripts = await page.evaluate(() => [...document.querySelectorAll('script[src]')].map((el) => /** @type {HTMLScriptElement} */ (el).src));
     assert.ok(scripts.every((src) => new URL(src).pathname.startsWith(`/v/${SHA}/`)), `${screen}: ${scripts.join(', ')}`);
+    if (screen === 'setup') {
+      for (const name of ['frame', 'copy']) assert.ok(scripts.some((src) => new URL(src).pathname === `/v/${SHA}/pkg/design/elements/${name}.js`), `setup loads ${name}.js`);
+      assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-frame') && customElements.get('tl-copy'))), true, 'and defines both');
+    }
     if (screen === 'bridge') {
       assert.ok(scripts.length, 'the bridge loads a script');
       const map = JSON.parse(await page.locator('script[type="importmap"]').innerText());
