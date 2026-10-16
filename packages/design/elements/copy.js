@@ -39,4 +39,4 @@ class TlCopy extends HTMLElement {
   }
 }
 
-if (globalThis.customElements && !customElements.get('tl-copy')) customElements.define('tl-copy', TlCopy);
+if (!customElements.get('tl-copy')) customElements.define('tl-copy', TlCopy);

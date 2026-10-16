@@ -81,7 +81,7 @@ function decodersSection(request, m) {
   const error = m.errors.pair ?? null;
   return html`<section class="card-static stack-md" id="decoders" aria-labelledby="decoders-title">
   <h2 class="h3" id="decoders-title">Decoders</h2>
-  ${m.paired ? html`<div class="status status-info" role="status">
+  ${m.paired ? html`<div class="status status-info">
     <p>${m.paired.name} is paired. Its token is shown only this once:</p>
     ${copyable(html`<code class="token">${m.paired.token}</code>`)}
     <p>Decoder id:</p>

@@ -7,12 +7,24 @@
 // answers with, so a card saves in place and the page keeps its place.
 // The server answers as it does without script: a 303 to the page, or the
 // page with the error. Anything unexpected loads the form's page instead,
-// and a submit is never sent twice: a GET on a form target redirects to it.
+// and a submit is never sent twice: a GET on a form target redirects to
+// its page.
 
 const TIMEOUT_MS = 30_000;
 // One submit per page: a response may refresh other frames, so two in
 // flight could swap in each other's stale cards.
 let busy = false;
+
+// A page the back/forward cache brings back, after a fallback load or one
+// the user stopped, starts over: no submit in flight, every button live.
+addEventListener('pageshow', (event) => {
+  if (!event.persisted) return;
+  busy = false;
+  for (const frame of document.querySelectorAll('tl-frame[aria-busy]')) {
+    frame.removeAttribute('aria-busy');
+    for (const b of frame.querySelectorAll('button[disabled], input[type="submit"][disabled]')) /** @type {HTMLButtonElement} */ (b).disabled = false;
+  }
+});
 
 /** @param {Element | null} el */
 const focusOn = (el) => {
@@ -29,7 +41,10 @@ function changed(root) {
       if (el.selectedIndex !== (initial === -1 ? 0 : initial)) return true;
     } else if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
       if (el.checked !== el.defaultChecked) return true;
-    } else if (/** @type {HTMLInputElement | HTMLTextAreaElement} */ (el).value !== /** @type {HTMLInputElement | HTMLTextAreaElement} */ (el).defaultValue) return true;
+    } else {
+      const field = /** @type {HTMLInputElement | HTMLTextAreaElement} */ (el);
+      if (field.value !== field.defaultValue) return true;
+    }
   }
   return false;
 }
@@ -58,21 +73,26 @@ class TlFrame extends HTMLElement {
     const button = /** @type {HTMLButtonElement | HTMLInputElement | null} */ (submitter);
     const method = button?.hasAttribute('formmethod') ? button.formMethod : form.method;
     const action = new URL(button?.hasAttribute('formaction') ? button.formAction : form.action);
+    // A fragment would make the fallback's location.assign scroll instead of load.
+    action.hash = '';
     if (method !== 'post' || action.origin !== location.origin || form.target || button?.formTarget
       || form.dataset.frame === 'off' || form.querySelector('input[type="file"]')) return;
     event.preventDefault();
-    if (busy) return;
+    if (busy) {
+      announce('Still saving. Try again in a moment.');
+      return;
+    }
     busy = true;
     this.send(form, button, action);
   }
 
-  /** @param {HTMLFormElement} form @param {HTMLElement | null} submitter @param {URL} action */
+  /** @param {HTMLFormElement} form @param {HTMLButtonElement | HTMLInputElement | null} submitter @param {URL} action */
   async send(form, submitter, action) {
-    const body = new URLSearchParams(/** @type {any} */ (new FormData(form, submitter)));
-    const fieldId = firstFieldId(form);
-    this.setAttribute('aria-busy', 'true');
-    for (const b of form.querySelectorAll('button, input[type="submit"]')) /** @type {HTMLButtonElement} */ (b).disabled = true;
     try {
+      const body = new URLSearchParams(/** @type {any} */ (new FormData(form, submitter)));
+      const fieldId = firstFieldId(form);
+      this.setAttribute('aria-busy', 'true');
+      for (const b of form.querySelectorAll('button, input[type="submit"]')) /** @type {HTMLButtonElement} */ (b).disabled = true;
       const res = await fetch(action, { method: 'POST', body, redirect: 'follow', headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
       if (!(res.headers.get('content-type') ?? '').startsWith('text/html')) throw new Error(`not a page: ${res.status}`);
       const page = new DOMParser().parseFromString(await res.text(), 'text/html');
@@ -116,4 +136,4 @@ class TlFrame extends HTMLElement {
   }
 }
 
-if (globalThis.customElements && !customElements.get('tl-frame')) customElements.define('tl-frame', TlFrame);
+if (!customElements.get('tl-frame')) customElements.define('tl-frame', TlFrame);
