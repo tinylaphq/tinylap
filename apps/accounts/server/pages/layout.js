@@ -4,7 +4,9 @@
 
 // The shell every accounts page shares: palace-ui's narrow auth layout, the
 // TinyLap mark, and one external module script. No inline scripts or styles
-// (the page CSP forbids both); state the scripts need travels in data-*.
+// (the page CSP forbids both, except the speculation rules, allowed by hash);
+// state the scripts need travels in data-*.
+import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 
 /** @param {unknown} text */
 export const escapeHtml = (text) =>
@@ -36,6 +38,7 @@ export function layout({ title, heading = title, lede = '', body, script, data =
 <link rel="stylesheet" href="/pkg/design/design.css">
 <link rel="stylesheet" href="/public/accounts.css">
 <link rel="icon" href="/public/mark.svg" type="image/svg+xml">
+${SPECULATION_RULES}
 ${script ? `<script type="module" src="/public/${script}"></script>\n` : ''}</head>
 <body${attrs}>
 <main class="${wide ? 'container accounts-wide' : 'container-narrow'} page-header accounts">

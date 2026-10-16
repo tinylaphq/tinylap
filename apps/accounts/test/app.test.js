@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { servedPackages } from '../server/app.js';
 import { createTestUser, driveAuthorize, Jar, navigate, startAccounts, testSession } from './helpers.js';
+import { SPECULATION_HASH } from '@tinylap/design/html/speculation.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
 let accounts;
@@ -16,7 +17,7 @@ before(async () => {
 });
 after(() => accounts.close());
 
-const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+const CSP = `default-src 'self'; script-src 'self' '${SPECULATION_HASH}'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`;
 
 test('every response has the security headers and no Server header', async () => {
   for (const path of ['/.well-known/openid-configuration', '/jwks', '/sign-in', '/nope', '/pkg/design/design.css']) {

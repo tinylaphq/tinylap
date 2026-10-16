@@ -12,11 +12,13 @@
   "style": "design.css",
   "exports": {
     "./design.css": "./design.css",
-    "./elements/*": "./elements/*"
+    "./elements/*": "./elements/*",
+    "./html/*": "./html/*"
   },
   "files": [
     "design.css",
-    "elements"
+    "elements",
+    "html"
   ],
   "dependencies": {
     "palace-ui": "^0.10.0"

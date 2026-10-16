@@ -30,3 +30,11 @@ tl-frame { display: block; }
  * [hidden], so a hidden control would still show. Belongs upstream in
  * palace-ui; drop this once palace ships it. */
 [hidden] { display: none !important; }
+
+/* Moving between pages is a page load; where the browser can, it cross-fades
+ * the content and keeps the navbar in place. Not for reduced motion. */
+@view-transition { navigation: auto; }
+.navbar { view-transition-name: navbar; }
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+}

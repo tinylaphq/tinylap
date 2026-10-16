@@ -15,6 +15,7 @@ import { html } from '../../server/views/html.js';
 import { layout } from '../../server/views/layout.js';
 import { routes } from '../../server/routes.js';
 import { startTiming } from './helpers.js';
+import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 
 // A test page behind pageRoute, so the access rules are tested before any real screen exists.
 const probe = {
@@ -144,7 +145,7 @@ test('the navbar: brand, screens, and the account menu with your spaces and Sign
   assert.match(body, /<form method="post" action="\/auth\/logout">\s*<button[^>]*>Sign out<\/button>/);
   assert.match(body, /<link rel="stylesheet" href="\/pkg\/palace-ui\/palace.css">/);
   assert.match(body, /<link rel="icon" href="\/public\/mark.svg"/);
-  assert.doesNotMatch(body, /<script/);
+  assert.doesNotMatch(body.replace(SPECULATION_RULES, ''), /<script/, 'no script but the speculation rules');
 });
 
 test('in production every asset is under /v/<build>/', async () => {

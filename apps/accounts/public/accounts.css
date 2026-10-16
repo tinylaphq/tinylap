@@ -385,3 +385,8 @@ a.accounts-workspace-name {
 .accounts-row-sub time {
   font-weight: 400;
 }
+
+/* No cross-fade between accounts pages: they are sign-in steps that mostly
+   hand on to another site, where a transition can't follow and Chrome
+   reports the aborted one as a page error. */
+@view-transition { navigation: none; }

@@ -4,13 +4,14 @@
 
 // Page responses (spec §4.2): HTML with the page CSP, never cached, never
 // CORS (credentials: true), and 303s for POST/redirect/GET.
+import { SPECULATION_HASH } from '@tinylap/design/html/speculation.js';
 
-/** @param {any} request @param {string[]} [scriptHashes] e.g. 'sha256-…' for an import map */
+/** @param {any} request @param {string[]} [scriptHashes] e.g. 'sha256-…' for an import map; every page also allows its speculation rules */
 export function pageCsp(request, scriptHashes = []) {
   const issuer = request.auth ? ` ${new URL(request.auth.issuer).origin}` : '';
   return [
     "default-src 'self'",
-    `script-src 'self'${scriptHashes.map((h) => ` '${h}'`).join('')}`,
+    `script-src 'self'${[SPECULATION_HASH, ...scriptHashes].map((h) => ` '${h}'`).join('')}`,
     // Inline styles only, for driver colour swatches (as the planner allows).
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
