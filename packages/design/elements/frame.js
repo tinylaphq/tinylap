@@ -22,7 +22,10 @@ addEventListener('pageshow', (event) => {
   busy = false;
   for (const frame of document.querySelectorAll('tl-frame[aria-busy]')) {
     frame.removeAttribute('aria-busy');
-    for (const b of frame.querySelectorAll('button[disabled], input[type="submit"][disabled]')) /** @type {HTMLButtonElement} */ (b).disabled = false;
+    for (const b of frame.querySelectorAll('[data-frame-disabled]')) {
+      /** @type {HTMLButtonElement} */ (b).disabled = false;
+      b.removeAttribute('data-frame-disabled');
+    }
   }
 });
 
@@ -92,7 +95,11 @@ class TlFrame extends HTMLElement {
       const body = new URLSearchParams(/** @type {any} */ (new FormData(form, submitter)));
       const fieldId = firstFieldId(form);
       this.setAttribute('aria-busy', 'true');
-      for (const b of form.querySelectorAll('button, input[type="submit"]')) /** @type {HTMLButtonElement} */ (b).disabled = true;
+      // Marked, so a page restored from the cache re-enables only these.
+      for (const b of form.querySelectorAll('button:enabled, input[type="submit"]:enabled')) {
+        /** @type {HTMLButtonElement} */ (b).disabled = true;
+        b.setAttribute('data-frame-disabled', '');
+      }
       const res = await fetch(action, { method: 'POST', body, redirect: 'follow', headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
       if (!(res.headers.get('content-type') ?? '').startsWith('text/html')) throw new Error(`not a page: ${res.status}`);
       const page = new DOMParser().parseFromString(await res.text(), 'text/html');
