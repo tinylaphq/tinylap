@@ -4,7 +4,8 @@
 
 // Signing key rotation as the README describes it: expiring the current key
 // switches signing to a new one, and the expired key stays in the JWKS for
-// the pinned grace period (30 days), so tokens it signed still verify.
+// the pinned grace period (30 days), so tokens it signed still verify. And
+// token issues that race for a new key all end up signing with one.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as oidc from 'openid-client';

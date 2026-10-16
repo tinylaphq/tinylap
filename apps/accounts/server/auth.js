@@ -171,7 +171,7 @@ export function authOptions(config, db = null) {
     const adapter = await getCurrentAdapter(ctx.context.adapter);
     const now = new Date();
     const live = (await adapter.findMany({ model: 'jwks' }))
-      .filter((k) => !k.expiresAt || k.expiresAt > now)
+      .filter((k) => (k.alg ?? webKey.alg) === webKey.alg && (!k.expiresAt || k.expiresAt > now))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     return live ?? adapter.create({ model: 'jwks', data: { ...webKey, createdAt: new Date() } });
   }));
