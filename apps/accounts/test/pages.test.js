@@ -12,6 +12,7 @@ import { PAGE_CSP } from '../server/app.js';
 import { createRecoveryCodes } from '../server/recovery.js';
 import { LOSS_WARNING } from '../server/pages/sign-up.js';
 import { createTestUser, driveAuthorize, Jar, navigate, startAccounts, testSession } from './helpers.js';
+import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
 let accounts;
@@ -65,7 +66,7 @@ describe('pages', () => {
       assert.match(html, /<link rel="stylesheet" href="\/pkg\/palace-ui\/palace.css">/);
       assert.match(html, /<link rel="stylesheet" href="\/pkg\/design\/design.css">/);
       assert.match(html, /<script type="module" src="\/public\/[a-z-]+\.js"><\/script>/);
-      assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/, 'no inline script');
+      assert.doesNotMatch(html.replace(SPECULATION_RULES, ''), /<script(?![^>]*\bsrc=)[^>]*>/, 'no inline script but the speculation rules');
       assert.doesNotMatch(html, /\sstyle=|<style/, 'no inline style');
     });
   }

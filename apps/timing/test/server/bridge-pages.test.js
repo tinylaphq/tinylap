@@ -31,6 +31,6 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const map = /<script type="importmap">([\s\S]*?)<\/script>/.exec(body)[1];
   assert.deepEqual(JSON.parse(map), { imports: { '@tinylap/timing': '/pkg/timing/index.js' } });
   const hash = createHash('sha256').update(map).digest('base64');
-  assert.match(res.headers.get('content-security-policy'), new RegExp(`script-src 'self' 'sha256-${hash.replace(/[+/=]/g, (c) => `\\${c}`)}'`));
+  assert.match(res.headers.get('content-security-policy'), new RegExp(`script-src 'self' '[^']+' 'sha256-${hash.replace(/[+/=]/g, (c) => `\\${c}`)}'`));
   assert.match(body, /<script type="module" src="\/public\/bridge-page.js"><\/script>/);
 });

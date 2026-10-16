@@ -11,6 +11,7 @@ import { PAGE_CSP } from '../server/app.js';
 import { createRecoveryCodes } from '../server/recovery.js';
 import { createClub, createInvite, createPersonalWorkspace, redeemInvite, setRole } from '../server/workspaces.js';
 import { createTestUser, Jar, navigate, startAccounts, testSession } from './helpers.js';
+import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
 let accounts;
@@ -225,7 +226,7 @@ describe('pages', () => {
     assert.equal(res.status, status);
     assert.equal(res.headers.get('content-security-policy'), PAGE_CSP);
     const text = await res.text();
-    assert.doesNotMatch(text, /<script(?![^>]*\bsrc=)/, 'no inline script');
+    assert.doesNotMatch(text.replace(SPECULATION_RULES, ''), /<script(?![^>]*\bsrc=)/, 'no inline script but the speculation rules');
     assert.doesNotMatch(text, /<style|\sstyle=/, 'no inline style');
     return text;
   }

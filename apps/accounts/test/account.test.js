@@ -15,6 +15,7 @@ import { PAGE_CSP } from '../server/app.js';
 import { createRecoveryCodes } from '../server/recovery.js';
 import { createClub, createPersonalWorkspace, createInvite } from '../server/workspaces.js';
 import { createTestUser, driveAuthorize, Jar, navigate, startAccounts, testSession } from './helpers.js';
+import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
 let accounts;
@@ -327,7 +328,7 @@ describe('pages', () => {
     assert.equal(res.headers.get('cache-control'), 'no-store');
   };
   const noInline = (html) => {
-    assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/, 'no inline script');
+    assert.doesNotMatch(html.replace(SPECULATION_RULES, ''), /<script(?![^>]*\bsrc=)[^>]*>/, 'no inline script but the speculation rules');
     assert.doesNotMatch(html, /<style|style="/, 'no inline style');
   };
 

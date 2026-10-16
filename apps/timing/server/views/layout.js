@@ -5,7 +5,8 @@
 // The shell every timing page shares (spec §4.2), modelled on accounts'
 // layout.js: palace's stylesheets, the TinyLap mark, a navbar with the
 // space's screens and the account menu, and only external scripts.
-import { html } from './html.js';
+import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
+import { html, safe } from './html.js';
 
 export const SCREENS = /** @type {const} */ ([['board', 'Board'], ['race', 'Race'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]);
 
@@ -47,6 +48,7 @@ export function layout(request, { title, body, screen = null, scripts = [], modu
 <link rel="stylesheet" href="${asset(request, 'pkg/design/design.css')}">
 <link rel="stylesheet" href="${asset(request, 'public/app.css')}">
 <link rel="icon" href="${asset(request, 'public/mark.svg')}" type="image/svg+xml">
+${safe(SPECULATION_RULES)}
 ${importMap}${scripts.map((s) => html`<script type="module" src="${asset(request, `public/${s}`)}"></script>\n`)}${modules.map((m) => html`<script type="module" src="${asset(request, m)}"></script>\n`)}${head}</head>
 <body${big ? html` class="big"` : null}>
 <nav class="navbar">

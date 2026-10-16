@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { isAPIError } from 'better-auth/api';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import { can, clientBucket, rateLimiter } from '@tinylap/auth';
+import { SPECULATION_HASH } from '@tinylap/design/html/speculation.js';
 import { packageRoots, within } from '../../../tools/serve-map.js';
 import { createAuth, authOptions, seedClients } from './auth.js';
 import { openDb } from './db.js';
@@ -37,7 +38,8 @@ const APP_DIR = fileURLToPath(new URL('..', import.meta.url));
 const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
 export const PAGE_CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  // Our own scripts, and the speculation rules inlined in every page's head.
+  `script-src 'self' '${SPECULATION_HASH}'`,
   "style-src 'self'",
   "img-src 'self' data:",
   "object-src 'none'",
