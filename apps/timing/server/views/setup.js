@@ -6,7 +6,7 @@
 // and the watchers link, each its own card-static section and forms.
 import { formatAgo } from '../../public/format.js';
 import { html } from './html.js';
-import { errorSummary, selectField, textField } from './form-parts.js';
+import { copyable, errorSummary, selectField, textField } from './form-parts.js';
 import { layout } from './layout.js';
 
 const DIRECTIONS = [{ value: 'ccw', label: 'Anticlockwise' }, { value: 'cw', label: 'Clockwise' }];
@@ -83,8 +83,9 @@ function decodersSection(request, m) {
   <h2 class="h3" id="decoders-title">Decoders</h2>
   ${m.paired ? html`<div class="status status-info" role="status">
     <p>${m.paired.name} is paired. Its token is shown only this once:</p>
-    <p><code class="token">${m.paired.token}</code></p>
-    <p>Decoder id: <code class="token-id">${m.paired.id}</code></p>
+    ${copyable(html`<code class="token">${m.paired.token}</code>`)}
+    <p>Decoder id:</p>
+    ${copyable(html`<code class="token token-id">${m.paired.id}</code>`)}
     <p>Put both on the decoder now.</p>
   </div>` : null}
   ${m.decoders.length ? html`<ul class="setup-list">${m.decoders.map((d) => html`<li class="setup-row">
@@ -108,7 +109,7 @@ function watchersSection(request, m) {
   return html`<section class="card-static stack-md" id="watchers" aria-labelledby="watchers-title">
   <h2 class="h3" id="watchers-title">Watchers link</h2>
   <p>Anyone with this link sees the board, read-only, without signing in.</p>
-  ${link ? html`${textField({ id: 'watch-link', label: 'Watchers link', name: 'link', value: link, readonly: true })}
+  ${link ? html`${textField({ id: 'watch-link', label: 'Watchers link', name: 'link', value: link, readonly: true, copy: true })}
   <p><a class="btn btn-outline" href="${base}/watch-link/new">Make a new watchers link</a></p>` : html`<form method="post" action="${base}/watch-link">
     <button type="submit" class="btn btn-primary">Make a watchers link</button>
   </form>`}

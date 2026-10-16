@@ -24,7 +24,7 @@ test('safe() passes trusted markup through', () => {
   assert.equal(safe('<i>').text, '<i>');
 });
 
-import { textField } from '../server/views/form-parts.js';
+import { copyable, textField } from '../server/views/form-parts.js';
 import { clockOf } from '../server/views/board.js';
 
 test('fields escape their values and mark their errors', () => {
@@ -44,4 +44,17 @@ test('the clock for each state, on the server', () => {
   assert.deepEqual(clockOf({ ...race, state: 'finishing' }, 400_000), { label: 'Last lap', ms: 0 });
   assert.deepEqual(clockOf({ ...race, state: 'aborted' }, 400_000), { label: 'Aborted', ms: 0 });
   assert.deepEqual(clockOf({ ...race, state: 'done' }, 400_000), { label: 'Finished', ms: 0 });
+});
+
+test('a copyable value: the Copy button and its hint are hidden until tl-copy shows them', () => {
+  const out = String(copyable(html`<code class="token">abc</code>`));
+  assert.match(out, /^<tl-copy class="copy"><code class="token">abc<\/code>/);
+  assert.match(out, /<button type="button" class="btn btn-outline" hidden>Copy<\/button>/);
+  assert.match(out, /<span class="visually-hidden" role="status"><\/span>/);
+  assert.match(out, /<p class="field-hint copy-hint" hidden>Select it and copy it yourself\.<\/p>/);
+});
+
+test('a copyable field wraps its input, not its label', () => {
+  const out = String(textField({ id: 'w', label: 'Link', name: 'link', value: 'https://x', readonly: true, copy: true }));
+  assert.match(out, /<label for="w">Link<\/label>\s*<tl-copy class="copy"><input type="text" id="w"[^>]*readonly>/);
 });
