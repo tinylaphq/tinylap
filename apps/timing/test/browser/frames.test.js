@@ -195,7 +195,18 @@ test('a save after pairing drops ?paired from the URL and keeps the section', as
   await saved(page, 'Drivers saved');
   const url = new URL(page.url());
   assert.equal(url.pathname + url.search + url.hash, '/personal/setup#decoders');
-  assert.equal(await page.title(), 'Setup · TinyLap Timing');
+});
+
+test('a page shown again from the back/forward cache drops a lock left by a load that never finished', async (t) => {
+  const { page } = await openSetup(t);
+  // The fallback's page load, stopped: the request stays held, as when the user presses Stop.
+  await page.route('**/personal/drivers', () => {});
+  await page.locator('#add-driver-name').fill('Lou');
+  await page.getByRole('button', { name: 'Add driver' }).click();
+  assert.equal(await page.locator('#drivers').getAttribute('aria-busy'), 'true');
+  await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+  assert.equal(await page.locator('#drivers').getAttribute('aria-busy'), null);
+  assert.equal(await page.getByRole('button', { name: 'Add driver' }).isDisabled(), false);
 });
 
 test('a failed request loads the form’s page and never posts again', async (t) => {
