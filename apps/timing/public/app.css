@@ -334,12 +334,16 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .status-info p { font-weight: 400; margin: 0; }
 .status-info p + p { margin-top: var(--p-space-xs); }
 .status .token { margin: 0; }
-/* A value and its Copy button (tl-copy): one row, the button as tall as the
-   value, wrapping under it when the row is too narrow; the hint on its own line. */
-.copy { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); align-items: stretch; }
-.copy > .token, .copy > input { flex: 1 1 16rem; min-width: 0; margin: 0; }
-.copy > .btn { margin: 0; flex: none; }
-.copy > .copy-hint { flex-basis: 100%; margin: 0; }
+/* A value and its Copy button (tl-copy): the button stays beside what it
+   copies, even on a phone, where a long token wraps instead; one-line values
+   and the button share the inline-form height. The hint takes its own line. */
+.copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-sm); align-items: start; }
+.copy > .token, .copy > input, .copy > .btn { box-sizing: border-box; min-height: 3rem; margin: 0; }
+.copy > input { height: 3rem; }
+.copy > .copy-hint { grid-column: 1 / -1; margin: 0; }
+/* A line that introduces a copyable value sits with it; the next line keeps its distance. */
+.status > p + .copy { margin-top: var(--p-space-xs); }
+.status > .copy + p { margin-top: var(--p-space-md); }
 .decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
 .decoder-info .meta { margin: 0; }
 @media (max-width: 520px) {
