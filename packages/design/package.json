@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "description": "The TinyLap design layer on top of palace-ui.",
   "license": "MPL-2.0",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tinylaphq/tinylap.git",
@@ -10,17 +11,20 @@
   },
   "style": "design.css",
   "exports": {
-    "./design.css": "./design.css"
+    "./design.css": "./design.css",
+    "./elements/*": "./elements/*"
   },
   "files": [
-    "design.css"
+    "design.css",
+    "elements"
   ],
   "dependencies": {
     "palace-ui": "^0.10.0"
   },
   "scripts": {
-    "test": "node -e \"process.exit(/--tl-track-mat:/.test(require('fs').readFileSync('design.css','utf8'))?0:1)\"",
-    "lint": "true",
+    "test": "node --test 'test/*.test.js'",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
     "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSES/MPL-2.0.txt', 'LICENSE')\""
   }
 }

@@ -22,3 +22,11 @@
   --tl-track-grid: #1f1f1f;
   --tl-track-wall: var(--p-surface);
 }
+
+/* Custom elements are inline by default; a frame holds a card. */
+tl-frame { display: block; }
+
+/* palace's `button, .btn { display: inline-block }` beats the browser's
+ * [hidden], so a hidden control would still show. Belongs upstream in
+ * palace-ui; drop this once palace ships it. */
+[hidden] { display: none !important; }
