@@ -17,3 +17,9 @@ test('a frame is a block, and a hidden control stays hidden', () => {
   assert.match(css, /tl-frame \{ display: block; \}/);
   assert.match(css, /\[hidden\] \{ display: none !important; \}/);
 });
+
+test('page loads cross-fade with the navbar held still, and not for reduced motion', () => {
+  assert.match(css, /@view-transition \{ navigation: auto; \}/);
+  assert.match(css, /\.navbar \{ view-transition-name: navbar; \}/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*@view-transition \{ navigation: none; \}/);
+});
