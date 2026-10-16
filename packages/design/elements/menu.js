@@ -14,6 +14,9 @@
 // - leaving the page closes it, so Back never shows it open.
 // The document listeners exist only while it is open.
 
+/** Whether `el` is rendered; checkVisibility where the browser has it (Safari 17.4+). @param {Element} el */
+const shown = (el) => el.checkVisibility?.() ?? el.getClientRects().length > 0;
+
 class TlMenu extends HTMLElement {
   /** The menu's <details>, looked up each time, so markup filled in or replaced later works. */
   get details() { return this.querySelector('details'); }
@@ -57,7 +60,7 @@ class TlMenu extends HTMLElement {
     const details = this.details;
     // A menu hidden while open (an app hiding its account control) closes,
     // and leaves the page's keys and presses alone.
-    if ((event.type === 'keydown' || event.type === 'pointerdown') && details?.open && !this.checkVisibility()) {
+    if ((event.type === 'keydown' || event.type === 'pointerdown') && details?.open && !shown(this)) {
       this.close();
       return;
     }

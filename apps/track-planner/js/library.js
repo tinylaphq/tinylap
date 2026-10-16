@@ -598,7 +598,7 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
   // or to Save if the account control has gone (signed out meanwhile).
   dialog.addEventListener('close', () => {
     const menu = /** @type {any} */ (doc.querySelector('#account tl-menu'));
-    if (menu?.checkVisibility()) menu.close({ focus: true });
+    if (menu && (menu.checkVisibility?.() ?? menu.getClientRects().length > 0)) menu.close({ focus: true });
     else /** @type {HTMLElement | null} */ (doc.querySelector('#btn-save'))?.focus();
   });
   menuItem.addEventListener('click', () => {
