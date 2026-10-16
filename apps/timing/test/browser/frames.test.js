@@ -108,7 +108,10 @@ test('pairing loads the page; a later swap keeps the one-time token; Copy copies
   const { page, context, posts, loads } = await openSetup(t);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.locator('#pair-name').fill('Finish');
+  // The token shows before the load event fires; wait for the load itself.
+  const loaded = page.waitForEvent('load');
   await page.getByRole('button', { name: 'Pair over Wi-Fi only' }).click();
+  await loaded;
   await page.locator('code.token').first().waitFor();
   assert.equal(loads(), 1, 'pairing is a normal page load');
   const token = await page.locator('code.token').first().innerText();
