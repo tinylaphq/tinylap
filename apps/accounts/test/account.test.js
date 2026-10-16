@@ -331,6 +331,18 @@ describe('pages', () => {
     assert.doesNotMatch(html, /<style|style="/, 'no inline style');
   };
 
+  test('/ is the account page: signed in it goes there, signed out to sign-in and then there', async () => {
+    const out = await page('/');
+    assert.equal(out.status, 303);
+    assert.equal(out.headers.get('location'), '/sign-in?next=%2Faccount');
+    assert.equal(out.headers.get('cache-control'), 'no-store', 'it depends on the session, so nothing may keep it');
+    const p = await person('Root');
+    const signedIn = await page('/', p.jar);
+    assert.equal(signedIn.status, 303);
+    assert.equal(signedIn.headers.get('location'), '/account');
+    assert.equal(signedIn.headers.get('cache-control'), 'no-store');
+  });
+
   test('/account signed out goes to sign-in and back', async () => {
     const res = await page('/account');
     assert.equal(res.status, 303);
