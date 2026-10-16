@@ -123,10 +123,12 @@ test('pairing loads the page; a later swap keeps the one-time token; Copy copies
   assert.deepEqual(posts, ['/personal/decoders', '/personal/drivers']);
 });
 
-test('the watchers link copies too', async (t) => {
-  await app.form(owner, '/personal/watch-link', {});
-  const { page, context } = await openSetup(t);
+test('a watchers link made in place copies too: tl-copy works after a swap', async (t) => {
+  const { page, context, loads } = await openSetup(t);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: 'Make a watchers link' }).click();
+  await saved(page, 'Watchers link saved');
+  assert.equal(loads(), 0);
   const copy = page.locator('#watchers tl-copy');
   await copy.getByRole('button', { name: 'Copy' }).click();
   await copy.getByRole('status').filter({ hasText: 'Copied' }).waitFor({ state: 'attached' });
@@ -143,10 +145,57 @@ test('submits while one is in flight are dropped, in the same frame and in anoth
     add.requestSubmit();
     assign.requestSubmit();
   });
-  await saved(page, 'Drivers saved');
-  await page.waitForTimeout(300);
+  await page.waitForLoadState('networkidle');
   assert.deepEqual(posts, ['/personal/drivers']);
   assert.equal(loads(), 0);
+  await saved(page, 'Drivers saved');
+});
+
+test('while a save is in flight its buttons are disabled, and another card says it is still saving', async (t) => {
+  const { page, posts } = await openSetup(t);
+  let release;
+  const held = new Promise((done) => { release = done; });
+  await page.route('**/personal/drivers', async (route) => { await held; await route.continue(); });
+  await page.locator('#add-driver-name').fill('Ivy');
+  await page.getByRole('button', { name: 'Add driver' }).click();
+  assert.equal(await page.getByRole('button', { name: 'Add driver' }).isDisabled(), true);
+  assert.equal(await page.locator('#drivers').getAttribute('aria-busy'), 'true');
+  await page.locator('#transponder-0A').locator('xpath=ancestor::form').getByRole('button', { name: 'Assign' }).click();
+  await saved(page, 'Still saving. Try again in a moment.');
+  release();
+  await saved(page, 'Drivers saved');
+  assert.deepEqual(posts, ['/personal/drivers']);
+});
+
+for (const [what, reply] of [
+  ['a response that is not a page', { status: 200, contentType: 'text/plain', body: 'ok' }],
+  ['a page without the frame', { status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>Other</title><p>Something else' }],
+]) {
+  test(`${what} loads the form’s page and never posts again`, async (t) => {
+    const { page, posts, loads } = await openSetup(t);
+    await page.route('**/personal/drivers', (route) => (route.request().method() === 'POST' ? route.fulfill(reply) : route.continue()));
+    await page.locator('#add-driver-name').fill('Jo');
+    const loaded = page.waitForEvent('load');
+    await page.getByRole('button', { name: 'Add driver' }).click();
+    await loaded;
+    assert.equal(new URL(page.url()).pathname, '/personal/setup');
+    assert.equal(loads(), 1);
+    assert.deepEqual(posts, ['/personal/drivers']);
+  });
+}
+
+test('a save after pairing drops ?paired from the URL and keeps the section', async (t) => {
+  const { page } = await openSetup(t);
+  await page.locator('#pair-name').fill('Lap line');
+  await page.getByRole('button', { name: 'Pair over Wi-Fi only' }).click();
+  await page.locator('code.token').first().waitFor();
+  assert.match(page.url(), /\?paired=.+#decoders$/);
+  await page.locator('#add-driver-name').fill('Kim');
+  await page.getByRole('button', { name: 'Add driver' }).click();
+  await saved(page, 'Drivers saved');
+  const url = new URL(page.url());
+  assert.equal(url.pathname + url.search + url.hash, '/personal/setup#decoders');
+  assert.equal(await page.title(), 'Setup · TinyLap Timing');
 });
 
 test('a failed request loads the form’s page and never posts again', async (t) => {
