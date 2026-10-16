@@ -278,8 +278,15 @@ export async function createAccounts(config) {
     return json(req, res, 200, readDeletions(db, Number(after)));
   }
 
-  /** The signed-in pages: /clubs, /clubs/:id, /invite/:token, /account. Null if none of them. */
+  /** The signed-in pages: /, /clubs, /clubs/:id, /invite/:token, /account. Null if none of them. */
   function page(req, res, pathname, session) {
+    // The site's address is the account page, as account sites do: there
+    // when signed in, else through sign-in. It depends on the session, so
+    // it is a 303 nothing may keep.
+    if (pathname === '/') {
+      if (!session) return toSignIn(req, res, '/account');
+      return send(req, res, 303, { Location: '/account', 'Cache-Control': 'no-store' }, '');
+    }
     if (pathname === '/account') {
       if (!session) return toSignIn(req, res, pathname);
       const { id } = session.user;
