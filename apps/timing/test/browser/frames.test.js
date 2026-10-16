@@ -151,7 +151,7 @@ test('submits while one is in flight are dropped, in the same frame and in anoth
   await saved(page, 'Drivers saved');
 });
 
-test('while a save is in flight its buttons are disabled, and another card says it is still saving', async (t) => {
+test('while a save is in flight every card’s buttons are disabled, and a submit anyway says it is still saving', async (t) => {
   const { page, posts } = await openSetup(t);
   let release;
   const held = new Promise((done) => { release = done; });
@@ -160,10 +160,15 @@ test('while a save is in flight its buttons are disabled, and another card says 
   await page.getByRole('button', { name: 'Add driver' }).click();
   assert.equal(await page.getByRole('button', { name: 'Add driver' }).isDisabled(), true);
   assert.equal(await page.locator('#drivers').getAttribute('aria-busy'), 'true');
-  await page.locator('#transponder-0A').locator('xpath=ancestor::form').getByRole('button', { name: 'Assign' }).click();
+  const assign = page.locator('#transponder-0A').locator('xpath=ancestor::form');
+  assert.equal(await assign.getByRole('button', { name: 'Assign' }).isDisabled(), true, 'another card shows it can’t save yet');
+  assert.equal(await page.getByRole('button', { name: 'Use this track' }).isDisabled(), true);
+  await assign.evaluate((form) => /** @type {HTMLFormElement} */ (form).requestSubmit());
   await saved(page, 'Still saving. Try again in a moment.');
   release();
   await saved(page, 'Drivers saved');
+  assert.equal(await assign.getByRole('button', { name: 'Assign' }).isDisabled(), false, 'and every button comes back');
+  assert.equal(await page.getByRole('button', { name: 'Use this track' }).isDisabled(), false);
   assert.deepEqual(posts, ['/personal/drivers']);
 });
 

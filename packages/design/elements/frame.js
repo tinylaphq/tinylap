@@ -15,18 +15,29 @@ const TIMEOUT_MS = 30_000;
 // flight could swap in each other's stale cards.
 let busy = false;
 
+// While a save runs, every frame's buttons are disabled, so the page shows
+// that nothing else can be saved yet. Marked, so only these come back.
+function holdButtons() {
+  for (const b of document.querySelectorAll('tl-frame button:enabled, tl-frame input[type="submit"]:enabled')) {
+    /** @type {HTMLButtonElement} */ (b).disabled = true;
+    b.setAttribute('data-frame-disabled', '');
+  }
+}
+
+function releaseButtons() {
+  for (const b of document.querySelectorAll('[data-frame-disabled]')) {
+    /** @type {HTMLButtonElement} */ (b).disabled = false;
+    b.removeAttribute('data-frame-disabled');
+  }
+}
+
 // A page the back/forward cache brings back, after a fallback load or one
 // the user stopped, starts over: no submit in flight, every button live.
 addEventListener('pageshow', (event) => {
   if (!event.persisted) return;
   busy = false;
-  for (const frame of document.querySelectorAll('tl-frame[aria-busy]')) {
-    frame.removeAttribute('aria-busy');
-    for (const b of frame.querySelectorAll('[data-frame-disabled]')) {
-      /** @type {HTMLButtonElement} */ (b).disabled = false;
-      b.removeAttribute('data-frame-disabled');
-    }
-  }
+  for (const frame of document.querySelectorAll('tl-frame[aria-busy]')) frame.removeAttribute('aria-busy');
+  releaseButtons();
 });
 
 /** @param {Element | null} el */
@@ -95,11 +106,7 @@ class TlFrame extends HTMLElement {
       const body = new URLSearchParams(/** @type {any} */ (new FormData(form, submitter)));
       const fieldId = firstFieldId(form);
       this.setAttribute('aria-busy', 'true');
-      // Marked, so a page restored from the cache re-enables only these.
-      for (const b of form.querySelectorAll('button:enabled, input[type="submit"]:enabled')) {
-        /** @type {HTMLButtonElement} */ (b).disabled = true;
-        b.setAttribute('data-frame-disabled', '');
-      }
+      holdButtons();
       const res = await fetch(action, { method: 'POST', body, redirect: 'follow', headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
       if (!(res.headers.get('content-type') ?? '').startsWith('text/html')) throw new Error(`not a page: ${res.status}`);
       const page = new DOMParser().parseFromString(await res.text(), 'text/html');
@@ -118,6 +125,7 @@ class TlFrame extends HTMLElement {
   swap(page, next, res, fieldId) {
     this.replaceChildren(...next.childNodes);
     this.removeAttribute('aria-busy');
+    releaseButtons();
     for (const id of (this.getAttribute('refreshes') ?? '').split(/\s+/).filter(Boolean)) {
       const mine = document.getElementById(id);
       const theirs = page.getElementById(id);
