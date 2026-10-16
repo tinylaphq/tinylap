@@ -20,7 +20,9 @@ export async function pageAs(browser, app, who, { viewport = { width: 1280, heig
   }
   const page = await context.newPage();
   const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  // Chrome reports a cross-fade it gave up on as a page error, though the
+  // page is fine: the navigation simply happens without it.
+  page.on('pageerror', (error) => { if (!/ViewTransition opt-in disabled/.test(error.message)) errors.push(error.message); });
   page.on('console', (message) => {
     if (message.type() === 'error' && !/status of 40[134]/.test(message.text())) errors.push(message.text());
   });
