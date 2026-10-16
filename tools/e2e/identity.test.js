@@ -103,8 +103,8 @@ const pieceCount = async (/** @type {import('playwright-core').Page} */ page) =>
 
 /** @param {import('playwright-core').Page} page */
 async function openLibrary(page) {
-  await page.locator('#btn-account').click();
-  await page.getByRole('menuitem', { name: 'Library' }).click();
+  await page.locator('#account summary').click();
+  await page.locator('#account').getByRole('button', { name: 'Library' }).click();
   const dialog = page.locator('#library-dialog');
   await dialog.locator('.library-ws').first().waitFor();
   return dialog;
@@ -136,13 +136,13 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   await a.locator('#presets-list button[data-preset-id]').first().click();
   await a.waitForFunction(() => JSON.parse(sessionStorage.getItem('circuit30.layout') ?? '{"pieces":[]}').pieces.length > 0);
   const drawn = await canvasLayout(a);
-  await a.locator('#btn-login').click();
+  await a.locator('#account .nav-sign-in').click();
   await a.waitForURL(`${planner.suite.issuer}/sign-in?**`);
   await a.getByRole('link', { name: 'Create an account' }).click();
   await signUpHere(a, 'Alice');
   await a.waitForURL(`${planner.base}/`);
-  await a.locator('#btn-account').waitFor();
-  assert.equal(await a.locator('#btn-account').textContent(), 'Alice');
+  await a.locator('#account summary').waitFor();
+  assert.equal(await a.locator('#account .nav-account-name').textContent(), 'Alice');
   assert.equal(await canvasLayout(a), drawn, 'the canvas survived the round trip unchanged');
 
   // 2. A closed layout saved to her library, then a second version of it.
@@ -189,9 +189,9 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   await b.waitForURL(new RegExp(`/clubs/${clubId}$`));
   await b.locator('#members li', { hasText: 'Bob' }).getByText('Member').waitFor();
   await b.goto('/');
-  await b.locator('#btn-login').click();
-  await b.locator('#btn-account').waitFor();
-  assert.equal(await b.locator('#btn-account').textContent(), 'Bob');
+  await b.locator('#account .nav-sign-in').click();
+  await b.locator('#account summary').waitFor();
+  assert.equal(await b.locator('#account .nav-account-name').textContent(), 'Bob');
 
   // 5. Alice copies Monza to the club. Bob sees it there, without Delete,
   //    and the server refuses his delete too.
@@ -231,7 +231,7 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   const key = link.split('/').pop();
   assert.equal((await stranger.page.goto(link))?.status(), 200, 'the public page');
   await stranger.page.locator(`a[href="/?layout=${key}"]`).first().click();
-  await stranger.page.locator('#btn-login').waitFor();
+  await stranger.page.locator('#account .nav-sign-in').waitFor();
   await stranger.page.waitForFunction((n) => JSON.parse(sessionStorage.getItem('circuit30.layout') ?? '{"pieces":[]}').pieces.length === n, pieces);
   await stranger.context.close();
 
@@ -266,30 +266,30 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   assert.ok(droppedAfter < (TTL + 5) * 1000, `the club dropped ${droppedAfter} ms after the removal`);
   t.diagnostic(`step 7: club listed ${listedAfterRemoval} times after the removal; dropped ${droppedAfter} ms after it`);
   await b.reload();
-  await b.locator('#btn-account').waitFor();
-  assert.equal(await b.locator('#btn-account').textContent(), 'Bob', 'still logged in, no new login');
+  await b.locator('#account summary').waitFor();
+  assert.equal(await b.locator('#account .nav-account-name').textContent(), 'Bob', 'still logged in, no new login');
   await openLibrary(b);
   assert.equal(await clubSection(b).count(), 0, 'the dialog has no club section');
   await closeLibrary(b);
 
-  // 8. Bob logs out. "Log in" asks for a passkey again: no silent login.
-  await b.locator('#btn-account').click();
-  await b.getByRole('menuitem', { name: 'Log out' }).click();
+  // 8. Bob signs out. "Sign in" asks for a passkey again: no silent login.
+  await b.locator('#account summary').click();
+  await b.locator('#account').getByRole('button', { name: 'Sign out' }).click();
   await b.waitForURL(`${planner.base}/`);
-  await b.locator('#btn-login').waitFor();
+  await b.locator('#account .nav-sign-in').waitFor();
   assert.equal(accountsSessions(userId('Bob')), 0, 'the accounts session ended too');
-  await b.locator('#btn-login').click();
+  await b.locator('#account .nav-sign-in').click();
   await b.waitForURL(`${planner.suite.issuer}/sign-in?**`);
   await b.getByRole('button', { name: 'Sign in with a passkey' }).click();
   await b.waitForURL(`${planner.base}/`);
-  await b.locator('#btn-account').waitFor();
-  assert.equal(await b.locator('#btn-account').textContent(), 'Bob');
+  await b.locator('#account summary').waitFor();
+  assert.equal(await b.locator('#account .nav-account-name').textContent(), 'Bob');
 
   // 9. Bob deletes his account (his passkey sign-in just now is fresh).
   //    After a feed poll, his planner sessions are gone.
   const bobId = userId('Bob');
-  await b.locator('#btn-account').click();
-  await b.getByRole('menuitem', { name: 'Account' }).click();
+  await b.locator('#account summary').click();
+  await b.locator('#account').getByRole('link', { name: 'Account' }).click();
   await b.waitForURL(`${planner.suite.issuer}/account`);
   await b.getByRole('button', { name: 'Delete account' }).click();
   const dialog = b.locator('#delete-dialog');
@@ -302,11 +302,11 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   assert.ok(polled.processed >= 1, 'the feed had his deletion');
   assert.equal(plannerSessions(bobId), 0, 'his planner sessions are gone');
   await b.goto('/');
-  await b.locator('#btn-login').waitFor();
+  await b.locator('#account .nav-sign-in').waitFor();
 
   // Alice is untouched by all of it.
   await a.goto('/');
-  await a.locator('#btn-account').waitFor();
+  await a.locator('#account summary').waitFor();
   assert.ok((await libraryJson(a)).body.workspaces.some((w) => w.id === clubId));
 });
 
@@ -317,11 +317,11 @@ test('logging out of the planner as one user does not sign another out of accoun
   // session: Dave must stay signed in, and is asked instead.
   const { context, page } = await device(t);
   await page.goto('/');
-  await page.locator('#btn-login').click();
+  await page.locator('#account .nav-sign-in').click();
   await page.getByRole('link', { name: 'Create an account' }).click();
   await signUpHere(page, 'Carol');
-  await page.locator('#btn-account').waitFor();
-  assert.equal(await page.locator('#btn-account').textContent(), 'Carol');
+  await page.locator('#account summary').waitFor();
+  assert.equal(await page.locator('#account .nav-account-name').textContent(), 'Carol');
 
   await context.clearCookies({ domain: 'localhost' });
   await page.goto(`${planner.suite.issuer}/sign-up`);
@@ -331,14 +331,14 @@ test('logging out of the planner as one user does not sign another out of accoun
   assert.equal(accountsSessions(dave), 1);
 
   await page.goto('/');
-  await page.locator('#btn-account').waitFor();
-  assert.equal(await page.locator('#btn-account').textContent(), 'Carol');
-  await page.locator('#btn-account').click();
-  await page.getByRole('menuitem', { name: 'Log out' }).click();
+  await page.locator('#account summary').waitFor();
+  assert.equal(await page.locator('#account .nav-account-name').textContent(), 'Carol');
+  await page.locator('#account summary').click();
+  await page.locator('#account').getByRole('button', { name: 'Sign out' }).click();
   await page.getByText('You are still signed in as Dave.').waitFor();
   assert.equal(accountsSessions(dave), 1, `Dave is still signed in to accounts (ended on ${page.url()})`);
   assert.equal(page.url(), `${planner.suite.issuer}/signed-out`, 'asked at accounts, not sent back to the planner');
   // The planner session is gone either way.
   await page.goto('/');
-  await page.locator('#btn-login').waitFor();
+  await page.locator('#account .nav-sign-in').waitFor();
 });
