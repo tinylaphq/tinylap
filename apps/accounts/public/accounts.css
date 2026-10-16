@@ -9,17 +9,12 @@
  * indicator, the recovery code sheet and a checkbox row. Every value is a
  * --p-* token; no radius, no blurred shadows, transitions 0.1s. */
 
-.accounts-brand {
-  gap: var(--p-space-sm);
+/* The shared lockup (@tinylap/design) sets its gap and mark size; here its place on the page. */
+.accounts > .brand-lockup {
   margin-bottom: var(--p-space-lg);
 }
 
-.accounts-brand img {
-  width: 32px;
-  height: 32px;
-}
-
-.accounts-brand .brand {
+.accounts > .brand-lockup .brand {
   color: var(--p-text);
 }
 
