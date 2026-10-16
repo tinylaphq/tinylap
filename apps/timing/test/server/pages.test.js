@@ -64,6 +64,9 @@ test('signed out, / is the start page with Sign in', async () => {
   const body = await res.text();
   assert.match(body, /<title>TinyLap Timing<\/title>/);
   assert.match(body, /href="\/auth\/login\?returnTo=%2F">Sign in</);
+  assert.match(body, /<a class="btn btn-sm btn-outline nav-sign-in" href="\/auth\/login\?returnTo=%2F">Sign in<\/a>/, 'the shared Sign in');
+  assert.match(body, /<p class="brand-lockup"><img src="\/pkg\/design\/mark.svg" alt="" width="32" height="32"><span class="brand">TinyLap Timing<\/span><\/p>/);
+  assert.doesNotMatch(body, /menu\.js|tl-menu/, 'no menu signed out');
   assert.doesNotMatch(body, /workspace/i);
 });
 
@@ -133,19 +136,22 @@ test('a role that may not, or a form from elsewhere: the forbidden page', async 
   assert.equal((await app.api(anaLogin, 'POST', `/clubs/${office.id}/probe`, undefined, { 'content-type': 'application/x-www-form-urlencoded' })).status, 200);
 });
 
-test('the navbar: brand, screens, and the account menu with your spaces and Sign out', async () => {
+test('the navbar: brand, screens, and the shared account menu with your clubs and Sign out', async () => {
   const body = await (await get(anaLogin, `/clubs/${office.id}/probe`)).text();
   assert.match(body, /<a class="navbar-brand" href="\/">/);
   for (const [path, label] of [['board', 'Board'], ['race', 'Race'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]) {
     assert.match(body, new RegExp(`href="/clubs/${office.id}/${path}"[^>]*>${label}</a>`));
   }
-  assert.match(body, /<details class="nav-account">\s*<summary[^>]*>Ana &lt;b&gt;<\/summary>/);
+  assert.match(body, /<tl-menu class="nav-account">\s*<details name="tl-account">\s*<summary><span class="visually-hidden">Account: <\/span><span class="nav-account-name">Ana &lt;b&gt;<\/span><\/summary>/);
+  assert.match(body, /<ul aria-label="Your clubs">/);
   assert.match(body, /href="\/personal\/board"[^>]*>Personal<\/a>/);
   assert.match(body, new RegExp(`href="/clubs/${office.id}/board" aria-current="true"[^>]*>Office &amp; Co</a>`));
   assert.match(body, /<form method="post" action="\/auth\/logout">\s*<button[^>]*>Sign out<\/button>/);
   assert.match(body, /<link rel="stylesheet" href="\/pkg\/palace-ui\/palace.css">/);
-  assert.match(body, /<link rel="icon" href="\/public\/mark.svg"/);
-  assert.doesNotMatch(body.replace(SPECULATION_RULES, ''), /<script/, 'no script but the speculation rules');
+  assert.match(body, /<link rel="icon" href="\/pkg\/design\/mark.svg"/);
+  assert.match(body, /<img src="\/pkg\/design\/mark.svg" alt="" width="24" height="24"> TinyLap Timing<\/a>/);
+  const scripts = body.replace(SPECULATION_RULES, '').match(/<script[^>]*>/g) ?? [];
+  assert.deepEqual(scripts, ['<script type="module" src="/pkg/design/elements/menu.js">'], 'only the menu, and the speculation rules');
 });
 
 test('in production every asset is under /v/<build>/', async () => {

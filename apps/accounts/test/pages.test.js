@@ -102,7 +102,7 @@ describe('pages', () => {
       assert.match(res.headers.get('content-type'), /^text\/javascript/);
     }
     assert.equal((await fetch(`${accounts.issuer}/public/accounts.css`)).status, 200);
-    assert.equal((await fetch(`${accounts.issuer}/public/mark.svg`)).headers.get('content-type'), 'image/svg+xml');
+    assert.equal((await fetch(`${accounts.issuer}/pkg/design/mark.svg`)).headers.get('content-type'), 'image/svg+xml', 'the shared mark');
   });
 
   test('the error page is a TinyLap page', async () => {

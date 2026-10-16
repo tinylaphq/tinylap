@@ -2,11 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The navbar's account control: "Log in" when logged out, the display name
-// opening a menu (Library, Account, Log out) when logged in, nothing when
-// the server has log-in turned off. Logging in is a plain navigation, so
-// the canvas survives through sessionStorage (session-store.js saves it on
-// pagehide). Logging out is a same-origin form POST, never a script call.
+// The navbar's account control, the shared one from @tinylap/design written
+// into index.html: "Sign in" when signed out, the display name opening the
+// menu (Library, Account, Sign out; tl-menu does the opening and closing)
+// when signed in, nothing when the server has sign-in turned off. This only
+// shows, hides and fills in that markup. Signing in is a plain navigation,
+// so the canvas survives through sessionStorage (session-store.js saves it
+// on pagehide). Signing out is a same-origin form POST, never a script call.
 
 /** @typedef {{ state: 'off' } | { state: 'out' } | { state: 'down' } | { state: 'in', name: string, accountUrl: string }} AccountView */
 
@@ -29,19 +31,21 @@ export async function loadAccount({ fetch = globalThis.fetch } = {}) {
   return { state: 'in', name: me.user?.name || 'Account', accountUrl: me.accountUrl };
 }
 
-/** Where "Log in" goes: back to this page, query included. @param {{ pathname: string, search: string }} location */
+/** Where "Sign in" goes: back to this page, query included. @param {{ pathname: string, search: string }} location */
 export const loginHref = ({ pathname, search }) => `/auth/login?${new URLSearchParams({ returnTo: pathname + search })}`;
 
-/** Shows "Log in", "unavailable" or the name for `view`. */
+/** Shows "Sign in", "unavailable" or the menu for `view`. */
 function show(/** @type {Document} */ doc, /** @type {AccountView} */ view) {
   /** @type {HTMLElement} */ (doc.querySelector('#account')).hidden = false;
-  /** @type {HTMLElement} */ (doc.querySelector('#btn-login')).hidden = view.state !== 'out';
-  /** @type {HTMLElement} */ (doc.querySelector('#account-down')).hidden = view.state !== 'down';
-  /** @type {HTMLElement} */ (doc.querySelector('#btn-account')).hidden = view.state !== 'in';
+  /** @type {HTMLElement} */ (doc.querySelector('#account .nav-sign-in')).hidden = view.state !== 'out';
+  /** @type {HTMLElement} */ (doc.querySelector('#account .account-down')).hidden = view.state !== 'down';
+  const menu = /** @type {any} */ (doc.querySelector('#account .nav-account'));
+  if (view.state !== 'in') menu.close?.();
+  menu.hidden = view.state !== 'in';
 }
 
 /**
- * Asks again who is logged in and updates the control, after the server
+ * Asks again who is signed in and updates the control, after the server
  * said the session is gone (a 401), so no stale name stays in the navbar.
  * @returns {Promise<AccountView>}
  */
@@ -53,12 +57,9 @@ export async function refreshAccount(doc = document) {
 
 /** Wires the control in the page; resolves with the state it shows. @returns {Promise<AccountView | undefined>} */
 export async function initAccount(doc = document) {
-  const root = /** @type {HTMLElement} */ (doc.querySelector('#account'));
-  const login = /** @type {HTMLAnchorElement} */ (doc.querySelector('#btn-login'));
-  const button = /** @type {HTMLButtonElement} */ (doc.querySelector('#btn-account'));
-  const down = /** @type {HTMLElement} */ (doc.querySelector('#account-down'));
-  const menu = /** @type {HTMLElement} */ (doc.querySelector('#account-menu'));
-  if (!root || !login || !button || !down || !menu) return;
+  const login = /** @type {HTMLAnchorElement | null} */ (doc.querySelector('#account .nav-sign-in'));
+  const menu = doc.querySelector('#account .nav-account');
+  if (!login || !menu || !doc.querySelector('#account .account-down')) return;
 
   const view = await loadAccount();
   if (view.state === 'off') return view;
@@ -71,30 +72,7 @@ export async function initAccount(doc = document) {
   login.addEventListener('click', refresh);
 
   if (view.state !== 'in') return view;
-  button.textContent = view.name;
-  button.setAttribute('aria-expanded', 'false');
-  /** @type {HTMLAnchorElement} */ (menu.querySelector('#menu-account')).href = view.accountUrl;
-
-  const items = () => /** @type {HTMLElement[]} */ ([...menu.querySelectorAll('[role="menuitem"]')].filter((el) => !el.closest('[hidden]')));
-
-  // Under the button, right edges aligned.
-  menu.addEventListener('toggle', (/** @type {any} */ event) => {
-    const open = event.newState === 'open';
-    button.setAttribute('aria-expanded', String(open));
-    if (!open) return;
-    const rect = button.getBoundingClientRect();
-    menu.style.top = `${rect.bottom + 6}px`;
-    menu.style.right = `${Math.max(8, doc.documentElement.clientWidth - rect.right)}px`;
-    items()[0]?.focus();
-  });
-
-  menu.addEventListener('keydown', (event) => {
-    const list = items();
-    const at = list.indexOf(/** @type {HTMLElement} */ (doc.activeElement));
-    const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: list.length - 1 }[event.key];
-    if (to === undefined) return;
-    event.preventDefault();
-    list[(to + list.length) % list.length]?.focus();
-  });
+  /** @type {HTMLElement} */ (menu.querySelector('.nav-account-name')).textContent = view.name;
+  /** @type {HTMLAnchorElement} */ (menu.querySelector('.nav-account-link')).href = view.accountUrl;
   return view;
 }

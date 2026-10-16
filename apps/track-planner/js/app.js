@@ -1348,6 +1348,8 @@ export function undo() {
 // behaviour and Task 12's select/rotate/delete/undo behaviour are merged
 // here so there is exactly one handler, not two competing ones.
 document.addEventListener('keydown', (e) => {
+  // Already handled, such as an Escape that closed the account menu.
+  if (e.defaultPrevented) return;
   if (e.target.matches('input, textarea, select')) return;
   // Minor: the input/textarea/select guard above misses an open <dialog> —
   // its own focused controls (a button, etc.) don't match that selector,

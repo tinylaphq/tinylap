@@ -593,8 +593,15 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
     }
   });
 
+  // tl-menu closes the account menu on this click; once the library closes,
+  // focus goes back to the menu's summary, not to the hidden Library item,
+  // or to Save if the account control has gone (signed out meanwhile).
+  dialog.addEventListener('close', () => {
+    const menu = /** @type {any} */ (doc.querySelector('#account tl-menu'));
+    if (menu && (menu.checkVisibility?.() ?? menu.getClientRects().length > 0)) menu.close({ focus: true });
+    else /** @type {HTMLElement | null} */ (doc.querySelector('#btn-save'))?.focus();
+  });
   menuItem.addEventListener('click', () => {
-    /** @type {any} */ (doc.querySelector('#account-menu'))?.hidePopover?.();
     panels.clear();
     histories.clear();
     fail(null);

@@ -4,7 +4,8 @@
 
 // The start page and the notices (spec §6.6): the brand lockup, a
 // card-static, and what to do next, as accounts' pages do it.
-import { html } from './html.js';
+import { brandLockup } from '@tinylap/design/html/brand.js';
+import { html, safe } from './html.js';
 import { asset, layout } from './layout.js';
 
 /** @param {any} request @param {{ title: string, heading?: string, text: string, action?: { href: string, label: string } }} content */
@@ -12,7 +13,7 @@ function notice(request, { title, heading = title, text, action }) {
   return layout(request, {
     title,
     body: html`<section class="container-narrow page-header notice">
-  <p class="brand-lockup"><img src="${asset(request, 'public/mark.svg')}" alt="" width="32" height="32"><span class="brand">TinyLap Timing</span></p>
+  ${safe(brandLockup({ name: 'TinyLap Timing', markSrc: asset(request, 'pkg/design/mark.svg') }))}
   <h1>${heading}</h1>
   <div class="card-static stack-md">
     <p>${text}</p>

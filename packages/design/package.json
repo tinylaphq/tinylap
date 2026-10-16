@@ -18,7 +18,8 @@
   "files": [
     "design.css",
     "elements",
-    "html"
+    "html",
+    "mark.svg"
   ],
   "dependencies": {
     "palace-ui": "^0.10.0"

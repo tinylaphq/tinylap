@@ -6,6 +6,7 @@
 // TinyLap mark, and one external module script. No inline scripts or styles
 // (the page CSP forbids both, except the speculation rules, allowed by hash);
 // state the scripts need travels in data-*.
+import { brandLockup } from '@tinylap/design/html/brand.js';
 import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 
 /** @param {unknown} text */
@@ -37,12 +38,12 @@ export function layout({ title, heading = title, lede = '', body, script, data =
 <link rel="stylesheet" href="/pkg/palace-ui/palace.css">
 <link rel="stylesheet" href="/pkg/design/design.css">
 <link rel="stylesheet" href="/public/accounts.css">
-<link rel="icon" href="/public/mark.svg" type="image/svg+xml">
+<link rel="icon" href="/pkg/design/mark.svg" type="image/svg+xml">
 ${SPECULATION_RULES}
 ${script ? `<script type="module" src="/public/${script}"></script>\n` : ''}</head>
 <body${attrs}>
 <main class="${wide ? 'container accounts-wide' : 'container-narrow'} page-header accounts">
-<p class="brand-lockup accounts-brand"><img src="/public/mark.svg" alt="" width="32" height="32"><span class="brand">TinyLap</span></p>
+${brandLockup({ name: 'TinyLap', markSrc: '/pkg/design/mark.svg' })}
 <h1>${escapeHtml(heading)}</h1>
 ${lede ? `<p class="subtitle">${lede}</p>\n` : ''}${body}
 </main>
