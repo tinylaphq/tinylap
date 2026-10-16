@@ -140,7 +140,7 @@ That is better than no-JS, which returns to `/`. Do not "fix" this with `redirec
 ```html
 <tl-copy class="copy">
   <code class="token">…</code>
-  <button type="button" class="btn btn-sm btn-outline" hidden>Copy</button>
+  <button type="button" class="btn btn-outline" hidden>Copy</button>
   <p class="hint" hidden>Select it and copy it yourself.</p>
 </tl-copy>
 ```
@@ -195,7 +195,7 @@ New `test/browser/frames.test.js`; `page.on('request')` counts the POSTs:
 5. After pairing over Wi-Fi (normal load), adding a driver leaves the token on screen.
 6. `requestSubmit()` twice, in a frame and across two frames, inside one `page.evaluate`: exactly one POST.
 7. Network failure on the POST only (`route.request().method() === 'POST'` aborted): a page load of the form's page, and no second POST.
-8. Expired session (`context.clearCookies()`): the page lands on accounts sign-in, and after signing in it is back on Setup.
+8. Expired session (`context.clearCookies()`): the page lands on accounts sign-in by a page load. The return to Setup after signing in needs a passkey, so the test doesn't cover it; the fallback GET carries `returnTo=<action>`, and that action redirects to Setup.
 9. `tl-copy` copies the token and the watchers link. The test context grants `clipboard-read` and `clipboard-write`.
 
 Other browser tests:

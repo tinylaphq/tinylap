@@ -79,7 +79,7 @@
 
   ```js
   /** A value with a Copy button, hidden until tl-copy finds the clipboard API (no JS: the value alone). */
-  export const copyable = (inner) => html`<tl-copy class="copy">${inner}<button type="button" class="btn btn-sm btn-outline" hidden>Copy</button><span class="visually-hidden" role="status"></span><p class="field-hint copy-hint" hidden>Select it and copy it yourself.</p></tl-copy>`;
+  export const copyable = (inner) => html`<tl-copy class="copy">${inner}<button type="button" class="btn btn-outline" hidden>Copy</button><span class="visually-hidden" role="status"></span><p class="field-hint copy-hint" hidden>Select it and copy it yourself.</p></tl-copy>`;
   ```
 
   `textField({ …, copy: true })` renders `copyable(<input …>)` in place of the bare `<input>`. The label, hint and error stay outside.
