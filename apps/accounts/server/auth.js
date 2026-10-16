@@ -7,7 +7,7 @@
 // client talks to the endpoints this configures. Option names are those of
 // better-auth and @better-auth/oauth-provider 1.7.7 (read from their types).
 import { createHash, randomBytes } from 'node:crypto';
-import { betterAuth } from 'better-auth';
+import { betterAuth, getCurrentAdapter } from 'better-auth';
 import { APIError, createAuthEndpoint, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { jwt } from 'better-auth/plugins';
@@ -161,6 +161,20 @@ function recoveryPlugin(db) {
  * @param {import('node:sqlite').DatabaseSync | null} [db]
  */
 export function authOptions(config, db = null) {
+  // One live signing key at a time. Better Auth creates a key whenever it
+  // finds no live one, without a lock, so concurrent first token issues each
+  // stored their own, and a verifier that had fetched the JWKS in between met
+  // an unknown kid. Concurrent issues may still each generate a pair; storing
+  // waits its turn and reuses a key that appeared meanwhile.
+  let storing = Promise.resolve();
+  const createJwk = (webKey, ctx) => (storing = storing.catch(() => {}).then(async () => {
+    const adapter = await getCurrentAdapter(ctx.context.adapter);
+    const now = new Date();
+    const live = (await adapter.findMany({ model: 'jwks' }))
+      .filter((k) => (k.alg ?? webKey.alg) === webKey.alg && (!k.expiresAt || k.expiresAt > now))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    return live ?? adapter.create({ model: 'jwks', data: { ...webKey, createdAt: new Date() } });
+  }));
   return {
     appName: 'TinyLap',
     baseURL: config.issuer,
@@ -225,6 +239,7 @@ export function authOptions(config, db = null) {
         jwks: { keyPairConfig: { alg: 'RS256', modulusLength: 2048 }, gracePeriod: JWKS_GRACE_SECONDS },
         jwt: { issuer: config.issuer },
         disableSettingJwtHeader: true,
+        adapter: { createJwk },
       }),
       oauthProvider({
         loginPage: '/sign-in',

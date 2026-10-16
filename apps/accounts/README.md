@@ -161,7 +161,10 @@ key that has not expired and still publishes an expired key for 30 days (the
 JWT plugin's `gracePeriod`, pinned as `JWKS_GRACE_SECONDS` in `server/auth.js`), so
 expiring the current key switches signing to a fresh key and keeps the old one
 verifiable. Planners refetch the JWKS when they meet an unknown `kid`, and
-access tokens last 10 minutes, so no waiting is needed:
+access tokens last 10 minutes, so no waiting is needed. One exception: an app
+that fetched the JWKS in the 30 seconds before the rotation refetches only once
+those 30 seconds are over, so a log-in in that window can fail; one after it
+works:
 
 1. Expire the current key (a new one is generated at the next token issue):
 
