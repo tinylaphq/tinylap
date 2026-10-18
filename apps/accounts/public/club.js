@@ -7,7 +7,7 @@
 // viewer's role may do; this sends the requests. Destructive actions ask
 // first in the page's confirm dialog. A change reloads the page, except a
 // new invite, whose link is shown once and must not be lost.
-import { api, onSubmit, PageError, show } from './webauthn.js';
+import { api, failureText, onSubmit, PageError, show } from './webauthn.js';
 
 const $ = (id) => /** @type {any} */ (document.getElementById(id));
 const { page, club, name: clubName } = document.body.dataset;
@@ -38,7 +38,7 @@ async function act(button, status, run) {
   try {
     await run();
   } catch (error) {
-    show(status, error instanceof PageError ? error.message : 'Something went wrong. Try again.', 'error');
+    show(status, failureText(error), 'error');
     if (!(error instanceof PageError)) console.error(error);
   } finally {
     button.disabled = false;

@@ -95,7 +95,7 @@ ${NOSCRIPT}
       <span class="accounts-row-actions"><a class="btn btn-sm btn-outline" href="/api/me/export" download>Download</a></span>
     </li>${plannerExport ? `
     <li class="accounts-row">
-      <span class="accounts-row-main">Tracks<span class="accounts-row-sub">Every track and version in your workspaces, from the planner, as JSON.</span></span>
+      <span class="accounts-row-main">Tracks<span class="accounts-row-sub">Every track and version in your personal space and your clubs, from the planner, as JSON.</span></span>
       <span class="accounts-row-actions"><a class="btn btn-sm btn-outline" href="${escapeHtml(plannerExport)}">Download</a></span>
     </li>` : ''}
   </ul>
@@ -106,7 +106,7 @@ ${NOSCRIPT}
   <h2 class="h3">Delete your account</h2>
   ${owned.length
     ? `<p>You own ${quoteList(owned)}. Transfer ownership or delete ${owned.length === 1 ? 'that club' : 'those clubs'} first, on <a href="/clubs">your clubs</a>.</p>`
-    : '<p>Deletes your name, passkeys, recovery codes and personal workspace with its tracks, and signs you out everywhere. Clubs you are in keep the tracks you saved to them. This cannot be undone.</p>'}
+    : '<p>Deletes your name, passkeys, recovery codes and your personal space with its tracks, and signs you out everywhere. Clubs you are in keep the tracks you saved to them. This cannot be undone.</p>'}
   <button type="button" class="btn btn-danger btn-block" id="delete-account"${owned.length ? ' disabled' : ''}>Delete account</button>
   <p class="status" id="danger-status" role="status" hidden></p>
 </div>
@@ -134,7 +134,7 @@ ${NOSCRIPT}
 </dialog>
 <dialog class="card-static accounts-dialog accounts-dialog-calm" id="reauth" aria-labelledby="reauth-text">
   <form method="dialog" class="stack-md">
-    <p id="reauth-text">Confirm it is you with your passkey. TinyLap asks again when you sign in more than 10 minutes ago, so an old session on a lost device cannot change your account.</p>
+    <p id="reauth-text">Confirm it is you with your passkey. TinyLap asks again when you signed in more than 10 minutes ago, so an old session on a lost device cannot change your account.</p>
     <div class="accounts-actions">
       <button type="submit" value="cancel" class="btn btn-outline" id="reauth-cancel">Cancel</button>
       <button type="submit" value="ok" class="btn btn-primary" id="reauth-ok">Use my passkey</button>

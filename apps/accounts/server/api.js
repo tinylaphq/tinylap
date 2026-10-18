@@ -15,8 +15,8 @@ const STATUS = {
   forbidden: { status: 403, title: 'Not allowed' },
   'not-found': { status: 404, title: 'Not found' },
   'quota-exceeded': { status: 422, title: 'Limit reached' },
-  invalid: { status: 400, title: 'Cannot do that' },
-  conflict: { status: 409, title: 'Not yet' },
+  invalid: { status: 400, title: 'The request is not valid' },
+  conflict: { status: 409, title: 'Not possible yet' },
 };
 
 /**

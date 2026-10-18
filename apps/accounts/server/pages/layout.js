@@ -34,7 +34,7 @@ export function layout({ title, heading = title, lede = '', body, script, data =
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>${escapeHtml(title)} · TinyLap</title>
+<title>${escapeHtml(title)} · TinyLap Accounts</title>
 <link rel="stylesheet" href="/pkg/palace-ui/palace.css">
 <link rel="stylesheet" href="/pkg/design/design.css">
 <link rel="stylesheet" href="/public/accounts.css">
@@ -43,7 +43,7 @@ ${SPECULATION_RULES}
 ${script ? `<script type="module" src="/public/${script}"></script>\n` : ''}</head>
 <body${attrs}>
 <main class="${wide ? 'container accounts-wide' : 'container-narrow'} page-header accounts">
-${brandLockup({ name: 'TinyLap', markSrc: '/pkg/design/mark.svg' })}
+${brandLockup({ name: 'TinyLap Accounts', markSrc: '/pkg/design/mark.svg' })}
 <h1>${escapeHtml(heading)}</h1>
 ${lede ? `<p class="subtitle">${lede}</p>\n` : ''}${body}
 </main>

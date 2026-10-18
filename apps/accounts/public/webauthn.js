@@ -21,6 +21,18 @@ export class PageError extends Error {
 }
 
 /** The problem type that means "sign in with your passkey again first". */
+/**
+ * What an error says on the page: a PageError its own message, a failed
+ * fetch (a TypeError) that TinyLap could not be reached, anything else that
+ * a reload may help.
+ * @param {unknown} error
+ */
+export function failureText(error) {
+  if (error instanceof PageError) return error.message;
+  if (error instanceof TypeError) return 'Could not reach TinyLap. Check your connection and try again.';
+  return 'That did not work. Reload the page and try again.';
+}
+
 export const isReauthenticate = (error) => error instanceof PageError && error.type.endsWith('/problems/reauthenticate');
 
 export const supported = () =>
@@ -44,7 +56,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     if (res.status === 429) throw new PageError(data?.detail ?? 'Too many tries. Wait a while and try again.');
-    throw new PageError(data?.detail ?? data?.message ?? `The server answered ${res.status}. Try again.`, typeof data?.type === 'string' ? data.type : '');
+    throw new PageError(data?.detail ?? data?.message ?? `TinyLap answered ${res.status}. Try again in a minute.`, typeof data?.type === 'string' ? data.type : '');
   }
   return data;
 }
@@ -160,7 +172,7 @@ export function onSubmit(form, status, action) {
     try {
       await action();
     } catch (error) {
-      show(status, error instanceof PageError ? error.message : 'Something went wrong. Try again.', 'error');
+      show(status, failureText(error), 'error');
       if (!(error instanceof PageError)) console.error(error);
     } finally {
       button.disabled = false;
