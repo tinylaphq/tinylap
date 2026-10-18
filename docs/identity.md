@@ -74,7 +74,7 @@ serve one representation each. The full API is described at
 
 # Accounts and workspaces
 
-Logging in is optional: the planner works fully without an account. An
+Signing in is optional: the planner works fully without an account. An
 account gives you a durable library of tracks, and gives clubs a shared one.
 The sign-in service is TinyLap Accounts (`apps/accounts`); the planner is its first client. The
 design is in `docs/superpowers/specs/2026-10-14-identity-design.md`.
@@ -123,8 +123,8 @@ workspace before leaving if you want them.
 
 Saving a track to the library writes a **private** snapshot: same
 content-addressed key as a public one, readable only by members of that
-workspace (anyone else gets a 404). Saving is not publishing. **Share**
-publishes the current version as an ordinary public snapshot and cannot be
+workspace (anyone else gets a 404). Saving is not sharing. **Share**
+makes the current version an ordinary public snapshot and cannot be
 undone, which is why it asks first. Two workspaces with identical content each
 have their own private copy, and deleting one never touches the other or any
 public snapshot.
