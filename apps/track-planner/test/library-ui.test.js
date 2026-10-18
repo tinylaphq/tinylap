@@ -139,9 +139,10 @@ test('a saver without a name is a former member', () => {
 });
 
 test('the first workspace is the personal one', () => {
-  assert.equal(workspaceLabel({ id: 'W1', name: 'Ayrton', role: 'owner' }, 0), 'Ayrton (personal)');
+  assert.equal(workspaceLabel({ id: 'W1', name: 'Ayrton', role: 'owner' }, 0), 'Personal');
   assert.equal(workspaceLabel({ id: 'W2', name: 'Kart Club', role: 'member' }, 1), 'Kart Club');
-  assert.equal(workspaceLabel({ id: 'W3', name: null, role: 'member' }, 2), 'Unnamed workspace');
+  assert.equal(workspaceLabel({ id: 'W3', name: null, role: 'member' }, 2), 'Unnamed club');
+  assert.equal(workspaceLabel({ id: 'W4', name: null, role: 'owner' }, 0), 'Personal');
 });
 
 test('undo restores the track link that belonged to the layout it brings back', () => {

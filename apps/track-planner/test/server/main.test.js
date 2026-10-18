@@ -53,11 +53,11 @@ const LOGIN = { TINYLAP_ISSUER: 'http://127.0.0.1:1', TINYLAP_CLIENT_ID: 'planne
 
 test('with TINYLAP_ISSUER set, missing or bad log-in settings stop the server at startup', async () => {
   const cases = [
-    [{ TINYLAP_CLIENT_SECRET: '' }, /log-in also needs TINYLAP_CLIENT_SECRET/],
-    [{ TINYLAP_TOKEN_KEYS: '' }, /log-in also needs TINYLAP_TOKEN_KEYS/],
-    [{ TINYLAP_FEED_TOKEN: '', TINYLAP_CLIENT_ID: '' }, /log-in also needs TINYLAP_CLIENT_ID, TINYLAP_FEED_TOKEN/],
+    [{ TINYLAP_CLIENT_SECRET: '' }, /sign-in also needs TINYLAP_CLIENT_SECRET/],
+    [{ TINYLAP_TOKEN_KEYS: '' }, /sign-in also needs TINYLAP_TOKEN_KEYS/],
+    [{ TINYLAP_FEED_TOKEN: '', TINYLAP_CLIENT_ID: '' }, /sign-in also needs TINYLAP_CLIENT_ID, TINYLAP_FEED_TOKEN/],
     [{ TINYLAP_TOKEN_KEYS: 'k1:short' }, /TINYLAP_TOKEN_KEYS: /],
-    [{ TINYLAP_ISSUER: 'ftp://accounts.test' }, /log-in: /],
+    [{ TINYLAP_ISSUER: 'ftp://accounts.test' }, /sign-in: /],
   ];
   for (const [env, message] of cases) {
     const child = run({ ...LOGIN, ...env, PORT: '0' });

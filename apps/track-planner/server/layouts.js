@@ -36,7 +36,7 @@ function clientOf(request) {
 }
 
 const notFound = (request, detail = 'Nothing is stored under this key.') => problem(request, 'not-found', detail);
-const unavailable = (request) => problem(request, 'unavailable', 'Layouts cannot be stored or read right now.');
+const unavailable = (request) => problem(request, 'unavailable', 'Tracks cannot be shared or opened right now. Try again in a minute.');
 
 async function postLayout(request) {
   const { req } = request;

@@ -90,6 +90,6 @@ test('the json block escapes an embedded </script> to prevent injection', () => 
 });
 
 test('a served export links back to the planner; a downloaded one does not', () => {
-  assert.match(exportHtml(ring(), { openUrl: '/?layout=abc' }), /<a href="\/\?layout=abc">Open in planner<\/a>/);
-  assert.doesNotMatch(exportHtml(ring()), /Open in planner/);
+  assert.match(exportHtml(ring(), { openUrl: '/?layout=abc' }), /<a href="\/\?layout=abc">Open in TinyLap Planner<\/a>/);
+  assert.doesNotMatch(exportHtml(ring()), /Open in TinyLap Planner/);
 });

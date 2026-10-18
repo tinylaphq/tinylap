@@ -163,7 +163,7 @@ function renderStatus() {
   // count that reads as if the layout were fine.
   const overlapCount = findOverlaps(state.layout).length;
   if (overlapCount > 0) {
-    status.textContent = `${overlapCount} overlapping mat${overlapCount === 1 ? '' : 's'} — layout invalid`;
+    status.textContent = `${overlapCount} overlapping mat${overlapCount === 1 ? '' : 's'}. Move them apart to make the track valid.`;
     status.className = 'status status-error';
     return;
   }
@@ -1121,8 +1121,8 @@ function renderSuggestionPage() {
   const total = state.suggestions.results.length;
   const filtered = pool.length < total ? ` (filtered from ${total})` : '';
   document.querySelector('#suggestions-page').textContent = pool.length
-    ? `showing ${cursor + 1}-${Math.min(cursor + 5, pool.length)} of ${pool.length}${filtered}`
-    : (total > 0 ? 'nothing matches those filters' : '');
+    ? `Showing ${cursor + 1}–${Math.min(cursor + 5, pool.length)} of ${pool.length}${filtered}`
+    : (total > 0 ? 'Nothing matches those filters' : '');
 }
 
 document.querySelector('#btn-more-suggestions').addEventListener('click', () => {
@@ -1177,7 +1177,7 @@ function renderOutOfReach(stock) {
           // pluralisation would give "joint as" for the Joint A/B labels.
           // Naming the part and stating the shortfall sidesteps both.
           ? `${b.missing.label}: ${b.missing.short} short`
-          : 'a loop of these alone cannot close \u2014 they widen one corner of an '
+          : 'A loop of these alone cannot close \u2014 they widen one corner of an '
             + 'ordinary track, so buying more will not add a shape'}</dd>`).join('')
     + `</dl>`
     + (stopped ? `<p class="status">Search stopped early — there may be more.</p>` : '');

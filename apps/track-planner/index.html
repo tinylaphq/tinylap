@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Circuit 30 Planner</title>
+  <title>TinyLap Planner</title>
   <script type="importmap">
   { "imports": { "@tinylap/track-format": "./pkg/track-format/index.js" } }
   </script>
@@ -16,14 +16,16 @@
 </head>
 <body>
   <nav class="navbar">
-    <a class="navbar-brand" href="./"><img src="./pkg/design/mark.svg" alt="" width="24" height="24"> Circuit 30 Planner</a>
+    <!-- brand -->
+    <a class="navbar-brand" href="./"><img src="./pkg/design/mark.svg" alt="" width="24" height="24"> TinyLap Planner</a>
+    <!-- /brand -->
     <span class="library-current" id="library-current" hidden></span>
     <div class="navbar-right">
       <button type="button" class="btn btn-sm btn-outline" id="btn-presets">Layouts</button>
       <button type="button" class="btn btn-sm btn-secondary" id="btn-open">Open</button>
       <button type="button" class="btn btn-sm btn-secondary" id="btn-share">Share</button>
       <button type="button" class="btn btn-sm btn-outline" id="btn-download" hidden>Download</button>
-      <button type="button" class="btn btn-sm btn-primary" id="btn-save">Save</button>
+      <button type="button" class="btn btn-sm btn-primary" id="btn-save">Download</button>
       <!-- The shared account control (@tinylap/design html/account.js), written out
            because this page is static; test/account-markup.test.js keeps it in step. -->
       <div class="account" id="account" hidden>
@@ -59,17 +61,17 @@
     <section id="shortcuts" aria-labelledby="shortcuts-title">
       <h2 class="h3" id="shortcuts-title">Controls</h2>
       <dl>
-        <dt><kbd>Space</kbd></dt><dd>place next, keep going</dd>
-        <dt><kbd>R</kbd></dt><dd>turn the selected piece</dd>
-        <dt><kbd>C</kbd></dt><dd>swap for another that fits</dd>
-        <dt><kbd>Delete</kbd></dt><dd>remove the selection</dd>
-        <dt><kbd>Esc</kbd></dt><dd>cancel and deselect</dd>
+        <dt><kbd>Space</kbd></dt><dd>Place next, keep going</dd>
+        <dt><kbd>R</kbd></dt><dd>Turn the selected piece</dd>
+        <dt><kbd>C</kbd></dt><dd>Swap for another that fits</dd>
+        <dt><kbd>Delete</kbd></dt><dd>Remove the selection</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Cancel and deselect</dd>
       </dl>
     </section>
   </aside>
 
   <main>
-    <svg id="canvas" role="application" aria-label="Track layout" tabindex="0"></svg>
+    <svg id="canvas" role="application" aria-label="Track" tabindex="0"></svg>
     <div id="canvas-bar">
       <p id="status" class="status" role="status"></p>
       <button type="button" class="btn btn-sm btn-danger" id="btn-clear">Clear</button>
@@ -140,7 +142,7 @@
       <div class="chips-row" id="shape-chips" role="group" aria-label="Filter by shape"></div>
       <label class="chips-toggle">
         <input type="checkbox" id="chicane-toggle" checked>
-        include chicanes
+        Include chicanes
       </label>
     </div>
     <div class="chips" id="suggestion-sorts" hidden>
@@ -182,7 +184,7 @@
         <input type="text" id="save-name" name="name" maxlength="100" autocomplete="off" placeholder="Living room oval">
       </div>
       <div class="field">
-        <label for="save-workspace">Workspace</label>
+        <label for="save-workspace">Where</label>
         <select id="save-workspace" name="workspace"></select>
       </div>
       <p class="status status-error" id="save-error" role="alert" hidden></p>
@@ -194,12 +196,12 @@
   </dialog>
 
   <dialog id="share-dialog" aria-labelledby="share-dialog-title" aria-describedby="share-dialog-text">
-    <h2 id="share-dialog-title">Publish this layout?</h2>
-    <p id="share-dialog-text">Publishing makes this layout public at a permanent link. It cannot be undone.</p>
+    <h2 id="share-dialog-title">Share this track?</h2>
+    <p id="share-dialog-text">Sharing makes this track public at a permanent link. It cannot be undone.</p>
     <form method="dialog">
       <menu>
         <button class="btn btn-outline" value="cancel">Cancel</button>
-        <button class="btn btn-primary" value="publish">Publish and copy link</button>
+        <button class="btn btn-primary" value="publish">Share and copy link</button>
       </menu>
     </form>
   </dialog>

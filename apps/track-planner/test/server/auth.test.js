@@ -124,7 +124,8 @@ test('a failed callback is a page for a browser and a problem for anything else,
   assert.match(page.headers.get('content-type') ?? '', /^text\/html/);
   assert.match(page.headers.get('content-security-policy') ?? '', /default-src 'none'/);
   const text = await page.text();
-  assert.match(text, /log in again/i);
+  assert.match(text, /sign in again/i);
+  assert.match(text, /<title>The sign-in didn&#39;t finish · TinyLap Planner<\/title>/);
   assert.match(text, /href="\/auth\/login"/);
   assert.ok(page.headers.getSetCookie().some((l) => l.startsWith('__Host-tinylap-login=') && /Max-Age=0/.test(l)), 'the login cookie is spent');
 
@@ -159,7 +160,7 @@ test('with accounts stopped, a logged-in /auth/me is 503 unavailable and anonymo
   assert.equal(res.status, 503);
   const body = await res.json();
   assert.equal(body.type, `${planner.base}/problems/unavailable`);
-  assert.equal(body.detail, 'Log-in is unavailable right now.');
+  assert.equal(body.detail, 'Sign-in is unavailable right now.');
   assert.equal(res.headers.get('access-control-allow-origin'), null);
 
   assert.deepEqual(await (await me()).json(), { loggedIn: false, available: true });

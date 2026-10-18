@@ -52,7 +52,7 @@ let feed = null;
 if (env.TINYLAP_ISSUER) {
   const needed = { TINYLAP_CLIENT_ID: env.TINYLAP_CLIENT_ID, TINYLAP_CLIENT_SECRET: env.TINYLAP_CLIENT_SECRET, TINYLAP_TOKEN_KEYS: env.TINYLAP_TOKEN_KEYS, TINYLAP_FEED_TOKEN: env.TINYLAP_FEED_TOKEN, TINYLAP_PUBLIC_URL: publicUrl };
   const missing = Object.keys(needed).filter((name) => !needed[name]);
-  if (missing.length) refuse(`TINYLAP_ISSUER is set, so log-in also needs ${missing.join(', ')}. Set them, or unset TINYLAP_ISSUER to run without log-in.`);
+  if (missing.length) refuse(`TINYLAP_ISSUER is set, so sign-in also needs ${missing.join(', ')}. Set them, or unset TINYLAP_ISSUER to run without sign-in.`);
   let keys;
   try {
     keys = parseKeys(env.TINYLAP_TOKEN_KEYS);
@@ -60,12 +60,12 @@ if (env.TINYLAP_ISSUER) {
     refuse(`TINYLAP_TOKEN_KEYS: ${error.message}`);
   }
   if (!store) {
-    console.error('log-in is off: it keeps its sessions in the database, which is unavailable.');
+    console.error('sign-in is off: it keeps its sessions in the database, which is unavailable.');
   } else {
     try {
       auth = createAuth({ issuer: env.TINYLAP_ISSUER, clientId: env.TINYLAP_CLIENT_ID, clientSecret: env.TINYLAP_CLIENT_SECRET, keys, publicUrl, sessions: store.sessions });
     } catch (error) {
-      refuse(`log-in: ${error.message}`);
+      refuse(`sign-in: ${error.message}`);
     }
     feed = startFeed({ issuer: env.TINYLAP_ISSUER, token: env.TINYLAP_FEED_TOKEN, store });
   }
@@ -83,7 +83,7 @@ const handler = createHandler({
 });
 
 const host = dev ? '127.0.0.1' : '0.0.0.0';
-const server = createServer(handler).listen(port, host, () => console.log(`planner on http://${host}:${port}${dev ? ' (dev, no-store)' : ''}${auth ? `, log-in through ${env.TINYLAP_ISSUER}` : ''}`));
+const server = createServer(handler).listen(port, host, () => console.log(`planner on http://${host}:${port}${dev ? ' (dev, no-store)' : ''}${auth ? `, sign-in through ${env.TINYLAP_ISSUER}` : ''}`));
 
 // Stop accepting, finish what is in flight, close the database, leave.
 for (const signal of ['SIGTERM', 'SIGINT']) {

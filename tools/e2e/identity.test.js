@@ -223,7 +223,7 @@ test('Alice and Bob: sign up, library, a club, sharing, removal, logout, deletio
   await clubSection(a).locator('.library-track', { hasText: 'Monza' }).getByRole('button', { name: 'Open', exact: true }).click();
   await a.getByText('Opened Monza.').waitFor();
   await a.locator('#btn-share').click();
-  await a.locator('#share-dialog').getByRole('button', { name: 'Publish and copy link' }).click();
+  await a.locator('#share-dialog').getByRole('button', { name: 'Share and copy link' }).click();
   const shared = a.getByText(/^(Link copied|Share link): http/);
   await shared.waitFor();
   const link = /** @type {string} */ ((await shared.textContent())?.replace(/^(Link copied|Share link): /, ''));
