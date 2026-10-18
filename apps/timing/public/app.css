@@ -12,7 +12,6 @@
 body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-text); font-family: var(--p-font); }
 
 .navbar { gap: var(--p-space-md); }
-.navbar[hidden] { display: none; }
 .nav-tabs { display: flex; gap: var(--p-space-xs); align-self: stretch; margin-right: auto; margin-left: var(--p-space-lg); }
 .nav-tab {
   display: flex; align-items: center; color: var(--p-surface); text-decoration: none; padding: 0 var(--p-space-md);
@@ -90,8 +89,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-laps .tag { font-size: 10px; padding: 1px 6px; }
 
 /* palace's .status upper-cases its text; the notice reads as prose. */
-.board-unknown { text-transform: none; letter-spacing: 0; font-weight: 600; }
-.board-unknown a { color: inherit; text-decoration-color: currentColor; }
+.board-unknown { font-weight: 600; }
+.board-unknown a { color: inherit; border-bottom-color: currentColor; }
 
 /* The wall screen (?big, spec 6.1): every part follows .board's font size, which
    follows the smaller of the screen's width and height; only the way out stays fixed. */
@@ -183,25 +182,8 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .tap-state { display: inline-block; padding: 0.1em 0.5em; margin-right: 0.35em; border: var(--p-border-width) solid var(--p-text); font: 700 0.75rem/1.4 var(--p-font); text-transform: uppercase; letter-spacing: 0.08em; vertical-align: middle; background: var(--p-surface); color: var(--p-text); }
 [data-state="started"] .tap-state, [data-state="lap"] .tap-state { background: var(--p-success); }
 [data-state="again"] .tap-state { background: var(--p-warning); }
-[data-state="error"] .tap-state { background: var(--p-error); color: #fff; }
+[data-state="error"] .tap-state { background: var(--p-error); color: var(--p-text); }
 .tap-bar:has(#tap-alert > *) .tap-result:empty { display: none; }
-
-/* Selects, styled like palace's text inputs (palace 0.10 leaves them native); belongs upstream in palace-ui. */
-.field select, td select {
-  appearance: none;
-  padding: 12px 2.5rem 12px 12px;
-  border: var(--p-border-width) solid var(--p-text);
-  border-radius: 0;
-  background-color: var(--p-surface);
-  background-image: linear-gradient(45deg, transparent 50%, var(--p-text) 50%), linear-gradient(135deg, var(--p-text) 50%, transparent 50%);
-  background-position: calc(100% - 1.25rem) 50%, calc(100% - 0.9rem) 50%;
-  background-size: 0.35rem 0.35rem;
-  background-repeat: no-repeat;
-  font-family: var(--p-font);
-  font-size: 1rem;
-  color: var(--p-text);
-}
-.field select:focus-visible, td select:focus-visible { outline: none; border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); }
 
 /* The bridge screen: the status strip is the loud part, like the lamp on a decoder. */
 .bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-surface); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
@@ -250,7 +232,6 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
   font: 600 11px/1.4 var(--p-font); letter-spacing: 1px; text-transform: uppercase;
 }
 .navbar-right .btn { border-color: var(--p-border-dark); }
-.navbar-right .live-status[hidden] { display: none; }
 .nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
 .nav-tabs li { display: flex; }
 
@@ -267,7 +248,7 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 
 /* Forms and the setup page. Palace styles the inputs and labels; these lay them out. */
 .field { min-width: 0; }
-.field-error { margin: 0; color: var(--p-error); font-size: 13px; font-weight: 600; }
+.field-error { margin: 0; color: var(--p-error-text); font-size: 13px; font-weight: 600; }
 .field input[aria-invalid="true"], .field select[aria-invalid="true"] { border-color: var(--p-error); }
 .field label { margin-bottom: 0; }
 .field input[type="text"], .field input[type="url"] { max-width: 100%; }
@@ -302,10 +283,9 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 /* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
 .token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
 /* Every status line here is prose, not a label. */
-.status { text-transform: none; letter-spacing: 0; }
 /* A failed form's summary is a sentence; its link keeps the box's colour. */
 .status-error { font-weight: 600; }
-.status-error a { color: inherit; text-decoration-color: currentColor; }
+.status-error a { color: inherit; border-bottom-color: currentColor; }
 .status-info p { font-weight: 400; margin: 0; }
 .status-info p + p { margin-top: var(--p-space-xs); }
 .status .token { margin: 0; }

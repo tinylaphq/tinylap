@@ -127,10 +127,6 @@ input[type="text"].accounts-mono {
   margin-bottom: var(--p-space-sm);
 }
 
-.accounts [hidden] {
-  display: none;
-}
-
 /* ── Clubs (/clubs, /clubs/:id, /invite/:token) ─────────────────────────
  * Palace's 640px container. Workspaces and members are rows with a 2px
  * frame; the workspace rows take palace's pink/purple/cyan list rotation as
@@ -249,27 +245,9 @@ input[type="text"].accounts-mono {
 }
 
 .accounts select {
-  padding: 10px 12px;
-  border: var(--p-border-width) solid var(--p-text);
-  border-radius: var(--p-radius);
-  font-family: var(--p-font);
-  font-size: 1rem;
-  background: var(--p-surface);
-  color: var(--p-text);
+  /* palace styles select; here it sizes to its content, as before. */
+  width: auto;
   max-width: 100%;
-  transition: var(--p-transition);
-}
-
-.accounts select:focus-visible {
-  outline: none;
-  border-color: var(--p-accent-2);
-  box-shadow: var(--p-shadow-md) var(--p-accent-2);
-}
-
-.accounts select:disabled {
-  background: var(--p-disabled-bg);
-  color: var(--p-disabled-text);
-  border-color: var(--p-disabled-border);
 }
 
 /* The new invite link, shown once: palace's dark reveal. */
