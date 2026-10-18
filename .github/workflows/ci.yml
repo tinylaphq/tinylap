@@ -1,13 +1,17 @@
 name: ci
 
 # Pull requests run the checks but never deploy. A push to main runs the same
-# checks and then deploys the planner, accounts and timing, each only if the push
-# touched it (accounts and timing also only once their DEPLOY_ENABLED variable is set).
+# checks and then deploys the planner, accounts and timing, each only if it
+# changed since the last successful run on main, so a change whose own run
+# failed still ships with the next green one (accounts and timing also only
+# once their DEPLOY_ENABLED variable is set). Run the workflow by hand on main
+# ("Run workflow") to check and deploy all three.
 on:
   push:
     branches: [main]
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   check:
@@ -25,7 +29,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - if: github.event_name == 'pull_request'
         run: pnpm turbo run test lint typecheck --affected
-      - if: github.event_name == 'push'
+      - if: github.event_name != 'pull_request'
         run: pnpm turbo run test lint typecheck
       # Passkeys in a real browser (apps/accounts/test/browser). GitHub's
       # ubuntu-latest image ships Google Chrome, which is playwright-core's
@@ -109,8 +113,11 @@ jobs:
 
   deploy:
     needs: [check, smoke]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     concurrency:
       # Deploys queue instead of cancelling: a newer push could otherwise cancel a deploy whose change it doesn't contain itself, and runs in order still leave the newest image live.
       group: deploy-track-planner
@@ -121,9 +128,16 @@ jobs:
           fetch-depth: 0
       - id: changed
         run: |
-          # Fail open: if the range can't be diffed (first push, force-push),
-          # deploy rather than silently skip.
-          if ! files=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null); then
+          # Changed since the last successful run on main, not since the previous
+          # commit: a push whose run failed never deployed. A run by hand deploys
+          # everything. Fail open: with no base, or a range that can't be diffed
+          # (first run, force-push), deploy rather than silently skip.
+          base=""
+          if [ "$EVENT" = push ]; then
+            base=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci --branch main --status success --limit 1 --json headSha --jq '.[0].headSha // empty' || true)
+          fi
+          echo "Deploying what changed since: ${base:-everything}"
+          if [ -z "$base" ] || ! files=$(git diff --name-only "$base" "$GITHUB_SHA" 2>/dev/null); then
             echo "planner=true" >> "$GITHUB_OUTPUT"
             accounts=true
             timing=true
@@ -143,6 +157,8 @@ jobs:
             echo "timing=true" >> "$GITHUB_OUTPUT"
           fi
         env:
+          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
           ACCOUNTS_DEPLOY_ENABLED: ${{ vars.ACCOUNTS_DEPLOY_ENABLED }}
           TIMING_DEPLOY_ENABLED: ${{ vars.TIMING_DEPLOY_ENABLED }}
       - if: steps.changed.outputs.planner == 'true' || steps.changed.outputs.accounts == 'true' || steps.changed.outputs.timing == 'true'
