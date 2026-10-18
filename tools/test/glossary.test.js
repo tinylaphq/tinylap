@@ -41,6 +41,12 @@ test('proseLiterals skips literals that are not prose', () => {
   assert.deepEqual(texts("const a = 'workspace'; const b = '/workspaces/:id'; const c = 'a b';"), []);
 });
 
+test('proseLiterals catches short labels, Title Case and templates led by code', () => {
+  const source = "a.textContent = 'Publish'; b = 'Log In'; c = `Copied ${t.name} to ${n} workspaces`; d = `Logout`;";
+  const found = texts(source);
+  for (const probe of ['Publish', 'Log In', 'workspaces', 'Logout']) assert.ok(found.some((t) => t.includes(probe) && flagged(t)), probe);
+});
+
 test('proseLiterals finds "logs out" in prose', () => {
   const found = texts("const d = 'Ends the session and logs out at accounts too.';");
   assert.equal(found.length, 1);

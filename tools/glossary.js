@@ -19,7 +19,7 @@ export function exempt(text) {
   return text.replace(PROTOCOL, ' ');
 }
 
-const SQL = /\b(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|JOIN|VALUES|SAVEPOINT|RELEASE|CREATE|ALTER|DROP|PRAGMA|WITH)\b/;
+const SQL = /\b(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|JOIN|VALUES|SAVEPOINT|RELEASE|ROLLBACK|BEGIN|COMMIT|CREATE|ALTER|DROP|PRAGMA|WITH)\b/;
 const KEPT_ATTRIBUTES = /\s(?:aria-label|title|placeholder|alt)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
@@ -143,7 +143,12 @@ export function proseLiterals(source) {
   return literals(stripComments(source))
     .filter((l) => !l.consoleCall && !SQL.test(l.text))
     .map((l) => ({ line: l.line, text: l.text.includes('<') ? visibleText(l.text) : l.text }))
-    .filter((l) => /\s/.test(l.text) && /[A-Za-z]{3,} [a-z]/.test(l.text));
+    .filter((l) => {
+      // Prose, or a short label: "Sign out", "Publish", "Log In". A template's
+      // text counts with its ${…} parts already blanked out.
+      const text = l.text.trim();
+      return /[A-Za-z]{2,}\s+[A-Za-z]/.test(text) || /^[A-Z][a-z]+(?: [A-Za-z]+)*$/.test(text);
+    });
 }
 
 // Every summary, description and title in an OpenAPI document.
