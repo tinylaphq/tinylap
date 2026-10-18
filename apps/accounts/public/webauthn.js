@@ -20,7 +20,6 @@ export class PageError extends Error {
   }
 }
 
-/** The problem type that means "sign in with your passkey again first". */
 /**
  * What an error says on the page: a PageError its own message, a failed
  * fetch (a TypeError) that TinyLap could not be reached, anything else that
@@ -33,6 +32,7 @@ export function failureText(error) {
   return 'That did not work. Reload the page and try again.';
 }
 
+/** The problem type that means "sign in with your passkey again first". */
 export const isReauthenticate = (error) => error instanceof PageError && error.type.endsWith('/problems/reauthenticate');
 
 export const supported = () =>

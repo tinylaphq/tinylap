@@ -126,8 +126,8 @@ const consentPage = () => layout({ title: 'Allow access', lede: 'No other apps c
 
 /** Better Auth sends its errors here (onAPIError.errorURL). */
 const errorPage = (url) => layout({
-  title: 'TinyLap could not do that',
-  lede: 'The app that sent you here asked for something TinyLap could not do.',
+  title: 'That request did not work',
+  lede: 'The app that sent you here asked for something TinyLap Accounts does not allow. Go back to that app and try again.',
   body: `
 <div class="card-static stack-md">
   <p class="status status-error" role="alert"><code>${escapeHtml(url.searchParams.get('error') ?? 'unknown_error')}</code></p>

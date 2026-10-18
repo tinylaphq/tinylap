@@ -20,10 +20,10 @@ export function clubsPage({ user, workspaces }) {
   const clubs = workspaces.filter((w) => w.kind === 'club');
   const owned = clubs.filter((w) => w.role === 'owner').length;
   const items = [
-    ...personal.map((w) => `
+    ...personal.map(() => `
   <li class="accounts-workspace">
-    <span class="accounts-workspace-name">${escapeHtml(w.name)}</span>
-    <span class="accounts-workspace-meta">Personal, only you</span>
+    <span class="accounts-workspace-name">Personal</span>
+    <span class="accounts-workspace-meta">Only you</span>
   </li>`),
     ...clubs.map((w) => `
   <li class="accounts-workspace">

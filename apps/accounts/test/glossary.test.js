@@ -90,7 +90,7 @@ test('the pages say TinyLap Accounts', async () => {
 test('the words in the sources follow the glossary', () => {
   const pages = readdirSync(join(appDir, 'server/pages')).filter((f) => f.endsWith('.js')).map((f) => `server/pages/${f}`);
   const scripts = readdirSync(join(appDir, 'public')).filter((f) => f.endsWith('.js')).map((f) => `public/${f}`);
-  const files = [...pages, 'server/app.js', 'server/api.js', 'server/workspaces.js', ...scripts];
+  const files = [...pages, 'server/app.js', 'server/api.js', 'server/auth.js', 'server/account.js', 'server/workspaces.js', ...scripts];
   const found = files.flatMap((file) => proseLiterals(readFileSync(join(appDir, file), 'utf8')).map((l) => ({ ...l, file })));
   assert.ok(found.length > 100, 'the prose is read');
   const hits = found.filter((l) => banned(l.text) && !ALLOWED.has(`${l.file}: ${l.text}`));
