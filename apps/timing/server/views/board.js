@@ -5,7 +5,7 @@
 // The board (spec §6.1), rendered on the server from engine.snapshot. All
 // that changes lives in #board-live, which the stream replaces whole; the
 // watchers board is the same without member parts.
-import { formatClock, formatLap } from '../../public/format.js';
+import { clockAt, formatClock, formatLap } from '../../public/format.js';
 import { html } from './html.js';
 import { layout } from './layout.js';
 
@@ -15,12 +15,8 @@ const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
 /** What the session clock shows at server time `now`. */
 export function clockOf(session, now) {
   if (!session) return null;
-  if (session.state === 'countdown') return { label: 'Starts in', ms: session.opensAt - now };
-  if (session.kind === 'practice' && (session.state === 'done' || session.state === 'aborted')) return { label: 'Practice ended', ms: 0 };
-  if (session.kind === 'practice') return { label: 'Practice', ms: now - session.opensAt };
-  if (session.state === 'running') return { label: 'Remaining', ms: Math.max(0, session.closesAt - now) };
-  if (session.state === 'finishing') return { label: 'Last lap', ms: 0 };
-  return { label: session.state === 'aborted' ? 'Aborted' : 'Finished', ms: 0 };
+  const { label, ms } = clockAt({ ...session, opensAt: session.opensAt ?? null, closesAt: session.closesAt ?? null }, now);
+  return { label, ms };
 }
 
 function chip(snap, id) {
