@@ -32,23 +32,23 @@ export async function fetchTrack(plannerUrl, link, { fetch: fetchImpl = fetch, t
   }
   if (url.origin !== planner.origin) throw new TrackError('invalid', `Paste a link from ${planner.origin}.`);
   const key = /^\/layouts\/([^/.]+)(?:\.json|\.html)?$/.exec(url.pathname)?.[1];
-  if (!key || !KEY_PATTERN.test(key)) throw new TrackError('invalid', 'The link must be a shared layout (/layouts/…).');
+  if (!key || !KEY_PATTERN.test(key)) throw new TrackError('invalid', 'Paste the link of a track shared from the planner.');
   let res;
   try {
     res = await fetchImpl(`${planner.origin}/layouts/${key}`, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     throw new TrackError('unavailable', 'The planner cannot be reached right now.', { cause: error });
   }
-  if (res.status === 404) throw new TrackError('invalid', 'The planner has no shared layout under this link.');
+  if (res.status === 404) throw new TrackError('invalid', 'The planner has no shared track at this link. Share it again and paste the new link.');
   if (!res.ok) throw new TrackError('unavailable', `The planner answered ${res.status}.`);
   const text = await res.text();
-  if (text.length > MAX_LAYOUT) throw new TrackError('invalid', 'The layout is too large.');
+  if (text.length > MAX_LAYOUT) throw new TrackError('invalid', 'This track is too large to time.');
   let layout;
   try {
     layout = parseLayout(text);
   } catch {
-    throw new TrackError('invalid', 'The planner sent something that is not a layout.');
+    throw new TrackError('invalid', 'The planner sent something that is not a track. Share the track again and paste the new link.');
   }
-  if (!isTrack(layout.track)) throw new TrackError('not-a-circuit', 'This layout is not a closed circuit, so it has no track to time.');
+  if (!isTrack(layout.track)) throw new TrackError('not-a-circuit', 'This track is not a closed circuit, so there is nothing to time. Close the loop in the planner and share it again.');
   return { id: layout.track.id, shape: layout.track.shape, snapshotKey: key, layout: canonicalJson(layout) };
 }

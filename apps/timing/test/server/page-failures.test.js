@@ -43,7 +43,7 @@ test('an unexpected throw is a 500 page on a page route, logged once, and Proble
     assert.equal(res.status, 500);
     assert.match(res.headers.get('content-type'), /^text\/html/);
     assert.match(res.headers.get('content-security-policy'), /script-src 'self'/);
-    assert.match(await res.text(), /<h1>Something went wrong<\/h1>/);
+    assert.match(await res.text(), /<h1>The server could not finish this<\/h1>/);
     assert.equal(log.mock.callCount(), 1);
     const api = await fetch(`${server.base}/workspaces/w1/drivers`);
     assert.match(api.headers.get('content-type'), /^application\/problem\+json/);
@@ -67,7 +67,7 @@ test('a handler that throws after sign-in is a 500 page too', async () => {
     const res = await app.api(who, 'GET', '/personal/board', undefined, HTML);
     assert.equal(res.status, 500);
     assert.match(res.headers.get('content-type'), /^text\/html/);
-    assert.match(await res.text(), /Something went wrong/);
+    assert.match(await res.text(), /<h1>The server could not finish this<\/h1>/);
     assert.equal(log.mock.callCount(), 1);
   } finally {
     app.engine.snapshot = snapshot;

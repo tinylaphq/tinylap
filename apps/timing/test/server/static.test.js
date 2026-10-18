@@ -30,7 +30,7 @@ test('the timing package is served to the browser, auth is not', async () => {
 test('discovery: the description, the catalog, problem types, the docs page', async () => {
   const doc = await get('/openapi.json');
   assert.equal(doc.status, 200);
-  assert.equal((await doc.json()).info.title, 'TinyLap timing API');
+  assert.equal((await doc.json()).info.title, 'TinyLap Timing API');
   assert.equal((await get('/.well-known/api-catalog')).status, 200);
   const known = await get('/problems/conflict', { redirect: 'manual' });
   assert.equal(known.status, 302);
@@ -38,5 +38,5 @@ test('discovery: the description, the catalog, problem types, the docs page', as
   const unknown = await get('/problems/nope');
   assert.equal(unknown.status, 404);
   assert.equal(unknown.headers.get('content-type'), 'application/problem+json');
-  assert.match(await (await get('/api')).text(), /TinyLap timing API/);
+  assert.match(await (await get('/api')).text(), /TinyLap Timing API/);
 });

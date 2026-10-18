@@ -106,7 +106,7 @@ test('assigning and unassigning a transponder', async () => {
   assert.equal(app.store.transponders(office.id).find((t) => t.code === '4711').driverId, null);
   res = await app.form(owner, `${base}/transponders/4711`, { driver: 'nobody' });
   assert.equal(res.status, 422);
-  assert.match(await res.text(), /Pick one of this space’s drivers, or none\./);
+  assert.match(await res.text(), /Pick one of the drivers here, or none\./);
 });
 
 test('a form from another site changes nothing', async () => {

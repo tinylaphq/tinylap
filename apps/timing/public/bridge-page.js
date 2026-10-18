@@ -26,7 +26,7 @@ async function api(method, path, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = res.status === 204 ? null : await res.json().catch(() => null);
-  if (!res.ok) throw Object.assign(new Error(data?.detail ?? data?.error ?? `The server answered ${res.status}.`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(data?.detail ?? data?.error ?? `Timing answered ${res.status}. Try again in a minute.`), { status: res.status });
   return data;
 }
 

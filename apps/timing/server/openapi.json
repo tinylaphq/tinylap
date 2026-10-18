@@ -1,18 +1,18 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "TinyLap timing API",
+    "title": "TinyLap Timing API",
     "version": "1.0.0",
     "license": { "name": "AGPL-3.0-or-later", "identifier": "AGPL-3.0-or-later" },
-    "description": "Lap timing for a workspace's track. Decoders post passings, over the internet with their own token or through a logged-in browser tab connected by USB; the server stores each passing once, turns passings into laps, practice, qualifying and race results, and streams them as Server-Sent Events. A read-only watchers view needs no log-in."
+    "description": "Lap timing for a club's track, or your own. Decoders post passings, over the internet with their own token or through a signed-in browser tab connected by USB; the server stores each passing once, turns passings into laps, practice, qualifying and race results, and streams them as Server-Sent Events. A read-only watchers view needs no sign-in."
   },
   "externalDocs": { "description": "The passing format, the ingest API and the ZRound extension", "url": "https://github.com/tinylaphq/tinylap/blob/main/docs/timing.md" },
   "paths": {
-    "/auth/login": { "get": { "summary": "Log in through TinyLap accounts", "responses": { "302": { "description": "To the issuer." }, "default": { "$ref": "#/components/responses/Problem" } } } },
-    "/auth/callback": { "get": { "summary": "Finish logging in", "responses": { "302": { "description": "Back to the page that asked." }, "default": { "$ref": "#/components/responses/Problem" } } } },
-    "/auth/logout": { "post": { "summary": "Log out", "responses": { "302": { "description": "To the issuer's end-session page." }, "default": { "$ref": "#/components/responses/Problem" } } } },
-    "/auth/me": { "get": { "summary": "Who is logged in, and their workspaces", "responses": { "200": { "description": "The log-in state.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
-    "/workspaces/{workspace}": { "get": { "summary": "The workspace's live state: track, session, standings, recent crossings, drivers, personal bests", "security": [{ "session": [] }], "responses": { "200": { "description": "A snapshot.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/auth/login": { "get": { "summary": "Sign in through TinyLap Accounts", "responses": { "302": { "description": "To the issuer." }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/auth/callback": { "get": { "summary": "Finish signing in", "responses": { "302": { "description": "Back to the page that asked." }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/auth/logout": { "post": { "summary": "Sign out", "responses": { "302": { "description": "To the issuer's end-session page." }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/auth/me": { "get": { "summary": "Who is signed in, with their personal space and clubs", "responses": { "200": { "description": "The sign-in state.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
+    "/workspaces/{workspace}": { "get": { "summary": "The live state of a club or personal space: track, session, standings, recent crossings, drivers, personal bests", "security": [{ "session": [] }], "responses": { "200": { "description": "A snapshot.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
     "/workspaces/{workspace}/live": { "get": { "summary": "Live events as Server-Sent Events", "description": "Events: snapshot, session, crossing, standings, results, drivers, track, setup. Reconnect with Last-Event-ID to get what you missed in the last 10 minutes; older, you get a snapshot.", "security": [{ "session": [] }], "responses": { "200": { "description": "An event stream.", "content": { "text/event-stream": {} } }, "default": { "$ref": "#/components/responses/Problem" } } } },
     "/workspaces/{workspace}/drivers": {
       "get": { "summary": "The drivers", "security": [{ "session": [] }], "responses": { "200": { "description": "Drivers.", "content": { "application/json": {} } }, "default": { "$ref": "#/components/responses/Problem" } } },
@@ -54,23 +54,23 @@
       "Problem": { "description": "RFC 9457 Problem Details; the type ends in one of the problem names below.", "content": { "application/problem+json": {} } }
     },
     "securitySchemes": {
-      "session": { "type": "apiKey", "in": "cookie", "name": "__Host-tinylap-session", "description": "The log-in session. Writes must come from the app's own pages." },
+      "session": { "type": "apiKey", "in": "cookie", "name": "__Host-tinylap-session", "description": "The sign-in session. Writes must come from the app's own pages." },
       "decoderToken": { "type": "http", "scheme": "bearer", "description": "A decoder's token, from pairing. It can only post that decoder's passings." }
     }
   },
   "x-tinylap-problems": {
-    "not-found": { "status": 404, "title": "Not found", "description": "No such route, workspace, driver, decoder, session or watchers link, or it is not one of yours." },
+    "not-found": { "status": 404, "title": "Not found", "description": "No such route, club, personal space, driver, decoder, session or watchers link, or it is not one of yours." },
     "method-not-allowed": { "status": 405, "title": "Method not allowed", "description": "The Allow header lists the methods this URL supports." },
-    "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Timing data cannot be read or stored right now, or log-in is unavailable." },
-    "unauthorized": { "status": 401, "title": "Not logged in", "description": "Log in, or send a valid decoder token." },
+    "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Timing data cannot be read or stored right now, or sign-in is unavailable." },
+    "unauthorized": { "status": 401, "title": "Not signed in", "description": "Sign in, or send a valid decoder token." },
     "forbidden": { "status": 403, "title": "Forbidden", "description": "Your role may not do this, or the request did not come from the app's own pages." },
     "invalid-request": { "status": 422, "title": "The request is not valid", "description": "A field is missing or out of range; the detail says which." },
     "unsupported-media-type": { "status": 415, "title": "Unsupported media type", "description": "Send application/json." },
     "too-large": { "status": 413, "title": "The request is too large", "description": "A request body may be at most 64 KiB." },
     "rate-limited": { "status": 429, "title": "Too many requests", "description": "Wait for the number of seconds in Retry-After." },
-    "conflict": { "status": 409, "title": "Something else is running", "description": "A qualifying or race is already running in this workspace; abort it or wait for it to end." },
-    "not-a-circuit": { "status": 422, "title": "The layout is not a closed circuit", "description": "Only a closed circuit has a track to time. Close the loop in the planner and share it again." },
+    "conflict": { "status": 409, "title": "Something else is running", "description": "A qualifying or race is already running here; abort it or wait for it to end." },
+    "not-a-circuit": { "status": 422, "title": "The track is not a closed circuit", "description": "Only a closed circuit has a track to time. Close the loop in the planner and share it again." },
     "planner-unavailable": { "status": 502, "title": "The planner cannot be reached", "description": "The planner did not answer or answered with an error; try again." },
-    "login-failed": { "status": 400, "title": "The log-in could not be completed", "description": "The log-in expired or was tampered with; log in again." }
+    "login-failed": { "status": 400, "title": "The sign-in could not be completed", "description": "The sign-in expired or was tampered with. Sign in again." }
   }
 }
