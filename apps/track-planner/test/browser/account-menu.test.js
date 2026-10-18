@@ -67,3 +67,58 @@ test('a press on a drag handle, which stops the event, still closes the menu', a
   await page.mouse.up();
   assert.equal(await menuOpen(page), false);
 });
+
+// The canvas's shortcuts against focused navbar controls: Space and Enter
+// belong to the focused button or link; r, c and Delete still act on the
+// selection, since a dialog hands focus back to the button that opened it.
+const cells = (page) => page.locator('.mat').evaluateAll((all) => all.map((m) => `${m.getAttribute('x')},${m.getAttribute('y')},${m.getAttribute('data-piece')}`).join(' '));
+const focused = (page) => page.evaluate(() => document.activeElement?.id);
+
+/** Opens the loop and selects a piece that Space extends; returns its cell. */
+async function extendable(page) {
+  await page.locator('.mat').first().click();
+  await page.keyboard.press('Delete');
+  const count = await page.locator('.mat').count();
+  for (let i = 0; i < count; i++) {
+    const before = await cells(page);
+    await page.locator('.mat').nth(i).click();
+    await page.keyboard.press('Space');
+    if ((await cells(page)) !== before) {
+      await page.keyboard.press('Control+z');
+      assert.equal(await cells(page), before, 'undone');
+      return page.locator('.mat').nth(i);
+    }
+  }
+  throw new Error('no piece that Space extends');
+}
+
+test('with the canvas focused, r turns the selected piece', async (t) => {
+  const page = await planner(t);
+  await page.locator('.mat').first().click();
+  assert.equal(await focused(page), 'canvas');
+  const before = await cells(page);
+  await page.keyboard.press('r');
+  assert.notEqual(await cells(page), before);
+});
+
+test('Enter on a focused Share button opens the share dialog and places no piece', async (t) => {
+  const page = await planner(t);
+  const piece = await extendable(page);
+  await piece.click();
+  const before = await cells(page);
+  await page.locator('#btn-share').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#share-dialog').evaluate((d) => /** @type {HTMLDialogElement} */ (d).open), true, 'the dialog opened');
+  assert.equal(await cells(page), before, 'no piece was placed');
+  await page.keyboard.press('Escape');
+});
+
+test('with a navbar button focused, r still turns the selected piece', async (t) => {
+  const page = await planner(t);
+  await page.locator('.mat').first().click();
+  const before = await cells(page);
+  await page.locator('#btn-share').focus();
+  await page.keyboard.press('r');
+  assert.equal(await focused(page), 'btn-share');
+  assert.notEqual(await cells(page), before);
+});

@@ -1383,6 +1383,10 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Space and Enter press the focused button or follow the focused link; the
+  // canvas must not take them too. Other shortcuts still act on the selection.
+  if ((e.key === ' ' || e.key === 'Enter') && e.target.closest('button, a[href], summary, [contenteditable]')) return;
+
   if (e.key.toLowerCase() === 'r') {
     if (state.tool) {
       e.preventDefault();
