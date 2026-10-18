@@ -1,1 +1,1 @@
-{ "extends": "../../tsconfig.base.json", "compilerOptions": { "strict": true }, "include": ["elements/*.js", "html/*.js", "test/*.js"] }
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "strict": true }, "include": ["elements/*.js", "format-ago.js", "html/*.js", "test/*.js"] }

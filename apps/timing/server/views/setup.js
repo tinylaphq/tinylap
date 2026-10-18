@@ -4,7 +4,7 @@
 
 // The setup page (spec §6.4): the track, drivers, transponders, decoders
 // and the watchers link, each its own card-static section and forms.
-import { formatAgo } from '../../public/format.js';
+import { formatAgo } from '@tinylap/design/format-ago.js';
 import { html } from './html.js';
 import { copyable, errorSummary, selectField, textField } from './form-parts.js';
 import { layout } from './layout.js';

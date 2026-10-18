@@ -16,15 +16,6 @@ export function formatClock(ms) {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
-/** How long ago, for the people looking at a page: no time zone to get wrong. @param {number} ms @param {number} now */
-export function formatAgo(ms, now) {
-  const minutes = Math.floor((now - ms) / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`;
-  return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-}
-
 /** A session's length in words: seconds under a minute, else minutes and any seconds over. @param {number} ms */
 export function formatLength(ms) {
   const total = Math.round(ms / 1000);

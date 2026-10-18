@@ -20,3 +20,4 @@ DOM-free helpers for servers, under `@tinylap/design/html/`, returning plain str
 - `account.js`: the account menu (`accountMenu`) and `signInLink`, the same in every app. Parts are found by class; the menu has no ids of its own.
 - `speculation.js`: the speculation rules every page carries, and their CSP hash.
 - `escape.js`: `escapeHtml`, and `safeHref` for every URL the helpers write.
+- `format-ago.js`: `formatAgo(ms, now)`, "3 min ago" for a time in the past; DOM-free, used by servers and by `tl-relative-time`.
