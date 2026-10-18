@@ -6,6 +6,8 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/tools/test-env.js",
+        "$TURBO_ROOT$/tools/glossary.js",
+        "$TURBO_ROOT$/tools/js-source.js",
         "$TURBO_ROOT$/apps/accounts/package.json",
         "$TURBO_ROOT$/apps/accounts/server/**",
         "$TURBO_ROOT$/apps/accounts/test/helpers.js"
