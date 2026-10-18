@@ -76,7 +76,7 @@ serve one representation each. The full API is described at
 
 Logging in is optional: the planner works fully without an account. An
 account gives you a durable library of tracks, and gives clubs a shared one.
-The login service is `apps/accounts`; the planner is its first client. The
+The sign-in service is TinyLap Accounts (`apps/accounts`); the planner is its first client. The
 design is in `docs/superpowers/specs/2026-10-14-identity-design.md`.
 
 **Status: proof of concept.** Everything runs on `*.fly.dev`, with Fly's daily
@@ -158,7 +158,7 @@ after verifying the request out of band
 `accounts` stores a display name, passkeys (public keys), recovery code hashes,
 memberships and sessions. The email field holds a placeholder
 (`<id>@users.invalid`) that is never shown or used. The planner stores the
-library and, per login session, the tokens, encrypted. The account page offers
+library and, per sign-in session, the tokens, encrypted. The account page offers
 an export of the account data with a link to the planner's export of every
 track and version, and deletion. The privacy page of `accounts` says the same
-in plain words. Nothing is third-party: no analytics, fonts or logins.
+in plain words. Nothing is third-party: no analytics, fonts or sign-in providers.
