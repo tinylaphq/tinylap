@@ -96,3 +96,16 @@ test('qualifying is complete when every driver crossed after the close', () => {
   assert.equal(isComplete(qualifying, state, 402_000), true);
   assert.equal(isComplete(practice, emptyState(), Number.MAX_SAFE_INTEGER), false);
 });
+
+test('standings carry each driver’s last crossing, counted or not', () => {
+  const p = run(practice, [['ana', 1000, null], ['ana', 9000, 8000]]);
+  assert.equal(standings(practice, p.state)[0].lastAt, 9000);
+  const r = run(race, [['ana', 50_000, null]]); // before go
+  const rows = standings(race, r.state);
+  assert.equal(rows.find((s) => s.driverId === 'ana').lastAt, 50_000);
+  assert.equal(rows.find((s) => s.driverId === 'ben').lastAt, null);
+  const q = run(qualifying, [['ana', 105_000, 10_000]]); // began before the window: not counted
+  const ana = standings(qualifying, q.state).find((s) => s.driverId === 'ana');
+  assert.equal(ana.lastAt, 105_000);
+  assert.equal(ana.laps, 0);
+});

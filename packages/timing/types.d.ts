@@ -73,6 +73,8 @@ export interface Standing {
   laps: number;
   bestMs: number | null;
   bestAt: number | null;
+  /** Server time of the driver's last crossing in this session, counted or not. */
+  lastAt: number | null;
   totalMs: number;
   /** Race only: reaction after "go" plus the laps. */
   elapsedMs: number | null;
