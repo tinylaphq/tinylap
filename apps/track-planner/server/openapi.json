@@ -560,7 +560,7 @@
     "unsupported-media-type": { "status": 415, "title": "Unsupported media type", "description": "Send application/json, or text/html for an exported page." },
     "not-found": { "status": 404, "title": "Not found", "description": "Nothing is stored under this key, or the key is malformed; or a library track or club that does not exist or is not one of yours." },
     "method-not-allowed": { "status": 405, "title": "Method not allowed", "description": "The Allow header lists the methods this URL supports." },
-    "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Layouts cannot be stored or read right now, or sign-in is unavailable because TinyLap Accounts can't be reached. The planner itself keeps working." },
+    "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Tracks cannot be shared, stored or read right now, or sign-in is unavailable because TinyLap Accounts can't be reached. The planner itself keeps working." },
     "forbidden": { "status": 403, "title": "Forbidden", "description": "A state-changing request that did not come from the planner's own pages (Sec-Fetch-Site, or else Origin), or your role in the club cannot do it: only the owner and admins delete tracks and versions." },
     "unauthorized": { "status": 401, "title": "Not signed in", "description": "Sign in to use the library." },
     "quota-exceeded": { "status": 422, "title": "A limit is reached", "description": "At most 200 tracks in a club or personal space, 64 KiB per snapshot (canonical JSON) and 60 saves per user an hour. The detail names the limit; for saves, Retry-After says when to try again." },

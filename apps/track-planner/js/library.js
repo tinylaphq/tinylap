@@ -593,8 +593,8 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
       const target = String(data.get('workspace') ?? '');
       panels.delete(t.id);
       const result = await change(() => api.copy(t.id, target));
-      const w = workspaces.find((o) => o.id === target);
-      if (result) host.report({ notice: `Copied ${t.name} to ${w?.name || 'the other club'}.` });
+      const i = workspaces.findIndex((o) => o.id === target);
+      if (result) host.report({ notice: `Copied ${t.name} to ${i === -1 ? 'the other list' : workspaceLabel(workspaces[i], i)}.` });
     }
   });
 

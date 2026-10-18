@@ -122,3 +122,28 @@ test('with a navbar button focused, r still turns the selected piece', async (t)
   assert.equal(await focused(page), 'btn-share');
   assert.notEqual(await cells(page), before);
 });
+
+test('Space on a focused Share button presses it and places no piece', async (t) => {
+  const page = await planner(t);
+  const piece = await extendable(page);
+  await piece.click();
+  const before = await cells(page);
+  await page.locator('#btn-share').focus();
+  await page.keyboard.press('Space');
+  assert.equal(await page.locator('#share-dialog').evaluate((d) => /** @type {HTMLDialogElement} */ (d).open), true, 'the dialog opened');
+  assert.equal(await cells(page), before, 'no piece was placed');
+  await page.keyboard.press('Escape');
+});
+
+test('with a navbar button focused, c and Delete still act on the selected piece', async (t) => {
+  const page = await planner(t);
+  await page.locator('.mat').first().click();
+  await page.locator('#btn-share').focus();
+  const before = await cells(page);
+  await page.keyboard.press('c');
+  const swapped = await cells(page);
+  assert.notEqual(swapped, before, 'c swapped the piece');
+  await page.keyboard.press('Delete');
+  assert.notEqual(await cells(page), swapped, 'Delete removed it');
+  assert.equal(await focused(page), 'btn-share');
+});

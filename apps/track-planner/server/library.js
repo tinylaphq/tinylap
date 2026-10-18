@@ -128,7 +128,7 @@ function trackFor(request, id, action) {
  */
 async function saver(request) {
   const userName = await displayName(request);
-  if (userName === null) throw new AuthError('unavailable', 'Your name could not be looked up at accounts right now; nothing was saved. Try again in a minute.');
+  if (userName === null) throw new AuthError('unavailable', 'Your name could not be looked up at TinyLap Accounts right now; nothing was saved. Try again in a minute.');
   return { userId: request.session.userId, userName };
 }
 
