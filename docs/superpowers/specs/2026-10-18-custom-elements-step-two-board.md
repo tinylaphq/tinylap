@@ -91,7 +91,7 @@ export function clockAt({ kind, state, opensAt, closesAt }, now) { … }
    - **Not `location.replace(location.href)`:** a reload is never served from the prefetch cache. A script navigation to the same URL could be, if the user has just hovered the Race tab.
 4. **No loops.**
    - A server clock behind the device: the boundary is measured in server time, so the device doesn't reload early. The reload is a normal load, with a fresh `data-now` and skew. The new page's derived phase still equals `data-state`, and it waits.
-   - A stalled server tick: the derived phase differs from `data-state`, so guard 5 stops a second reload.
+   - A stalled server tick: the derived phase differs from `data-state`, so step 5 stops a second reload.
 5. **Once per boundary.** Before reloading, the element writes `tl-countdown reload <pathname> <data-opens> <data-state>` to `sessionStorage`. If that key is already there, it doesn't reload.
    - **Prefetch.** A `prefetched` element (skew 0) neither reads nor writes the key. It reloads once its derived phase differs from `data-state`.
      - The page it loads is a normal navigation, with a real skew, and it uses the key as usual. So a prefetched page can't use up the reload for the real boundary.
@@ -313,28 +313,28 @@ The button is rendered only when `big`, and stays hidden without JavaScript, by 
 | `test/server/race-pages.test.js` | - `GET /race` while running: `tl-countdown … reload-on-phase` and `elements/countdown.js`.<br>- The 409 of a second start renders the panel without `reload-on-phase`.<br>- The start form has neither. |
 | `test/server/frames.test.js:46-48` | The no-import regex also forbids `public\/elements\/`. |
 | `test/browser/assembled.test.js` | The board loads `/v/<sha>/public/elements/board.js`, `countdown.js` and `/v/<sha>/pkg/design/elements/relative-time.js`, and defines all three. |
-| `test/browser/no-js.test.js` | - **Clock:** the suite gains `const clock = { now: Date.now() }`, passed to `startTiming({ plannerUrl, clock })`, and only ever moved forward, so sessions and cookies stay valid across its ordered tests.<br>- A big board shows no Full screen button.<br>- A stopped driver: post a passing, move `clock.now` 3 min, load the board: "last lap 3 min ago" is visible. |
+| `test/browser/no-js.test.js` | - **Clock:** the suite gains a running clock with an offset, `const clock = { offset: 0, get now() { return Date.now() + this.offset; } }`, passed to `startTiming({ plannerUrl, clock })`. Only `offset` is ever increased, so sessions and cookies stay valid across its ordered tests.<br>- A big board shows no Full screen button.<br>- A stopped driver: post two passings 8 s apart (one lap, so practice has a row), add 3 min to `clock.offset`, load the board: "last lap 3 min ago" is visible. |
 
 **New: `test/browser/board-elements.test.js`.**
-- **Clocks.** The suite starts the server with `const clock = { now: Date.now() }; startTiming({ clock })` and only ever moves `clock.now` forward, as `no-js.test.js` does. `page.clock` moves the device clock.
+- **Clocks.** Both new suites start the server with a running clock, `const clock = { offset: 0, get now() { return Date.now() + this.offset; } }; startTiming({ clock })`. It runs with real time, and a test jumps it only forward with `clock.offset += …`, as `no-js.test.js` does. `page.clock` moves the device clock.
 - **What `page.clock.install()` fakes:** the page's timers, including the 15 s timer. It fakes neither `EventSource` nor the server.
-1. **Restore.** Dispatch `pagehide` with `persisted: true` (as `menu.test.js:121`): the subscription ends (wrap `app.hub.subscribe` as `live.test.js:84-96` does). Post a passing, then dispatch `pageshow` with `persisted: true`: "reconnecting", then "live", and the lap shows.
-2. **Disconnect.** `tl-board.remove()` ends the subscription, and no reload follows within `tinylapReloadMs`. Re-appending reopens the stream.
-3. **Server time.** `page.clock.setSystemTime` puts the device an hour behind the server: the practice clock and the note follow the server.
-4. **The note appears on its own.** `page.clock.install()` before `goto`. A driver whose last crossing is 50 s old by server time shows no note. `page.clock.runFor(15_000)` → still none. Another `runFor(15_000)` → "last lap 1 min ago", with the stream idle.
-5. **Paused when hidden.** Override `document.hidden` to true and dispatch `visibilitychange`, then `runFor(120_000)`: the text is unchanged. Set it visible and dispatch again: it updates at once.
-6. **A stable layout.** At 390×844, 1280×800 and 1920×1080 `?big`, with short and long names: the left edge of each column header is the same before and after a note appears, and `document.documentElement.scrollWidth <= innerWidth`.
+- **B1** **Restore.** Dispatch `pagehide` with `persisted: true` (as `menu.test.js:121`): the subscription ends (wrap `app.hub.subscribe` as `live.test.js:84-96` does). Post a passing, then dispatch `pageshow` with `persisted: true`: "reconnecting", then "live", and the lap shows.
+- **B2** **Disconnect.** `tl-board.remove()` ends the subscription, and no reload follows within `tinylapReloadMs`. Re-appending reopens the stream.
+- **B3** **Server time.** `page.clock.setSystemTime` puts the device an hour behind the server: the practice clock and the note follow the server.
+- **B4** **The note appears on its own.** `page.clock.install()` before `goto`. A driver with one lap (two passings 8 s apart), whose last crossing is 40 s old by server time, shows no note. `page.clock.runFor(15_000)` (55 s) → still none. Another `runFor(15_000)` (70 s) → "last lap 1 min ago", with the stream idle.
+- **B5** **Paused when hidden.** Override `document.hidden` to true and dispatch `visibilitychange`, then `runFor(120_000)`: the text is unchanged. Set it visible and dispatch again: it updates at once.
+- **B6** **A stable layout.** At 390×844, 1280×800 and 1920×1080 `?big`, with short and long names: the left edge of each column header is the same before and after a note appears, and `document.documentElement.scrollWidth <= innerWidth`.
 
 **New: `test/browser/race-countdown.test.js`.** Each test runs the engine ticker described above.
-1. **One reload by GET.** Start a race with a 2 s countdown (`app.form`), open `/personal/race`: "Starts in" ticks, then exactly one load (`page.on('load')`), whose request is a GET, and no POST (`page.on('request')`). The panel then says "Race, running" and "Remaining".
-2. **Stalled server.** The ticker stopped, and `page.route` with `route.fetch()` rewrites the race page to `data-state="countdown"` with a past `data-opens`, keeping its headers and CSP: one load, then none.
-3. **Blocked storage.** An init script makes `sessionStorage` throw: no load.
-4. **Prefetch, simulated.** An init script makes `performance.getEntriesByType('navigation')[0].deliveryType` report `'navigational-prefetch'` on the first load only, with `page.clock` 5 s ahead.
-   - "First load only" is tracked in `window.name`: the init script sets it on the first run and checks it later. The element's own `sessionStorage` key is never used for this.
-   - Expected: the page reloads early, reading and writing no key. The next, normal page waits. Then exactly one more load, at the server's boundary.
-4b. **Prefetch, real.** On a running countdown's race page, hover the navbar's Race tab and wait for the prefetch request (`sec-purpose`, as `navigation.test.js:30`). Then cross the boundary: exactly one load, and the panel says "Race, running".
-5. **Never after a POST.** A second start answers 409 with the panel: past the boundary, no reload and no request.
-6. **Reload at `closesAt`.** A 1-minute race with a 0 s countdown, driven by the fake server clock (`startTiming({ clock })`, moved forward, with `app.engine.tick()` after each move) and `page.clock`. Past `closesAt`: exactly one load, and the panel then says "Race, finishing the last lap" with a stopped 0:00.
+- **C1** **One reload by GET.** Start a race with a 2 s countdown (`app.form`), open `/personal/race`: "Starts in" ticks, then exactly one load (`page.on('load')`), whose request is a GET, and no POST (`page.on('request')`). The panel then says "Race, running" and "Remaining".
+- **C2** **Stalled server.** The ticker stopped, and `page.route` with `route.fetch()` rewrites the race page to `data-state="countdown"` with a past `data-opens`, keeping its headers and CSP: one load, then none.
+- **C3** **Blocked storage.** An init script makes `sessionStorage` throw. The test first checks, in the page, that reading `sessionStorage` really throws, then expects no load.
+- **C4** **Prefetch, simulated.** An init script makes `performance.getEntriesByType('navigation')[0].deliveryType` report `'navigational-prefetch'` on the first load only, with the device clock 5 s ahead through `page.clock.setSystemTime(clock.now + 5000)`, without `install()`, so real timers run.
+  - "First load only" is tracked in `window.name`: the init script sets it on the first run and checks it later. The element's own `sessionStorage` key is never used for this.
+  - Expected: the page reloads early, reading and writing no key. The next, normal page waits. Then exactly one more load, at the server's boundary.
+- **C5** **Prefetch, real.** On a running countdown's race page, hover the navbar's Race tab and wait for the prefetch request (`sec-purpose`, as `navigation.test.js:30`). Then cross the boundary: exactly one load, and the panel says "Race, running". The hover waits at most 5 s for the prefetch. If Chrome doesn't prefetch a link to the document's own URL, the R1 hazard can't arise there: the test notes it and passes, and C4 stays the guard.
+- **C6** **Never after a POST.** A second start answers 409 with the panel: past the boundary, no reload and no request.
+- **C7** **Reload at `closesAt`.** A 1-minute race with a 0 s countdown, driven by the fake server clock (`startTiming({ clock })`, moved forward, with `app.engine.tick()` after each move) and `page.clock`, installed with `page.clock.install({ time: clock.now })` before `goto`. `page.clock` moves together with the server clock: each step adds the same amount to `clock.offset` and to `page.clock.runFor`. Past `closesAt`: exactly one load, and the panel then says "Race, finishing the last lap" with a stopped 0:00.
 
 **A real back/forward cache restore** is not tested. Playwright starts Chrome with that cache turned off (confirm in playwright-core's Chromium switches), and `no-store` may keep these pages out anyway. As in `frames.test.js:215`, the tests dispatch the events.
 
