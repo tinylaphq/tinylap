@@ -79,7 +79,7 @@ test('create a club, invite, join with new passkeys, promote, and the new admin 
   await owner.page.getByText('Your account is ready').waitFor();
 
   await owner.page.goto('/clubs');
-  await owner.page.getByText('Personal, only you').waitFor();
+  await owner.page.getByText('Only you', { exact: true }).waitFor();
   await owner.page.getByLabel('Club name').fill('Night Racers');
   await owner.page.getByRole('button', { name: 'Create club' }).click();
   await owner.page.waitForURL(/\/clubs\/[A-Za-z0-9_-]+$/);

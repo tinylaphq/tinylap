@@ -134,7 +134,7 @@ ${others.map((m) => `        <option value="${escapeHtml(m.id)}">${escapeHtml(m.
 ${may('club.manage') ? `  <h2 class="h3">Delete this club</h2>
   <p>Members lose access to its tracks at once, and the tracks are deleted. This cannot be undone.</p>
   <button type="button" class="btn btn-danger btn-block" id="delete-club">Delete club</button>` : `  <h2 class="h3">Leave this club</h2>
-  <p>The club keeps the tracks you saved to it. Copy any you want to your personal workspace first.</p>
+  <p>The club keeps the tracks you saved to it. Copy any you want to your personal space first.</p>
   <button type="button" class="btn btn-danger btn-block" id="leave-club">Leave club</button>`}
   <p class="status" id="danger-status" role="status" hidden></p>
 </div>`);

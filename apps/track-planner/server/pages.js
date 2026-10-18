@@ -45,7 +45,7 @@ export function shapePage({ shapeKey, layouts }) {
   const items = layouts
     .map((l) => `<li><a href="/layouts/${esc(l.key)}"><code>${esc(l.key)}</code></a> <span class="meta">track ${esc(l.trackId)} &middot; ${esc(l.createdAt)}</span></li>`)
     .join('\n');
-  return page('One build, every snapshot', `<h1>One build</h1>
+  return page('One build, every snapshot · TinyLap Planner', `<h1>One build</h1>
 <p class="subtitle">Shape ${esc(shapeKey)}</p>
 <p>Every stored snapshot of this build. Snapshots with the same track id are the same track; different track ids are separate tracks built the same way.</p>
 <ul>

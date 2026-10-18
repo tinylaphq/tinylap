@@ -119,7 +119,7 @@ export function withSession(handler, { pages = false } = {}) {
 /** A navigation gets a page it can act on; anything else, Problem Details. */
 function failure(request, name, title, detail, extra = {}) {
   const res = prefersHtml(request.req.headers.accept)
-    ? html(problem(request, name, detail).status, page(title, `<h1>${esc(title)}</h1>
+    ? html(problem(request, name, detail).status, page(`${title} · TinyLap Timing`, `<h1>${esc(title)}</h1>
 <p>${esc(detail)}</p>
 <p><a href="/auth/login">Sign in again</a> &middot; <a href="/">Back to timing</a></p>`), NO_STORE)
     : problem(request, name, detail);
@@ -150,7 +150,7 @@ async function callback(request) {
     if (res.status !== 400) return res;
     // The BFF's text says why; the cookie it clears must still go out.
     const cookies = res.headers['Set-Cookie'];
-    return failure(request, 'login-failed', "The sign-in didn't finish", res.body ?? 'Please sign in again.', cookies ? { 'Set-Cookie': cookies } : {});
+    return failure(request, 'login-failed', "The sign-in didn't finish", res.body ?? 'Sign in again.', cookies ? { 'Set-Cookie': cookies } : {});
   });
 }
 

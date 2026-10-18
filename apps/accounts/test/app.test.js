@@ -55,6 +55,8 @@ test("Better Auth's errors land on our error page", async () => {
   const location = new URL(res.headers.get('location'));
   assert.equal(location.origin + location.pathname, `${accounts.issuer}/error`);
   assert.equal(location.searchParams.get('error'), 'invalid_request');
+  const page = await (await fetch(location)).text();
+  assert.match(page, /<h1>That request did not work<\/h1>/, 'the title says what happened');
 });
 
 test("Better Auth's own end-session pages are never shown: they become /signed-out", async () => {

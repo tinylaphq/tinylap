@@ -20,10 +20,10 @@ export function clubsPage({ user, workspaces }) {
   const clubs = workspaces.filter((w) => w.kind === 'club');
   const owned = clubs.filter((w) => w.role === 'owner').length;
   const items = [
-    ...personal.map((w) => `
+    ...personal.map(() => `
   <li class="accounts-workspace">
-    <span class="accounts-workspace-name">${escapeHtml(w.name)}</span>
-    <span class="accounts-workspace-meta">Personal, only you</span>
+    <span class="accounts-workspace-name">Personal</span>
+    <span class="accounts-workspace-meta">Only you</span>
   </li>`),
     ...clubs.map((w) => `
   <li class="accounts-workspace">
@@ -33,14 +33,13 @@ export function clubsPage({ user, workspaces }) {
   ].join('');
   return layout({
     title: 'Your clubs',
-    lede: `Signed in as ${escapeHtml(user.name)}. Tracks you save go to one of these workspaces.`,
+    lede: `Signed in as ${escapeHtml(user.name)}. Tracks you save go to your personal space or one of your clubs.`,
     script: 'club.js',
     data: { page: 'clubs' },
     wide: true,
     body: `<p class="accounts-back"><a href="/account">Your account</a></p>
-<section class="stack-md" aria-labelledby="ws-heading">
-  <h2 class="h3" id="ws-heading">Workspaces</h2>
-  <ul class="accounts-list accounts-workspaces">${items}
+<section class="stack-md">
+  <ul class="accounts-list accounts-workspaces" aria-label="Your clubs">${items}
   </ul>
   ${clubs.length ? '' : '<p class="empty">You are not in a club yet. Start one below, or open an invite link a club sent you.</p>'}
 </section>

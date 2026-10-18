@@ -250,7 +250,7 @@ test('a callback without the login cookie, or with a forged state, fails with 40
 
   const bare = await fetch(location, { redirect: 'manual' });
   assert.equal(bare.status, 400);
-  assert.match(await bare.text(), /log in again/i);
+  assert.match(await bare.text(), /sign in again/i);
   assert.equal(setCookie(bare, '__Host-tinylap-session'), undefined);
 
   const appJar = new Jar();

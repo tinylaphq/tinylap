@@ -48,8 +48,8 @@ export const unavailablePage = (request) => notice(request, {
 });
 
 export const serverErrorPage = (request) => notice(request, {
-  title: 'Something went wrong',
-  text: 'Timing hit a problem it did not expect. Try again in a minute.',
+  title: 'The server could not finish this',
+  text: 'Try again in a minute.',
   action: { href: '/', label: 'Go to your board' },
 });
 

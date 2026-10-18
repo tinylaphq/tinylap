@@ -103,7 +103,7 @@ function authorize(db, actor, workspaceId, action, { clubOnly = true, forbidden 
   const row = db.prepare(`SELECT w.id, w.kind, w.name, m.role FROM workspace w JOIN membership m ON m.workspace_id = w.id
     WHERE w.id = ? AND m.user_id = ?`).get(String(workspaceId), String(actor));
   if (!row) throw new WorkspaceError('not-found', 'There is no such club, or you are not a member.');
-  if (clubOnly && row.kind !== 'club') throw new WorkspaceError('invalid', 'A personal workspace has no other members, invites or settings.');
+  if (clubOnly && row.kind !== 'club') throw new WorkspaceError('invalid', 'Your personal space has no other members, invites or settings.');
   if (!can(claimsOf(db, actor), String(row.id), action)) throw new WorkspaceError('forbidden', forbidden);
   return { id: String(row.id), kind: String(row.kind), name: String(row.name), role: /** @type {Role} */ (row.role) };
 }

@@ -52,7 +52,7 @@ export function addDriver(request, { name: raw, colour: rawColour }) {
   const name = nameOf(raw);
   if (!name) return invalid('Give the driver a name of 1 to 60 characters.', 'name');
   const existing = request.store.drivers(request.workspaceId);
-  if (existing.length >= MAX_DRIVERS) return invalid(`A space holds at most ${MAX_DRIVERS} drivers.`, 'name');
+  if (existing.length >= MAX_DRIVERS) return invalid(`You can have at most ${MAX_DRIVERS} drivers here.`, 'name');
   const colour = rawColour === undefined ? COLOURS[existing.length % COLOURS.length] : colourOf(rawColour);
   if (!colour) return invalid('A colour is #rrggbb.', 'colour');
   const driver = { id: randomUUID(), name, colour };
@@ -85,7 +85,7 @@ export function assignTransponder(request, { code: rawCode, driverId }) {
   const code = transponderCode(rawCode);
   if (!code) return invalid('A transponder code is 1 to 16 hex digits.', 'code');
   if (driverId !== null && (typeof driverId !== 'string' || !request.store.driver(request.workspaceId, driverId))) {
-    return invalid('Pick one of this space’s drivers, or none.', 'driver');
+    return invalid('Pick one of the drivers here, or none.', 'driver');
   }
   request.engine.assign(request.workspaceId, code, driverId);
   return { value: { code, driverId } };
@@ -142,7 +142,7 @@ export function startSession(request, { kind, roster, durationSeconds, countdown
   if (!KINDS.has(kind)) return invalid('Pick a race or a qualifying.', 'kind');
   if (!Array.isArray(roster) || roster.length < 1 || roster.length > MAX_ROSTER) return invalid(`Pick 1 to ${MAX_ROSTER} drivers.`, 'roster');
   if (new Set(roster).size !== roster.length) return invalid('A driver can be on the roster only once.', 'roster');
-  if (!roster.every((id) => typeof id === 'string' && request.store.driver(request.workspaceId, id))) return invalid('Every driver must be one of this space’s.', 'roster');
+  if (!roster.every((id) => typeof id === 'string' && request.store.driver(request.workspaceId, id))) return invalid('Pick only drivers you have set up.', 'roster');
   const duration = intIn(durationSeconds, 10, 3600, 300);
   if (duration === null) return invalid('A session lasts 10 seconds to an hour.', 'duration');
   const countdown = intIn(countdownSeconds, 0, 30, 10);
@@ -158,7 +158,7 @@ export function abortSession(request, { id }) {
 }
 
 export function tap(request, { driverId }) {
-  if (typeof driverId !== 'string' || !request.store.driver(request.workspaceId, driverId)) return invalid('Pick one of this space’s drivers.', 'driver');
+  if (typeof driverId !== 'string' || !request.store.driver(request.workspaceId, driverId)) return invalid('Pick one of the drivers here.', 'driver');
   const wait = request.limiters.tap.take(request.userId);
   if (wait) return limited(`That's a lot of taps. Try again in ${wait} seconds.`, wait);
   const row = request.engine.tap(request.workspaceId, driverId);

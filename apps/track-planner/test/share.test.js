@@ -26,8 +26,8 @@ test('sharing posts the layout as json and returns the link', async () => {
 });
 
 test('a refused share throws the problem title', async () => {
-  const fetch = reply(429, { type: 'x', title: 'Too many layouts posted', status: 429 }, 'application/problem+json');
-  await assert.rejects(shareLayout(layout(), { fetch }), /Too many layouts posted/);
+  const fetch = reply(429, { type: 'x', title: 'Too many tracks shared. Wait a minute.', status: 429 }, 'application/problem+json');
+  await assert.rejects(shareLayout(layout(), { fetch }), /Too many tracks shared\. Wait a minute\./);
 });
 
 test('a share that never reaches the server says so', async () => {
@@ -47,7 +47,7 @@ test('opening a shared layout fetches its json', async () => {
 
 test('a malformed key is refused without a request', async () => {
   const fetch = async () => assert.fail('no request expected');
-  await assert.rejects(fetchShared('../x', { fetch }), /not point to a layout/);
+  await assert.rejects(fetchShared('../x', { fetch }), /not point to a shared track/);
 });
 
 test('an unknown key throws the problem title', async () => {

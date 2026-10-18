@@ -22,7 +22,7 @@ import { html, json, problem } from './responses.js';
  * }} Auth
  */
 
-const UNAVAILABLE = 'Log-in is unavailable right now.';
+const UNAVAILABLE = 'Sign-in is unavailable right now.';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const isOutage = (/** @type {unknown} */ error) => error instanceof AuthError && error.code === 'unavailable';
 
@@ -112,21 +112,21 @@ export function withSession(handler) {
 /** A navigation gets a page it can act on; anything else, Problem Details. */
 function failure(request, name, title, detail, extra = {}) {
   const res = prefersHtml(request.req.headers.accept)
-    ? html(problem(request, name, detail).status, page(title, `<h1>${esc(title)}</h1>
+    ? html(problem(request, name, detail).status, page(`${title} · TinyLap Planner`, `<h1>${esc(title)}</h1>
 <p>${esc(detail)}</p>
-<p><a href="/auth/login">Log in again</a> &middot; <a href="/">Back to the planner</a></p>`), NO_STORE)
+<p><a href="/auth/login">Sign in again</a> &middot; <a href="/">Back to the planner</a></p>`), NO_STORE)
     : problem(request, name, detail);
   return { ...res, headers: { ...res.headers, ...extra } };
 }
 
-const off = (request) => problem(request, 'not-found', 'Log-in is not set up on this server.');
+const off = (request) => problem(request, 'not-found', 'Sign-in is not set up on this server.');
 
 /** The BFF's own response, or a 503 when the issuer can't be reached. */
 async function viaBff(request, step) {
   try {
     return await step(request.auth.bff);
   } catch (error) {
-    if (isOutage(error)) return failure(request, 'unavailable', "Can't log in right now", `${UNAVAILABLE} The planner still works; try again in a minute.`);
+    if (isOutage(error)) return failure(request, 'unavailable', "Can't sign in right now", `${UNAVAILABLE} The planner still works; try again in a minute.`);
     throw error;
   }
 }
@@ -143,13 +143,13 @@ async function callback(request) {
     if (res.status !== 400) return res;
     // The BFF's text says why; the cookie it clears must still go out.
     const cookies = res.headers['Set-Cookie'];
-    return failure(request, 'login-failed', "The log-in didn't finish", res.body ?? 'Please log in again.', cookies ? { 'Set-Cookie': cookies } : {});
+    return failure(request, 'login-failed', "The sign-in didn't finish", res.body ?? 'Sign in again.', cookies ? { 'Set-Cookie': cookies } : {});
   });
 }
 
 async function logout(request) {
   if (!request.auth) return off(request);
-  if (!request.auth.bff.requireSameOrigin(request.req)) return problem(request, 'forbidden', "Log out from the planner's own page.");
+  if (!request.auth.bff.requireSameOrigin(request.req)) return problem(request, 'forbidden', "Sign out from the planner's own page.");
   return request.auth.bff.logout(request.req);
 }
 

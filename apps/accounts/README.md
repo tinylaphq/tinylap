@@ -1,6 +1,6 @@
-# TinyLap accounts
+# TinyLap Accounts
 
-The suite's login service: passkey sign-in, recovery codes, workspaces and an
+The suite's sign-in service: passkey sign-in, recovery codes, workspaces and an
 OpenID Connect provider for the planner and later apps. One Node 24 process
 on `node:http`, SQLite through `node:sqlite`, Better Auth used only as the
 OIDC engine. Design: `docs/superpowers/specs/2026-10-14-identity-design.md`;
@@ -34,9 +34,9 @@ never written to a file in this repository.
 ## First deploy (maintainer, once)
 
 CI deploys accounts only after step 9, so `main` keeps deploying the planner
-alone until then. The planner's `fly.toml` carries its two login variables as
+alone until then. The planner's `fly.toml` carries its two sign-in variables as
 comments for the same reason: with `TINYLAP_ISSUER` set the planner refuses to
-start unless every login secret exists (step 8 turns them on). Fly cannot show a
+start unless every sign-in secret exists (step 8 turns them on). Fly cannot show a
 secret again after it is set, so keep each generated value in your password
 manager.
 
@@ -90,7 +90,7 @@ manager.
 6. Check it: `node apps/accounts/test/smoke.js https://tinylap-accounts.fly.dev/`
    (the first request may take a few seconds while the machine wakes).
 
-7. Set the planner's login secrets (the planner restarts, still without log-in,
+7. Set the planner's sign-in secrets (the planner restarts, still without sign-in,
    because `TINYLAP_ISSUER` is not set yet):
 
    ```sh
@@ -98,9 +98,9 @@ manager.
      TINYLAP_CLIENT_SECRET="$PLANNER_SECRET" TINYLAP_TOKEN_KEYS="$TOKEN_KEY" TINYLAP_FEED_TOKEN="$FEED_TOKEN"
    ```
 
-8. Turn log-in on: in `apps/track-planner/fly.toml` uncomment `TINYLAP_ISSUER`
+8. Turn sign-in on: in `apps/track-planner/fly.toml` uncomment `TINYLAP_ISSUER`
    and `TINYLAP_CLIENT_ID` under `[env]`, commit and merge. The planner deploy
-   then starts with log-in. Try it in a browser.
+   then starts with sign-in. Try it in a browser.
 
 9. Last, let CI deploy accounts from now on:
 
@@ -137,7 +137,7 @@ user already owns the club.
 
 Rotate any secret you suspect leaked at once; otherwise there is no schedule.
 
-**The planner's token keys** (`TINYLAP_TOKEN_KEYS`) rotate without logging anyone out:
+**The planner's token keys** (`TINYLAP_TOKEN_KEYS`) rotate without signing anyone out:
 
 1. Generate a key with a new id: `node -e "console.log('2:'+require('node:crypto').randomBytes(32).toString('base64'))"`.
 2. Set the list with the new key first and every old key after it, using the old values from your password manager: `fly secrets set --app circuit30-planner TINYLAP_TOKEN_KEYS="2:<new>,1:<old>"`.
@@ -145,12 +145,12 @@ Rotate any secret you suspect leaked at once; otherwise there is no schedule.
 4. After 90 days (the longest a session lives) set the list to `2:<new>` alone.
 
 **The planner's client secret** is one secret per client, so there is a short
-gap rather than an overlap: the planner cannot log in or refresh between the
-two steps (its sessions are kept, and log-in answers "unavailable"):
+gap rather than an overlap: the planner cannot sign in or refresh between the
+two steps (its sessions are kept, and sign-in answers "unavailable"):
 
 1. Generate: `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`.
 2. Set it in `TINYLAP_CLIENTS` (rebuild the JSON as in first-deploy step 4) and as `TINYLAP_CLIENT_SECRET`, back to back, with `--stage` on the first and a plain `set` on the second so both machines restart once: `fly secrets set --stage --app tinylap-accounts TINYLAP_CLIENTS="$CLIENTS"`, then `fly secrets set --app circuit30-planner TINYLAP_CLIENT_SECRET="<new>"`, then `fly secrets deploy --app tinylap-accounts`.
-3. Check that logging in to the planner works.
+3. Check that signing in to the planner works.
 
 **A feed token** (`TINYLAP_FEED_TOKENS` here, `TINYLAP_FEED_TOKEN` in the planner):
 `TINYLAP_FEED_TOKENS` takes several tokens, so it does overlap: set `old,new` on
@@ -163,7 +163,7 @@ expiring the current key switches signing to a fresh key and keeps the old one
 verifiable. Planners refetch the JWKS when they meet an unknown `kid`, and
 access tokens last 10 minutes, so no waiting is needed. One exception: an app
 that fetched the JWKS in the 30 seconds before the rotation refetches only once
-those 30 seconds are over, so a log-in in that window can fail; one after it
+those 30 seconds are over, so a sign-in in that window can fail; one after it
 works:
 
 1. Expire the current key (a new one is generated at the next token issue):
@@ -172,7 +172,7 @@ works:
    fly ssh console --app tinylap-accounts -C "node --disable-warning=ExperimentalWarning -e \"new (require('node:sqlite').DatabaseSync)('/data/accounts.sqlite').prepare('UPDATE jwks SET expiresAt = ? WHERE expiresAt IS NULL').run(new Date().toISOString())\""
    ```
 
-2. Log in to the planner once; `GET /jwks` now lists two keys.
+2. Sign in to the planner once; `GET /jwks` now lists two keys.
 3. The old key leaves the JWKS 30 days later (`JWKS_GRACE_SECONDS`) by itself.
    Nothing to retire.
 
@@ -200,6 +200,6 @@ or the signing keys cannot be read and every token fails:
    ```
 
 4. Right away, `fly secrets set --app tinylap-accounts BETTER_AUTH_SECRET="<new>"` (the restart picks it up).
-5. Check `node apps/accounts/test/smoke.js https://tinylap-accounts.fly.dev/` and a planner login.
+5. Check `node apps/accounts/test/smoke.js https://tinylap-accounts.fly.dev/` and a planner sign-in.
 
 If step 3 or 4 fails, restore the snapshot and keep the old secret.

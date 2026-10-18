@@ -51,7 +51,7 @@ class IssuerUnavailable extends Error {
 }
 
 /** @param {unknown} cause */
-const unavailable = (cause) => new AuthError('unavailable', 'Log-in is unavailable right now.', { cause });
+const unavailable = (cause) => new AuthError('unavailable', 'Sign-in is unavailable right now.', { cause });
 
 /**
  * True when `error` comes from the issuer being unreachable, slow or failing
@@ -363,18 +363,18 @@ export function createBff(options) {
       const fail = (detail) => ({
         status: 400,
         headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'Set-Cookie': [spent] },
-        body: `${detail} Please log in again.`,
+        body: `${detail} Sign in again.`,
       });
       const sealed = readCookie(req, loginCookie);
-      if (!sealed) return fail('This log-in has expired or was started in another browser.');
+      if (!sealed) return fail('This sign-in has expired or was started in another browser.');
       /** @type {{ state: string, nonce: string, verifier: string, returnTo: string, expiresAt: number }} */
       let pending;
       try {
         pending = JSON.parse(open(keys, sealed, LOGIN));
       } catch {
-        return fail('This log-in could not be read.');
+        return fail('This sign-in could not be read.');
       }
-      if (!(pending.expiresAt > Date.now())) return fail('This log-in has expired.');
+      if (!(pending.expiresAt > Date.now())) return fail('This sign-in has expired.');
 
       const config = await configuration();
       const current = new URL(redirectUri);
@@ -389,7 +389,7 @@ export function createBff(options) {
         );
       } catch (error) {
         if (isOutage(error)) throw unavailable(error);
-        return fail('The log-in did not complete.');
+        return fail('The sign-in did not complete.');
       }
       /** @type {Awaited<ReturnType<typeof tokensFrom>>} */
       let issued;
@@ -397,10 +397,10 @@ export function createBff(options) {
         issued = await tokensFrom(response);
       } catch (error) {
         if (error instanceof AuthError && error.code === 'unavailable') throw error;
-        return fail('The log-in did not complete.');
+        return fail('The sign-in did not complete.');
       }
       const { tokens, claims } = issued;
-      if (response.claims()?.sub !== claims.sub) return fail('The log-in did not complete.');
+      if (response.claims()?.sub !== claims.sub) return fail('The sign-in did not complete.');
 
       const value = randomBytes(32).toString('base64url');
       const now = Date.now();

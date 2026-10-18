@@ -85,7 +85,7 @@ export function exportHtml(layout, { openUrl } = {}) {
   <figcaption>${size} &middot; ${matCount} mats &middot; lap ${(lapMm / 1000).toFixed(2)} m</figcaption>
 </figure>
 <table><caption>Bill of materials</caption><tbody>${rows}</tbody></table>
-${openUrl ? `<p class="note"><a href="${openUrl}">Open in planner</a></p>` : '<p class="note">Open this file in the Circuit 30 Planner to keep editing it.</p>'}
+${openUrl ? `<p class="note"><a href="${openUrl}">Open in TinyLap Planner</a></p>` : '<p class="note">Open this file in TinyLap Planner to keep editing it.</p>'}
 </main>
 <script type="application/json" id="${LAYOUT_SCRIPT_ID}">
 ${JSON.stringify(layout, null, 2).replace(/</g, '\\u003c')}

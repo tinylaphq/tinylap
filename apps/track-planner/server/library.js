@@ -22,8 +22,8 @@ const MAX_NAME = 100;
 const FORMER = 'former member';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
-const notFound = (request) => problem(request, 'not-found', 'There is no such track, or it is not in one of your workspaces.');
-const noWorkspace = (request) => problem(request, 'not-found', 'There is no such workspace, or you are not a member.');
+const notFound = (request) => problem(request, 'not-found', 'There is no such track, or it is not in your personal space or one of your clubs.');
+const noWorkspace = (request) => problem(request, 'not-found', 'There is no such club, or you are not in it.');
 
 /** @param {import('./store.js').Saver} saver */
 const saverOf = ({ id, name }) => ({ id, name: name ?? FORMER });
@@ -44,7 +44,7 @@ function route(handler, { write = false } = {}) {
   return withSession(async (request, match) => {
     if (!request.session) {
       request.req.resume();
-      return problem(request, 'unauthorized', 'Log in to use the library.');
+      return problem(request, 'unauthorized', 'Sign in to use the library.');
     }
     if (write && !request.auth.bff.requireSameOrigin(request.req)) {
       request.req.resume();
@@ -108,7 +108,7 @@ function spendSave(request) {
   return problem(request, 'quota-exceeded', `You can save at most 60 times an hour. Try again in ${wait} seconds.`, { 'Retry-After': String(wait) });
 }
 
-const fullWorkspace = (request) => problem(request, 'quota-exceeded', `A workspace can hold at most ${TRACK_QUOTA} tracks.`);
+const fullWorkspace = (request) => problem(request, 'quota-exceeded', `A club or personal space can hold at most ${TRACK_QUOTA} tracks.`);
 
 /** The track, or a 404 (not yours) or 403 (your role may not `action`). */
 function trackFor(request, id, action) {
@@ -116,7 +116,7 @@ function trackFor(request, id, action) {
   const { claims } = request.session;
   if (!track || !can(claims, track.workspaceId, 'track.read')) return { error: notFound(request) };
   if (!can(claims, track.workspaceId, action)) {
-    return { error: problem(request, 'forbidden', 'Your role in this workspace cannot do that: only the owner and admins delete tracks and versions.') };
+    return { error: problem(request, 'forbidden', 'Your role in this club cannot do that: only the owner and admins delete tracks and versions.') };
   }
   return { track };
 }
@@ -128,7 +128,7 @@ function trackFor(request, id, action) {
  */
 async function saver(request) {
   const userName = await displayName(request);
-  if (userName === null) throw new AuthError('unavailable', 'Your name could not be looked up at accounts right now; nothing was saved. Try again in a minute.');
+  if (userName === null) throw new AuthError('unavailable', 'Your name could not be looked up at TinyLap Accounts right now; nothing was saved. Try again in a minute.');
   return { userId: request.session.userId, userName };
 }
 

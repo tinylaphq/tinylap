@@ -100,13 +100,11 @@ export const saverName = (saver) => saver?.name || 'former member';
 
 /**
  * A workspace as the UI names it. accounts lists the personal workspace
- * first, then clubs by name, and the token keeps that order.
+ * first, then clubs by name, and the token keeps that order: the first is
+ * "Personal", as in timing and the account menu.
  * @param {{ name: string | null }} workspace @param {number} index
  */
-export const workspaceLabel = (workspace, index) => {
-  const name = workspace.name || 'Unnamed workspace';
-  return index === 0 && workspace.name ? `${name} (personal)` : name;
-};
+export const workspaceLabel = (workspace, index) => (index === 0 ? 'Personal' : workspace.name || 'Unnamed club');
 
 // ── The track on the canvas ─────────────────────────────────────────
 
@@ -121,7 +119,7 @@ function showCurrent(doc, ref) {
   }
   const save = doc.querySelector('#btn-save');
   if (save && !save.hasAttribute('data-library')) return;
-  save?.setAttribute('title', ref ? `Save a new version of ${ref.name}` : 'Save this layout to your library');
+  save?.setAttribute('title', ref ? `Save a new version of ${ref.name}` : 'Save this track to your library');
 }
 
 /** Remembers which library track the canvas holds. @param {TrackRef | null} ref */
@@ -237,7 +235,10 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
   const menuItem = /** @type {HTMLElement} */ (doc.querySelector('#menu-library'));
   const download = /** @type {HTMLElement} */ (doc.querySelector('#btn-download'));
 
-  doc.querySelector('#btn-save')?.setAttribute('data-library', '');
+  // Signed out, this button downloads a file and says so; signed in, it saves.
+  const navSave = doc.querySelector('#btn-save');
+  navSave?.setAttribute('data-library', '');
+  if (navSave) navSave.textContent = 'Save';
   menuItem.hidden = false;
   download.hidden = false;
   showCurrent(doc, loadTrackRef(sessionStorage));
@@ -286,7 +287,7 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
       } catch (error) {
         if (/** @type {any} */ (error).status === 404) {
           forgetTrack(doc);
-          host.report({ error: `${ref.name} is no longer in your library. Save again to keep this layout as a new track.` });
+          host.report({ error: `${ref.name} is no longer in your library. Save again to keep it as a new track.` });
         } else {
           host.report({ error: /** @type {Error} */ (error).message });
         }
@@ -350,16 +351,16 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
     const total = workspaces.reduce((n, w) => n + w.tracks.length, 0);
     const sections = workspaces.map((w, i) => {
       const head = el(doc, 'div', { class: 'library-ws-head' }, [
-        el(doc, 'h3', { class: 'h3', text: w.name || 'Unnamed workspace' }),
-        el(doc, 'span', { class: 'tag', text: i === 0 && w.name ? 'Personal' : w.role[0].toUpperCase() + w.role.slice(1) }),
+        el(doc, 'h3', { class: 'h3', text: workspaceLabel(w, i) }),
+        ...(i === 0 ? [] : [el(doc, 'span', { class: 'tag', text: w.role[0].toUpperCase() + w.role.slice(1) })]),
       ]);
       const list = w.tracks.length
         ? el(doc, 'ul', { class: 'library-tracks' }, w.tracks.map((t) => trackRow(t, w, current)))
         : el(doc, 'p', { class: 'empty', text: 'No tracks here yet.' });
-      return el(doc, 'section', { class: 'library-ws', 'aria-label': w.name || 'Unnamed workspace' }, [head, list]);
+      return el(doc, 'section', { class: 'library-ws', 'aria-label': workspaceLabel(w, i) }, [head, list]);
     });
     if (workspaces.length && total === 0) {
-      sections.unshift(el(doc, 'p', { class: 'library-hint', text: 'Nothing saved yet. Close this and press Save to keep the layout on the canvas here.' }));
+      sections.unshift(el(doc, 'p', { class: 'library-hint', text: 'Nothing saved yet. Close this and press Save to keep the track on the canvas here.' }));
     }
     const focused = focusKey(doc.activeElement);
     body.replaceChildren(...sections);
@@ -537,13 +538,17 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
     const t = li && trackById(/** @type {string} */ (li.getAttribute('data-track-id')));
     if (!button || !t) return;
     const act = button.dataset.act;
+    // The first workspace is the personal one: nobody else sees its tracks.
+    const personal = workspaces.findIndex((o) => o.id === t.workspaceId) === 0;
     if (act === 'open') return open(t, t.currentKey, `Opened ${t.name}.`);
     if (act === 'history' || act === 'rename' || act === 'copy') return togglePanel(t.id, act);
     if (act === 'close-panel') return togglePanel(t.id, undefined);
     if (act === 'delete') {
       const ok = await confirmAction(doc, {
         title: `Delete ${t.name}?`,
-        text: 'The track and its whole history are deleted for everyone in the workspace. Links you shared keep working. This cannot be undone.',
+        text: personal
+          ? 'The track and its whole history are deleted. Links you shared keep working. This cannot be undone.'
+          : 'The track and its whole history are deleted for everyone in the club. Links you shared keep working. This cannot be undone.',
         confirm: 'Delete track',
       });
       if (!ok) return;
@@ -561,7 +566,7 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
         title: last ? `Delete ${t.name}?` : 'Delete this version?',
         text: last
           ? 'This is its only version, so the track goes too. This cannot be undone.'
-          : `The version saved ${relativeTime(version.savedAt)} is deleted for everyone in the workspace. This cannot be undone.`,
+          : `The version saved ${relativeTime(version.savedAt)} is deleted${personal ? '' : ' for everyone in the club'}. This cannot be undone.`,
         confirm: last ? 'Delete track' : 'Delete version',
       });
       if (!ok) return;
@@ -588,8 +593,8 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
       const target = String(data.get('workspace') ?? '');
       panels.delete(t.id);
       const result = await change(() => api.copy(t.id, target));
-      const w = workspaces.find((o) => o.id === target);
-      if (result) host.report({ notice: `Copied ${t.name} to ${w?.name || 'the other workspace'}.` });
+      const i = workspaces.findIndex((o) => o.id === target);
+      if (result) host.report({ notice: `Copied ${t.name} to ${i === -1 ? 'the library' : workspaceLabel(workspaces[i], i)}.` });
     }
   });
 

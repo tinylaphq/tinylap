@@ -20,7 +20,7 @@ const connect = (label) => html`<button type="button" class="btn btn-primary btn
 /** @param {any} request @param {{ tag: unknown }} importMap */
 export function bridgePage(request, importMap) {
   const base = request.space.base;
-  const where = request.space.kind === 'personal' ? 'your personal timing' : 'this club';
+  const where = request.space.kind === 'personal' ? 'your personal space' : 'this club';
   return layout(request, {
     title: 'Bridge',
     screen: 'bridge',

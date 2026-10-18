@@ -7,7 +7,7 @@
 // server answers "reauthenticate" (the session is older than 10 minutes),
 // the page asks for the passkey once, which signs in afresh, and then
 // retries the action.
-import { api, isReauthenticate, PageError, registerPasskey, show, signInWithPasskey } from './webauthn.js';
+import { api, failureText, isReauthenticate, PageError, registerPasskey, show, signInWithPasskey } from './webauthn.js';
 
 const $ = (id) => /** @type {any} */ (document.getElementById(id));
 const { name: displayName, user: userId } = document.body.dataset;
@@ -60,7 +60,7 @@ async function act(button, status, run) {
   try {
     await run();
   } catch (error) {
-    show(status, error instanceof PageError ? error.message : 'Something went wrong. Try again.', 'error');
+    show(status, failureText(error), 'error');
     if (!(error instanceof PageError)) console.error(error);
   } finally {
     button.disabled = false;

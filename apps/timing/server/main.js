@@ -40,7 +40,7 @@ const needed = {
   TINYLAP_PLANNER_URL: env.TINYLAP_PLANNER_URL,
 };
 const missing = Object.keys(needed).filter((name) => !needed[name]);
-if (missing.length) refuse(`Timing needs ${missing.join(', ')}. See "Self-hosting timing" in README.md.`);
+if (missing.length) refuse(`Timing needs ${missing.join(', ')}. See "Self-hosting TinyLap Timing" in README.md.`);
 
 let keys;
 try {
@@ -63,7 +63,7 @@ let auth;
 try {
   auth = createAuth({ issuer: env.TINYLAP_ISSUER, clientId: env.TINYLAP_CLIENT_ID, clientSecret: env.TINYLAP_CLIENT_SECRET, keys, publicUrl, sessions: store.sessions });
 } catch (error) {
-  refuse(`log-in: ${error.message}`);
+  refuse(`sign-in: ${error.message}`);
 }
 const feed = startFeed({ issuer: env.TINYLAP_ISSUER, token: env.TINYLAP_FEED_TOKEN, store });
 const ticker = setInterval(() => {
@@ -86,7 +86,7 @@ const handler = createHandler({
 
 const host = dev ? '127.0.0.1' : '0.0.0.0';
 const server = createServer(handler).listen(port, host, () => {
-  console.log(`timing on http://${host}:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}${dev ? ' (dev, no-store)' : ''}, log-in through ${env.TINYLAP_ISSUER}`);
+  console.log(`timing on http://${host}:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}${dev ? ' (dev, no-store)' : ''}, sign-in through ${env.TINYLAP_ISSUER}`);
 });
 
 // Stop ticking and accepting, end the open streams, close the database, leave.

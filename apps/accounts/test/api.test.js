@@ -243,7 +243,7 @@ describe('pages', () => {
     const c = await club();
     const text = await ours(await page('/clubs', c.member.jar));
     assert.match(text, new RegExp(`href="/clubs/${c.id}"`));
-    assert.match(text, /Personal, only you/);
+    assert.match(text, /<span class="accounts-workspace-name">Personal<\/span>\s*<span class="accounts-workspace-meta">Only you<\/span>/, "your personal space is Personal, as in every app");
     assert.match(text, /id="create-club"/);
     assert.match(text, /src="\/public\/club\.js"/);
   });

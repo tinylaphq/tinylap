@@ -74,9 +74,9 @@ serve one representation each. The full API is described at
 
 # Accounts and workspaces
 
-Logging in is optional: the planner works fully without an account. An
+Signing in is optional: the planner works fully without an account. An
 account gives you a durable library of tracks, and gives clubs a shared one.
-The login service is `apps/accounts`; the planner is its first client. The
+The sign-in service is TinyLap Accounts (`apps/accounts`); the planner is its first client. The
 design is in `docs/superpowers/specs/2026-10-14-identity-design.md`.
 
 **Status: proof of concept.** Everything runs on `*.fly.dev`, with Fly's daily
@@ -123,8 +123,8 @@ workspace before leaving if you want them.
 
 Saving a track to the library writes a **private** snapshot: same
 content-addressed key as a public one, readable only by members of that
-workspace (anyone else gets a 404). Saving is not publishing. **Share**
-publishes the current version as an ordinary public snapshot and cannot be
+workspace (anyone else gets a 404). Saving is not sharing. **Share**
+makes the current version an ordinary public snapshot and cannot be
 undone, which is why it asks first. Two workspaces with identical content each
 have their own private copy, and deleting one never touches the other or any
 public snapshot.
@@ -158,7 +158,7 @@ after verifying the request out of band
 `accounts` stores a display name, passkeys (public keys), recovery code hashes,
 memberships and sessions. The email field holds a placeholder
 (`<id>@users.invalid`) that is never shown or used. The planner stores the
-library and, per login session, the tokens, encrypted. The account page offers
+library and, per sign-in session, the tokens, encrypted. The account page offers
 an export of the account data with a link to the planner's export of every
 track and version, and deletion. The privacy page of `accounts` says the same
-in plain words. Nothing is third-party: no analytics, fonts or logins.
+in plain words. Nothing is third-party: no analytics, fonts or sign-in providers.

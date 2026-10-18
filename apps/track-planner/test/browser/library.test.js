@@ -83,6 +83,7 @@ test('save, version, history, rename, share and log out', async (t) => {
   await page.locator('#account .nav-sign-in').waitFor();
   assert.equal(await page.locator('#btn-download').isHidden(), true);
   assert.equal(await page.locator('#library-current').isHidden(), true);
+  assert.equal(await save.textContent(), 'Download', 'signed out, the button says what it does');
 
   // Sign up with a passkey at accounts, then log in to the planner.
   await page.goto(`${planner.suite.issuer}/sign-up`);
@@ -97,6 +98,7 @@ test('save, version, history, rename, share and log out', async (t) => {
   await page.locator('#account summary').waitFor();
   assert.equal(await page.locator('#account .nav-account-name').textContent(), 'Ayrton');
   assert.equal(await page.locator('#btn-download').isVisible(), true);
+  assert.equal(await save.textContent(), 'Save');
 
   // A layout on the canvas: the stock one.
   await page.locator('#btn-presets').click();
@@ -214,13 +216,13 @@ test('save, version, history, rename, share and log out', async (t) => {
   await page.locator('#btn-share').click();
   const confirm = page.locator('#share-dialog');
   await confirm.waitFor();
-  assert.equal(await confirm.locator('p').textContent(), 'Publishing makes this layout public at a permanent link. It cannot be undone.');
+  assert.equal(await confirm.locator('p').textContent(), 'Sharing makes this track public at a permanent link. It cannot be undone.');
   await shot(page, 'task-9-share-confirm.png');
   await confirm.getByRole('button', { name: 'Cancel' }).click();
   await confirm.waitFor({ state: 'hidden' });
   assert.equal(posts.length, 0);
   await page.locator('#btn-share').click();
-  await confirm.getByRole('button', { name: 'Publish and copy link' }).click();
+  await confirm.getByRole('button', { name: 'Share and copy link' }).click();
   await page.getByText(/^(Link copied|Share link): http/).waitFor();
   assert.equal(posts.length, 1);
 

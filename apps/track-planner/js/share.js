@@ -14,11 +14,11 @@ export async function request(fetch, url, init) {
   try {
     res = await fetch(url, init);
   } catch {
-    throw new Error('Could not reach the planner server. Check your connection and try again.');
+    throw new Error('Could not reach the planner. Check your connection and try again.');
   }
   if (res.ok) return res;
   const problem = await res.json().catch(() => null);
-  throw Object.assign(new Error(problem?.title ?? `The planner server answered ${res.status}.`), { status: res.status });
+  throw Object.assign(new Error(problem?.title ?? `The planner answered ${res.status}. Try again in a minute.`), { status: res.status });
 }
 
 /**
@@ -37,7 +37,7 @@ export async function shareLayout(layout, { fetch = globalThis.fetch } = {}) {
 
 /** @param {string} key @returns {Promise<Layout>} */
 export async function fetchShared(key, { fetch = globalThis.fetch } = {}) {
-  if (!KEY_PATTERN.test(key)) throw new Error('This link does not point to a layout.');
+  if (!KEY_PATTERN.test(key)) throw new Error('This link does not point to a shared track.');
   const res = await request(fetch, `/layouts/${key}.json`);
   return parseLayout(await res.text());
 }
