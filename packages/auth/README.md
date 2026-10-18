@@ -98,7 +98,7 @@ createServer(async (req, res) => {
     res.writeHead(out.status, out.headers).end(out.body);
   } catch (error) {
     const down = error instanceof AuthError && error.code === 'unavailable';
-    res.writeHead(down ? 503 : 500).end(down ? 'Log-in is unavailable right now.' : undefined);
+    res.writeHead(down ? 503 : 500).end(down ? 'Sign-in is unavailable right now.' : undefined);
   }
 }).listen(8080);
 ```
