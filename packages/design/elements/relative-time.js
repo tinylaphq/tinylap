@@ -6,7 +6,7 @@
 // it current on the server's time, and keeps itself hidden while that time is
 // younger than its `min` attribute (ms). Its `now` attribute is the server's
 // time (ms) when the page was rendered; skew = now − Date.now() is taken once,
-// on connect. One shared timer updates every element every 15 s, and once on
+// on connect. Without `now` it uses the device clock. One shared timer updates every element every 15 s, and once on
 // connect; it pauses while the page is hidden, and stops when no element is
 // connected. It writes the <time>'s text and its own `hidden` only. Without
 // it the server-rendered text and `hidden` stay as rendered.
@@ -27,7 +27,11 @@ class TlRelativeTime extends HTMLElement {
   skew = null;
 
   connectedCallback() {
-    if (this.skew === null) this.skew = Number(this.getAttribute('now')) - Date.now();
+    if (this.skew === null) {
+      // Without a server time, the device clock.
+      const now = this.getAttribute('now');
+      this.skew = now === null || now === '' ? 0 : Number(now) - Date.now();
+    }
     if (live.size === 0) document.addEventListener('visibilitychange', onVisibility);
     live.add(this);
     this.update();

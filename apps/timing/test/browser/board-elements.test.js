@@ -2,10 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The board's elements in the browser (spec step two §7, B1–B7): tl-board's
+// The board's elements in the browser (spec step two §7, B1–B8): tl-board's
 // stream across pagehide, pageshow and disconnect; tl-countdown and
 // tl-relative-time on the server's time; a layout that holds still when
-// a "last lap" note appears; and the shared timer's teardown.
+// a "last lap" note appears; the shared timer's teardown; and the device
+// clock when no server time is given.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatClock } from '../../public/format.js';
@@ -241,5 +242,20 @@ test('B7: when the last note leaves, its shared timer and listener go too', asyn
   assert.deepEqual(await counts(), [false, 0, 0]);
   await page.evaluate(() => document.querySelector('main')?.append(/** @type {any} */ (window).board));
   assert.deepEqual(await counts(), [true, 1, 1]);
+  assert.deepEqual(errors, []);
+});
+
+test('B8: without a now attribute, tl-relative-time uses the device clock', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, null);
+  t.after(() => context.close());
+  const at = new Date(Date.now() - 2 * 60_000).toISOString();
+  await page.route('**/fixture-ago', (route) => route.fulfill({
+    contentType: 'text/html',
+    body: `<!doctype html><script type="module" src="/pkg/design/elements/relative-time.js"></script><p><tl-relative-time min="60000">last lap <time datetime="${at}">later</time></tl-relative-time></p>`,
+  }));
+  await page.goto('/fixture-ago');
+  await page.waitForFunction(() => customElements.get('tl-relative-time'));
+  assert.equal(await page.locator('time').innerText(), '2 min ago');
+  assert.equal(await page.getByText('last lap 2 min ago').isVisible(), true);
   assert.deepEqual(errors, []);
 });
