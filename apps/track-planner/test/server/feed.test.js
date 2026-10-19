@@ -210,7 +210,9 @@ test('startFeed reads on start and on its interval, and stop() ends it', async (
     logger: { warn: () => {}, info: () => {} },
     fetch: async () => { calls += 1; return Response.json({ deletions: [], next: 0 }); },
   });
-  await new Promise((resolve) => setTimeout(resolve, 70));
+  // Wait for the reads themselves, not a fixed 70 ms: timers run late on a busy machine.
+  const deadline = Date.now() + 5000;
+  while (calls < 3 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
   feed.stop();
   const seen = calls;
   assert.ok(seen >= 3, `read on start and then on the interval (${seen})`);
