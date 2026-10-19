@@ -88,14 +88,15 @@ export function clockAt({ kind, state, opensAt, closesAt }, now) { … }
 3. **By GET only.** The element calls `location.reload()`.
    - **Why it is safe:** the server renders `reload-on-phase` only on the 200 answer to `GET /race`, so a reload re-sends that GET and nothing else. That GET-only attribute is the guard against sending a form again.
    - **Answers to a POST:** the race page can also be the answer to the 422 or 409 of `POST /sessions` (`race-pages.js:17-21`, `:31`, `:40`), or to the error of abort (`:61`). Those answers carry no attribute, and their clock just ticks.
-   - **Not `location.replace(location.href)`:** both can be served from a prefetch of the same URL. Measured in Chrome during implementation, `location.reload()` too, after the Race tab was hovered. So the speculation rules (`@tinylap/design/html/speculation.js`) leave out links to the page itself (`[aria-current="page"]`): the race page is never fetched ahead, and its reload always comes from the server.
+   - **Not `location.replace(location.href)`:** both can be served from a prefetch of the same URL. Measured in Chrome during implementation, `location.reload()` too, after the Race tab was hovered. So the speculation rules (`@tinylap/design/html/speculation.js`) leave out links to the page itself (`[aria-current="page"]`): a page is never fetched ahead from itself, so race control's reload always comes from the server. Other pages may still prefetch race control (the Race tab hovered on the board); step 5's `prefetched` path is for the page that arrives that way.
 4. **No loops.**
    - A server clock behind the device: the boundary is measured in server time, so the device doesn't reload early. The reload is a normal load, with a fresh `data-now` and skew. The new page's derived phase still equals `data-state`, and it waits.
    - A stalled server tick: the derived phase differs from `data-state`, so step 5 stops a second reload.
-5. **Once per boundary.** Before reloading, the element writes `tl-countdown reload <pathname> <data-opens> <data-state>` to `sessionStorage`. If that key is already there, it doesn't reload.
+5. **Once per boundary.** Before reloading, the element writes `tl-countdown reload <pathname> <data-opens> <data-state>` to `sessionStorage`. If that key is already there, it doesn't reload. Writing a key drops the page's keys with an older `<data-opens>`, so a tab left open all day keeps only the current session's.
+   - **Moved in the page.** An element disconnected while its reload is pending cancels it and removes its key, so it decides again when it connects.
    - **Prefetch.** A `prefetched` element (skew 0) neither reads nor writes the key. It reloads once its derived phase differs from `data-state`.
      - The page it loads is a normal navigation, with a real skew, and it uses the key as usual. So a prefetched page can't use up the reload for the real boundary.
-     - It can't loop either: the page itself is never prefetched (see above), and each normal load waits for the server.
+     - It can't loop either: a page is never fetched ahead from itself (see step 3), so its reload comes from the server, and each normal load waits for the server.
    - **No storage.** If `sessionStorage` throws, the element never reloads, and the clock stays at 0:00.
 6. **Not at `done`, not at `closesAt + MAX_LAP_MS`.** Neither is decided by the time alone. The race page then shows "finishing the last lap", with a stopped 0:00, until it is loaded again.
 7. **Never on the board.** The board has the stream.
@@ -139,7 +140,7 @@ A roster driver with no crossing since the start shows nothing; "Laps 0" already
 
 **The element reads:**
 - the crossing time: `Date.parse(time.dateTime)` of its `<time>` child. Without a parsable `<time>`, it does nothing;
-- server time: its `now` attribute (server ms at render). `skew = now − Date.now()` is taken once, on connect. There is no prefetch rule: on the board the stream replaces a stale board within a second, and the note has minute resolution;
+- server time: its `now` attribute (server ms at render). `skew = now − Date.now()` is taken once, on connect. Without `now`, it uses the device clock (skew 0). There is no prefetch rule: on the board the stream replaces a stale board within a second, and the note has minute resolution;
 - `min`: ms below which the element keeps itself `hidden`.
 
 **Cadence.**
@@ -323,7 +324,9 @@ The button is rendered only when `big`, and stays hidden without JavaScript, by 
 - **B3** **Server time.** `page.clock.setSystemTime` puts the device an hour behind the server: the practice clock and the note follow the server.
 - **B4** **The note appears on its own.** `page.clock.install()` before `goto`. A driver with one lap (two passings 8 s apart), whose last crossing is 40 s old by server time, shows no note. `page.clock.runFor(15_000)` (55 s) → still none. Another `runFor(15_000)` (70 s) → "last lap 1 min ago", with the stream idle.
 - **B5** **Paused when hidden.** Override `document.hidden` to true and dispatch `visibilitychange`, then `runFor(120_000)`: the text is unchanged. Set it visible and dispatch again: it updates at once.
-- **B6** **A stable layout.** At 390×844, 1280×800 and 1920×1080 `?big`, with short and long names: the left edge of each column header is the same before and after a note appears, and `document.documentElement.scrollWidth <= innerWidth`.
+- **B6** **A stable layout.** At 390×844, 1280×800 and 1920×1080 `?big`, each with short names only (`Al`, `Bo`, where a note is the widest thing in the Driver column) and with a long one: the left edge of each column header is the same before and after a note appears, and `document.documentElement.scrollWidth <= innerWidth`.
+- **B7** **Teardown.** Removing the board removes the shared 15 s timer and the `visibilitychange` listener; putting it back adds them again.
+- **B8** **No server time.** A `tl-relative-time` without `now` counts on the device clock.
 
 **New: `test/browser/race-countdown.test.js`.** Each test runs the engine ticker described above.
 - **C1** **One reload by GET.** Start a race with a 2 s countdown (`app.form`), open `/personal/race`: "Starts in" ticks, then exactly one load (`page.on('load')`), whose request is a GET, and no POST (`page.on('request')`). The panel then says "Race, running" and "Remaining".
@@ -332,16 +335,20 @@ The button is rendered only when `big`, and stays hidden without JavaScript, by 
 - **C4** **Prefetch, simulated.** An init script makes `performance.getEntriesByType('navigation')[0].deliveryType` report `'navigational-prefetch'` on the first load only, with the device clock 5 s ahead through `page.clock.setSystemTime(clock.now + 5000)`, without `install()`, so real timers run.
   - "First load only" is tracked in `window.name`: the init script sets it on the first run and checks it later. The element's own `sessionStorage` key is never used for this.
   - Expected: the page reloads early, reading and writing no key. The next, normal page waits. Then exactly one more load, at the server's boundary.
-- **C5** **Prefetch, real.** On a running countdown's race page, hover the navbar's Race tab and wait for the prefetch request (`sec-purpose`, as `navigation.test.js:30`). Then cross the boundary: exactly one load, and the panel says "Race, running". The hover waits at most 5 s for the prefetch. If Chrome doesn't prefetch a link to the document's own URL, the R1 hazard can't arise there: the test notes it and passes, and C4 stays the guard.
+- **C5** **No self-prefetch.** On a running countdown's race page, hover the navbar's Race tab (the page itself, `aria-current="page"`): no request for `/personal/race` with `sec-purpose` follows. Then cross the boundary: exactly one more document, from the network (counted by its `deliveryType`, not by `load` events), and the panel says "Race, running". Without the speculation rule, Chrome serves the reload from the prefetch, and the stale page reloads once more.
 - **C6** **Never after a POST.** A second start answers 409 with the panel: past the boundary, no reload and no request.
 - **C7** **Reload at `closesAt`.** A 1-minute race with a 0 s countdown, driven by the fake server clock (`startTiming({ clock })`, moved forward, with `app.engine.tick()` after each move) and `page.clock`, installed with `page.clock.install({ time: clock.now })` before `goto`. `page.clock` moves together with the server clock: each step adds the same amount to `clock.offset` and to `page.clock.runFor`. Past `closesAt`: exactly one load, and the panel then says "Race, finishing the last lap" with a stopped 0:00.
+- **C8** **Hidden page.** `document.hidden` overridden to true, with `visibilitychange`: past the boundary, no load. Visible again: exactly one load.
+- **C9** **Moved after deciding.** With `page.clock`, just past the boundary (reload scheduled), the element is removed and put back: it still reloads.
+- C2 refuses a third request for the page, so a broken once-per-boundary key fails the test instead of reloading forever. The browser tests run with `--test-timeout=60000`.
+- C1 also checks that a key from an earlier session on the page is dropped.
 
 **A real back/forward cache restore** is not tested. Playwright starts Chrome with that cache turned off (confirm in playwright-core's Chromium switches), and `no-store` may keep these pages out anyway. As in `frames.test.js:215`, the tests dispatch the events.
 
 ## 8. Risks
 
 - **Race-page reloads.** One at the end of the countdown, one at `closesAt`. A user about to press Abort gets a fresh page, with Abort still there. `done` shows only after a load (ruling).
-- **Prefetched race page.** It uses the device clock until its early reload. The reload costs one extra page load.
+- **Prefetched race page.** Only on arriving from another page's prefetch (for example the Race tab hovered on the board): the page uses the device clock until its early reload, which costs one extra page load. Race control is never prefetched from itself, so its own reloads cost nothing extra.
 - **`lastAt` is any crossing.** A car that keeps crossing with uncounted laps isn't shown as stopped. That is intended: it is moving.
 - **Mapped time.**
   - A decoder whose offset jumps moves the note by the jump; the note's minute resolution hides small errors.
@@ -359,4 +366,4 @@ The button is rendered only when `big`, and stays hidden without JavaScript, by 
 - A live race-page state beyond the two reloads; no reload at `done` or at `closesAt + MAX_LAP_MS`.
 - Changes to the SSE framing, the throttle, the retry or `/live`, beyond the additive `lastAt`.
 - An instant Back from the back/forward cache.
-- View transitions; speculation-rule changes.
+- View transitions; speculation-rule changes beyond leaving out a page's links to itself (§2.2 step 3).

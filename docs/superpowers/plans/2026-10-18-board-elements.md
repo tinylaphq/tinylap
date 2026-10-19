@@ -20,6 +20,8 @@ Without JavaScript the board works as today, and the note is rendered by the ser
 
 **Spec:** `docs/superpowers/specs/2026-10-18-custom-elements-step-two-board.md` (draft 4, committed in dcff143). Read it; it is the authority. Section and test ids below (§2.2, B1–B6, C1–C7) are the spec's.
 
+**Changed after implementation:** Chrome served `location.reload()` from a prefetch of the same page, so the speculation rules now leave out links to the page itself (`[aria-current="page"]`, commit 379307d), and C5 checks that nothing is fetched ahead. The review added B7, B8, C8 and C9 and a browser test timeout. Where this plan and the spec differ, the spec supersedes it.
+
 ## Global constraints
 
 - **AGENTS.md "Web platform first":**
