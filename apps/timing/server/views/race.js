@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Race control (spec §6.2): the start form, or the running session with Abort.
-import { formatLength } from '../../public/format.js';
+import { formatClock, formatLength } from '../../public/format.js';
+import { clockOf } from './board.js';
 import { html } from './html.js';
 import { errorSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
@@ -44,12 +45,15 @@ function startForm(request, { drivers, error, values }) {
 </form>`;
 }
 
-function runningPanel(request, session, drivers) {
+/** The panel of a running session. `reload` (only on the 200 GET) lets its clock reload the page once at a phase change. */
+function runningPanel(request, session, drivers, { reload }) {
   const base = request.space.base;
   const names = (session.roster ?? []).map((id) => drivers.find((d) => d.id === id)?.name ?? 'Former driver');
+  const clock = clockOf(session, request.now());
   return html`<div class="card-static stack-md">
   <h2 class="h3">${KIND[session.kind]}, ${STATE[session.state] ?? session.state}</h2>
   <p>${names.join(', ')}. ${formatLength(session.durationMs ?? 0)}.</p>
+  <tl-countdown class="race-clock"${reload ? html` reload-on-phase` : null}><span class="stat-label" data-clock-label>${clock.label}</span> <time class="race-clock-time" data-clock data-kind="${session.kind}" data-state="${session.state}" data-opens="${session.opensAt ?? ''}" data-closes="${session.closesAt ?? ''}" data-now="${request.now()}">${formatClock(clock.ms)}</time></tl-countdown>
   <div class="button-row">
     <a class="btn btn-outline" href="${base}/board">Show the board</a>
     <a class="btn btn-danger" href="${base}/sessions/${session.id}/abort">Abort</a>
@@ -57,15 +61,16 @@ function runningPanel(request, session, drivers) {
 </div>`;
 }
 
-/** @param {any} request @param {{ session: any, drivers: any[], error?: any, values?: any }} model */
-export function racePage(request, { session, drivers, error = null, values = null }) {
+/** @param {any} request @param {{ session: any, drivers: any[], error?: any, values?: any, reload?: boolean }} model */
+export function racePage(request, { session, drivers, error = null, values = null, reload = false }) {
   return layout(request, {
     title: 'Race control',
     screen: 'race',
+    scripts: session ? ['elements/countdown.js'] : [],
     body: html`<div class="container stack-lg screen">
   <h1>Race control</h1>
   ${errorSummary(error, FIELD_ID[error?.field])}
-  ${session ? runningPanel(request, session, drivers) : startForm(request, { drivers, error, values })}
+  ${session ? runningPanel(request, session, drivers, { reload }) : startForm(request, { drivers, error, values })}
 </div>`,
   });
 }

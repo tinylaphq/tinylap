@@ -45,5 +45,5 @@ test('setup loads the two element modules', async () => {
 
 test('no server module imports an element file (they need a browser)', () => {
   const files = readdirSync(join(appDir, 'server'), { recursive: true, encoding: 'utf8' }).filter((f) => f.endsWith('.js'));
-  for (const f of files) assert.doesNotMatch(readFileSync(join(appDir, 'server', f), 'utf8'), /(from\s*|import\(\s*)['"][^'"]*design\/elements\//, f);
+  for (const f of files) assert.doesNotMatch(readFileSync(join(appDir, 'server', f), 'utf8'), /(from\s*|import\(\s*)['"][^'"]*(design\/elements\/|public\/elements\/)/, f);
 });

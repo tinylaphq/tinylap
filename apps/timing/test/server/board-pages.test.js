@@ -51,6 +51,7 @@ test('an empty board shows a member how to get the track ready', async () => {
   assert.match(body, /<noscript><meta http-equiv="refresh" content="10"><\/noscript>/);
   assert.match(body, new RegExp(`<div id="board-live"[^>]* data-events="${base}/board/events"`));
   assert.match(body, /<script type="module" src="\/public\/board.js"><\/script>/);
+  assert.match(body, /<script type="module" src="\/public\/elements\/countdown.js"><\/script>/);
 });
 
 test('laps, a personal best and an unknown car', async () => {

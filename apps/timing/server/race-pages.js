@@ -13,11 +13,15 @@ import { racePage } from './views/race.js';
 
 const NO_SESSION = { message: 'There is no running qualifying or race here.' };
 
-/** @param {any} request @param {number} status @param {{ error?: any, values?: any }} [extras] */
+/**
+ * Race control. Only a 200, the answer to GET /race, lets the clock reload the page: a reload
+ * of the answer to a POST would send the form again.
+ * @param {any} request @param {number} status @param {{ error?: any, values?: any }} [extras]
+ */
 function renderRace(request, status, { error = null, values = null } = {}) {
   const ws = request.workspaceId;
   const session = request.store.activeSession(ws);
-  return page(request, status, racePage(request, { session, drivers: request.store.drivers(ws), error, values }));
+  return page(request, status, racePage(request, { session, drivers: request.store.drivers(ws), error, values, reload: status === 200 }));
 }
 
 async function start(request) {
