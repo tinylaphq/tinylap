@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The board's elements in the browser (spec step two §7, B1–B6): tl-board's
+// The board's elements in the browser (spec step two §7, B1–B7): tl-board's
 // stream across pagehide, pageshow and disconnect; tl-countdown and
-// tl-relative-time on the server's time; and a layout that holds still when
-// a "last lap" note appears.
+// tl-relative-time on the server's time; a layout that holds still when
+// a "last lap" note appears; and the shared timer's teardown.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatClock } from '../../public/format.js';
@@ -216,3 +216,30 @@ for (const [i, { viewport, v, names }] of CASES.entries()) {
     assert.deepEqual(errors, []);
   });
 }
+
+test('B7: when the last note leaves, its shared timer and listener go too', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  // Counts the page's visibilitychange listeners and its 15 s timers.
+  await page.addInitScript(() => {
+    const spy = { listeners: new Set(), timers: new Set() };
+    /** @type {any} */ (window).spy = spy;
+    const add = document.addEventListener.bind(document);
+    const remove = document.removeEventListener.bind(document);
+    document.addEventListener = (type, listener, options) => { if (type === 'visibilitychange') spy.listeners.add(listener); return add(type, listener, options); };
+    document.removeEventListener = (type, listener, options) => { if (type === 'visibilitychange') spy.listeners.delete(listener); return remove(type, listener, options); };
+    const set = window.setInterval.bind(window);
+    const clear = window.clearInterval.bind(window);
+    window.setInterval = /** @type {any} */ ((fn, ms, ...rest) => { const id = set(fn, ms, ...rest); if (ms === 15_000) spy.timers.add(id); return id; });
+    window.clearInterval = (id) => { spy.timers.delete(id); return clear(id); };
+  });
+  await page.goto('/personal/board');
+  await page.locator('#live-status[data-state="live"]').waitFor();
+  const counts = () => page.evaluate(() => { const { spy } = /** @type {any} */ (window); return [document.querySelectorAll('tl-relative-time').length > 0, spy.listeners.size, spy.timers.size]; });
+  assert.deepEqual(await counts(), [true, 1, 1]);
+  await page.evaluate(() => { const board = document.querySelector('tl-board'); /** @type {any} */ (window).board = board; board?.remove(); });
+  assert.deepEqual(await counts(), [false, 0, 0]);
+  await page.evaluate(() => document.querySelector('main')?.append(/** @type {any} */ (window).board));
+  assert.deepEqual(await counts(), [true, 1, 1]);
+  assert.deepEqual(errors, []);
+});
