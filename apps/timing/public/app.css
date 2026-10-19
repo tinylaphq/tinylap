@@ -77,6 +77,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 tl-board { display: block; }
 /* The tap element; the tap screen inside it is unchanged. */
 tl-tap { display: block; }
+/* The bridge element; #bridge inside it is unchanged, and it takes #bridge's place in the stack. */
+tl-bridge { display: block; }
 /* Room for "last lap 14 Oct 2026", so a note appearing never moves a column (spec §5.2). */
 .board-table .board-driver { min-width: 9.5em; }
 /* A quiet second line under a driver who has stopped. */

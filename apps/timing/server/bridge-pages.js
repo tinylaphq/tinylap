@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The bridge's page (spec §6.5). Everything else the bridge does goes over
-// the JSON API from bridge-page.js.
+// the JSON API from tl-bridge.
 import { pageRoute } from './page-access.js';
 import { page } from './respond.js';
 import { spacePath } from './spaces.js';

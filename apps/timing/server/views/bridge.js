@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The bridge (spec §6.5): the server renders every state; bridge-page.js
+// The bridge (spec §6.5): the server renders every state; tl-bridge
 // shows the one that applies. Without JavaScript or Web Serial, the page
 // says what the bridge needs.
 import { createHash } from 'node:crypto';
@@ -25,9 +25,10 @@ export function bridgePage(request, importMap) {
     title: 'Bridge',
     screen: 'bridge',
     importMap: importMap.tag,
-    scripts: ['bridge-page.js'],
+    scripts: ['elements/bridge.js'],
     body: html`<div class="container stack-lg screen">
   <h1>Bridge</h1>
+  <tl-bridge>
   <div id="bridge" data-workspace="${request.workspaceId}">
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-warning" data-bridge-earlier hidden></p>
@@ -75,6 +76,7 @@ export function bridgePage(request, importMap) {
     </section>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
   </div>
+  </tl-bridge>
 </div>`,
   });
 }
