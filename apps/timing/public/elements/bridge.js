@@ -10,7 +10,11 @@
 // guards leaving the page while a decoder is forwarding. Pairing posts to
 // the JSON API, because the decoder's token must reach the board over serial.
 // - Each start, on connect, makes a fresh run: the page's state, held in
-//   one object.
+//   one object. Every async path writes to the page only while its run is
+//   current, so a move (a stop and a fresh start) shows Connect again.
+// - On disconnect it stops: the port is closed, and the click, submit and
+//   beforeunload listeners are removed. Work in flight (the picker, a
+//   pairing request, a name lookup, earlier passings) finishes, unseen.
 // - Without #bridge, or without Web Serial and ?simulate, it does nothing,
 //   and the server's "unsupported" notice stays.
 // The Bridge class itself (serial, outbox, retries) is ../bridge.js.
@@ -68,8 +72,7 @@ class TlBridge extends HTMLElement {
 
   connectedCallback() { this.start(); }
 
-  // Teardown follows (Task 5).
-  disconnectedCallback() {}
+  disconnectedCallback() { this.stop(); }
 
   start() {
     if (this.run) return;
@@ -77,11 +80,36 @@ class TlBridge extends HTMLElement {
     if (!root || !supported) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null };
     this.run = run;
+    this.reset(run);
     this.show(run, 'connect');
     this.addEventListener('click', this);
     this.addEventListener('submit', this);
     addEventListener('beforeunload', this);
     void this.sendEarlier(run).catch(() => {});
+  }
+
+  stop() {
+    const run = this.run;
+    this.run = null;
+    if (!run) return;
+    this.removeEventListener('click', this);
+    this.removeEventListener('submit', this);
+    removeEventListener('beforeunload', this);
+    const bridge = run.bridge;
+    run.bridge = null;
+    void bridge?.close();
+  }
+
+  /** Puts back what an earlier run wrote, as the server rendered it; a first start changes nothing. @param {Run} run */
+  reset(run) {
+    const error = this.$(run, '[data-bridge-error]');
+    error.hidden = true;
+    error.textContent = '';
+    this.$(run, '[data-bridge-earlier]').hidden = true;
+    this.$(run, '[data-bridge-live]').textContent = '';
+    const form = /** @type {HTMLFormElement} */ (this.$(run, '[data-bridge-pair]'));
+    /** @type {HTMLInputElement} */ (form.elements.namedItem('name')).readOnly = false;
+    /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]')).disabled = false;
   }
 
   /** @param {Event} event */
@@ -94,7 +122,9 @@ class TlBridge extends HTMLElement {
     if (!run) return;
     if (event.type === 'click') {
       const button = event.target instanceof Element ? event.target.closest('[data-bridge-connect]') : null;
-      if (button && this.contains(button)) this.connect(run).then(() => this.ok(run), (caught) => this.fail(run, caught));
+      if (button && this.contains(button)) {
+        this.connect(run).then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
+      }
     } else if (event.type === 'submit') {
       const form = event.target;
       if (form instanceof HTMLFormElement && form.matches('[data-bridge-pair]') && this.contains(form)) {
@@ -145,7 +175,7 @@ class TlBridge extends HTMLElement {
     const refused = this.$(run, '[data-bridge-refused]');
     refused.hidden = !(bridge.online && bridge.lastError);
     refused.textContent = bridge.online && bridge.lastError ? `Some passings were refused: ${bridge.lastError.message}` : '';
-    void bridge.outbox.count().then((n) => { this.$(run, '[data-bridge-outbox]').textContent = String(n); });
+    void bridge.outbox.count().then((n) => { if (run === this.run) this.$(run, '[data-bridge-outbox]').textContent = String(n); });
     const list = this.$(run, '[data-bridge-preview]');
     const row = (kind) => /** @type {HTMLTemplateElement} */ (this.$(run, `template[data-bridge-row="${kind}"]`)).content.firstElementChild;
     list.replaceChildren(...run.preview.map((p) => {
@@ -166,7 +196,7 @@ class TlBridge extends HTMLElement {
       const found = decoders.find((d) => d.id === id);
       if (found) {
         run.names.set(id, found.name);
-        this.update(run);
+        if (run === this.run) this.update(run);
       }
     } catch {
       // The short id stays.
@@ -176,9 +206,12 @@ class TlBridge extends HTMLElement {
   /** @param {Run} run */
   async connect(run) {
     const port = await pickPort();
+    if (run !== this.run) return;
     if (!port) return;
     await run.bridge?.close();
-    const next = new Bridge({ port, outbox: await openOutbox(), post });
+    const outbox = await openOutbox();
+    if (run !== this.run) return;
+    const next = new Bridge({ port, outbox, post });
     next.addEventListener('state', () => {
       if (next.state === 'not-tinylap') void next.close();
       if (run.bridge === next) this.show(run, next.state === 'idle' ? 'connecting' : next.state);
@@ -193,10 +226,11 @@ class TlBridge extends HTMLElement {
     this.show(run, 'connecting');
     try {
       await next.start();
+      if (run !== this.run) await next.close();
     } catch (caught) {
       await next.close();
       if (run.bridge === next) run.bridge = null;
-      this.show(run, 'connect');
+      if (run === this.run) this.show(run, 'connect');
       throw caught;
     }
   }
@@ -206,6 +240,7 @@ class TlBridge extends HTMLElement {
     const note = this.$(run, '[data-bridge-earlier]');
     const outbox = await openOutbox();
     const say = (count, why = '') => {
+      if (run !== this.run) return;
       note.hidden = count === 0;
       note.textContent = `${count} ${count === 1 ? 'passing' : 'passings'} from earlier ${count === 1 ? 'is' : 'are'} waiting. ${why}`.trim();
       if (count > 0) this.announce(run, note.textContent);
@@ -228,7 +263,9 @@ class TlBridge extends HTMLElement {
     submit.disabled = true;
     try {
       if (!run.made) {
-        run.made = await api('POST', `/workspaces/${encodeURIComponent(run.workspaceId)}/decoders`, { name });
+        const made = await api('POST', `/workspaces/${encodeURIComponent(run.workspaceId)}/decoders`, { name });
+        if (run !== this.run) return;
+        run.made = made;
         run.names.set(run.made.id, run.made.name);
         nameField.readOnly = true;
       }
@@ -236,9 +273,9 @@ class TlBridge extends HTMLElement {
       await run.bridge.pair(run.made.id, run.made.token, ssid ? { ssid, password: String(form.get('password') ?? '') } : null);
       run.made = null;
       nameField.readOnly = false;
-      this.ok(run);
+      if (run === this.run) this.ok(run);
     } catch (caught) {
-      this.fail(run, run.made ? new Error(`${caught.message} The decoder "${run.made.name ?? name}" is created; press Pair again to send it to the device. The name stays as it is.`) : caught);
+      if (run === this.run) this.fail(run, run.made ? new Error(`${caught.message} The decoder "${run.made.name ?? name}" is created; press Pair again to send it to the device. The name stays as it is.`) : caught);
     } finally {
       submit.disabled = false;
     }
