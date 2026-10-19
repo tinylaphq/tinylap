@@ -55,6 +55,9 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 }
 .board-clock-label { color: var(--p-accent-3); margin: 0; }
 .board-clock-time { font: 700 clamp(2.5rem, 9vw, 6rem) / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
+/* Race control's clock: one row, the label as palace's .stat-label. */
+.race-clock { display: flex; align-items: baseline; gap: var(--p-space-sm); }
+.race-clock-time { font: 700 1.5rem / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
 
 /* Wide tables scroll inside the board, not the page; the padding keeps the hard shadow in view. */
 .board-scroll { overflow-x: auto; padding: 0 4px 4px 0; }
@@ -70,6 +73,13 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-table th { font-size: 0.7em; }
 .board-table tbody tr:first-child .pos { box-shadow: inset 4px 0 0 var(--p-accent-1); }
 .board-table .pos { font: 700 1.25em var(--p-font-mono); width: 3.5em; }
+/* The board element; the stream swaps the #board-live inside it. */
+tl-board { display: block; }
+/* Room for "last lap 14 Oct 2026", so a note appearing never moves a column (spec §5.2). */
+.board-table .board-driver { min-width: 9.5em; }
+/* A quiet second line under a driver who has stopped. */
+.board-ago { display: block; color: var(--p-text-secondary); font-weight: 400; font-size: 0.75em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.board-ago time { white-space: nowrap; }
 .num { text-align: right; font-family: var(--p-font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .is-finished td { color: var(--p-text-muted); }
 .pb { margin-left: var(--p-space-xs); background: var(--p-accent-1); vertical-align: middle; }
@@ -105,6 +115,7 @@ body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
 body.big .board-table th, body.big .board-table td { padding-block: 0.6em; }
 body.big .board-feed { font-size: 0.7em; }
+body.big .board-ago { font-size: 0.6em; }
 /* The way out: a dark pill at the top right, always there, big enough to hit by touch. */
 body.big .navbar { position: fixed; top: 0.5rem; right: 0.5rem; left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
 body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; }
@@ -126,6 +137,7 @@ body.big .navbar-right .btn { font-size: 16px; min-height: 44px; padding-inline:
   .board { grid-template-columns: 1fr; padding: var(--p-space-md); }
   .board-clock { width: 100%; box-sizing: border-box; grid-template-columns: auto auto; justify-content: space-between; justify-items: start; align-items: center; }
   .board-table th, .board-table td { padding: var(--p-space-sm); }
+  .board-table .board-driver { min-width: 6em; }
   .navbar { height: auto; flex-wrap: wrap; padding: var(--p-space-sm) var(--p-space-md); }
   .navbar-right { flex-wrap: wrap; gap: var(--p-space-sm); }
   .nav-tabs { margin-left: 0; }

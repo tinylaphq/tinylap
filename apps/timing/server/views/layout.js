@@ -53,7 +53,8 @@ ${importMap}${scripts.map((s) => html`<script type="module" src="${asset(request
   ${safe(brand({ href: '/', name: 'TinyLap Timing', markSrc: asset(request, 'pkg/design/mark.svg') }))}
   ${space ? html`<ul class="nav-tabs">${SCREENS.map(([id, label]) => html`<li><a class="nav-tab" href="${space.base}/${id}"${id === screen ? html` aria-current="page"` : null}>${label}</a></li>`)}</ul>` : null}
   <div class="navbar-right">
-    ${screen === 'board' || watcher ? html`<span class="live-status" id="live-status" data-state="off" hidden></span>
+    ${screen === 'board' || watcher ? html`${big ? html`<button type="button" class="btn btn-sm btn-outline" data-fullscreen hidden>Full screen</button>
+    ` : null}<span class="live-status" id="live-status" data-state="off" hidden></span>
     <a class="btn btn-sm btn-outline" href="${bigLink}">${big ? 'Leave big screen' : 'Big screen'}</a>` : null}
     ${watcher ? null : accountMenu(request)}${signIn}
   </div>

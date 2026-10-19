@@ -35,6 +35,7 @@ test('start a race from the form, then abort it after confirming', async () => {
   const form = await (await get(`${base}/race`)).text();
   assert.match(form, /<input type="radio" name="kind" value="race"[^>]* checked/);
   assert.match(form, new RegExp(`<input type="checkbox" name="roster" value="${a.id}"[^>]* checked`));
+  assert.doesNotMatch(form, /tl-countdown|countdown\.js/, 'the start form has no clock');
   const started = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['roster', b.id], ['duration', '2'], ['countdown', '0']]);
   assert.equal(started.status, 303);
   assert.equal(started.headers.get('location'), `${base}/board`);
@@ -45,11 +46,14 @@ test('start a race from the form, then abort it after confirming', async () => {
   assert.match(running, /<h2[^>]*>Race, running<\/h2>/);
   assert.match(running, new RegExp(`<a[^>]*href="${base}/sessions/${session.id}/abort"`));
   assert.doesNotMatch(running, /<form[^>]*action="\/clubs/, 'abort needs the confirmation page first');
+  assert.match(running, /<tl-countdown class="race-clock" reload-on-phase><span class="stat-label" data-clock-label>Remaining<\/span> <time class="race-clock-time" data-clock data-kind="race" data-state="running" data-opens="\d+" data-closes="\d+" data-now="\d+">\d+:\d\d<\/time><\/tl-countdown>/);
+  assert.match(running, /<script type="module" src="\/public\/elements\/countdown.js"><\/script>/);
 
   const again = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0']]);
   assert.equal(again.status, 409);
   const conflict = await again.text();
   assert.match(conflict, /<p class="status status-error" role="alert">A qualifying or race is already running here\.<\/p>/);
+  assert.match(conflict, /<tl-countdown class="race-clock">/, 'the answer to a POST never reloads');
 
   const ask = await get(`${base}/sessions/${session.id}/abort`);
   assert.equal(ask.status, 200);

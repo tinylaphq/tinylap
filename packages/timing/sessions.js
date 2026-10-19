@@ -78,7 +78,7 @@ export function standings(rules, state) {
     const d = state.drivers[driverId] ?? fresh();
     if (rules.kind === 'practice' && d.laps === 0) continue;
     const elapsedMs = rules.kind === 'race' && d.startAt !== null && rules.opensAt !== null ? d.startAt - rules.opensAt + d.totalMs : null;
-    rows.push({ driverId, position: 0, laps: d.laps, bestMs: d.bestMs, bestAt: d.bestAt, totalMs: d.totalMs, elapsedMs, finished: d.finished });
+    rows.push({ driverId, position: 0, laps: d.laps, bestMs: d.bestMs, bestAt: d.bestAt, lastAt: d.lastAt, totalMs: d.totalMs, elapsedMs, finished: d.finished });
   }
   rows.sort(rules.kind === 'race' ? byRace : byBest);
   rows.forEach((row, i) => {

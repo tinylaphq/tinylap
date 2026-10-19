@@ -16,13 +16,22 @@ export function formatClock(ms) {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
-/** How long ago, for the people looking at a page: no time zone to get wrong. @param {number} ms @param {number} now */
-export function formatAgo(ms, now) {
-  const minutes = Math.floor((now - ms) / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`;
-  return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+/**
+ * What a session clock shows at server time `now`, and the phase time alone decides:
+ * a countdown past opensAt is running; a race or qualifying past closesAt is finishing.
+ * done and aborted are never derived. opensAt/closesAt may be null.
+ * @param {{ kind: string, state: string, opensAt: number | null, closesAt: number | null }} session @param {number} now
+ * @returns {{ phase: string, label: string, ms: number }}
+ */
+export function clockAt({ kind, state, opensAt, closesAt }, now) {
+  let phase = state;
+  if (phase === 'countdown' && opensAt !== null && now >= opensAt) phase = 'running';
+  if (phase === 'running' && kind !== 'practice' && closesAt !== null && now >= closesAt) phase = 'finishing';
+  if (phase === 'countdown') return { phase, label: 'Starts in', ms: opensAt - now };
+  if (kind === 'practice') return phase === 'done' || phase === 'aborted' ? { phase, label: 'Practice ended', ms: 0 } : { phase, label: 'Practice', ms: now - opensAt };
+  if (phase === 'running') return { phase, label: 'Remaining', ms: Math.max(0, closesAt - now) };
+  if (phase === 'finishing') return { phase, label: 'Last lap', ms: 0 };
+  return { phase, label: phase === 'aborted' ? 'Aborted' : 'Finished', ms: 0 };
 }
 
 /** A session's length in words: seconds under a minute, else minutes and any seconds over. @param {number} ms */

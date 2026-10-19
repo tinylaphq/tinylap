@@ -17,6 +17,7 @@ test('the rules prefetch same-site links on intent, never the sign-in flow or th
   assert.equal(prefetch[0].eagerness, 'moderate');
   const text = JSON.stringify(prefetch[0].where);
   for (const path of ['/auth/*', '/oauth2/*', '/api/*']) assert.ok(text.includes(path), path);
+  assert.ok(text.includes('[aria-current=\\"page\\"]'), 'never the page itself');
 });
 
 test('the hash is the script body’s sha256, as CSP wants it', () => {

@@ -44,6 +44,10 @@ test('every screen loads its assets from /v/<build>/', async (t) => {
     assert.ok(css.every((href) => new URL(href).pathname.startsWith(`/v/${SHA}/`)), `${screen}: ${css.join(', ')}`);
     const scripts = await page.evaluate(() => [...document.querySelectorAll('script[src]')].map((el) => /** @type {HTMLScriptElement} */ (el).src));
     assert.ok(scripts.every((src) => new URL(src).pathname.startsWith(`/v/${SHA}/`)), `${screen}: ${scripts.join(', ')}`);
+    if (screen === 'board') {
+      for (const path of ['public/elements/board.js', 'public/elements/countdown.js', 'pkg/design/elements/relative-time.js']) assert.ok(scripts.some((src) => new URL(src).pathname === `/v/${SHA}/${path}`), `the board loads ${path}`);
+      assert.equal(await page.evaluate(() => ['tl-board', 'tl-countdown', 'tl-relative-time'].every((name) => customElements.get(name))), true, 'and defines all three');
+    }
     if (screen === 'setup') {
       for (const name of ['frame', 'copy']) assert.ok(scripts.some((src) => new URL(src).pathname === `/v/${SHA}/pkg/design/elements/${name}.js`), `setup loads ${name}.js`);
       assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-frame') && customElements.get('tl-copy'))), true, 'and defines both');

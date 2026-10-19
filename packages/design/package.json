@@ -13,11 +13,13 @@
   "exports": {
     "./design.css": "./design.css",
     "./elements/*": "./elements/*",
+    "./format-ago.js": "./format-ago.js",
     "./html/*": "./html/*"
   },
   "files": [
     "design.css",
     "elements",
+    "format-ago.js",
     "html",
     "mark.svg"
   ],
