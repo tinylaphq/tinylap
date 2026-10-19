@@ -11,6 +11,8 @@ import { startTiming } from '../server/helpers.js';
 import { CLOSED, startPlannerStub } from '../server/planner-stub.js';
 import { openBrowser, pageAs } from './browser.js';
 
+// Server time runs with real time; only `offset` is ever increased, so the ordered tests keep real time.
+const clock = { offset: 0, get now() { return Date.now() + this.offset; } };
 let app;
 let planner;
 let browser;
@@ -19,7 +21,7 @@ let personal;
 
 before(async () => {
   planner = await startPlannerStub();
-  app = await startTiming({ plannerUrl: planner.url });
+  app = await startTiming({ plannerUrl: planner.url, clock });
   browser = await openBrowser();
   member = await app.login(await app.signUp('Ana'));
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
@@ -152,6 +154,26 @@ test('the watchers page works without JavaScript or a log-in', async (t) => {
   assert.equal(pathOf(page), `/watch/${token}`);
   assert.equal(await page.getByText('Ana', { exact: true }).first().isVisible(), true);
   assert.equal(await page.getByRole('link', { name: 'Setup' }).count(), 0);
+});
+
+test('the big board has no Full screen button without JavaScript', async (t) => {
+  const page = await plainPage(t);
+  await page.goto('/personal/board?big');
+  await page.getByRole('link', { name: 'Leave big screen' }).waitFor();
+  assert.equal(await page.locator('[data-fullscreen]').count(), 1);
+  assert.equal(await page.getByRole('button', { name: 'Full screen' }).isVisible(), false);
+});
+
+test('without JavaScript the board says when a stopped driver last crossed the line', async (t) => {
+  const decoder = await (await app.api(member, 'POST', `/workspaces/${personal}/decoders`, { name: 'Line' })).json();
+  const ana = app.store.drivers(personal).find((d) => d.name === 'Ana');
+  app.engine.assign(personal, '4712', ana.id);
+  const sent = await app.api(null, 'POST', `/decoders/${decoder.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '4712', t: 1000 }, { transponder: '4712', t: 9000 }] }, { authorization: `Bearer ${decoder.token}` });
+  assert.equal(sent.status, 200);
+  clock.offset += 180_000;
+  const page = await plainPage(t);
+  await page.goto('/personal/board');
+  await page.getByText(/^last lap 3 min ago$/).waitFor();
 });
 
 test('sign out ends on the start page or the issuer, signed out', async (t) => {
