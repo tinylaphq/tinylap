@@ -170,6 +170,7 @@ export class Bridge extends EventTarget {
 
   /** Sends the outbox; retries later when the server can't be reached. */
   flush() {
+    if (this.#closed) return Promise.resolve();
     if (this.#flushing) {
       this.#again = true;
       return this.#flushing;
@@ -184,7 +185,7 @@ export class Bridge extends EventTarget {
         if (refusal) this.lastError = refusal;
       } catch (error) {
         this.#setOnline(false, error);
-        this.#retryTimer = setTimeout(() => void this.flush(), this.retryMs);
+        if (!this.#closed) this.#retryTimer = setTimeout(() => void this.flush(), this.retryMs);
       } finally {
         this.#flushing = null;
         this.dispatchEvent(new Event('outbox'));
