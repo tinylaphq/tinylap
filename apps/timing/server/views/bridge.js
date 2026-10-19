@@ -64,6 +64,8 @@ export function bridgePage(request, importMap) {
       <div class="bridge-preview">
         <p class="bridge-head"><span>Transponder</span><span>Lap</span></p>
         <ol class="board-laps" data-bridge-preview></ol>
+        <template data-bridge-row="first"><li><span class="bridge-code"></span><span class="bridge-first">first pass</span></li></template>
+        <template data-bridge-row="lap"><li><span class="bridge-code"></span><span class="num"></span></li></template>
       </div>
       <p class="empty" data-bridge-preview-empty>Passings show up here the moment the decoder reports them.</p>
     </section>

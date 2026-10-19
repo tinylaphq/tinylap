@@ -34,3 +34,14 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   assert.match(res.headers.get('content-security-policy'), new RegExp(`script-src 'self' '[^']+' 'sha256-${hash.replace(/[+/=]/g, (c) => `\\${c}`)}'`));
   assert.match(body, /<script type="module" src="\/public\/bridge-page.js"><\/script>/);
 });
+
+/** `s` as a regex source that matches it exactly. */
+const exact = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+
+test('the preview rows are server templates, right after the list', async () => {
+  const body = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  const list = '<ol class="board-laps" data-bridge-preview></ol>';
+  const first = '<template data-bridge-row="first"><li><span class="bridge-code"></span><span class="bridge-first">first pass</span></li></template>';
+  const lap = '<template data-bridge-row="lap"><li><span class="bridge-code"></span><span class="num"></span></li></template>';
+  assert.match(body, new RegExp(`${exact(list)}\\s*${exact(first)}\\s*${exact(lap)}`));
+});

@@ -75,13 +75,12 @@ function update() {
   refused.textContent = bridge.online && bridge.lastError ? `Some passings were refused: ${bridge.lastError.message}` : '';
   void bridge.outbox.count().then((n) => { $('[data-bridge-outbox]').textContent = String(n); });
   const list = $('[data-bridge-preview]');
+  const row = (kind) => /** @type {HTMLTemplateElement} */ ($(`template[data-bridge-row="${kind}"]`)).content.firstElementChild;
   list.replaceChildren(...preview.map((p) => {
-    const li = document.createElement('li');
-    const code = Object.assign(document.createElement('span'), { className: 'bridge-code', textContent: p.transponder });
-    const lap = p.lapMs === null || p.lapMs === undefined
-      ? Object.assign(document.createElement('span'), { className: 'bridge-first', textContent: 'first pass' })
-      : Object.assign(document.createElement('span'), { className: 'num', textContent: formatLap(p.lapMs) });
-    li.append(code, lap);
+    const first = p.lapMs === null || p.lapMs === undefined;
+    const li = /** @type {HTMLElement} */ (row(first ? 'first' : 'lap').cloneNode(true));
+    li.querySelector('.bridge-code').textContent = p.transponder;
+    if (!first) li.querySelector('.num').textContent = formatLap(p.lapMs);
     return li;
   }));
   $('[data-bridge-preview-empty]').hidden = preview.length > 0;
