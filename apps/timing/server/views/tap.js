@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Tap entry (spec §6.3): one form per driver, a big button each. tap.js
+// Tap entry (spec §6.3): one form per driver, a big button each. tl-tap
 // submits them in place; without it each tap is a page load.
 import { formatLap } from '../../public/format.js';
 import { html } from './html.js';
@@ -31,22 +31,30 @@ function resultBar(result, error) {
   <p class="tap-result" id="tap-result" role="status" aria-live="polite"><span class="tap-state">${STATE_LABEL[result.result]}</span> <span class="tap-text">${tapResultText(result, result.driver)}</span></p></div>`;
 }
 
+/** The pieces tl-tap clones; one line each, so they add no text nodes. */
+const tapTemplates = (request) => html`<template data-tap="result"><span class="tap-state"></span> <span class="tap-text"></span></template>
+<template data-tap="alert"><p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text"></span></p></template>
+<template data-tap="signed-out"><a href="${request.url.pathname + request.url.search}">Sign in again</a> to keep tapping.</template>
+`;
+
 /** @param {any} request @param {{ drivers: any[], result?: any, error?: any }} data */
 export function tapPage(request, { drivers, result = null, error = null }) {
   const base = request.space.base;
   return layout(request, {
     title: 'Tap',
     screen: 'tap',
-    scripts: drivers.length ? ['tap.js'] : [],
+    scripts: drivers.length ? ['elements/tap.js'] : [],
     body: drivers.length
-      ? html`<div class="tap-screen">
+      ? html`<tl-tap>
+<div class="tap-screen">
   <h1 class="visually-hidden">Tap</h1>
   ${resultBar(result, error)}
   <div class="tap-grid">${drivers.map((d) => html`<form method="post" action="${base}/tap" class="tap-form">
     <input type="hidden" name="driver" value="${d.id}">
     <button type="submit" class="tap-tile" style="--driver: ${d.colour}">${d.name}</button>
   </form>`)}</div>
-</div>`
+</div>
+${tapTemplates(request)}</tl-tap>`
       : html`<div class="container stack-lg screen">
   <h1>Tap</h1>
   ${error ? html`<p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text">${error.message}</span></p>` : null}

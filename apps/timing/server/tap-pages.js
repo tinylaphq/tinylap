@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Tap entry's page and form (spec §6.3). The form answers 303 with what the
-// tap did in the query; asked for JSON (tap.js), the same post answers in
+// tap did in the query; asked for JSON (tl-tap), the same post answers in
 // place, so taps don't wait for a page load.
 import * as ops from './operations.js';
 import { readForm } from './form.js';

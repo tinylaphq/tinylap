@@ -75,6 +75,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-table .pos { font: 700 1.25em var(--p-font-mono); width: 3.5em; }
 /* The board element; the stream swaps the #board-live inside it. */
 tl-board { display: block; }
+/* The tap element; the tap screen inside it is unchanged. */
+tl-tap { display: block; }
 /* Room for "last lap 14 Oct 2026", so a note appearing never moves a column (spec §5.2). */
 .board-table .board-driver { min-width: 9.5em; }
 /* A quiet second line under a driver who has stopped. */
