@@ -21,7 +21,7 @@
     "@tinylap/auth": "workspace:*",
     "@tinylap/design": "workspace:*",
     "@tinylap/track-format": "workspace:*",
-    "palace-ui": "^0.11.0"
+    "palace-ui": "^0.12.0"
   },
   "devDependencies": {
     "ajv": "^8.20.0",

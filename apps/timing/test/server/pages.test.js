@@ -142,7 +142,7 @@ test('the navbar: brand, screens, and the shared account menu with your clubs an
   for (const [path, label] of [['board', 'Board'], ['race', 'Race'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]) {
     assert.match(body, new RegExp(`href="/clubs/${office.id}/${path}"[^>]*>${label}</a>`));
   }
-  assert.match(body, /<tl-menu class="nav-account">\s*<details name="tl-account">\s*<summary><span class="visually-hidden">Account: <\/span><span class="nav-account-name">Ana &lt;b&gt;<\/span><\/summary>/);
+  assert.match(body, /<tl-menu class="nav-account">\s*<details class="navbar-menu" name="tl-account">\s*<summary><span class="visually-hidden">Account: <\/span><span class="nav-account-name">Ana &lt;b&gt;<\/span><\/summary>/);
   assert.match(body, /<ul aria-label="Your clubs">/);
   assert.match(body, /href="\/personal\/board"[^>]*>Personal<\/a>/);
   assert.match(body, new RegExp(`href="/clubs/${office.id}/board" aria-current="true"[^>]*>Office &amp; Co</a>`));

@@ -38,7 +38,7 @@ test('the brand links home with the mark; the lockup is the larger one', () => {
 
 test('the account menu: tl-menu, one named details, the name after a hidden "Account:", Account, Sign out', () => {
   const out = accountMenu({ name: 'Ana <b>', accountUrl: 'https://acc/?a=1&b=2' });
-  assert.match(out, /^<tl-menu class="nav-account">\s*<details name="tl-account">\s*<summary><span class="visually-hidden">Account: <\/span><span class="nav-account-name">Ana &lt;b&gt;<\/span><\/summary>\s*<div class="nav-account-menu">/);
+  assert.match(out, /^<tl-menu class="nav-account">\s*<details class="navbar-menu" name="tl-account">\s*<summary><span class="visually-hidden">Account: <\/span><span class="nav-account-name">Ana &lt;b&gt;<\/span><\/summary>\s*<div class="nav-account-menu navbar-menu-panel">/);
   assert.match(out, /<a class="nav-account-link" href="https:\/\/acc\/\?a=1&amp;b=2">Account<\/a>/);
   assert.match(out, /<form method="post" action="\/auth\/logout">\s*<button type="submit" class="nav-account-signout">Sign out<\/button>\s*<\/form>/);
   assert.doesNotMatch(out, /\bid=/, 'no ids, so two menus never collide');
@@ -48,7 +48,7 @@ test('the account menu: tl-menu, one named details, the name after a hidden "Acc
 test('your clubs: absent for none, else a named list with Personal first and the current one marked', () => {
   for (const clubs of [null, []]) assert.doesNotMatch(accountMenu({ name: 'Ana', accountUrl: '/', clubs }), /Your clubs/);
   const out = accountMenu({ name: 'Ana', accountUrl: '/', clubs: [{ href: '/personal/board', name: 'Personal' }, { href: '/clubs/1/board', name: 'Office & Co', current: true }] });
-  assert.match(out, /<p class="nav-account-label" aria-hidden="true">Your clubs<\/p>\s*<ul aria-label="Your clubs">\s*<li><a href="\/personal\/board">Personal<\/a><\/li>\s*<li><a href="\/clubs\/1\/board" aria-current="true">Office &amp; Co<\/a><\/li>\s*<\/ul>/);
+  assert.match(out, /<p class="navbar-menu-label" aria-hidden="true">Your clubs<\/p>\s*<ul aria-label="Your clubs">\s*<li><a href="\/personal\/board">Personal<\/a><\/li>\s*<li><a href="\/clubs\/1\/board" aria-current="true">Office &amp; Co<\/a><\/li>\s*<\/ul>/);
 });
 
 test('extra items are buttons with the caller’s id, hidden when asked; a custom sign-out action', () => {

@@ -36,58 +36,11 @@ tl-frame { display: block; }
 }
 
 /* The account menu every TinyLap navbar shows (html/account.js, enhanced by
- * tl-menu): palace's .navbar-user, the name in cyan (12.9:1 on the navbar),
- * as the summary of a <details>, in the btn-sm box with palace's .navbar .btn
- * border; the panel in a dialog's card language, small. Dark navbars only:
- * on .navbar-light the cyan fails contrast. The <details> navbar menu is
- * generic and belongs upstream in palace-ui. */
-.nav-account { display: block; position: relative; }
-.nav-account > details > summary {
-  position: relative; display: block; box-sizing: border-box; max-width: min(14rem, 40vw);
-  /* The name truncates; the caret after it (in the right padding) never does. */
-  padding: 6px 28px 6px 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  border: var(--p-border-thin) solid var(--p-border-dark);
-  font: 600 11px/1.4 var(--p-font); letter-spacing: 1px; text-transform: uppercase;
-  color: var(--p-accent-3); list-style: none; cursor: pointer;
-}
-.nav-account > details > summary::-webkit-details-marker { display: none; }
-.nav-account > details > summary::after {
-  content: ''; position: absolute; right: 12px; top: 50%; margin-top: -2px;
-  border: 4px solid transparent; border-top-color: currentColor; border-bottom: 0;
-}
-.nav-account > details > summary:hover, .nav-account > details[open] > summary { color: var(--p-accent-1); border-color: var(--p-accent-1); }
-.nav-account > details > summary:focus-visible { outline: 2px solid var(--p-accent-3); outline-offset: 2px; }
-/* Right-aligned under the summary; only its right edge is kept in view, as
- * every navbar puts the menu at its right. */
-.nav-account-menu {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 100;
-  min-width: 14rem; max-width: calc(100vw - 2 * var(--p-space-md));
-  display: grid; padding: var(--p-space-xs) 0;
-  background: var(--p-surface); color: var(--p-text);
-  border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-md) var(--p-accent-2);
-}
-.nav-account-menu ul { list-style: none; margin: 0; padding: 0; display: grid; }
-.nav-account-label { margin: 0; padding: var(--p-space-sm) var(--p-space-md) var(--p-space-xs); font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--p-text-faint); }
-.nav-account-menu a, .nav-account-item, .nav-account-signout {
-  display: block; width: 100%; box-sizing: border-box; padding: var(--p-space-sm) var(--p-space-md);
-  border: 0; background: none; font: 600 13px/1.4 var(--p-font); text-transform: none; letter-spacing: normal;
-  color: var(--p-text); text-align: left; text-decoration: none; cursor: pointer;
-  /* No transition (palace gives buttons one): a closed <details> doesn't
-     render its content, so a transition started there never finishes. */
-  transition: none;
-}
-.nav-account-menu a:hover, .nav-account-item:hover, .nav-account-signout:hover { background: var(--p-hover-bg); }
-/* One focus style for links and buttons alike: palace's button focus lift and shadow would spill past the panel. */
-.nav-account-menu a:focus-visible, .nav-account-item:focus-visible, .nav-account-signout:focus-visible { outline: 2px solid var(--p-accent-2); outline-offset: -2px; color: var(--p-accent-2); transform: none; box-shadow: none; }
-.nav-account-menu a[aria-current="true"]:focus-visible { box-shadow: inset 3px 0 0 var(--p-accent-1); }
-/* The club you are in: a pink bar, beside any focus outline, never instead of it. */
-.nav-account-menu a[aria-current="true"] { box-shadow: inset 3px 0 0 var(--p-accent-1); }
-.nav-account-menu form { margin: var(--p-space-xs) 0 0; padding-top: var(--p-space-xs); border-top: var(--p-border-thin) solid var(--p-border); }
+ * tl-menu) is palace-ui's .navbar-menu; tl-menu is a custom element, inline
+ * by default, so it is a block here. */
+.nav-account { display: block; }
 
 /* The mark beside a name: shared size and gap; each app sets the margin. */
 .navbar-brand img, .brand-lockup img { display: block; }
 .brand-lockup { gap: var(--p-space-sm); }
 .brand-lockup img { width: 32px; height: 32px; }
-
-/* Text for screen readers only. Generic, belongs upstream in palace-ui. */
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -23,16 +23,16 @@ import { escapeHtml as e, safeHref as url } from './escape.js';
  */
 export function accountMenu({ name, accountUrl, signOutAction = '/auth/logout', clubs = null, items = [] }) {
   const clubList = clubs?.length ? `
-      <p class="nav-account-label" aria-hidden="true">Your clubs</p>
+      <p class="navbar-menu-label" aria-hidden="true">Your clubs</p>
       <ul aria-label="Your clubs">
 ${clubs.map((c) => `        <li><a href="${url(c.href)}"${c.current ? ' aria-current="true"' : ''}>${e(c.name)}</a></li>`).join('\n')}
       </ul>` : '';
   const extra = items.map((i) => `
       <button type="button" class="nav-account-item" id="${e(i.id)}"${i.hidden ? ' hidden' : ''}>${e(i.label)}</button>`).join('');
   return `<tl-menu class="nav-account">
-  <details name="tl-account">
+  <details class="navbar-menu" name="tl-account">
     <summary><span class="visually-hidden">Account: </span><span class="nav-account-name">${e(name)}</span></summary>
-    <div class="nav-account-menu">${clubList}${extra}
+    <div class="nav-account-menu navbar-menu-panel">${clubList}${extra}
       <a class="nav-account-link" href="${url(accountUrl)}">Account</a>
       <form method="post" action="${url(signOutAction)}">
         <button type="submit" class="nav-account-signout">Sign out</button>
