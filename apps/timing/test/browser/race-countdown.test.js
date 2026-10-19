@@ -190,9 +190,11 @@ test('C6: the answer to a POST never reloads', async (t) => {
   await page.getByText('A qualifying or race is already running here.').waitFor();
   assert.equal(await page.locator('tl-countdown').count(), 1);
   assert.equal(await page.locator('tl-countdown[reload-on-phase]').count(), 0);
+  // The text shows before the 409 page's own load event and its last assets: count from a settled page.
+  await page.waitForLoadState('networkidle');
   const seen = [loads.length, requests.length];
   await until(() => clock.now > session.opensAt + 2000, 'the boundary to pass');
-  assert.deepEqual([loads.length, requests.length], seen, 'no reload, no request');
+  assert.deepEqual([loads.length, requests.length], seen, `no reload, no request: ${JSON.stringify(requests.slice(seen[1]))}`);
   assert.deepEqual(errors.filter((e) => !/status of 409/.test(e)), [], 'nothing but the 409 itself');
 });
 
