@@ -15,11 +15,17 @@ let app;
 let member;
 let office;
 let base;
+let practiceClub;
+let countdownClub;
+let finishClub;
 
 before(async () => {
   app = await startTiming({ clock });
   const user = await app.signUp('Ana');
   office = app.club(user, 'Office');
+  practiceClub = app.club(user, 'Practice');
+  countdownClub = app.club(user, 'Countdown');
+  finishClub = app.club(user, 'Finish');
   member = await app.login(user);
   base = `/clubs/${office.id}`;
 });
@@ -29,6 +35,10 @@ const get = (who, path, headers = {}) => app.api(who, 'GET', path, undefined, { 
 const pass = (t, transponder = '10') => {
   clock.now = 1_000_000_000_000 + t;
   app.engine.ingest({ workspaceId: office.id, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings: [{ transponder, t }] } });
+};
+const passIn = (ws, t, transponder = '10') => {
+  clock.now = 1_000_000_000_000 + t;
+  app.engine.ingest({ workspaceId: ws, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings: [{ transponder, t }] } });
 };
 
 test('an empty board shows a member how to get the track ready', async () => {
@@ -155,5 +165,87 @@ test('JSON on the watchers URL does not depend on the log-in', async () => {
     assert.equal(asked, 0, 'the log-in is never asked');
   } finally {
     await server.close();
+  }
+});
+
+// The board elements (step two spec §5.1, §2.3). `t` only ever grows: clock.now follows it.
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** A driver named `name` in `club`, on `transponder`. */
+async function driverIn(club, name, transponder) {
+  await app.form(member, `/clubs/${club.id}/drivers`, { name });
+  const driver = app.store.drivers(club.id).find((d) => d.name === name);
+  app.engine.assign(club.id, transponder, driver.id);
+  return driver;
+}
+
+test('the board is a tl-board, and its clock a tl-countdown', async () => {
+  const body = await (await get(member, `${base}/board`)).text();
+  assert.match(body, /<tl-board status="live-status">\s*<div id="board-live"/);
+  assert.match(body, /<tl-countdown class="board-clock"><span class="stat-label board-clock-label" data-clock-label>/);
+});
+
+test('a stopped practice driver shows when they last crossed the line, but not within the minute', async () => {
+  await driverIn(practiceClub, 'Cleo', '21');
+  passIn(practiceClub.id, 200_000, '21');
+  passIn(practiceClub.id, 208_000, '21');
+  const lastAt = clock.now;
+  clock.now = lastAt + 180_000;
+  let body = await (await get(member, `/clubs/${practiceClub.id}/board`)).text();
+  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+">Cleo</span><tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
+
+  passIn(practiceClub.id, 396_000, '21');
+  passIn(practiceClub.id, 404_000, '21');
+  clock.now += 30_000;
+  body = await (await get(member, `/clubs/${practiceClub.id}/board`)).text();
+  assert.match(body, new RegExp(`<tl-relative-time class="board-ago" now="${clock.now}" min="60000" hidden>last lap <time datetime="[^"]+">just now</time></tl-relative-time>`));
+});
+
+test('no note during a race countdown, nor for a crossing before the start', async () => {
+  const driver = await driverIn(countdownClub, 'Dora', '31');
+  clock.now = 1_000_000_000_000 + 500_000;
+  const { session } = app.engine.start(countdownClub.id, { kind: 'race', roster: [driver.id], durationMs: 60_000, countdownMs: 30_000 });
+  passIn(countdownClub.id, 505_000, '31');
+  let body = await (await get(member, `/clubs/${countdownClub.id}/board`)).text();
+  assert.match(body, /data-state="countdown"/);
+  assert.match(body, />Dora<\/span><\/td>/);
+  assert.doesNotMatch(body, /tl-relative-time/);
+
+  // Running, and the only crossing was before the start.
+  clock.now = session.opensAt + 30_000;
+  app.engine.tick();
+  body = await (await get(member, `/clubs/${countdownClub.id}/board`)).text();
+  assert.match(body, /data-state="running"/);
+  assert.doesNotMatch(body, /tl-relative-time/);
+});
+
+test('no note on a finished row, nor in the results', async () => {
+  const a = await driverIn(finishClub, 'Abe', '41');
+  const b = await driverIn(finishClub, 'Bea', '42');
+  clock.now = 1_000_000_000_000 + 700_000;
+  const { session } = app.engine.start(finishClub.id, { kind: 'race', roster: [a.id, b.id], durationMs: 60_000, countdownMs: 0 });
+  passIn(finishClub.id, 701_000, '41');
+  passIn(finishClub.id, 701_500, '42');
+  passIn(finishClub.id, 709_000, '41');
+  passIn(finishClub.id, 709_500, '42');
+  clock.now = session.closesAt + 1000;
+  app.engine.tick();
+  passIn(finishClub.id, 765_000, '41');
+  clock.now += 180_000;
+  let body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
+  assert.match(body, /data-state="finishing"/);
+  assert.match(body, /<tr class="is-finished">\s*<td class="pos">\d<\/td>\s*<td class="board-driver"><span [^>]+>Abe<\/span><\/td>/);
+  assert.match(body, />Bea<\/span><tl-relative-time class="board-ago"[^>]*>last lap <time [^>]+>3 min ago<\/time>/);
+
+  app.engine.abort(finishClub.id, session.id);
+  body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
+  const results = body.slice(body.indexOf('<section class="board-results"'), body.indexOf('</section>', body.indexOf('<section class="board-results"')));
+  assert.match(results, /<td class="board-driver"><span [^>]+>Abe<\/span><\/td>/);
+  assert.doesNotMatch(results, /tl-relative-time/);
+});
+
+test('the watchers board and the big board show the note too', async () => {
+  const token = await watchToken();
+  for (const body of [await (await get(null, `/watch/${token}`)).text(), await (await get(member, `${base}/board?big`)).text()]) {
+    assert.match(body, /&lt;i&gt;Ana&lt;\/i&gt;<\/span><tl-relative-time class="board-ago" now="\d+" min="60000">last lap <time datetime="[^"]+">\d+ min ago<\/time><\/tl-relative-time>/);
   }
 });

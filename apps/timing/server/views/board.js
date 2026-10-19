@@ -6,6 +6,7 @@
 // that changes lives in #board-live, which the stream replaces whole; the
 // watchers board is the same without member parts.
 import { clockAt, formatClock, formatLap } from '../../public/format.js';
+import { formatAgo } from '@tinylap/design/format-ago.js';
 import { html } from './html.js';
 import { layout } from './layout.js';
 
@@ -31,8 +32,17 @@ function header(snap) {
   const where = snap.track ? `${snap.track.name} · ${DIRECTION[snap.direction]}` : 'No track set';
   return html`<header class="board-head">
   <div><p class="eyebrow">${where}</p><h1 class="board-title">${s ? KIND[s.kind] : 'Waiting for the first car'}</h1></div>
-  ${clock ? html`<div class="board-clock"><span class="stat-label board-clock-label">${clock.label}</span><time class="board-clock-time" data-clock data-kind="${s.kind}" data-state="${s.state}" data-opens="${s.opensAt ?? ''}" data-closes="${s.closesAt ?? ''}" data-now="${snap.now}">${formatClock(clock.ms)}</time></div>` : null}
+  ${clock ? html`<tl-countdown class="board-clock"><span class="stat-label board-clock-label" data-clock-label>${clock.label}</span><time class="board-clock-time" data-clock data-kind="${s.kind}" data-state="${s.state}" data-opens="${s.opensAt ?? ''}" data-closes="${s.closesAt ?? ''}" data-now="${snap.now}">${formatClock(clock.ms)}</time></tl-countdown>` : null}
 </header>`;
+}
+
+/** "last lap 3 min ago" under a driver who has stopped (spec §2.3); hidden under a minute. */
+function ago(snap, row) {
+  const s = snap.session;
+  if (!s || s.state === 'countdown' || row.lastAt === null || row.finished) return null;
+  if (s.kind !== 'practice' && row.lastAt < s.opensAt) return null;
+  const hidden = snap.now - row.lastAt < 60_000;
+  return html`<tl-relative-time class="board-ago" now="${snap.now}" min="60000"${hidden ? html` hidden` : null}>last lap <time datetime="${new Date(row.lastAt).toISOString()}">${formatAgo(row.lastAt, snap.now)}</time></tl-relative-time>`;
 }
 
 function standingsTable(snap) {
@@ -45,7 +55,7 @@ function standingsTable(snap) {
   <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th><th scope="col" class="num">Last</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
   <tbody>${snap.standings.map((row) => html`<tr${row.finished ? html` class="is-finished"` : null}>
     <td class="pos">${row.position}</td>
-    <td>${chip(snap, row.driverId)}</td>
+    <td class="board-driver">${chip(snap, row.driverId)}${ago(snap, row)}</td>
     <td class="num">${row.laps}</td>
     <td class="num">${formatLap(row.bestMs)}${row.bestMs !== null && best.get(row.driverId) === row.bestMs ? html`<span class="badge pb">PB</span>` : null}</td>
     <td class="num">${formatLap(last.get(row.driverId))}</td>
@@ -62,7 +72,7 @@ function results(snap) {
   <h2 class="h3 board-results-title">${KIND[r.session.kind]} results <span class="tag">${r.session.state === 'aborted' ? 'Aborted' : 'Finished'}</span></h2>
   ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<div class="board-scroll"><table class="board-table">
     <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
-    <tbody>${r.standings.map((row) => html`<tr><td class="pos">${row.position}</td><td>${chip(snap, row.driverId)}</td><td class="num">${row.laps}</td><td class="num">${formatLap(row.bestMs)}</td>${race ? html`<td class="num">${formatLap(row.elapsedMs)}</td>` : null}</tr>`)}</tbody>
+    <tbody>${r.standings.map((row) => html`<tr><td class="pos">${row.position}</td><td class="board-driver">${chip(snap, row.driverId)}</td><td class="num">${row.laps}</td><td class="num">${formatLap(row.bestMs)}</td>${race ? html`<td class="num">${formatLap(row.elapsedMs)}</td>` : null}</tr>`)}</tbody>
   </table></div>`}
 </section>`;
 }
@@ -113,6 +123,6 @@ export function boardPage(request, snap, { watcher = false, big = false, token =
     big,
     scripts: ['board.js'],
     head: html`<noscript><meta http-equiv="refresh" content="10"></noscript>\n`,
-    body: boardLive(request, snap, { watcher, big, token }),
+    body: html`<tl-board status="live-status">\n${boardLive(request, snap, { watcher, big, token })}\n</tl-board>`,
   });
 }
