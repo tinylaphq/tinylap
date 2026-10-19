@@ -248,6 +248,20 @@ test('no note on a finished row, nor in the results', async () => {
   assert.doesNotMatch(results, /tl-relative-time/);
 });
 
+test('no note while the session still says countdown, even for a crossing after the start', async () => {
+  // The engine hasn't ticked yet: the state is countdown though opensAt has passed.
+  const old = app.store.activeSession(countdownClub.id);
+  if (old) app.engine.abort(countdownClub.id, old.id);
+  const [dora] = app.store.drivers(countdownClub.id);
+  clock.now = 1_000_000_000_000 + 1_000_000;
+  const { session } = app.engine.start(countdownClub.id, { kind: 'race', roster: [dora.id], durationMs: 60_000, countdownMs: 30_000 });
+  passIn(countdownClub.id, session.opensAt + 5000 - 1_000_000_000_000, '31');
+  assert.equal(app.store.activeSession(countdownClub.id).state, 'countdown');
+  const body = await (await get(member, `/clubs/${countdownClub.id}/board`)).text();
+  assert.match(body, /data-state="countdown"/);
+  assert.doesNotMatch(body, /tl-relative-time/);
+});
+
 test('the watchers board and the big board show the note too', async () => {
   const token = await watchToken();
   for (const body of [await (await get(null, `/watch/${token}`)).text(), await (await get(member, `${base}/board?big`)).text()]) {
