@@ -39,6 +39,8 @@ class TlCountdown extends HTMLElement {
   /** @type {ReturnType<typeof setTimeout> | 0} */
   reloadTimer = 0;
   decided = false;
+  /** The sessionStorage key this element wrote for its scheduled reload. @type {string | null} */
+  key = null;
 
   get time() {
     return /** @type {HTMLElement | null} */ (this.querySelector('time[data-clock]'));
@@ -59,8 +61,16 @@ class TlCountdown extends HTMLElement {
   disconnectedCallback() {
     clearInterval(this.interval);
     this.interval = 0;
-    clearTimeout(this.reloadTimer);
-    this.reloadTimer = 0;
+    if (this.reloadTimer) {
+      // A pending reload is cancelled, so decide again on the next connect.
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = 0;
+      this.decided = false;
+      if (this.key) {
+        try { sessionStorage.removeItem(this.key); } catch { /* blocked: nothing was written */ }
+        this.key = null;
+      }
+    }
     document.removeEventListener('visibilitychange', this);
   }
 
@@ -97,13 +107,20 @@ class TlCountdown extends HTMLElement {
       this.reloadTimer = setTimeout(() => location.reload(), wait);
       return;
     }
-    const key = `tl-countdown reload ${location.pathname} ${d.opens} ${d.state}`;
+    const prefix = `tl-countdown reload ${location.pathname} `;
+    const key = `${prefix}${d.opens} ${d.state}`;
     try {
       if (sessionStorage.getItem(key)) return;
+      // Keys of earlier sessions on this page are of no more use.
+      for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+        const old = sessionStorage.key(i);
+        if (old?.startsWith(prefix) && Number(old.slice(prefix.length).split(' ')[0]) < Number(d.opens)) sessionStorage.removeItem(old);
+      }
       sessionStorage.setItem(key, '1');
     } catch {
       return;
     }
+    this.key = key;
     this.reloadTimer = setTimeout(() => location.reload(), wait);
   }
 }

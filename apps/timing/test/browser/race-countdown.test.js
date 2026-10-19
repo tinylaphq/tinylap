@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Race control's tl-countdown in the browser (spec step two §2.2, §7, C1–C8):
+// Race control's tl-countdown in the browser (spec step two §2.2, §7, C1–C9):
 // one reload by GET at a phase change, and never a loop, a second reload,
 // a reload without storage, a reload of a hidden page, nor a reload of the
-// answer to a POST.
+// answer to a POST; and a clock moved in the page keeps its reload.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
@@ -74,6 +74,8 @@ test('C1: the countdown reaching zero reloads race control once, by GET', async 
   const session = race(t, { countdownMs: 2000 });
   const { page, errors, loads, requests } = await racePage(t);
   await page.goto('/personal/race');
+  // A key left by an earlier race on this page.
+  await page.evaluate(() => sessionStorage.setItem('tl-countdown reload /personal/race 1 running', '1'));
   await page.getByText('Starts in', { exact: true }).waitFor();
   const first = await page.locator('time[data-clock]').innerText();
   await page.waitForFunction((was) => document.querySelector('time[data-clock]')?.textContent !== was, first);
@@ -86,6 +88,7 @@ test('C1: the countdown reaching zero reloads race control once, by GET', async 
   const pages = requests.filter(([, path]) => path === '/personal/race');
   assert.deepEqual(pages, [['GET', '/personal/race'], ['GET', '/personal/race']]);
   assert.equal(requests.some(([method]) => method !== 'GET'), false, 'no POST');
+  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage)), [`tl-countdown reload /personal/race ${session.opensAt} countdown`], 'the earlier race’s key is gone');
   assert.deepEqual(errors, []);
 });
 
@@ -231,5 +234,27 @@ test('C8: a hidden page waits, and reloads once it shows', async (t) => {
   await page.getByRole('heading', { name: 'Race, running' }).waitFor();
   await sleep(2000);
   assert.equal(loads.length, 2, 'exactly one');
+  assert.deepEqual(errors, []);
+});
+
+test('C9: a clock moved after it has decided still reloads', async (t) => {
+  const session = race(t, { countdownMs: 10_000 });
+  const { page, errors } = await racePage(t);
+  const docs = [];
+  await page.addInitScript(() => addEventListener('DOMContentLoaded', () => console.log('tl-doc')));
+  page.on('console', (m) => { if (m.text() === 'tl-doc') docs.push(clock.now); });
+  await page.clock.install({ time: clock.now });
+  await page.goto('/personal/race');
+  await page.getByText('Starts in', { exact: true }).waitFor();
+  // Just past the boundary on the page's clock: the reload is scheduled for a second later.
+  await page.clock.runFor(session.opensAt + 300 - clock.now);
+  assert.equal(await page.evaluate(() => Object.keys(sessionStorage).length), 1, 'decided');
+  await page.evaluate(() => { const el = document.querySelector('tl-countdown'); const parent = el?.parentElement; el?.remove(); if (el) parent?.append(el); });
+  try {
+    await page.clock.runFor(3000);
+  } catch {
+    // The reload may land inside the step.
+  }
+  await until(() => docs.length === 2, 'the reload');
   assert.deepEqual(errors, []);
 });
