@@ -237,7 +237,7 @@ test('C8: a hidden page waits, and reloads once it shows', async (t) => {
   assert.deepEqual(errors, []);
 });
 
-test('C9: a clock moved after it has decided still reloads', async (t) => {
+test('C9: an element moved after it has decided still reloads', async (t) => {
   const session = race(t, { countdownMs: 10_000 });
   const { page, errors } = await racePage(t);
   const docs = [];
@@ -246,8 +246,10 @@ test('C9: a clock moved after it has decided still reloads', async (t) => {
   await page.clock.install({ time: clock.now });
   await page.goto('/personal/race');
   await page.getByText('Starts in', { exact: true }).waitFor();
-  // Just past the boundary on the page's clock: the reload is scheduled for a second later.
-  await page.clock.runFor(session.opensAt + 300 - clock.now);
+  // Just past the boundary on the element's own time (the paused page clock plus its skew),
+  // not on Node's clock, which keeps running while the page loads.
+  const serverNow = await page.evaluate(() => Date.now() + /** @type {any} */ (document.querySelector('tl-countdown')).skew);
+  await page.clock.runFor(session.opensAt + 300 - serverNow);
   assert.equal(await page.evaluate(() => Object.keys(sessionStorage).length), 1, 'decided');
   await page.evaluate(() => { const el = document.querySelector('tl-countdown'); const parent = el?.parentElement; el?.remove(); if (el) parent?.append(el); });
   try {
