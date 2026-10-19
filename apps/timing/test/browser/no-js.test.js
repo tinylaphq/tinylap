@@ -176,6 +176,17 @@ test('without JavaScript the board says when a stopped driver last crossed the l
   await page.getByText(/^last lap 3 min ago$/).waitFor();
 });
 
+test('without JavaScript the tap and bridge templates stay inert', async (t) => {
+  const page = await plainPage(t);
+  await page.goto('/personal/tap');
+  assert.ok(await page.locator('tl-tap template[data-tap="signed-out"]').count(), 'the tap page has its templates');
+  assert.equal(await page.getByText('Sign in again').isVisible(), false);
+  assert.equal(await page.getByRole('alert').count(), 0);
+  await page.goto('/personal/bridge');
+  assert.equal(await page.locator('template[data-bridge-row]').count(), 2);
+  assert.equal(await page.getByText('first pass').isVisible(), false);
+});
+
 test('sign out ends on the start page or the issuer, signed out', async (t) => {
   const { context, page } = await pageAs(browser, app, member, { javaScriptEnabled: false });
   t.after(() => context.close());
