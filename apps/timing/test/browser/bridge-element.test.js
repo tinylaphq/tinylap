@@ -167,10 +167,11 @@ test('E2: a removal closes the port, stops the retries and never blocks leaving'
   assert.equal(await blocksLeaving(page), true, 'forwarding blocks leaving');
   await page.route('**/decoders/*/passings', (route) => route.abort());
   await page.locator('[data-bridge-status]', { hasText: /^Offline: passings wait here/ }).waitFor({ timeout: 20_000 });
-  const seen = apiRequests(page);
   assert.equal(await beforeunloadListeners(context, page), 1);
   const el = await page.evaluateHandle(() => document.querySelector('tl-bridge'));
   await el.evaluate((x) => x.remove());
+  // From the removal on: before it, the bridge may still retry, as it should.
+  const seen = apiRequests(page);
   assert.equal(await beforeunloadListeners(context, page), 0, 'window no longer holds the element');
   await page.waitForTimeout(6000);
   const { opened, cancelled } = await counts(page);
