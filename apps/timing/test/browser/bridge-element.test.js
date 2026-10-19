@@ -150,8 +150,17 @@ test('E1b: passings an earlier visit left go to the server once', async (t) => {
   assert.deepEqual(errors, []);
 });
 
-test('E2: a removal closes the port, stops the retries and drops every listener', async (t) => {
-  const { page, errors } = await toPairing(t, { init: [COUNT] });
+/** The beforeunload listeners on window, as DevTools sees them. */
+async function beforeunloadListeners(context, page) {
+  const cdp = await context.newCDPSession(page);
+  const { result } = await cdp.send('Runtime.evaluate', { expression: 'window' });
+  const { listeners } = await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId });
+  await cdp.detach();
+  return listeners.filter((l) => l.type === 'beforeunload').length;
+}
+
+test('E2: a removal closes the port, stops the retries and never blocks leaving', async (t) => {
+  const { context, page, errors } = await toPairing(t, { init: [COUNT] });
   await page.getByLabel('Decoder name').fill('Gate');
   await page.getByRole('button', { name: 'Pair' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
@@ -159,11 +168,13 @@ test('E2: a removal closes the port, stops the retries and drops every listener'
   await page.route('**/decoders/*/passings', (route) => route.abort());
   await page.locator('[data-bridge-status]', { hasText: /^Offline: passings wait here/ }).waitFor({ timeout: 20_000 });
   const seen = apiRequests(page);
+  assert.equal(await beforeunloadListeners(context, page), 1);
   const el = await page.evaluateHandle(() => document.querySelector('tl-bridge'));
   await el.evaluate((x) => x.remove());
+  assert.equal(await beforeunloadListeners(context, page), 0, 'window no longer holds the element');
   await page.waitForTimeout(6000);
   const { opened, cancelled } = await counts(page);
-  assert.ok(opened >= 1);
+  assert.equal(opened, 1);
   assert.equal(cancelled, opened, 'every port is closed');
   assert.deepEqual(seen.filter((r) => r.endsWith('/passings')), [], 'no retry and no late flush');
   assert.equal(await blocksLeaving(page), false, 'a removed bridge never blocks leaving');
@@ -172,7 +183,8 @@ test('E2: a removal closes the port, stops the retries and drops every listener'
   await page.waitForTimeout(500);
   assert.equal((await counts(page)).opened, opened, 'a detached Connect opens nothing');
   assert.deepEqual(seen, [], 'and a detached Pair posts nothing');
-  assert.deepEqual(errors.filter((e) => !/ERR_FAILED|Failed to load resource/.test(e)), []);
+  // The aborted passings report as net::ERR_FAILED; nothing else may fail.
+  assert.deepEqual(errors.filter((e) => !/net::ERR_FAILED/.test(e)), []);
 });
 
 test('E3a: a removal right after the click opens nothing', async (t) => {
@@ -250,6 +262,15 @@ async function afterRestart(page, name) {
   assert.equal(app.store.decoders(personal).length, before + 1);
 }
 
+/** E4c's Web Serial: requestPort counts its calls, and each picker is closed without a choice. */
+const SERIAL = () => {
+  window.__picks = 0;
+  Object.defineProperty(navigator, 'serial', {
+    configurable: true,
+    value: { requestPort: async () => { window.__picks += 1; throw new DOMException('closed', 'NotFoundError'); } },
+  });
+};
+
 /** E4's start: a pairing whose pair command the decoder swallowed. */
 async function failedPairing(t, name) {
   const who = await toPairing(t, { init: [COUNT, DROP_FIRST_PAIR] });
@@ -269,6 +290,21 @@ test('E4: a move or a swap starts once, fresh, from a failed pairing', async (t)
   await swapped.page.evaluate(() => { const el = document.querySelector('tl-bridge'); el.replaceWith(el.cloneNode(true)); });
   await afterRestart(swapped.page, 'Pit4');
   assert.deepEqual(swapped.errors, []);
+});
+
+test('E4c: after a move, one click opens one picker, and closing it is no error', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(SERIAL);
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.__picks), 1, 'one click, one picker');
+  assert.equal(await page.getByRole('alert').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), true);
+  assert.deepEqual(errors, []);
 });
 
 test('E6: a pairing answer that lands after a move writes nothing', async (t) => {
