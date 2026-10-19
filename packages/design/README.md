@@ -11,6 +11,7 @@ Small custom elements that enhance server-rendered HTML, one per file, imported 
 - `tl-frame`: submits the forms inside it with fetch and swaps in the same frame from the page the server answers with.
 - `tl-copy`: shows a server-rendered Copy button where the browser can copy.
 - `tl-menu`: makes the `<details>` inside it a disclosure menu that closes on Escape, a press or focus outside, an in-page item, and leaving the page.
+- `tl-relative-time`: keeps the "N min ago" text of the `<time datetime>` inside it current on server time (`now` attribute), hidden while younger than `min` ms; one shared timer, paused while the page is hidden.
 
 ## Markup
 
