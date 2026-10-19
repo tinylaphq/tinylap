@@ -13,9 +13,9 @@ test('the track-surface tokens are there', () => {
   assert.match(css, /--tl-track-mat:/);
 });
 
-test('a frame is a block, and a hidden control stays hidden', () => {
+test('a frame is a block; [hidden] comes from palace-ui 0.11', () => {
   assert.match(css, /tl-frame \{ display: block; \}/);
-  assert.match(css, /\[hidden\] \{ display: none !important; \}/);
+  assert.doesNotMatch(css, /\[hidden\] \{/, 'no local copy');
 });
 
 test('page loads cross-fade with the navbar held still, and not for reduced motion', () => {

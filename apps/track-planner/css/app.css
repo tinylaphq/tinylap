@@ -184,9 +184,8 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 #bom table { width: 100%; }
 #bom th:not(:first-child), #bom td:not(:first-child) { text-align: right; }
 #bom td { font-variant-numeric: tabular-nums; }
-#bom tr.short td, #bom tr.short th { color: var(--p-error); font-weight: 700; }
+#bom tr.short td, #bom tr.short th { color: var(--p-error-text); font-weight: 700; }
 
-#bom-warning[hidden] { display: none; }
 
 #metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--p-space-md);
            margin-bottom: var(--p-space-lg); }
@@ -228,8 +227,8 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 .preset-source { font-size: 11px; color: var(--p-text-faint); }
 .preset-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 .preset-badge--ok { color: var(--p-success); }
-.preset-badge--bad { color: var(--p-error); }
-.preset-broken { color: var(--p-error); font-size: 12px; }
+.preset-badge--bad { color: var(--p-error-text); }
+.preset-broken { color: var(--p-error-text); font-size: 12px; }
 
 /* Skeleton rows for #suggestions-list while generateLayouts computes (see
  * js/app.js's renderSuggestionsSkeleton). Not a spinner or "Loading…" text
@@ -467,7 +466,6 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   padding-left: var(--p-space-md);
   border-left: var(--p-border-thin) solid var(--p-border-dark);
 }
-.account[hidden], .account [hidden] { display: none; }
 
 .account-down { font-size: 12px; color: var(--p-text-faint); }
 
@@ -488,12 +486,10 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   color: #fff;
   border-left: var(--p-space-xs) solid var(--p-accent-1);
 }
-.library-current[hidden], #btn-download[hidden] { display: none; }   /* .btn sets display */
 @media (max-width: 700px) { .library-current { display: none; } }
 
 #library-dialog { max-width: var(--p-container-width); }
-#library-dialog [hidden] { display: none; }
-#library-error { margin-bottom: var(--p-space-md); text-transform: none; }
+#library-error { margin-bottom: var(--p-space-md); }
 
 .library-ws + .library-ws { margin-top: var(--p-space-lg); }
 .library-ws-head {
@@ -584,26 +580,13 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 
 .library-form label { margin-bottom: var(--p-space-xs); }
 .library-form-row { display: flex; gap: var(--p-space-xs); align-items: stretch; flex-wrap: wrap; }
-.library-form-row input, .library-form-row select { flex: 1 1 12rem; width: auto; padding: 6px 10px; font-size: 14px; }
+.library-form-row input { flex: 1 1 12rem; width: auto; padding: 6px 10px; font-size: 14px; }
+/* Leaves room on the right for palace's select arrow. */
+.library-form-row select { flex: 1 1 12rem; width: auto; padding: 6px 2.5rem 6px 10px; font-size: 14px; }
 
 .library-foot { margin: var(--p-space-lg) 0 0; }
 
-/* palace styles text inputs but not <select>: the same box here. */
-#save-dialog select, .library-form select {
-  width: 100%;
-  padding: 12px;
-  font-family: var(--p-font);
-  font-size: 1rem;
-  color: var(--p-text);
-  background: var(--p-surface);
-  border: var(--p-border-width) solid var(--p-text);
-  border-radius: var(--p-radius);
-  outline: none;
-}
-#save-dialog select:focus, .library-form select:focus { border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); }
 #save-dialog .field { margin-bottom: var(--p-space-md); }
-#save-dialog [hidden] { display: none; }
-#save-error { text-transform: none; }
 
 @media (max-width: 600px) {
   #library-dialog { padding: var(--p-space-md); }

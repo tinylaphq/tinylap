@@ -51,8 +51,8 @@ importers:
         specifier: 1.7.7
         version: 1.7.7
       palace-ui:
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       jose:
         specifier: ^6
@@ -79,8 +79,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/track-format
       palace-ui:
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       playwright-core:
         specifier: ^1.64.1
@@ -98,8 +98,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/track-format
       palace-ui:
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       ajv:
         specifier: ^8.20.0
@@ -123,8 +123,8 @@ importers:
   packages/design:
     dependencies:
       palace-ui:
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
 
   packages/timing: {}
 
@@ -1066,8 +1066,8 @@ packages:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
 
-  palace-ui@0.10.0:
-    resolution: {integrity: sha512-l/b4R9dVvvkyPwgkL/W+FhBPlkabrZ6FdkiAUQ6MDDAT9Ev1OxK531xughryd1BihvHAMOFnuQ4BmCLnYmngJA==}
+  palace-ui@0.11.0:
+    resolution: {integrity: sha512-4sEM/JGnwO9Evk2xXaM0mz9/vyTlkWs8W33jpPB7S4EJaKhoO/btQEDwKsNh910DdGt2MoTuGTZI3aupuDTbZg==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -2075,7 +2075,7 @@ snapshots:
     dependencies:
       p-limit: 3.1.0
 
-  palace-ui@0.10.0: {}
+  palace-ui@0.11.0: {}
 
   parent-module@1.0.1:
     dependencies:
