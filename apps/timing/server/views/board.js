@@ -121,7 +121,7 @@ export function boardPage(request, snap, { watcher = false, big = false, token =
     screen: watcher ? null : 'board',
     watcher,
     big,
-    scripts: ['board.js', 'elements/countdown.js'],
+    scripts: ['board.js', 'elements/board.js', 'elements/countdown.js'],
     modules: ['pkg/design/elements/relative-time.js'],
     head: html`<noscript><meta http-equiv="refresh" content="10"></noscript>\n`,
     body: html`<tl-board status="live-status">\n${boardLive(request, snap, { watcher, big, token })}\n</tl-board>`,

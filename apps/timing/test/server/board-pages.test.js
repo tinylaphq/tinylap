@@ -51,7 +51,9 @@ test('an empty board shows a member how to get the track ready', async () => {
   assert.match(body, /<noscript><meta http-equiv="refresh" content="10"><\/noscript>/);
   assert.match(body, new RegExp(`<div id="board-live"[^>]* data-events="${base}/board/events"`));
   assert.match(body, /<script type="module" src="\/public\/board.js"><\/script>/);
+  assert.match(body, /<script type="module" src="\/public\/elements\/board.js"><\/script>/);
   assert.match(body, /<script type="module" src="\/public\/elements\/countdown.js"><\/script>/);
+  assert.doesNotMatch(body, /data-fullscreen/, 'full screen is for the big board only');
   assert.match(body, /<script type="module" src="\/pkg\/design\/elements\/relative-time.js"><\/script>/);
 });
 
@@ -79,6 +81,7 @@ test('?big is the wall layout, without the members-only notice', async () => {
   assert.match(body, /<body class="big">/);
   assert.doesNotMatch(body, /Unknown car/);
   assert.match(body, new RegExp(`href="${base}/board">Leave big screen</a>`));
+  assert.match(body, /<div class="navbar-right">\s*<button type="button" class="btn btn-sm btn-outline" data-fullscreen hidden>Full screen<\/button>/);
 });
 
 test('the watchers board: a page for browsers, JSON for programs, no codes', async () => {
