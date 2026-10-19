@@ -277,7 +277,8 @@ class TlBridge extends HTMLElement {
     } catch (caught) {
       if (run === this.run) this.fail(run, run.made ? new Error(`${caught.message} The decoder "${run.made.name ?? name}" is created; press Pair again to send it to the device. The name stays as it is.`) : caught);
     } finally {
-      submit.disabled = false;
+      // After a move the new run shares this button; its reset enabled it, and its own pairing may hold it.
+      if (run === this.run) submit.disabled = false;
     }
   }
 }

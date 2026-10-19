@@ -297,3 +297,33 @@ test('E6: a pairing answer that lands after a move writes nothing', async (t) =>
   assert.equal(app.store.decoders(personal).length, before + 1);
   assert.deepEqual(errors, []);
 });
+
+test('E7: after a move, the old pairing\'s answer leaves the new pairing\'s button disabled', async (t) => {
+  const { page, errors } = await toPairing(t, { init: [COUNT] });
+  // Each POST is held until the test releases it, in the order they came.
+  const releases = [];
+  await page.route('**/workspaces/*/decoders', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    return new Promise((resolve) => { releases.push(resolve); }).then(() => route.continue());
+  });
+  const posted = async (n) => { while (releases.length < n) await new Promise((done) => setTimeout(done, 20)); };
+  await page.getByLabel('Decoder name').fill('Old run');
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
+  await posted(1);
+  await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
+  await page.getByLabel('Decoder name').fill('New run');
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
+  await posted(2);
+  const pair = page.locator('[data-bridge-pair] button[type="submit"]');
+  assert.equal(await pair.evaluate((x) => x.disabled), true, 'disabled while the new pairing runs');
+  const finished = page.waitForEvent('requestfinished', (r) => r.method() === 'POST');
+  releases[0]();
+  await finished;
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await pair.evaluate((x) => x.disabled), true, 'the old answer leaves it disabled');
+  releases[1]();
+  await page.getByText('Forwarding from New run', { exact: true }).first().waitFor();
+  assert.deepEqual(errors, []);
+});
