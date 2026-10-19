@@ -88,14 +88,14 @@ export function clockAt({ kind, state, opensAt, closesAt }, now) { … }
 3. **By GET only.** The element calls `location.reload()`.
    - **Why it is safe:** the server renders `reload-on-phase` only on the 200 answer to `GET /race`, so a reload re-sends that GET and nothing else. That GET-only attribute is the guard against sending a form again.
    - **Answers to a POST:** the race page can also be the answer to the 422 or 409 of `POST /sessions` (`race-pages.js:17-21`, `:31`, `:40`), or to the error of abort (`:61`). Those answers carry no attribute, and their clock just ticks.
-   - **Not `location.replace(location.href)`:** a reload is never served from the prefetch cache. A script navigation to the same URL could be, if the user has just hovered the Race tab.
+   - **Not `location.replace(location.href)`:** both can be served from a prefetch of the same URL. Measured in Chrome during implementation, `location.reload()` too, after the Race tab was hovered. So the speculation rules (`@tinylap/design/html/speculation.js`) leave out links to the page itself (`[aria-current="page"]`): the race page is never fetched ahead, and its reload always comes from the server.
 4. **No loops.**
    - A server clock behind the device: the boundary is measured in server time, so the device doesn't reload early. The reload is a normal load, with a fresh `data-now` and skew. The new page's derived phase still equals `data-state`, and it waits.
    - A stalled server tick: the derived phase differs from `data-state`, so step 5 stops a second reload.
 5. **Once per boundary.** Before reloading, the element writes `tl-countdown reload <pathname> <data-opens> <data-state>` to `sessionStorage`. If that key is already there, it doesn't reload.
    - **Prefetch.** A `prefetched` element (skew 0) neither reads nor writes the key. It reloads once its derived phase differs from `data-state`.
      - The page it loads is a normal navigation, with a real skew, and it uses the key as usual. So a prefetched page can't use up the reload for the real boundary.
-     - It can't loop either: `location.reload()` is never served from the prefetch cache, and each normal load waits for the server.
+     - It can't loop either: the page itself is never prefetched (see above), and each normal load waits for the server.
    - **No storage.** If `sessionStorage` throws, the element never reloads, and the clock stays at 0:00.
 6. **Not at `done`, not at `closesAt + MAX_LAP_MS`.** Neither is decided by the time alone. The race page then shows "finishing the last lap", with a stopped 0:00, until it is loaded again.
 7. **Never on the board.** The board has the stream.

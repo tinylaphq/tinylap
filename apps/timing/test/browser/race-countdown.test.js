@@ -140,7 +140,7 @@ test('C4: a prefetched page reloads early on the device clock, and the next page
   assert.deepEqual(errors, []);
 });
 
-test('C5: a real prefetch of race control costs at most one extra load, and never a loop', async (t) => {
+test('C5: hovering the Race tab on race control fetches nothing ahead, so the reload at the boundary is one fresh page', async (t) => {
   ticking(t);
   const session = race(t, { countdownMs: 6000 });
   const { page, errors } = await racePage(t);
@@ -150,22 +150,17 @@ test('C5: a real prefetch of race control costs at most one extra load, and neve
   await page.addInitScript(() => addEventListener('DOMContentLoaded', () => console.log(`tl-doc ${/** @type {any} */ (performance.getEntriesByType('navigation')[0]).deliveryType || 'network'}`)));
   page.on('console', (m) => { if (m.text().startsWith('tl-doc ')) docs.push([m.text().slice(7), clock.now]); });
   await page.goto('/personal/race');
-  const prefetched = page.waitForRequest((r) => new URL(r.url()).pathname === '/personal/race' && /prefetch/i.test(r.headers()['sec-purpose'] ?? ''), { timeout: 5000 });
+  const ahead = [];
+  page.on('request', (r) => { if (/prefetch/i.test(r.headers()['sec-purpose'] ?? '')) ahead.push(new URL(r.url()).pathname); });
+  // The tab for the page itself (aria-current="page") is left out of the speculation rules.
   await page.getByRole('link', { name: 'Race' }).hover();
-  try {
-    await prefetched;
-  } catch {
-    t.diagnostic('no self-prefetch');
-  }
+  await sleep(1500);
+  assert.deepEqual(ahead.filter((p) => p === '/personal/race'), [], 'the page itself is never fetched ahead');
   await until(() => clock.now > session.opensAt + 3000, 'the boundary to pass');
   await page.getByRole('heading', { name: 'Race, running' }).waitFor();
   const later = docs.slice(1);
-  const stale = later.filter(([how]) => how === 'navigational-prefetch');
-  const fresh = later.filter(([how]) => how === 'network');
-  if (stale.length) t.diagnostic('the reload was served from the prefetch cache, and reloaded once more');
-  assert.ok(stale.length <= 1, `at most one stale page: ${JSON.stringify(later)}`);
-  assert.equal(fresh.length, 1, `then one page from the server: ${JSON.stringify(later)}`);
-  assert.ok(fresh[0][1] >= session.opensAt, 'after the boundary');
+  assert.deepEqual(later.map(([how]) => how), ['network'], `exactly one fresh page: ${JSON.stringify(later)}`);
+  assert.ok(later[0][1] >= session.opensAt, 'after the boundary');
   await sleep(2000);
   assert.equal(docs.length, 1 + later.length, 'then none');
   assert.deepEqual(errors, []);
