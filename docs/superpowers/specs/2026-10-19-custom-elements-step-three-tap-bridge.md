@@ -306,7 +306,7 @@ After a stop, `run.bridge` is null, so an old bridge's late events fail `run.bri
   - `.bridge-preview li:last-child` (`app.css:216`) is unaffected, because a `<template>` is not an `li`.
 - **The import map stays as it is:** emitted by `bridgeImportMap` (`views/bridge.js:13-16`), allowed by its hash (`bridge-pages.js:12-14`), and placed before every module (`layout.js:50`).
 - **The script:** `scripts: ['elements/bridge.js']` (`views/bridge.js:28`), and `public/bridge-page.js` is deleted. The element lives in `public/elements/`, like every other app element, so `bridge-pages.test.js:35` changes (owner's ruling).
-- **Naming.** `public/elements/bridge.js` holds the element, and `public/bridge.js` the `Bridge` class. The header comment of each says which is which.
+- **Naming.** `public/elements/bridge.js` holds the element, and `public/bridge.js` the `Bridge` class. The new element's header comment says which is which. `bridge.js`'s header (`:5-9`) already describes the `Bridge` class and stays unchanged.
 - **Comments.** `views/bridge.js:5-7` and `bridge-pages.js:5-6` name `tl-bridge`.
 - **Design check.** No visual change. The implementer confirms it with the `frontend-design` skill (CLAUDE.local.md).
 
@@ -357,7 +357,7 @@ The bridge's four existing suites stay green after each commit (§4).
 - **T4 An answer across a move.** Hold the answer (`page.route` and `route.fetch()`, as `tap.test.js:74-82` does). Move the element, then release: the result shows in the bar.
 - **T5 The same text twice is announced again.**
   - Set up: the personal space id comes from `/auth/me` (`board-elements.test.js:38`). One `app.form` tap for Ana, and then two clicks on Ana, at the same `clock.now`: both clicks answer "Too fast, tap again." (`server/engine.js:152`). `clock.now` doesn't move between the `app.form` and the clicks.
-  - A `MutationObserver` on `#tap-result` records `childNodes.length` in each callback. After the first "Again" fill, some callback sees `0` before a callback sees the second fill.
+  - A `MutationObserver` on `#tap-result` records `childNodes.length` in each callback. After each click, the test waits for the POST's answer and for two more records, not for the text, which is already there after the first click. After the first "Again" fill, some callback sees `0` before a callback sees the second fill.
   - Callbacks run at the end of a task, so a clear and a fill in the same task show up as filled.
 - **T6 The server's error text.**
   - Load a fresh `GET /personal/tap`, idle and with no `style` on the bar. Register the route after `goto`, as `tap.test.js:51` does.
@@ -366,7 +366,7 @@ The bridge's four existing suites stay green after each commit (§4).
 - **T7 The colour follows the tapped tile.** Tap Ben: the bar's `--driver` is Ben's, not Ana's.
 - **T8 An error cancels a pending fill.**
   1. `page.clock.install()` before `goto`, so frames run only when the test says.
-  2. Route the first POST to `{"stored":true,"lapMs":null,"text":"Ana: started"}`, and the second to a 429 with `{"error":"…"}`.
+  2. After `goto` (the pattern also matches the page's GET), route the first POST to `{"stored":true,"lapMs":null,"text":"Ana: started"}`, and the second to a 429 with `{"error":"…"}`.
   3. Click once, then wait for `.tap-bar[data-state="started"]`. The fill is now pending.
   4. Click again, then wait for the alert.
   5. `page.clock.runFor(100)`.
@@ -379,8 +379,8 @@ The bridge's four existing suites stay green after each commit (§4).
 **New: `test/browser/bridge-element.test.js`.** It uses `?simulate=fast` (laps every 2 s).
 - **Counting ports.** An init script wraps `WritableStream` and `ReadableStream`, as `bridge.test.js:99-108` does. Only `sim-port.js` constructs them with a JS sink or source (`sim-port.js:19-20`).
   - `window.__opened` counts **opened** ports. A port counts the first time its `WritableStream` sink gets a write, and `Bridge.start` always writes the hello (`bridge.js:78`).
-  - `window.__cancelled` counts readable sources whose `cancel` ran.
-  - `window.__writes` keeps a timestamp for each sink write.
+  - `window.__cancelled` counts readable sources whose `cancel` ran, and `window.__cancelledAt` records `performance.now()` when one does.
+  - `window.__writes` keeps a `performance.now()` timestamp for each sink write.
 
   Every port assertion is `__cancelled === __opened`.
 - **E1 Connect starts the link.**
@@ -389,7 +389,8 @@ The bridge's four existing suites stay green after each commit (§4).
   - **Earlier passings.**
     1. Pair a decoder through `app.api`.
     2. After the first load, with the import map in place, seed the outbox through its module: `await (await import('/public/outbox.js')).openOutbox()`, then `.add(passing)`, in `page.evaluate`. That keeps the key path (`outbox.js:48`) out of the test.
-    3. Reload. The note says "1 passing from earlier is waiting", and exactly one POST goes to `/decoders/<id>/passings`.
+    3. Hold the POST to `/decoders/*/passings`, then reload.
+    4. The note says "1 passing from earlier is waiting. Sending them now…". Release the POST: exactly one POST went to `/decoders/<id>/passings`, answered 200.
 - **E2 A removal tears everything down.**
   - Pair and wait for "Forwarding from …". A cancelable `beforeunload` dispatched on `window` is now `defaultPrevented`.
   - Route `/decoders/*/passings` to `abort()` and wait for the "Offline" status, so the 5 s retry is armed. Then call `tl-bridge.remove()`.
@@ -406,7 +407,7 @@ The bridge's four existing suites stay green after each commit (§4).
   1. In one `page.evaluate`, a `MutationObserver` waits for `[data-bridge-state="connecting"]` to lose `hidden`. That happens at `:132`, after `run.bridge = next`.
   2. The observer removes the element. Its callback runs before `port.open` resolves.
   3. Wait 1 s.
-  4. Expect: `__cancelled === __opened === 1`, no state section shown, and no entry in `__writes` after the cancel.
+  4. Expect: `__cancelled === __opened === 1`, no state section shown, and every `__writes` entry is `<= __cancelledAt`.
 
   Only the guard after `next.start()` closes this bridge, because `stop()`'s `close()` ran before the reader existed.
 - **E4 No double start on a move, from a failed pairing.**
@@ -415,14 +416,14 @@ The bridge's four existing suites stay green after each commit (§4).
      - the Connect section shows;
      - no alert is visible;
      - the name field is editable, and the Pair button is enabled;
-     - `__cancelled === __opened` for the first port.
+     - `__cancelled === __opened` for the first port, waited for: `stop()` doesn't await `close()`.
   3. One click opens exactly one more port. One Pair sends exactly one `POST /workspaces/<id>/decoders`, and the store gains exactly one decoder. The old run's decoder stays orphaned, as §3.3 says.
-  4. Repeat steps 1–3 with `tlBridge.replaceWith(tlBridge.cloneNode(true))` in place of the move.
+  4. In a new page (`toPairing` again, with the dropped `%TLPAIR`), repeat steps 1–3 with `tlBridge.replaceWith(tlBridge.cloneNode(true))` in place of the move. After step 3 the first page is paired and its dropped command is used up.
 - **E5 The lap row's template.** Wait for a row `li > .bridge-code + .num` whose text matches `/\d+\.\d{3}/`. The first-pass row is already covered by `bridge.test.js:85`.
 - **E6 A pairing answer across a move.**
-  1. On the pairing form, `page.route('**/workspaces/*/decoders', …)` holds the answer.
-  2. Press Pair, move the element, then release the answer.
-  3. Expect: the Connect section shows, the name field is editable, no alert is visible, and exactly one decoder is added to the store, orphaned as §3.3 says.
+  1. On the pairing form, `page.route('**/workspaces/*/decoders', …)` holds the POST only: `route.request().method() === 'POST'`, otherwise `route.continue()`. The GET of `learnName` (`bridge-page.js:94`) matches the same pattern.
+  2. Press Pair, move the element, then release the answer. Wait for `page.waitForEvent('requestfinished')`, as `tap.test.js:89` does, and then two frames, as `tap.test.js:93` does.
+  3. Then expect: the Connect section shows, the name field is editable, no alert is visible, and exactly one decoder is added to the store, orphaned as §3.3 says.
 
 **New, in `test/bridge.test.js`: a closed bridge sends nothing more.** The file's seven tests stay unchanged.
 - Set up: a `Bridge` with a `memoryOutbox` holding one passing, `retryMs: 20`, and a `post` that counts its calls, waits on a gate and then throws an `Error` with no status (offline).
@@ -453,9 +454,8 @@ The bridge's four existing suites stay green after each commit (§4).
 | tap: a template with extra whitespace or a wrong class | `tap-pages.test.js`, exact strings |
 | bridge: drop the `#closed` checks in `flush` | the new `bridge.test.js` case, E2 |
 | bridge: drop `run.bridge.close()` in `stop` | E2 (`__cancelled`, passings) |
-| bridge: keep the `click`, `submit` or `beforeunload` listener after `stop` | E2 |
-| bridge: `beforeunload` reading a stale bridge, not `this.run?.bridge` | E2 |
-| bridge: drop the run guard after `pickPort` | E3a |
+| bridge: keep the `click`, `submit` or `beforeunload` listener after `stop`, or let `beforeunload` read a stale bridge rather than `this.run?.bridge` | E2 |
+| bridge: drop the guards after both `pickPort` and `openOutbox` | E3a |
 | bridge: drop the run guard after `next.start()` | E3b |
 | bridge: drop the reset in `start()` | E4 |
 | bridge: start in the constructor, or once per element | E4 (nothing starts after the move) |
@@ -464,7 +464,7 @@ The bridge's four existing suites stay green after each commit (§4).
 | bridge: a row template with a wrong class, or no lap template | E5, `bridge-pages.test.js` |
 
 **Covered by review only:**
-- **The guard after `openOutbox`.** The guard after `pickPort` returns first in E3a. A test would have to delay `indexedDB.open` from an init script to reach it.
+- **Each of the guards after `pickPort` and `openOutbox` alone.** Each covers for the other, so E3a fails only when both are dropped.
 - **The guards on `connect`'s caller, its `catch`, the outbox count, `learnName` and `say`.** Each writes text or `hidden` into the page after a move. They are short, and they follow the same pattern as the tested guards.
 - **The `bridge === next` checks** (`:123`, `:125`, `:129`). They are kept verbatim. With the run guard they are defence in depth: after a stop `run.bridge` is null, and `update` returns early (`:67`), so no test can tell them apart.
 
