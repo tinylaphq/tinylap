@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Race control's tl-countdown in the browser (spec step two §2.2, §7, C1–C7):
+// Race control's tl-countdown in the browser (spec step two §2.2, §7, C1–C8):
 // one reload by GET at a phase change, and never a loop, a second reload,
-// a reload without storage, nor a reload of the answer to a POST.
+// a reload without storage, a reload of a hidden page, nor a reload of the
+// answer to a POST.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
@@ -92,14 +93,19 @@ test('C2: a server that has not moved the session gets one reload, not a loop', 
   // No ticker: the server is stalled. The page says countdown, with data-opens already past.
   race(t, { countdownMs: 0 });
   const { page, errors, loads } = await racePage(t);
+  // A third request would be a loop: refuse it, so a broken guard fails here instead of reloading forever.
+  let served = 0;
   await page.route('**/personal/race', async (route) => {
+    served += 1;
+    if (served > 2) return route.abort();
     const res = await route.fetch();
-    await route.fulfill({ response: res, body: (await res.text()).replace(/data-state="running"/, 'data-state="countdown"') });
+    return route.fulfill({ response: res, body: (await res.text()).replace(/data-state="running"/, 'data-state="countdown"') });
   });
   await page.goto('/personal/race');
-  await until(() => loads.length === 2, 'the reload');
+  await until(() => loads.length >= 2, 'the reload');
   await sleep(4000);
-  assert.equal(loads.length, 2, 'no second reload');
+  assert.equal(served, 2, 'no second reload');
+  assert.equal(loads.length, 2);
   assert.equal(await page.locator('time[data-clock]').getAttribute('data-state'), 'countdown');
   assert.deepEqual(errors, []);
 });
@@ -209,5 +215,21 @@ test('C7: time running out reloads race control once, which then says finishing 
   await page.clock.runFor(10_000);
   assert.equal(loads.length, 2, 'exactly one reload');
   assert.equal(await page.locator('time[data-clock]').innerText(), '0:00');
+  assert.deepEqual(errors, []);
+});
+
+test('C8: a hidden page waits, and reloads once it shows', async (t) => {
+  ticking(t);
+  const session = race(t, { countdownMs: 2000 });
+  const { page, errors, loads } = await racePage(t);
+  await page.goto('/personal/race');
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
+  await until(() => clock.now > session.opensAt + 3000, 'the boundary to pass');
+  assert.equal(loads.length, 1, 'no reload while hidden');
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
+  await until(() => loads.length >= 2, 'the reload once visible');
+  await page.getByRole('heading', { name: 'Race, running' }).waitFor();
+  await sleep(2000);
+  assert.equal(loads.length, 2, 'exactly one');
   assert.deepEqual(errors, []);
 });
