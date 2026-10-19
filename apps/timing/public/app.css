@@ -248,7 +248,7 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .nav-tabs li { display: flex; }
 
 .notice .brand-lockup { margin: 0 0 var(--p-space-md); }
-.notice .card-static p { margin: 0; }
+.notice h1 { margin-bottom: var(--p-space-md); }
 
 @media (max-width: 640px) {
   .navbar { flex-wrap: wrap; height: auto; padding: var(--p-space-sm) var(--p-space-md); row-gap: var(--p-space-xs); }
