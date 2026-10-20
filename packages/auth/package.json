@@ -1,6 +1,6 @@
 {
   "name": "@tinylap/auth",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Access token verification and permission checks for the TinyLap suite.",
   "license": "MPL-2.0",
   "type": "module",
