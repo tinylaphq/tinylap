@@ -20,6 +20,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write    # dispatch ci on the release pull request's branch
   id-token: write   # npm trusted publishing and provenance, no stored token
 
 jobs:
@@ -32,6 +33,15 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # GitHub starts no workflows for a pull request that release-please's
+      # token opens or updates, so the release pull request would never get
+      # its required checks. Running ci on its branch by dispatch (which that
+      # token may do) reports them on the pull request's head commit.
+      - if: steps.rp.outputs.prs_created == 'true' && steps.rp.outputs.pr != ''
+        run: gh workflow run ci --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
       - if: steps.rp.outputs.releases_created == 'true'
         uses: actions/checkout@v4
       - if: steps.rp.outputs.releases_created == 'true'
