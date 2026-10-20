@@ -150,3 +150,22 @@ test('sending drops only the passings a batch carried, up to `through`', async (
   assert.deepEqual(posted, [[1000, 9000], [5000]]);
   assert.equal(await outbox.count(), 0);
 });
+
+test('a closed bridge sends nothing more, and arms no retry', async () => {
+  const { port } = fakePort(null);
+  const outbox = memoryOutbox();
+  await outbox.add({ decoder: 'd1', boot: 'b00tb00t', transponder: '0A', t: 1000 });
+  let calls = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const bridge = new Bridge({ port, outbox, retryMs: 20, post: async () => { calls += 1; await gate; throw new Error('offline'); } });
+  const flushing = bridge.flush();
+  await until(() => calls === 1);
+  await bridge.close();
+  release();
+  await flushing;
+  await new Promise((done) => setTimeout(done, 100));
+  assert.equal(calls, 1, 'no retry after close');
+  await bridge.flush();
+  assert.equal(calls, 1, 'no flush after close');
+});

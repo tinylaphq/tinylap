@@ -177,10 +177,12 @@ test('without JavaScript the board says when a stopped driver last crossed the l
 });
 
 test('sign out ends on the start page or the issuer, signed out', async (t) => {
-  const { context, page } = await pageAs(browser, app, member, { javaScriptEnabled: false });
+  // Its own user and session, so signing out leaves the shared one for the other tests.
+  const who = await app.login(await app.signUp('Cleo'));
+  const { context, page } = await pageAs(browser, app, who, { javaScriptEnabled: false });
   t.after(() => context.close());
   await page.goto('/personal/board');
-  await page.locator('summary', { hasText: 'Ana' }).click();
+  await page.locator('summary', { hasText: 'Cleo' }).click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await page.waitForLoadState('load');
   const signedOut = new URL(page.url()).origin === app.base
@@ -189,4 +191,15 @@ test('sign out ends on the start page or the issuer, signed out', async (t) => {
   assert.ok(signedOut, `ended at ${page.url()}`);
   await page.goto('/');
   await page.getByRole('link', { name: 'Sign in' }).first().waitFor();
+});
+
+test('without JavaScript the tap and bridge templates stay inert', async (t) => {
+  const page = await plainPage(t);
+  await page.goto('/personal/tap');
+  assert.ok(await page.locator('tl-tap template[data-tap="signed-out"]').count(), 'the tap page has its templates');
+  assert.equal(await page.getByText('Sign in again').isVisible(), false);
+  assert.equal(await page.getByRole('alert').count(), 0);
+  await page.goto('/personal/bridge');
+  assert.equal(await page.locator('template[data-bridge-row]').count(), 2);
+  assert.equal(await page.getByText('first pass').isVisible(), false);
 });

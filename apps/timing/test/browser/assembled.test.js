@@ -52,8 +52,14 @@ test('every screen loads its assets from /v/<build>/', async (t) => {
       for (const name of ['frame', 'copy']) assert.ok(scripts.some((src) => new URL(src).pathname === `/v/${SHA}/pkg/design/elements/${name}.js`), `setup loads ${name}.js`);
       assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-frame') && customElements.get('tl-copy'))), true, 'and defines both');
     }
+    if (screen === 'tap') {
+      assert.ok(scripts.some((src) => new URL(src).pathname === `/v/${SHA}/public/elements/tap.js`), 'tap loads public/elements/tap.js');
+      assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-tap'))), true, 'and defines tl-tap');
+    }
     if (screen === 'bridge') {
       assert.ok(scripts.length, 'the bridge loads a script');
+      assert.ok(scripts.some((src) => new URL(src).pathname === `/v/${SHA}/public/elements/bridge.js`), 'the bridge loads public/elements/bridge.js');
+      assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-bridge'))), true, 'and defines tl-bridge');
       const map = JSON.parse(await page.locator('script[type="importmap"]').innerText());
       const urls = Object.values(map.imports ?? {});
       assert.ok(urls.length, 'the import map has entries');

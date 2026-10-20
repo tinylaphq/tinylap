@@ -29,7 +29,25 @@ const get = (path) => app.api(member, 'GET', path, undefined, { accept: 'text/ht
 test('a tile per driver, each its own form', async () => {
   const body = await (await get(`${base}/tap`)).text();
   assert.match(body, new RegExp(`<form method="post" action="${base}/tap" class="tap-form">\\s*<input type="hidden" name="driver" value="${ana.id}">\\s*<button type="submit" class="tap-tile"[^>]*>Ana</button>`));
-  assert.match(body, /<script type="module" src="\/public\/tap.js"><\/script>/);
+  assert.match(body, /<script type="module" src="\/public\/elements\/tap.js"><\/script>/);
+});
+
+/** `s` as a regex that matches it exactly. */
+const exact = (s) => new RegExp(s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&'));
+
+test('the tap page wraps its screen in tl-tap, with the three templates', async () => {
+  const body = await (await get(`${base}/tap`)).text();
+  assert.match(body, /<tl-tap>\s*<div class="tap-screen">/);
+  assert.match(body, exact('<template data-tap="result"><span class="tap-state"></span> <span class="tap-text"></span></template>'));
+  assert.match(body, exact('<template data-tap="alert"><p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text"></span></p></template>'));
+  const withQuery = await (await get(`${base}/tap?driver=${ana.id}&result=started`)).text();
+  assert.match(withQuery, exact(`<template data-tap="signed-out"><a href="${base}/tap?driver=${ana.id}&amp;result=started">Sign in again</a> to keep tapping.</template>`));
+});
+
+test('the 422 page with tiles has tl-tap and its script', async () => {
+  const body = await (await app.form(member, `${base}/tap`, { driver: 'nobody' })).text();
+  assert.match(body, /<tl-tap>/);
+  assert.match(body, /\/public\/elements\/tap.js/);
 });
 
 test('a tap is a post and a redirect that says what it did', async () => {
@@ -52,7 +70,9 @@ test('a forged query shows no result line', async () => {
   for (const query of [`driver=nobody&result=lap&ms=5`, `driver=${ana.id}&result=bogus`, `driver=${ana.id}&result=lap&ms=abc`, `driver=${ana.id}&result=lap&ms=-5`, `driver=${ana.id}&result=lap`, `driver=${ana.id}&result=lap&ms=1234567890`, 'driver=%3Cscript%3Ealert(1)%3C/script%3E&result=started']) {
     const body = await (await get(`${base}/tap?${query}`)).text();
     assert.match(body, /Tap a driver as their car crosses the line\./, query);
-    assert.doesNotMatch(body, /tap-state|<script>alert/, query);
+    const bar = /<div class="tap-bar"[\s\S]*?<\/p><\/div>/.exec(body)[0];
+    assert.doesNotMatch(bar, /tap-state/, query);
+    assert.doesNotMatch(body, /<script>alert/, query);
   }
   const body = await (await get(`${base}/tap?driver=${ana.id}&result=started&ms=99`)).text();
   assert.match(body, /Ana: started/);
@@ -69,7 +89,7 @@ test('asked for JSON, the same post answers in place', async () => {
 test('a failed tap comes back as the page with an alert, status 422', async () => {
   const bad = await app.form(member, `${base}/tap`, { driver: 'nobody' });
   assert.equal(bad.status, 422);
-  assert.match(await bad.text(), /<p class="status status-error" role="alert">/);
+  assert.match(await bad.text(), /<div id="tap-alert"><p class="status status-error" role="alert">/);
   const asJson = await app.form(member, `${base}/tap`, { driver: 'nobody' }, { accept: 'application/json' });
   assert.equal(asJson.status, 422);
   assert.match((await asJson.json()).error, /driver/);
@@ -102,4 +122,6 @@ test('without drivers: a link to Setup and no tiles', async () => {
   const body = await (await app.api(login, 'GET', '/personal/tap', undefined, { accept: 'text/html' })).text();
   assert.match(body, /href="\/personal\/setup#drivers"/);
   assert.doesNotMatch(body, /tap-tile/);
+  assert.doesNotMatch(body, /<tl-tap>/);
+  assert.doesNotMatch(body, /\/public\/elements\/tap.js/);
 });
