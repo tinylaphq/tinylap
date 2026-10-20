@@ -96,8 +96,13 @@ jobs:
       - uses: fsfe/reuse-action@v5
 
   commit-title:
-    if: github.event_name == 'pull_request'
+    # Also on a dispatch to a pull request's branch (the release pull request,
+    # see release.yml), never on a run by hand on main, which has no title.
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -106,10 +111,16 @@ jobs:
           node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # On a dispatch, the title of the open pull request for this branch.
+      - if: github.event_name == 'workflow_dispatch'
+        id: pr
+        run: echo "title=$(gh pr view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json title --jq .title)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
       # Squash merges make the pull request title the commit message.
       - run: echo "$TITLE" | pnpm commitlint
         env:
-          TITLE: ${{ github.event.pull_request.title }}
+          TITLE: ${{ github.event.pull_request.title || steps.pr.outputs.title }}
 
   deploy:
     needs: [check, smoke]
