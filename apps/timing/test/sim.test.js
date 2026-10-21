@@ -138,3 +138,57 @@ test('the fake HID device can refuse to open', async () => {
   const device = fakeHidDevice(easylapModel(), { failOpen: true });
   await assert.rejects(device.open(), (e) => e.name === 'NotAllowedError');
 });
+
+test('the fake HID device streams only while configured and enabled, and its reports carry the model bytes intact', async () => {
+  const good = [0, 0, 0x96, 0, 0, 0, 3, 0];
+  const make = () => {
+    const device = fakeHidDevice(easylapModel({ cars: 0, heartbeatMs: 5 }), { tickMs: 5 });
+    const received = [];
+    device.addEventListener('inputreport', (e) => received.push(e));
+    return { device, received };
+  };
+  const config = (device, bytes) => device.sendFeatureReport(0x50, Uint8Array.from(bytes));
+  const enable = (device, on) => device.sendFeatureReport(0x41, Uint8Array.of(on ? 1 : 0));
+
+  // A correct config without the enable sends nothing.
+  const idle = make();
+  await idle.device.open();
+  await config(idle.device, good);
+  await wait(40);
+  assert.equal(idle.received.length, 0, 'configured but not enabled');
+  await idle.device.close();
+
+  // A wrong baud, parity or data-bits value leaves the UART unconfigured.
+  for (const [name, bytes] of [['baud', [0, 0, 0x4b, 0, 0, 0, 3, 0]], ['parity', [0, 0, 0x96, 0, 1, 0, 3, 0]], ['data bits', [0, 0, 0x96, 0, 0, 0, 2, 0]]]) {
+    const wrong = make();
+    await wrong.device.open();
+    await config(wrong.device, bytes);
+    await enable(wrong.device, true);
+    await wait(40);
+    assert.equal(wrong.received.length, 0, `wrong ${name}`);
+    await wrong.device.close();
+  }
+
+  // 0x41 [00] stops the stream, and 0x41 [01] starts it again.
+  const { device, received } = make();
+  await device.open();
+  await config(device, good);
+  await enable(device, true);
+  await wait(40);
+  assert.ok(received.length > 0, 'streams once enabled');
+  await enable(device, false);
+  await wait(15);
+  const stopped = received.length;
+  await wait(40);
+  assert.equal(received.length, stopped, 'nothing after a stop');
+  await enable(device, true);
+  await wait(150); // the model keeps its beat count, so the restarted clock has to catch up first
+  assert.ok(received.length > stopped, 'streams again after re-enabling');
+  await device.close();
+
+  // The reports, trimmed to their report id, are the model's bytes: no byte lost, doubled or reordered.
+  const reader = createFrameReader();
+  const items = reader.push(Uint8Array.from(received.flatMap((r) => [...new Uint8Array(r.data.buffer, 0, r.reportId)])));
+  assert.ok(items.filter((x) => x.type === 'heartbeat').length >= 3);
+  assert.equal(reader.mismatches, 0);
+});
