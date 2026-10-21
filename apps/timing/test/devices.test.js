@@ -29,3 +29,11 @@ test('without IndexedDB the devices fall back to memory', async () => {
   await devices.remember('w1', 'hid:4292:34489', 'dec_1');
   assert.equal(await devices.recall('w1', 'hid:4292:34489'), 'dec_1');
 });
+
+test('the devices are opened once per page: a choice kept in memory survives the next connect', async () => {
+  const first = await openDevices('once');
+  await first.remember('w1', 'hid:4292:34489', 'dec_1');
+  const second = await openDevices('once');
+  assert.equal(second, first);
+  assert.equal(await second.recall('w1', 'hid:4292:34489'), 'dec_1');
+});

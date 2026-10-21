@@ -25,3 +25,28 @@ test('without IndexedDB the outbox falls back to memory', async () => {
   await box.add(p(1));
   assert.equal(await box.count(), 1);
 });
+
+test('an IndexedDB open that never answers falls back to memory after about 1 s', async (t) => {
+  const real = globalThis.indexedDB;
+  globalThis.indexedDB = /** @type {any} */ ({ open: () => ({}) });
+  t.after(() => { globalThis.indexedDB = real; });
+  const started = Date.now();
+  const box = await openOutbox('hung');
+  assert.ok(Date.now() - started < 3000);
+  await box.add({ decoder: 'd', boot: 'b00tb00t', transponder: '0A', t: 1 });
+  assert.equal(await box.count(), 1);
+});
+
+test('a blocked IndexedDB open falls back to memory at once', async (t) => {
+  const real = globalThis.indexedDB;
+  globalThis.indexedDB = /** @type {any} */ ({ open: () => {
+    const request = {};
+    setTimeout(() => request.onblocked?.(), 0);
+    return request;
+  } });
+  t.after(() => { globalThis.indexedDB = real; });
+  const started = Date.now();
+  const box = await openOutbox('blocked');
+  assert.ok(Date.now() - started < 500);
+  assert.equal(await box.count(), 0);
+});

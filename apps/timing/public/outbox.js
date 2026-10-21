@@ -44,11 +44,26 @@ function inTransaction(db, mode, fn) {
 export async function openOutbox(name = 'tinylap-timing') {
   let db;
   try {
+    // A hung or blocked open falls back to memory after 1 s, so it can't leave Connect dead.
     db = await new Promise((resolve, reject) => {
+      let timer;
       const request = indexedDB.open(name, 1);
       request.onupgradeneeded = () => request.result.createObjectStore(STORE, { keyPath: ['decoder', 'boot', 'transponder', 't'] });
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        clearTimeout(timer);
+        resolve(request.result);
+      };
+      request.onerror = () => {
+        clearTimeout(timer);
+        reject(request.error);
+      };
+      request.onblocked = () => {
+        clearTimeout(timer);
+        reject(new Error('IndexedDB open blocked'));
+      };
+      timer = setTimeout(() => {
+        reject(new Error('IndexedDB open timeout'));
+      }, 1000);
     });
   } catch {
     return memoryOutbox();

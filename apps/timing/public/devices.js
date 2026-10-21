@@ -39,8 +39,20 @@ function inTransaction(db, mode, fn) {
   });
 }
 
-/** The IndexedDB devices, or memory ones where IndexedDB is unavailable (private windows, Node). */
-export async function openDevices(name = 'tinylap-bridge-devices') {
+/** One store per name, for the page's life: each connect reuses its connection, or its memory fallback. */
+const opened = new Map();
+
+/**
+ * The IndexedDB devices, or memory ones where IndexedDB is unavailable (private windows, Node). Opened once
+ * per page and name, so a choice kept in memory survives the next connect. @param {string} [name]
+ */
+export function openDevices(name = 'tinylap-bridge-devices') {
+  if (!opened.has(name)) opened.set(name, open(name));
+  return opened.get(name);
+}
+
+/** @param {string} name */
+async function open(name) {
   let db;
   try {
     db = await new Promise((resolve, reject) => {
