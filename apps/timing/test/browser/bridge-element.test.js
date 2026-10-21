@@ -208,7 +208,7 @@ test('E3a: a removal right after the click opens nothing', async (t) => {
   assert.deepEqual(errors, []);
 });
 
-test('E3b: a removal during the start closes the port it opened', async (t) => {
+test('E3b: a removal during the start writes nothing and closes the port it opened', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.addInitScript(COUNT);
@@ -231,13 +231,11 @@ test('E3b: a removal during the start closes the port it opened', async (t) => {
   const state = await page.evaluate(`({
     opened: window.__opened,
     cancelled: window.__cancelled,
-    late: window.__writes.filter((w) => w > window.__cancelledAt).length,
     atRemoval: window.__atRemoval,
     now: (${shownIn})(window.__el),
   })`);
-  assert.equal(state.opened, 1);
-  assert.equal(state.cancelled, 1);
-  assert.equal(state.late, 0, 'no write after the cancel');
+  assert.equal(state.opened, 0, 'no write at all: nothing is written after close');
+  assert.equal(state.cancelled, 1, 'the port it opened is closed');
   assert.deepEqual(state.atRemoval, ['connecting']);
   assert.deepEqual(state.now, ['connecting'], 'nothing changed after the removal');
   assert.deepEqual(errors, []);

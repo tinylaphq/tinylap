@@ -64,7 +64,6 @@ const deviceOf = (port) => {
 const STATE_TEXT = {
   connect: 'Ready to connect.',
   connecting: 'Talking to the decoder.',
-  'not-tinylap': "This device doesn't answer like a TinyLap decoder.",
   unpaired: 'The decoder is not paired yet.',
   disconnected: 'Decoder disconnected.',
 };
@@ -264,7 +263,6 @@ class TlBridge extends HTMLElement {
     if (run !== this.run) return;
     const next = new Bridge({ port, outbox, post });
     next.addEventListener('state', () => {
-      if (next.state === 'not-tinylap') void next.close();
       if (run.bridge === next) this.show(run, next.state === 'idle' ? 'connecting' : next.state);
     });
     for (const type of ['outbox', 'online']) next.addEventListener(type, () => { if (run.bridge === next) this.update(run); });

@@ -82,11 +82,12 @@ test('offline, passings wait in the outbox and go when the server is back', asyn
   await bridge.close();
 });
 
-test('a device that does not answer is not a TinyLap decoder; a lost port is disconnected', async () => {
+test('a device that says nothing is listening, not an error; a lost port is disconnected', async () => {
   const silent = fakePort(null);
-  const bridge = new Bridge({ port: silent.port, outbox: memoryOutbox(), post: async () => ({ through: null }), helloMs: 20 });
+  const bridge = new Bridge({ port: silent.port, outbox: memoryOutbox(), post: async () => ({ through: null }), handshakeMs: 20 });
   await bridge.start();
-  await until(() => bridge.state === 'not-tinylap');
+  await until(() => bridge.state === 'listening');
+  assert.equal(bridge.lastError, null);
   silent.end();
   await until(() => bridge.state === 'disconnected');
 });
