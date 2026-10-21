@@ -399,7 +399,8 @@ test('E3c: a removal while the decoder-list GET is held opens nothing', async (t
   await listed;
   await page.evaluate(() => window.__el.remove());
   release();
-  await page.waitForTimeout(1000);
+  // Past the serial open delay (1.5 s): a bridge started for the removed element would write its %C& by then.
+  await page.waitForTimeout(2500);
   assert.equal((await counts(page)).opened, 0);
   assert.deepEqual(await page.evaluate(`(${shownIn})(window.__el)`), ['connecting'], 'as it was at the removal: connecting shows from the pick on');
   assert.deepEqual(errors, []);
