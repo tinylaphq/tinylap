@@ -95,3 +95,22 @@ export type ZroundMessage =
   | { type: 'ok' }
   | { type: 'error'; text: string }
   | { type: 'unknown'; raw: string };
+
+/** A Robitronic frame, as robitronic.js reads it (decoders spec §2.5). */
+export type RobitronicMessage =
+  | { type: 'passing'; id: number; transponder: string; t: number; hits: number; strength: number; checksumOk: boolean }
+  | { type: 'heartbeat'; t: number; tail: number[]; checksumOk: boolean };
+
+/** What a frame reader yields: a good frame, or a note that one failed its checksum. */
+export type RobitronicItem = RobitronicMessage | { type: 'noise'; detail: 'checksum'; bytes: Uint8Array };
+
+/** What the bridge's session sees, from either protocol reader (decoders spec §2.3). */
+export type DecoderEvent =
+  | { type: 'identity'; decoder: string | null; boot: string }
+  | { type: 'alive' }
+  | { type: 'clock'; t: number }
+  | { type: 'reset' }
+  | { type: 'passing'; transponder: string; t: number; hits?: number; strength?: number }
+  | { type: 'ok' }
+  | { type: 'error'; text: string }
+  | { type: 'noise'; detail: string };
