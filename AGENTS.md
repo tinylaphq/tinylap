@@ -9,7 +9,7 @@
 ## Web platform first
 
 - **Pages are rendered on the server, with real URLs.** Forms are plain HTML forms with server round trips: POST, then a 303 redirect; a failed form comes back as the same page with the error, the input kept and status 422.
-- **JavaScript is progressive enhancement.** Add it only where the platform needs it (live updates, Web Serial, a canvas editor) or where a round trip is too slow, and keep the page working without it wherever that is possible.
+- **JavaScript is progressive enhancement.** Add it only where the platform needs it (live updates, Web Serial, a canvas editor) or where a round trip is too slow. Most of a page then works without JavaScript, but that follows from building with web standards first; it is not a goal of its own. Don't add fallbacks or features just for browsers without JavaScript.
 - **No hash routing, no client-side routers, no frameworks.** Use platform APIs and native elements (`<form>`, `<a>`, `<dialog>`, `<details>`) before scripted imitations of them.
 - **Moving between pages is a normal page load.** Make it smooth with CSS view transitions (`@view-transition`) and speculation rules, never by swapping the page in script.
 - **Swap a part of the page only where a reload costs the user their place**, such as a form in the middle of a long page or a list you add to again and again. The server still answers with the full page, as it would without script. The client takes the element with the same id from that page and replaces its own copy. Afterwards it puts focus somewhere sensible and updates the URL if the redirect changed it. If anything is unexpected, it falls back to a normal page load. Never re-send the request: load the page, because a GET on a form target redirects to its page.
