@@ -63,8 +63,8 @@ test('signed out, / is the start page with Sign in', async () => {
   assert.match(res.headers.get('content-security-policy'), /form-action 'self'/);
   const body = await res.text();
   assert.match(body, /<title>TinyLap Timing<\/title>/);
-  assert.match(body, /href="\/auth\/login\?returnTo=%2F">Sign in</);
-  assert.match(body, /<a class="btn btn-sm btn-outline nav-sign-in" href="\/auth\/login\?returnTo=%2F">Sign in<\/a>/, 'the shared Sign in');
+  assert.match(body, /<a class="btn btn-primary" href="\/auth\/login\?returnTo=%2F">Sign in<\/a>/);
+  assert.doesNotMatch(body, /nav-sign-in/, 'one Sign in: the card has it, the navbar does not');
   assert.match(body, /<p class="brand-lockup"><img src="\/pkg\/design\/mark.svg" alt="" width="32" height="32"><span class="brand">TinyLap Timing<\/span><\/p>/);
   assert.doesNotMatch(body, /menu\.js|tl-menu/, 'no menu signed out');
   assert.doesNotMatch(body, /workspace/i);

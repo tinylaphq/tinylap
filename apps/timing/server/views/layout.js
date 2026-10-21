@@ -28,11 +28,12 @@ function accountMenu(request) {
 
 /**
  * @param {any} request
- * @param {{ title: string, body: unknown, screen?: string | null, scripts?: string[], modules?: string[], importMap?: unknown, head?: unknown, watcher?: boolean, big?: boolean }} page
+ * @param {{ title: string, body: unknown, screen?: string | null, scripts?: string[], modules?: string[], importMap?: unknown, head?: unknown, watcher?: boolean, big?: boolean, navSignIn?: boolean }} page
+ *   `navSignIn: false` leaves the navbar's Sign in out, for a page whose own body has one.
  */
-export function layout(request, { title, body, screen = null, scripts = [], modules = [], importMap = null, head = null, watcher = false, big = false }) {
+export function layout(request, { title, body, screen = null, scripts = [], modules = [], importMap = null, head = null, watcher = false, big = false, navSignIn = true }) {
   const space = watcher ? null : request.space;
-  const signIn = !request.session && !watcher ? safe(signInLink({ href: `/auth/login?${new URLSearchParams({ returnTo: request.url.pathname + request.url.search })}` })) : null;
+  const signIn = !request.session && !watcher && navSignIn ? safe(signInLink({ href: `/auth/login?${new URLSearchParams({ returnTo: request.url.pathname + request.url.search })}` })) : null;
   const menu = request.session && !watcher ? ['pkg/design/elements/menu.js'] : [];
   const bigLink = big ? request.url.pathname : `${request.url.pathname}?big`;
   return html`<!doctype html>

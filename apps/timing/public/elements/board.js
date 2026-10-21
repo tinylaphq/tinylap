@@ -19,7 +19,6 @@
 
 const STATES = { live: 'Live', reconnecting: 'Reconnecting…', off: 'Disconnected' };
 // Once the stream gives up, reload: the server then answers the board, sign-in or the gone page.
-// Tests set globalThis.tinylapReloadMs to wait less.
 const RELOAD_MS = 10_000;
 
 /** The focused element's counterpart in `next`, by href or id. @param {Element} next @param {Element | null} focused */
@@ -94,7 +93,7 @@ class TlBoard extends HTMLElement {
           break;
         }
         this.setStatus('off');
-        this.timer = setTimeout(() => location.reload(), Number(/** @type {any} */ (globalThis).tinylapReloadMs) || RELOAD_MS);
+        this.timer = setTimeout(() => location.reload(), RELOAD_MS);
         break;
       case 'board': {
         const template = document.createElement('template');

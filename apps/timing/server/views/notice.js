@@ -8,10 +8,11 @@ import { brandLockup } from '@tinylap/design/html/brand.js';
 import { html, safe } from './html.js';
 import { asset, layout } from './layout.js';
 
-/** @param {any} request @param {{ title: string, heading?: string, text: string, action?: { href: string, label: string } }} content */
-function notice(request, { title, heading = title, text, action }) {
+/** @param {any} request @param {{ title: string, heading?: string, text: string, action?: { href: string, label: string }, navSignIn?: boolean }} content */
+function notice(request, { title, heading = title, text, action, navSignIn }) {
   return layout(request, {
     title,
+    navSignIn,
     body: html`<section class="container-narrow page-header notice">
   ${safe(brandLockup({ name: 'TinyLap Timing', markSrc: asset(request, 'pkg/design/mark.svg') }))}
   <h1>${heading}</h1>
@@ -28,6 +29,7 @@ export const startPage = (request) => notice(request, {
   heading: 'Lap times, live',
   text: 'Time your track from a decoder on USB or Wi-Fi, or tap laps by hand, and show the board on every screen.',
   action: { href: '/auth/login?returnTo=%2F', label: 'Sign in' },
+  navSignIn: false, // the card's button is the one Sign in
 });
 
 export const notFoundPage = (request) => notice(request, {

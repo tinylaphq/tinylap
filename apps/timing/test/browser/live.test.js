@@ -111,7 +111,7 @@ test('a board whose stream is refused reloads itself', async (t) => {
   const streams = boardStreams();
   const { context, page } = await pageAs(browser, app, member);
   t.after(() => { streams.restore(); return context.close(); });
-  await page.addInitScript(() => { globalThis.tinylapReloadMs = 300; });
+  await page.clock.install();
   let asked = 0;
   await page.route('**/personal/board/events', (route) => {
     asked += 1;
@@ -119,11 +119,10 @@ test('a board whose stream is refused reloads itself', async (t) => {
   });
   await page.goto('/personal/board');
   await page.locator('#live-status[data-state="live"]').waitFor();
-  const reloaded = page.waitForEvent('load');
-  // "off" lasts only tinylapReloadMs before the reload, shorter than a locator's polling interval: check it every frame.
-  const off = page.waitForFunction(() => document.querySelector('#live-status')?.getAttribute('data-state') === 'off', null, { polling: 'raf' });
   streams.drop();
-  await off;
+  await page.locator('#live-status[data-state="off"]').waitFor();
+  const reloaded = page.waitForEvent('load');
+  await page.clock.fastForward(10_000); // the board waits 10 s before it reloads
   await reloaded;
   assert.equal(new URL(page.url()).pathname, '/personal/board');
   await page.locator('#live-status[data-state="live"]').waitFor();
