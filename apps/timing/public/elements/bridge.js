@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // <tl-bridge> (spec step three §3): while it is on the page, it runs the
-// page side of the USB bridge (spec §6.5), Web Serial ↔ the server, on the
+// page side of the USB bridge (spec §6.5), Web Serial or WebHID ↔ the server, on the
 // #bridge markup the server rendered inside it. It shows one
 // [data-bridge-state] section at a time, fills in the ready panel from the
 // server's row templates, sends passings an earlier visit left behind, and
@@ -15,16 +15,24 @@
 // - On disconnect it stops: the port is closed, and the click, submit and
 //   beforeunload listeners are removed. Work in flight (the picker, a
 //   pairing request, a name lookup, earlier passings) finishes, unseen.
-// - Without #bridge, or without Web Serial and ?simulate, it does nothing,
+// - Without #bridge, or without Web Serial and WebHID, it does nothing,
 //   and the server's "unsupported" notice stays.
 // The Bridge class itself (serial, outbox, retries) is ../bridge.js.
 import { Bridge, sendOutbox } from '../bridge.js';
 import { formatLap } from '../format.js';
+import { EASYLAP_FILTER, hidTransport } from '../link/hid.js';
+import { robitronicProtocol } from '../link/robitronic.js';
+import { serialTransport } from '../link/serial.js';
+import { zroundProtocol } from '../link/zround.js';
 import { openOutbox } from '../outbox.js';
-import { simulatedPort } from '../sim-port.js';
 
-const simulate = new URLSearchParams(location.search).get('simulate');
-const supported = 'serial' in navigator || simulate !== null;
+// No simulation code here: a simulator, when the server sets one, stands in for navigator.serial and
+// navigator.hid before this module runs (decoders spec §5.4).
+const has = { serial: 'serial' in navigator, hid: 'hid' in navigator };
+const supported = has.serial || has.hid;
+/** Opening a serial port resets an Arduino-based decoder: give it this long (decoders spec §2.4, C2). */
+const SERIAL_OPEN_DELAY_MS = 1500;
+const BROWSER_ASSIGNED = new Set(['zround', 'easylap']);
 
 /** A same-origin JSON call; errors carry the server's status and detail. */
 async function api(method, path, body) {
@@ -51,28 +59,21 @@ const needsSignIn = (error) => error?.status === 401;
 /** Says that `n` passings wait for a club this sign-in has no access to (a 403). Signing in again doesn't help. @param {number} n */
 const blockedText = (n) => `${passings(n)} ${n === 1 ? 'is' : 'are'} for a decoder in a club you don't have access to, so ${n === 1 ? 'it waits' : 'they wait'} here.`;
 
-/**
- * The device behind a port, as Web Serial shows it: its USB vendor and product ids. Web Serial
- * exposes no serial number, so two decoders of the same model count as one device.
- * @param {any} port
- */
-const deviceOf = (port) => {
-  const { usbVendorId, usbProductId } = port.getInfo?.() ?? {};
-  return `${usbVendorId ?? ''}:${usbProductId ?? ''}`;
-};
-
 const STATE_TEXT = {
   connect: 'Ready to connect.',
   connecting: 'Talking to the decoder.',
+  listening: 'Connected. Nothing from the device yet.',
   unpaired: 'The decoder is not paired yet.',
+  choose: 'Choose which decoder this is.',
   disconnected: 'Decoder disconnected.',
 };
 
-/** The browser's port picker; closing it is a choice, not an error. */
-async function pickPort() {
-  if (simulate !== null) return simulatedPort({ lapMs: simulate === 'fast' ? 2000 : 8000 });
+/** The picker for `which`; closing it is a choice, not an error. @param {'serial' | 'hid'} which */
+async function pick(which) {
   try {
-    return await /** @type {any} */ (navigator).serial.requestPort();
+    if (which === 'serial') return serialTransport(await /** @type {any} */ (navigator).serial.requestPort());
+    const [device] = await /** @type {any} */ (navigator).hid.requestDevice({ filters: [EASYLAP_FILTER] });
+    return device ? hidTransport(device) : null;
   } catch (caught) {
     if (/** @type {any} */ (caught)?.name === 'NotFoundError') return null;
     throw caught;
@@ -82,13 +83,15 @@ async function pickPort() {
 /**
  * One start's state. `names` maps a decoder id to the name it was paired
  * with; `made` is a decoder the server made but the cable didn't get yet:
- * its token is shown once, so a retry reuses it. It is bound to deviceOf:
- * Web Serial exposes no serial number, so two decoders of the same model
- * count as one device, and the protection works only between different
- * models. Re-plugging the same decoder reuses it, which is the intended
- * trade-off; a future decoder firmware could report a chip id to tell
- * decoders of one model apart.
- * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any }} Run
+ * its token is shown once, so a retry reuses it. It is bound to the device,
+ * which is its USB chip: its vendor and product ids. Web Serial exposes no
+ * serial number, so two decoders of the same model count as one device, and
+ * the protection works only between different models. Re-plugging the same
+ * decoder reuses it, which is the intended trade-off; a future decoder
+ * firmware could report a chip id to tell decoders of one model apart.
+ * `transport` is the last one picked, for "Connect again".
+ * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any,
+ *   transport: 'serial' | 'hid' | null }} Run
  */
 
 class TlBridge extends HTMLElement {
@@ -102,9 +105,14 @@ class TlBridge extends HTMLElement {
     if (this.run) return;
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root || !supported) return;
-    const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null };
+    const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null };
     this.run = run;
     this.reset(run);
+    for (const which of /** @type {const} */ (['serial', 'hid'])) {
+      const missing = !has[which];
+      this.$(run, `[data-bridge-connect="${which}"]`).hidden = missing;
+      this.$(run, `[data-bridge-missing="${which}"]`).hidden = !missing;
+    }
     this.show(run, 'connect');
     this.addEventListener('click', this);
     this.addEventListener('submit', this);
@@ -134,6 +142,13 @@ class TlBridge extends HTMLElement {
     const form = /** @type {HTMLFormElement} */ (this.$(run, '[data-bridge-pair]'));
     /** @type {HTMLInputElement} */ (form.elements.namedItem('name')).readOnly = false;
     /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]')).disabled = false;
+    for (const which of ['serial', 'hid']) {
+      this.$(run, `[data-bridge-connect="${which}"]`).hidden = false;
+      this.$(run, `[data-bridge-missing="${which}"]`).hidden = true;
+    }
+    this.$(run, '[data-bridge-listening]').hidden = false;
+    this.$(run, '[data-bridge-unreadable]').hidden = true;
+    this.$(run, '[data-bridge-gap]').hidden = true;
   }
 
   /** @param {Event} event */
@@ -147,7 +162,7 @@ class TlBridge extends HTMLElement {
     if (event.type === 'click') {
       const button = event.target instanceof Element ? event.target.closest('[data-bridge-connect]') : null;
       if (button && this.contains(button)) {
-        this.connect(run).then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
+        this.connect(run, /** @type {any} */ (button).dataset.bridgeConnect || 'serial').then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
       }
     } else if (event.type === 'submit') {
       const form = event.target;
@@ -200,8 +215,17 @@ class TlBridge extends HTMLElement {
   /** @param {Run} run */
   show(run, state) {
     for (const section of /** @type {NodeListOf<HTMLElement>} */ (run.root.querySelectorAll('[data-bridge-state]'))) section.hidden = section.dataset.bridgeState !== state;
+    if (state === 'listening') this.unreadable(run);
+    if (state === 'disconnected') this.$(run, '[data-bridge-gap]').hidden = !BROWSER_ASSIGNED.has(run.bridge?.kind);
     if (state === 'ready') this.update(run);
     else this.announce(run, STATE_TEXT[state] ?? '');
+  }
+
+  /** In listening: say so when data comes but fails its checksum (R8). @param {Run} run */
+  unreadable(run) {
+    const bad = (run.bridge?.mismatches ?? 0) > 0;
+    this.$(run, '[data-bridge-listening]').hidden = bad;
+    this.$(run, '[data-bridge-unreadable]').hidden = !bad;
   }
 
   /** @param {Run} run */
@@ -252,18 +276,24 @@ class TlBridge extends HTMLElement {
     }
   }
 
-  /** @param {Run} run */
-  async connect(run) {
-    const port = await pickPort();
+  /** @param {Run} run @param {'serial' | 'hid' | 'last'} which */
+  async connect(run, which) {
+    const chosen = which === 'last' ? run.transport ?? 'serial' : which;
+    const transport = await pick(chosen);
     if (run !== this.run) return;
-    if (!port) return;
-    if (run.made && run.made.device !== deviceOf(port)) this.forget(run);
+    if (!transport) return;
+    run.transport = chosen;
+    if (run.made && run.made.device !== transport.device) this.forget(run);
     await run.bridge?.close();
     const outbox = await openOutbox();
     if (run !== this.run) return;
-    const next = new Bridge({ port, outbox, post });
+    const protocol = chosen === 'hid' ? robitronicProtocol() : zroundProtocol();
+    const next = new Bridge({ link: { transport, protocol }, outbox, post, openDelayMs: chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
     next.addEventListener('state', () => {
       if (run.bridge === next) this.show(run, next.state === 'idle' ? 'connecting' : next.state);
+    });
+    next.addEventListener('noise', () => {
+      if (run.bridge === next && next.state === 'listening') this.unreadable(run);
     });
     for (const type of ['outbox', 'online']) next.addEventListener(type, () => { if (run.bridge === next) this.update(run); });
     next.addEventListener('passing', (event) => {
@@ -333,7 +363,7 @@ class TlBridge extends HTMLElement {
       if (!run.made) {
         const made = await api('POST', `/workspaces/${encodeURIComponent(run.workspaceId)}/decoders`, { name });
         if (run !== this.run) return;
-        run.made = { ...made, device: deviceOf(run.bridge.port) };
+        run.made = { ...made, device: run.bridge.device };
         run.names.set(run.made.id, run.made.name);
         nameField.readOnly = true;
       }

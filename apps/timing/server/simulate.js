@@ -19,7 +19,8 @@ export function isInstallPath(pathname) {
   try {
     decoded = decodeURIComponent(pathname);
   } catch {
-    return false;
+    // A malformed escape: fail closed, so the gate answers 404 rather than letting static serving guess.
+    return true;
   }
   return /^(\/v\/[^/]+)?\/public\/sim\/install\.js$/i.test(posix.normalize(decoded));
 }

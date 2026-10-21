@@ -9,6 +9,7 @@ import { createFrameReader, frames } from '@tinylap/timing';
 import { simulatedPort } from '../public/sim-port.js';
 import { fakeHidDevice } from '../public/sim/hid-device.js';
 import { fakeSerialPort } from '../public/sim/serial-port.js';
+import { install } from '../public/sim/install.js';
 import { simulation } from '../public/sim/models.js';
 import { easylapModel } from '../public/sim/models/easylap.js';
 import { tinylapModel } from '../public/sim/models/tinylap.js';
@@ -17,18 +18,18 @@ import { zroundModel } from '../public/sim/models/zround.js';
 const enc = (s) => new TextEncoder().encode(s);
 const text = (chunks) => chunks.map((c) => new TextDecoder().decode(c)).join('');
 
-test('?simulate picks a model and a lap time (spec §5.4)', () => {
+test('simulation reads <model>[,fast] (spec §5.4)', () => {
+  assert.equal(simulation(undefined), null);
   assert.equal(simulation(''), null);
-  assert.deepEqual(simulation('?simulate'), { name: 'tinylap', transport: 'serial', lapMs: 8000 });
-  assert.deepEqual(simulation('?simulate=tinylap'), { name: 'tinylap', transport: 'serial', lapMs: 8000 });
-  assert.deepEqual(simulation('?simulate=fast'), { name: 'tinylap', transport: 'serial', lapMs: 2000 });
-  assert.deepEqual(simulation('?simulate=zround&speed=fast'), { name: 'zround', transport: 'serial', lapMs: 2000 });
-  assert.deepEqual(simulation('?simulate=easylap'), { name: 'easylap', transport: 'hid', lapMs: 8000 });
+  assert.deepEqual(simulation('tinylap'), { name: 'tinylap', transport: 'serial', lapMs: 8000 });
+  assert.deepEqual(simulation('tinylap,fast'), { name: 'tinylap', transport: 'serial', lapMs: 2000 });
+  assert.deepEqual(simulation('zround,fast'), { name: 'zround', transport: 'serial', lapMs: 2000 });
+  assert.deepEqual(simulation('easylap'), { name: 'easylap', transport: 'hid', lapMs: 8000 });
   const warn = console.warn;
   const said = [];
   console.warn = (m) => said.push(m);
   try {
-    assert.deepEqual(simulation('?simulate=amb'), { name: 'tinylap', transport: 'serial', lapMs: 8000 });
+    assert.deepEqual(simulation('amb'), { name: 'tinylap', transport: 'serial', lapMs: 8000 });
   } finally {
     console.warn = warn;
   }
@@ -194,4 +195,24 @@ test('the fake HID device streams only while configured and enabled, and its rep
   const items = reader.push(Uint8Array.from(received.flatMap((r) => [...new Uint8Array(r.data.buffer, r.data.byteOffset, r.reportId)])));
   assert.ok(items.filter((x) => x.type === 'heartbeat').length >= 3);
   assert.equal(reader.mismatches, 0);
+});
+
+test('install stands in for the pickers: the model\'s transport gets a fresh device, the other is a closed picker', async () => {
+  const plain = {};
+  install(plain, 'zround,fast');
+  assert.ok(plain.serial instanceof EventTarget && plain.hid instanceof EventTarget, 'defined where missing');
+  const port = await plain.serial.requestPort();
+  assert.deepEqual(port.getInfo(), { usbVendorId: 0x0403, usbProductId: 0x6001, simulated: true });
+  assert.notEqual(await plain.serial.requestPort(), port, 'a fresh device for every pick');
+  assert.deepEqual(await plain.hid.requestDevice({ filters: [] }), []);
+  assert.deepEqual(await plain.serial.getPorts(), []);
+  const lap = {};
+  install(lap, 'easylap');
+  const [device] = await lap.hid.requestDevice({ filters: [] });
+  assert.equal(device.productName, 'EasyLap USB');
+  await assert.rejects(lap.serial.requestPort(), (e) => e.name === 'NotFoundError');
+  assert.deepEqual(await lap.hid.getDevices(), []);
+  const none = {};
+  install(none, null);
+  assert.deepEqual(none, {}, 'no setting, no change');
 });

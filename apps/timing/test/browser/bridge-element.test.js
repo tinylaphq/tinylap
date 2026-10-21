@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The bridge page in the browser (spec step three §4, E1–E6), with the
-// simulated decoder (?simulate=fast, a lap every 2 s).
+// simulated decoder (the server's TINYLAP_SIMULATE=tinylap,fast, a lap every 2 s).
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
@@ -24,6 +24,12 @@ after(async () => {
   await browser?.close();
   await app?.close();
 });
+
+/** Turns the server's simulator on for this test only (decoders spec §5.4). */
+const simulating = (t, value) => {
+  app.simulate = value;
+  t.after(() => { app.simulate = null; });
+};
 
 /**
  * Counts ports in the page: a port counts as opened on its first write (the
@@ -55,7 +61,7 @@ const COUNT = () => {
   };
 };
 
-/** The simulated decoder swallows the first pair command, so the bridge gets no answer (as bridge.test.js:99-108). */
+/** The simulated decoder swallows the first pair command, so the bridge gets no answer (as bridge.test.js does). */
 const DROP_FIRST_PAIR = () => {
   const Original = window.WritableStream;
   let dropped = false;
@@ -92,7 +98,8 @@ async function toPairing(t, { viewport, init = [] } = {}) {
   const who = await pageAs(browser, app, member, viewport ? { viewport } : {});
   t.after(() => who.context.close());
   for (const script of init) await who.page.addInitScript(script);
-  await who.page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await who.page.goto('/personal/bridge');
   await who.page.getByRole('button', { name: 'Connect decoder' }).click();
   await who.page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   return who;
@@ -113,7 +120,8 @@ test('E1a: tl-bridge starts the page, and Connect opens one port', async (t) => 
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.addInitScript(COUNT);
-  await page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
   const connect = page.getByRole('button', { name: 'Connect decoder' });
   await connect.waitFor();
   assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-bridge'))), true);
@@ -192,7 +200,8 @@ test('E3a: a removal right after the click opens nothing', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.addInitScript(COUNT);
-  await page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
   const seen = apiRequests(page);
   await page.evaluate(() => {
@@ -212,7 +221,8 @@ test('E3b: a removal during the start writes nothing and closes the port it open
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.addInitScript(COUNT);
-  await page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
   await page.evaluate(() => {
     const el = document.querySelector('tl-bridge');

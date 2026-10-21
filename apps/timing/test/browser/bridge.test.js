@@ -23,10 +23,17 @@ after(async () => {
   await app?.close();
 });
 
+/** Turns the server's simulator on for this test only (decoders spec §5.4). */
+const simulating = (t, value) => {
+  app.simulate = value;
+  t.after(() => { app.simulate = null; });
+};
+
 test('connect, pair and forward with the simulated decoder', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
-  await page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   await page.getByLabel('Decoder name').fill('  Gate  ');
@@ -47,10 +54,10 @@ test('without JavaScript, the page says what the bridge needs', async (t) => {
   assert.equal(await page.getByRole('link', { name: 'Pair over Wi-Fi only' }).isVisible(), true);
 });
 
-test('without Web Serial, the notice stays and no button is offered', async (t) => {
+test('without Web Serial or WebHID, the notice stays and no button is offered', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member, { viewport: { width: 390, height: 844 } });
   t.after(() => context.close());
-  await page.addInitScript(() => { delete Navigator.prototype.serial; });
+  await page.addInitScript(() => { delete Navigator.prototype.serial; delete Navigator.prototype.hid; });
   await page.goto('/personal/bridge');
   await page.getByText(/needs Chrome or Edge/).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), false);
@@ -63,7 +70,8 @@ async function toPairing(t, { viewport, init } = {}) {
   const who = await pageAs(browser, app, member, viewport ? { viewport } : {});
   t.after(() => who.context.close());
   if (init) await who.page.addInitScript(init);
-  await who.page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await who.page.goto('/personal/bridge');
   await who.page.getByRole('button', { name: 'Connect decoder' }).click();
   await who.page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   return who;
@@ -293,7 +301,8 @@ test('passings for a club without access wait, say why, and never hold up this d
   const own = (await (await app.api(uma, 'GET', '/auth/me')).json()).workspaces[0].id;
   const { context, page } = await pageAs(browser, app, uma);
   t.after(() => context.close());
-  await page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
   await page.evaluate(async (id) => {
     const { openOutbox } = await import('/public/outbox.js');
     await (await openOutbox()).add({ decoder: id, boot: 'b00tb00t', transponder: '0A', t: 1000 });
