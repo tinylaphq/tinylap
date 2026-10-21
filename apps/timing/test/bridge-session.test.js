@@ -172,11 +172,12 @@ test('a %TLID after the first %I& makes the decoder TinyLap: no further %I&', as
 
 test('a quiet running decoder, whose first clock comes after a while but before startMs, gets one %I&', async () => {
   // Scaled: RiCino's first clock at 5 s against startMs 6 s (spec §2.4, R1).
-  const rig = modelPort(plain({ clockEveryMs: 120 }));
-  const { bridge } = bridgeOn(rig);
+  // A clock every 100 ms against startMs 400 ms: wide margins on both sides of the first clock.
+  const rig = modelPort(plain({ clockEveryMs: 100 }));
+  const { bridge } = bridgeOn(rig, { startMs: 400 });
   await bridge.start();
   await until(() => bridge.state === 'choose');
-  await wait(FAST.startMs * 3);
+  await wait(400 * 3);
   assert.equal(count(rig.writes, commands.reset), 1);
   await bridge.close();
 });
