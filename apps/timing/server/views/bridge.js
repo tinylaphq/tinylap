@@ -32,6 +32,7 @@ export function bridgePage(request, importMap) {
   <div id="bridge" data-workspace="${request.workspaceId}">
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-warning" data-bridge-earlier hidden></p>
+    <template data-bridge-sign-in><a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}">Sign in again</a> to send them.</template>
     <section data-bridge-state="unsupported" class="card-static stack-md">
       <p>The bridge reads the decoder over USB with Web Serial, which needs Chrome or Edge on a laptop, with JavaScript on.</p>
       <p>Timing still works without it: the decoder can send its passings over Wi-Fi (<a href="${base}/setup">Pair over Wi-Fi only</a> on Setup), and you can <a href="${base}/tap">tap laps by hand</a>.</p>

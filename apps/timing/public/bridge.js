@@ -40,6 +40,10 @@ export class Bridge extends EventTarget {
     this.boot = null;
     this.online = true;
     this.lastError = null;
+    /** How many passings the last refusal (lastError) dropped from the outbox. */
+    this.dropped = 0;
+    /** How many passings the last flush held back: for a club this sign-in has no access to (a 403). */
+    this.blocked = 0;
     /** Transponder → the mark its laps are measured from, for the preview. */
     this.references = new Map();
   }
@@ -178,11 +182,13 @@ export class Bridge extends EventTarget {
     clearTimeout(this.#retryTimer);
     this.#flushing = (async () => {
       try {
-        const { refusal } = await sendOutbox(this.outbox, this.post, () => {
+        // A batch taken or refused for good: either way the server answered, and the outbox changed.
+        const { refusal, dropped, blocked } = await sendOutbox(this.outbox, this.post, () => {
           this.#setOnline(true);
           this.dispatchEvent(new Event('outbox'));
         });
-        if (refusal) this.lastError = refusal;
+        this.blocked = blocked;
+        if (refusal) Object.assign(this, { lastError: refusal, dropped });
       } catch (error) {
         this.#setOnline(false, error);
         if (!this.#closed) this.#retryTimer = setTimeout(() => void this.flush(), this.retryMs);
@@ -208,20 +214,32 @@ export class Bridge extends EventTarget {
   }
 }
 
+/** The answers that mean these passings will never be taken: no such decoder (it was removed,
+ * or never paired), or a batch the server can't read. */
+const FINAL = new Set([404, 422]);
+
 /**
- * Sends an outbox one decoder and boot at a time (spec §5), and drops the passings it sent, up to the
- * server's `through`. Throws when the server can't be reached. Groups the server refused for good
- * (a 4xx) stay in the outbox but don't block the others; the last refusal is returned.
+ * Sends an outbox one decoder and boot at a time (spec §5), and drops the passings it sent, up to
+ * the server's `through`. What the other answers do, so each flush sends what can be sent:
+ * - a 404 or 422 (FINAL): the batch is dropped, and the others go on;
+ * - a 403, no access to that decoder's club: its passings wait, and the other decoders go on;
+ * - a 401, signed out: every batch would fail the same way, so it throws and keeps everything;
+ * - a 413, 429, 5xx or network error throws too, keeping the rest for a retry.
+ * It returns the last refusal and how many passings were dropped, and the last 403 and how many
+ * passings it holds back. A thrown error carries `dropped`, `refusal` and `blocked` from before it.
  * @param {ReturnType<typeof import('./outbox.js').memoryOutbox>} outbox
  * @param {(decoderId: string, batch: { boot: string, passings: { transponder: string, t: number }[] }) => Promise<{ through: number | null }>} post
- * @param {() => void} [onSent] called after each batch the server took
- * @returns {Promise<{ refusal: any }>}
+ * @param {() => void} [onSent] called after each batch the server answered with a 2xx, 403, 404 or 422
+ * @returns {Promise<{ refusal: any, dropped: number, forbidden: any, blocked: number }>}
  */
 export async function sendOutbox(outbox, post, onSent = () => {}) {
-  const refused = new Set();
   let refusal = null;
+  let dropped = 0;
+  let forbidden = null;
+  let blocked = 0;
+  const skipped = new Set();
   for (;;) {
-    const items = (await outbox.list()).filter((p) => !refused.has(`${p.decoder} ${p.boot}`));
+    const items = (await outbox.list()).filter((p) => !skipped.has(p.decoder));
     if (items.length === 0) break;
     const [first] = items;
     const group = items.filter((p) => p.decoder === first.decoder && p.boot === first.boot).sort((a, b) => a.t - b.t).slice(0, MAX_BATCH);
@@ -230,9 +248,21 @@ export async function sendOutbox(outbox, post, onSent = () => {}) {
       ({ through } = await post(first.decoder, { boot: first.boot, passings: group.map(({ transponder, t }) => ({ transponder, t })) }));
     } catch (error) {
       const status = /** @type {any} */ (error)?.status;
-      if (typeof status !== 'number' || status < 400 || status > 499 || status === 429) throw error;
-      refused.add(`${first.decoder} ${first.boot}`);
+      if (status === 403) {
+        skipped.add(first.decoder);
+        blocked += items.filter((p) => p.decoder === first.decoder).length;
+        forbidden = error;
+        onSent();
+        continue;
+      }
+      if (!FINAL.has(status)) {
+        if (error && typeof error === 'object') Object.assign(error, { dropped, refusal, blocked });
+        throw error;
+      }
+      await outbox.remove(group);
+      dropped += group.length;
       refusal = error;
+      onSent();
       continue;
     }
     // Only what this batch carried: a passing of the same boot that wasn't sent stays, whatever `through` says.
@@ -241,5 +271,5 @@ export async function sendOutbox(outbox, post, onSent = () => {}) {
     // The server stores what it is sent, so `through` covers the group; if not, stop rather than loop.
     if (through === null || through < group.at(-1).t) break;
   }
-  return { refusal };
+  return { refusal, dropped, forbidden, blocked };
 }

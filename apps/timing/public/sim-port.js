@@ -30,6 +30,7 @@ export function simulatedPort({ lapMs = 8000, cars = 3 } = {}) {
     async close() {
       clearInterval(timer);
     },
-    getInfo: () => ({ simulated: true }),
+    // The ids of pid.codes' test product: every simulated decoder is the same device.
+    getInfo: () => ({ usbVendorId: 0x1209, usbProductId: 0x0001, simulated: true }),
   };
 }
