@@ -8,7 +8,7 @@ Product owner decisions recorded here (binding):
 - **The TinyLap commands are an enhancement**, used only when answered: `%TLPAIR`, `%TLWIFI`, the decoder's own `%TLID`, and with them Wi-Fi delivery without a browser and USB+Wi-Fi dedupe through the passing key. "not-tinylap" stops being an error state.
 - **The decoder's kind is not stored on the server** for now (owner, 2026-10-21; §1).
 - **EasyLap is supported.** It is a CP2110 HID-to-UART bridge (`10C4:86B9`) speaking Robitronic binary, reached with WebHID. So the bridge gets two layers, a **transport** and a **protocol reader**, with the identity, outbox, posting and preview shared behind them.
-- **Simulators:** one shared track plus pluggable device models (TinyLap, plain ZRound, EasyLap), picked with `?simulate=`.
+- **Simulators:** one shared track plus pluggable device models (TinyLap, plain ZRound, EasyLap). A server setting picks one, `TINYLAP_SIMULATE=<model>[,fast]`, and production never sets it. The simulator is injected at the platform boundary, in place of Web Serial's and WebHID's pickers; `tl-bridge` and `Bridge` have no simulation code at all (owner, 2026-10-21; §5.4). The page's `?simulate` goes.
 - UI wording follows the glossary and the frontend-design writing rules. Commits are conventional, signed off (`-s`), with no AI attribution.
 
 Coordinator rulings on the review (2026-10-21): the bridge sends `%I&` to a plain ZRound decoder (C1); the handshake retries, with an open delay and spacing (C2); I3–I13 and m14–m25 as the review proposes, with the choices named in their sections. The re-review's R1–R9 are applied as the reviewer proposes.
@@ -66,7 +66,11 @@ Coordinator rulings on the review (2026-10-21): the bridge sends `%I&` to a plai
 | `public/devices.js` | the browser's remembered choice: device → decoder (§3.2) | new |
 | `public/sim/track.js`, `public/sim/serial-port.js`, `public/sim/hid-device.js`, `public/sim/models.js`, `public/sim/models/{tinylap,zround,easylap}.js` | simulators (§5) | new |
 | `public/sim-port.js` | stays, as `simulatedPort(options) = fakeSerialPort(tinylapModel(options))`, so `test/browser/bridge.test.js:240` and the stream-counting init scripts keep working | changed |
-| `public/elements/bridge.js` | two pickers, the choose form, new state texts, `?simulate` parsing | changed |
+| `public/elements/bridge.js` | two pickers, the choose form, new state texts; today's `simulate` branch (`:24-27`, `:74`) is removed | changed |
+| `public/sim/install.js` | the simulator at the platform boundary: `navigator.serial` and `navigator.hid` replaced, or defined where missing (§5.4) | new |
+| `server/simulate.js` | `readSimulate(value)`: the setting's format, `<model>[,fast]`, checked | new |
+| `server/main.js`, `server/app.js` | `TINYLAP_SIMULATE` read with the other settings and handed to the handler as `settings.simulate`; `install.js` served only while it is set | changed |
+| `server/views/layout.js` | with the setting on, one `<script type="module" src="…/public/sim/install.js" data-model="…">` before the page's own scripts | changed |
 | `server/views/bridge.js`, `server/bridge-pages.js`, `server/store.js` | new sections, the second Connect button, the club's choosable decoders as options (one new read query, §3.2) | changed |
 | `docs/timing.md` | "Plain ZRound decoders" and "EasyLap" sections, and the handshake; the existing tables stay | changed |
 
@@ -116,7 +120,7 @@ new Bridge({ link: { transport, protocol }, outbox, post, openDelayMs = 0, synMs
 new Bridge({ port, outbox, post, … })   // shorthand: { transport: serialTransport(port), protocol: zroundProtocol() }
 ```
 
-The `port` shorthand keeps every `new Bridge({ port, … })` in `test/bridge.test.js` valid. New public fields: `kind` (`'tinylap' | 'zround' | 'easylap' | null`) and `device` (the transport's). `tl-bridge` passes `openDelayMs: 1500` for a real serial port and `0` for simulators. The Node defaults stay fast, so the existing tests' `until` (about 1 s, `test/bridge.test.js:31-37`) still holds.
+The `port` shorthand keeps every `new Bridge({ port, … })` in `test/bridge.test.js` valid. New public fields: `kind` (`'tinylap' | 'zround' | 'easylap' | null`) and `device` (the transport's). `tl-bridge` passes `openDelayMs: 1500` for every serial port; it can't tell a simulated one apart (§5.4), so a simulated decoder pays the same 1.5 s. The Node defaults stay fast, so the existing tests' `until` (about 1 s, `test/bridge.test.js:31-37`) still holds.
 
 **Every write** checks `#closed` first, so no write follows a `close()` (I13; E3b, `test/browser/bridge-element.test.js:211-240`).
 
@@ -277,7 +281,7 @@ One button can't open both pickers: the first picker uses up the click's user ac
 The two buttons sit inline in one paragraph and wrap at phone width; palace 0.12 has no cluster helper (`btn-secondary` exists). If their spacing needs a rule, it goes in `app.css`, or upstream in palace-ui if it is generic (AGENTS.md).
 
 - "Connect decoder" keeps its name (every browser test clicks it) and covers TinyLap and ZRound decoders. It stays first in DOM order, so the step-three tests' `querySelector('[data-bridge-connect]')` still clicks it.
-- When one API is missing (`serial` or `hid` not in `navigator`), `tl-bridge` hides that button and shows its `data-bridge-missing` note; `reset` (`elements/bridge.js:129-138`) puts both back. The rule applies to `serial` and `hid` buttons only, never to `last` ones (m20). `supported` (`:27`) becomes `'serial' in navigator || 'hid' in navigator || simulate !== null`.
+- When one API is missing (`serial` or `hid` not in `navigator`), `tl-bridge` hides that button and shows its `data-bridge-missing` note; `reset` (`elements/bridge.js:129-138`) puts both back. The rule applies to `serial` and `hid` buttons only, never to `last` ones (m20). `supported` (`:27`) becomes `'serial' in navigator || 'hid' in navigator`. With a simulation installed both APIs exist (§5.4), so both buttons show and no missing-API note does.
 - "Connect again" and "Try another device" carry `data-bridge-connect="last"`: the run's last transport.
 
 ### 4.2 States and what each says
@@ -346,19 +350,32 @@ A model turns crossings and host writes into device output. It never touches a t
   - A `sendReport(n, data)` whose `n` isn't `data.length` rejects, which catches the `n + 1` bug.
   - `failOpen` makes `open()` reject with `NotAllowedError`. `unplug()` fires a `disconnect` on its fake `hid`.
 
-### 5.4 Picking a model: `?simulate`
+### 5.4 Picking a model: a server setting, injected at the platform boundary
+
+The simulator is a server setting, and it is injected in place of the platform's pickers (owner, 2026-10-21). Production components don't change for it: `tl-bridge` and `Bridge` contain no simulation code, call Web Serial and WebHID exactly as with hardware, and never call `simulation()`. Production never sets the setting, so nothing of the simulator is rendered or loaded there.
+
+- **The setting:** `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap`, and `,fast` makes a lap 2 s instead of 8 s. Unset or empty: no simulation.
+  - `server/main.js` reads it with the timing server's other settings (`main.js:25-84`) and checks it with `readSimulate` (`server/simulate.js`). A value in any other format stops the server with a message, as a bad `TINYLAP_TOKEN_KEYS` does (`main.js:47-49`).
+  - It reaches the handler as `settings.simulate` (`server/app.js`). One `settings` object is shared by every request, so a test can change it on a running server.
+- **Tests:** `startTiming({ simulate: 'zround,fast' })`, and between tests `app.simulate = 'easylap'` or `app.simulate = null`. A test that needs a device of its own (silent, failing, noisy) keeps the setting off and stubs `navigator.serial` or `navigator.hid` with an init script, as today's tests do.
+- **The injection:** with the setting on, the layout renders `<script type="module" src="…/public/sim/install.js" data-model="zround,fast"></script>` after the import map and before the page's own scripts. Module scripts run in document order, so it runs before `tl-bridge`'s module. It is same-origin, so the CSP's `script-src 'self'` covers it with no hash. Today only the bridge page carries the import map that `install.js` needs, and the layout renders it only on pages that have one.
+- **`public/sim/install.js`:** reads its `data-model` through `simulation(value)` (`public/sim/models.js`, which parses that format), then replaces the platform's entry points:
+  - `navigator.serial.requestPort` and `getPorts`, and `navigator.hid.requestDevice` and `getDevices`, defining `navigator.serial` and `navigator.hid` (each an `EventTarget`) where the browser has none;
+  - `requestPort` returns a fresh `fakeSerialPort`, and `requestDevice` a fresh `[fakeHidDevice]` with the page's `navigator.hid` as its disconnect source, for the configured model's transport. The other transport acts as a closed picker: `requestPort` rejects with `NotFoundError`, and `requestDevice` resolves `[]`. No device of that kind is plugged in;
+  - `getPorts` and `getDevices` resolve `[]`: nothing is granted ahead of a click.
+- **The start:** the simulation starts when the member clicks Connect, because `requestPort` and `requestDevice` are what return the fake: the same moment and user gesture as with hardware. The rest of the flow is unchanged: the handshake, choose, forwarding.
+- **Serving:** the server answers `…/public/sim/install.js` with a 404 while the setting is off. That is the one file that changes the page's platform, so production can't load it even by hand. The rest of `public/sim/` and `public/sim-port.js` stay served like any static file. They are inert modules that nothing in production imports, and the tests' own stubs import them.
 
 `public/sim/models.js` holds a registry, `{ tinylap, zround, easylap }`. A later AMB model is one more entry. Every pick makes a fresh model and device, as `elements/bridge.js:74` does today (m22): an unplug and Connect again is a new device, which matches the owner's decision.
 
-| URL | Model | Lap |
+| Setting | Model | Lap |
 |---|---|---|
-| `?simulate`, `?simulate=tinylap` | `tinylap` | 8 s |
-| `?simulate=fast` | `tinylap` | 2 s (today's tests) |
-| `?simulate=zround`, `?simulate=easylap` | that model | 8 s |
-| `&speed=fast` with any of them | — | 2 s |
-| any other value | `tinylap`, with a `console.warn` naming the known models | 8 s |
-
-Under `?simulate`, both Connect buttons show, and `openDelayMs` is 0. The button of the model's transport opens the simulated device; the other one acts as a closed picker (nothing happens, no error). So `pickPort` (`elements/bridge.js:73-81`) becomes `pick(transport)`, returning a transport or `null`.
+| unset or empty | none: real Web Serial and WebHID; `install.js` not rendered, and a 404 | — |
+| `tinylap` | `tinylap` | 8 s |
+| `tinylap,fast` | `tinylap` | 2 s (today's `?simulate=fast` tests) |
+| `zround`, `easylap` | that model | 8 s |
+| `zround,fast`, `easylap,fast` | that model | 2 s |
+| any other value | the server refuses to start; `simulation()` in `install.js` warns and takes `tinylap` | — |
 
 ## 6. Test plan
 
@@ -417,6 +434,10 @@ New tests:
 - **EasyLap start fallback**: a model silent until `03 B9 01` gets it after `handshakeMs`, at most three times, and then forwards.
 - **No write after close** (I13): `close()` between two handshake writes; nothing more is written.
 
+**New `test/server/simulate.test.js`**: `readSimulate` takes `tinylap`, `zround,fast` and `easylap`, gives `null` for unset or empty, and throws for `amb`, `zround,slow` and ` tinylap`. The bridge page has the `install.js` script, with `data-model`, before `elements/bridge.js` exactly when the setting is on; `install.js` is a 404 while it is off; and both follow `app.simulate` on a running server.
+
+**`test/sim.test.js`** (from the models task) gains `install.js` in Node: with a stub `navigator` (no `serial`, no `hid`), it defines both; the model's transport returns a fake device, the other is a closed picker, and `getPorts`/`getDevices` resolve `[]`.
+
 **`test/outbox.test.js`**: unchanged. **New `test/devices.test.js`**: remember, recall, forget, the memory fallback, and the record holds only `{ decoder }`.
 
 **`test/server/bridge-pages.test.js`**:
@@ -426,24 +447,24 @@ New tests:
 
 ### 6.2 Browser tests
 
-Every existing test in `test/browser/bridge.test.js` and `bridge-element.test.js` is kept, on `?simulate=fast` (TinyLap), with two adapted:
+Every existing test in `test/browser/bridge.test.js` and `bridge-element.test.js` is kept. Those on `?simulate=fast` switch to the server setting `tinylap,fast` (`app.simulate`, §5.4); those on real Web Serial stubs keep the setting off. Two are adapted:
 - `bridge.test.js:50` "without Web Serial, the notice stays": it deletes `Navigator.prototype.hid` too. New next to it: "with WebHID only, just Connect EasyLap is offered, and the note says USB decoders can't be reached".
 - `bridge.test.js:41` and `:55`: the new `unsupported` sentence keeps "needs Chrome or Edge", so `/needs Chrome or Edge/` still matches (m16).
 
 E1–E7 (step three §4) run unchanged: `sim-port.js` keeps its streams (§5.3), and Connect decoder stays the first `[data-bridge-connect]`. The `SERIAL` init scripts that import `/public/sim-port.js` (`bridge.test.js:219-244`) keep working.
 
 New, in `test/browser/decoders.test.js`:
-- **D1 Plain ZRound** (`?simulate=zround&speed=fast`, RiCino-style reads, waiting for `%I&`): Connect decoder → "Which decoder is this?" → "Name for the new decoder" "Gate" → "Use this decoder" → "Forwarding from Gate" → a preview row. The store has one decoder "Gate", and the engine has crossings.
+- **D1 Plain ZRound** (setting `zround,fast`, RiCino-style reads, waiting for `%I&`): Connect decoder → "Which decoder is this?" → "Name for the new decoder" "Gate" → "Use this decoder" → "Forwarding from Gate" → a preview row. The store has one decoder "Gate", and the engine has crossings.
 - **D2 Remembered, confirmed** (I8): Connect again → "Is this Gate?" with Gate preselected and focus on "Use this decoder"; nothing is posted before the click; no `POST …/decoders`.
 - **D3 Removed on the server**: delete "Gate" through `app.api`, reconnect → "Which decoder is this?", Gate is not an option, and no POST goes to `/decoders/<old id>/passings`.
 - **D4 An existing decoder**: pick it in the select; no `POST …/decoders`. A decoder removed after the page loaded, then chosen: its option goes and the form says so (m24).
 - **D5 In use** (I7, R5): a decoder posted to within 2 minutes (through `app.api`) is `disabled` and reads "(in use)". The remembered one reads "(in use)" too but stays enabled. With the page's clock moved 10 minutes ahead (an init script), the marks are the same: they follow the server's `Date`.
 - **E4d Reset of the choose form** (R6): at "Is this Gate?" with an option disabled, move the element, then Connect again: the heading reads "Which decoder is this?" until the new run's remembered match applies, every option's text comes from `data-name`, and none is disabled before the new GET answers.
-- **D14 The connect GET fails** (F3): with `/workspaces/*/decoders` routed to a 503, Connect decoder on `?simulate=zround` shows the server-rendered options unchanged, with none disabled or marked "(in use)"; the remembered decoder is preselected; and "Use this decoder" goes to "Forwarding from Gate" with no `POST …/decoders`.
+- **D14 The connect GET fails** (F3): with `/workspaces/*/decoders` routed to a 503, Connect decoder with the setting `zround,fast` shows the server-rendered options unchanged, with none disabled or marked "(in use)"; the remembered decoder is preselected; and "Use this decoder" goes to "Forwarding from Gate" with no `POST …/decoders`.
 - **D13 Unreadable EasyLap** (R8): a fake device whose frames all fail the checksum: `listening` says "Data is coming, but it can't be read. Report this device."
-- **D6 EasyLap** (`?simulate=easylap&speed=fast`): Connect EasyLap → choose → forward. The preview shows the 24-bit codes as hex. The fake device's `log` shows the two feature reports in order, and removing the element sends `0x41 [00]`.
+- **D6 EasyLap** (setting `easylap,fast`): Connect EasyLap → choose → forward. The preview shows the 24-bit codes as hex. The fake device's `log` shows the two feature reports in order, and removing the element sends `0x41 [00]`.
 - **D7 Listening**: a silent serial port (init script) → "Connected, but nothing has come from this device yet.", no alert role; "Try another device" opens one picker.
-- **D8 The other button under `?simulate=easylap`**: Connect decoder opens nothing and shows no error.
+- **D8 The other button with the setting `easylap,fast`**: Connect decoder acts as a closed picker (nothing opens, no error), and Connect EasyLap opens the simulated EasyLap. Both buttons show and no missing-API note does, even with `serial` and `hid` deleted from `Navigator.prototype` before the page loads. With the setting off, the page has no `install.js`, a GET of it is a 404, and `?simulate=easylap` in the URL changes nothing.
 - **D9 A replug** (owner's decision): forward from "Gate", unplug, Connect again, confirm. The disconnected section shows the lost-crossings note. The passings after the replug carry a new boot, and each car's first passing after it is a start, not a lap.
 - **D10 Noise**: `zround` with `double` and `garbage` on: no page error, and the preview shows laps.
 - **D11 HID picker closed** (I12): `requestDevice` resolves `[]` → no error, and Connect stays (the WebHID twin of E4c).
@@ -493,7 +514,10 @@ New, in `test/browser/decoders.test.js`:
 | tl-bridge: token stored, or a decoder made for an existing choice | D4, `devices.test.js` |
 | tl-bridge: a missing API's button still shown, or a `last` button hidden | the WebHID-only browser test |
 | tl-bridge: no run guard after the list GET or the choose POST | E3c, E6c |
-| simulate: `fast` not mapped to TinyLap at 2 s | every existing browser test |
+| simulate: `tinylap,fast` not a 2 s lap | every existing browser test (timeouts) |
+| simulate: `install.js` rendered, or served, with the setting off; or `tl-bridge` still reads `location.search` | `server/simulate.js`'s page test; D8 |
+| simulate: the other transport returns a device | D8 |
+| simulate: `readSimulate` accepts any value | `server/simulate.js`'s test |
 
 **Covered by review only:** the 500-passing cap on held passings, and the `console.warn` on the first checksum mismatch.
 
@@ -547,5 +571,7 @@ Until items 3 and 4 are done, `docs/timing.md` marks EasyLap support "preview".
    - one guarded GET per connect, and `reset` restores the choose form from `data-name`;
    - the `%TLHELLO&` repeats stop at the first `%TLID`, and `%C&` in `listening` stops after 60 s;
    - the copy fixes, and the model's own `bootMs`.
+
+8. **The simulator is a server setting, injected at the platform boundary** (owner, 2026-10-21): `TINYLAP_SIMULATE=<model>[,fast]`, read in `server/main.js`. With it on, the layout loads `public/sim/install.js`, which stands in for Web Serial's and WebHID's pickers. `tl-bridge` and `Bridge` have no simulation code. Production never sets it, so nothing is rendered there and `install.js` is a 404 (§5.4).
 
 No open questions remain.

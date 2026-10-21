@@ -10,7 +10,7 @@
   - a **protocol reader**: `public/link/zround.js`, or `public/link/robitronic.js` over `packages/timing/robitronic.js`;
   - the **session**, which is today's `Bridge` in `public/bridge.js`, widened. It runs the handshake, decides the kind (`tinylap`, `zround`, `easylap`), makes the boots, holds passings until the identity is known, and keeps the outbox, posting and preview as they are.
 - `tl-bridge` (`public/elements/bridge.js`) gets two pickers and a server-rendered choose form. It remembers device → decoder in `public/devices.js`.
-- Simulators are device models in `public/sim/models/`, behind a fake serial port and a fake HIDDevice.
+- Simulators are device models in `public/sim/models/`, behind a fake serial port and a fake HIDDevice. They are injected at the platform boundary: with the server setting `TINYLAP_SIMULATE=<model>[,fast]`, the layout loads `public/sim/install.js`, which stands in for `navigator.serial` and `navigator.hid`. `tl-bridge` and `Bridge` have no simulation code (spec §5.4, owner 2026-10-21).
 
 **Tech Stack:** plain ES modules, checked by tsc `--checkJs` and eslint. Tests use node:test, and playwright-core for the browser tests. WebHID and Web Serial in Chrome.
 
@@ -61,7 +61,8 @@
   - the glossary applies: "Sign in", "club", "personal space"; never "workspace", "log in" or "publish" in anything people read. `test/server/glossary.test.js` guards it, and it runs in the checks;
   - the strings are exactly the spec's (§4.1, §4.2, §3.2). Copy them from this plan, which repeats them verbatim.
 - **Defaults** (spec §2.4): `openDelayMs = 0`, `synMs = 500`, `handshakeMs = 6000`, `spacingMs = 300`, `helloMs = 2500`, `startMs = 6000`, `listenMs = 60_000`, `retryMs = 5000`, `replyMs = 3000`. There are two more, named in the spec but not as options: `helloEveryMs = 700` and `listenSynMs = 2000`. One is new: `flushWaitMs = 10_000`, how long a late `%TLID` waits for the flush in flight. The decoder-list GET gives up after 3 s (`AbortSignal.timeout(3000)`). `tl-bridge` passes `openDelayMs: 1500` for a real serial port.
-- **No API change.** The one server change is a page-only read query and its index (§3.2).
+- **No API change.** The server changes are a page-only read query and its index (§3.2), and the simulator setting (§5.4).
+- **No simulation code in production components.** `tl-bridge` and `Bridge` never read a simulation setting or call `simulation()`. The simulator replaces the platform's pickers, and only while `TINYLAP_SIMULATE` is set.
 
 ## Review Focus
 
@@ -458,7 +459,9 @@ git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "feat(tim
 
 ---
 
-### Task 3: Device models and the `?simulate` registry
+### Task 3: Device models and the simulator registry
+
+> **Committed** (8c13c35) with `simulation(search)` reading `?simulate`. The owner has since made the simulator a server setting injected at the platform boundary (spec §5.4): Task 11 changes `simulation` to `simulation(value)` and rewrites its tests here. The code below is kept as it was committed.
 
 **Files:**
 - Create: `apps/timing/public/sim/models/tinylap.js`, `apps/timing/public/sim/models/zround.js`, `apps/timing/public/sim/models/easylap.js`, `apps/timing/public/sim/models.js`, `apps/timing/test/sim.test.js`
@@ -2653,10 +2656,14 @@ git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "feat(tim
   - `apps/timing/server/bridge-pages.js:12-15`;
   - `apps/timing/server/views/bridge.js:18-83`;
   - `apps/timing/server/views/form-parts.js:31-40` (`selectField` gains `hint` and per-option `dataName`);
+  - `apps/timing/server/main.js:5-13` (header), `:25-84` (reads `TINYLAP_SIMULATE`), `apps/timing/server/app.js:80-125` (`settings`, the `install.js` gate), `apps/timing/server/views/layout.js:51` (the install script);
+  - `apps/timing/test/server/helpers.js:34-53` and its returned object (the `simulate` option, `app.simulate`);
   - `apps/timing/test/server/bridge-pages.test.js`
+- Create: `apps/timing/server/simulate.js`, `apps/timing/test/server/simulate.test.js`
 
 **Interfaces:**
 - Produces:
+  - the simulator setting (spec §5.4). `TINYLAP_SIMULATE` is read in **`server/main.js`**, with the server's other settings, and checked by `readSimulate(value): string | null` in `server/simulate.js`. It reaches the handler as `createHandler({ settings: { simulate } })` → `request.settings.simulate`, one object shared by every request. Tests use `startTiming({ simulate })` and `app.simulate = …`;
   - `store.choosableDecoders(ws)`: today's `decoders(ws)` without the decoders that have any passing `via = 'net'`;
   - `bridgePage(request, importMap, decoders)`;
   - the markup hooks `tl-bridge` uses:
@@ -2835,8 +2842,128 @@ The hint sits on the `</select>` line, so for every existing caller (no hint, no
 
 Keep today's `unpaired` and `ready` sections byte for byte; the comments above only stand in for them in this plan. The `not-tinylap` section is gone. Update the header comment (`:5-7`): the server renders every state, for both pickers; without JavaScript, or without Web Serial and WebHID, the page says what the bridge needs.
 
-- [ ] **Step 4: Run `bridge-pages.test.js`, `store.test.js`, `glossary.test.js`, `csp.test.js`, `test/views.test.js` and the setup page tests; expect PASS.** Then run the browser bridge files. `bridge.test.js:41` and `:50` still match `/needs Chrome or Edge/`. The step-three E-tests still click the first `[data-bridge-connect]`, which is Connect decoder.
-- [ ] **Step 5: Look at the page.** Use the `frontend-design` skill. Open `/personal/bridge?simulate=fast` at 390×844 and 1280×800. The two buttons wrap cleanly with no horizontal scroll. The notes read as palace status lines. If the two inline buttons need a gap, add one rule in `app.css` next to the bridge rules, with palace spacing tokens only.
+- [ ] **Step 3b: The simulator setting** (spec §5.4). First the failing tests:
+
+```js
+// apps/timing/test/server/simulate.test.js
+// (AGPL header)
+
+import test, { after, before } from 'node:test';
+import assert from 'node:assert/strict';
+import { readSimulate } from '../../server/simulate.js';
+import { startTiming } from './helpers.js';
+
+let app;
+let member;
+before(async () => {
+  app = await startTiming();
+  member = await app.login(await app.signUp('Ana'));
+});
+after(() => app.close());
+
+test('readSimulate takes <model>[,fast], and nothing else', () => {
+  for (const value of ['tinylap', 'zround,fast', 'easylap', 'easylap,fast']) assert.equal(readSimulate(value), value);
+  assert.equal(readSimulate(undefined), null);
+  assert.equal(readSimulate(''), null);
+  for (const value of ['amb', 'zround,slow', ' tinylap', 'TinyLap']) assert.throws(() => readSimulate(value), /<model>\[,fast\]/);
+});
+
+const page = async (path = '/personal/bridge') => (await app.api(member, 'GET', path, undefined, { accept: 'text/html' })).text();
+const INSTALL = '<script type="module" src="/public/sim/install.js" data-model="zround,fast"></script>';
+
+test('the install script is on the bridge page exactly while the setting is on, after the import map and before tl-bridge', async () => {
+  assert.doesNotMatch(await page(), /sim\/install\.js/);
+  assert.equal((await fetch(`${app.base}/public/sim/install.js`)).status, 404, 'not served while off');
+  app.simulate = 'zround,fast';
+  try {
+    const body = await page();
+    const at = body.indexOf(INSTALL);
+    assert.ok(at > body.indexOf('<script type="importmap">') && at < body.indexOf('/public/elements/bridge.js'));
+    assert.doesNotMatch(await page('/personal/setup'), /sim\/install\.js/, 'only pages with the import map');
+    assert.throws(() => { app.simulate = 'amb'; });
+  } finally {
+    app.simulate = null;
+  }
+  assert.doesNotMatch(await page(), /sim\/install\.js/);
+});
+```
+
+(Task 11 adds the check that `install.js` is served, 200, while the setting is on; the file exists from then.)
+
+Then the code:
+
+```js
+// apps/timing/server/simulate.js
+// (AGPL header)
+
+// The simulator setting (decoders spec §5.4): TINYLAP_SIMULATE=<model>[,fast], with model tinylap,
+// zround or easylap. With it, the layout loads public/sim/install.js, which stands in for Web Serial's
+// and WebHID's pickers. Production never sets it.
+
+const FORMAT = /^(tinylap|zround|easylap)(,fast)?$/;
+/** The one file that changes a page's platform: served only while the setting is on. */
+export const INSTALL_PATH = /\/public\/sim\/install\.js$/;
+
+/** The setting, checked; null when unset or empty. @param {string | null | undefined} value */
+export function readSimulate(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (!FORMAT.test(value)) throw new Error(`"${value}" is not <model>[,fast], with model tinylap, zround or easylap.`);
+  return value;
+}
+```
+
+- `server/main.js`: add to the header comment (`:5-13`): "TINYLAP_SIMULATE (`<model>[,fast]`) puts a simulated decoder behind the bridge's Connect buttons, for development and tests; never set it in production." After the keys are read (`:47-49`), add:
+
+  ```js
+  let simulate = null;
+  try {
+    simulate = readSimulate(env.TINYLAP_SIMULATE);
+  } catch (error) {
+    refuse(`TINYLAP_SIMULATE: ${error.message}`);
+  }
+  if (simulate) console.log(`TINYLAP_SIMULATE=${simulate}: the bridge's Connect buttons open a simulated decoder.`);
+  ```
+
+  Pass `settings: { simulate }` to `createHandler` (`:76-84`).
+- `server/app.js`:
+  - the options' JSDoc gains `settings?: { simulate: string | null }`;
+  - the `context` gains `settings: options.settings ?? { simulate: null }`, the same object for every request (the per-request spread copies the reference);
+  - `dispatch`'s last line, `return serveStatic(req, url);`, becomes:
+
+  ```js
+  if (!request.settings.simulate && INSTALL_PATH.test(url.pathname)) {
+    return { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }, body: 'not found' };
+  }
+  return serveStatic(req, url);
+  ```
+
+- `server/views/layout.js:51`: between `${importMap}` and the page's scripts, add
+
+  ```js
+  ${importMap && request.settings?.simulate ? html`<script type="module" src="${asset(request, 'public/sim/install.js')}" data-model="${request.settings.simulate}"></script>\n` : null}
+  ```
+
+  Module scripts run in document order, so it runs before `elements/bridge.js`. It is same-origin, so the CSP needs no hash.
+- `test/server/helpers.js`:
+  - `const { clock, hostname, env, simulate = null, ...rest } = options;`;
+  - `const settings = { simulate: readSimulate(simulate) };`;
+  - `createHandler({ …, settings, ...rest })`;
+  - the returned object gains
+
+  ```js
+    /** The server's simulator setting (decoders spec §5.4), switchable between tests. */
+    get simulate() {
+      return settings.simulate;
+    },
+    set simulate(value) {
+      settings.simulate = readSimulate(value);
+    },
+  ```
+
+  Add `readSimulate` to its imports from `../../server/simulate.js`.
+
+- [ ] **Step 4: Run `bridge-pages.test.js`, `simulate.test.js`, `main.test.js`, `store.test.js`, `glossary.test.js`, `csp.test.js`, `test/views.test.js` and the setup page tests; expect PASS.** Then run the browser bridge files. `bridge.test.js:41` and `:50` still match `/needs Chrome or Edge/`. The step-three E-tests still click the first `[data-bridge-connect]`, which is Connect decoder.
+- [ ] **Step 5: Look at the page.** Use the `frontend-design` skill. Start the dev server with `TINYLAP_SIMULATE=tinylap,fast pnpm --filter @tinylap/timing-app dev`, and open `/personal/bridge` at 390×844 and 1280×800. The two buttons wrap cleanly with no horizontal scroll. The notes read as palace status lines. If the two inline buttons need a gap, add one rule in `app.css` next to the bridge rules, with palace spacing tokens only.
 - [ ] **Step 6: Checks, then commit**
 
 ```bash
@@ -2846,25 +2973,85 @@ git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "feat(tim
 
 ---
 
-### Task 11: `tl-bridge`: two pickers, `?simulate` models, listening, the gap note
+### Task 11: `tl-bridge`: two pickers, listening, the gap note; the simulator at the platform boundary
 
 **UI task: use the `frontend-design` skill.** The element shows server sections and sets text, `hidden` and `disabled` only; it never builds markup.
 
 **Files:**
-- Modify: `apps/timing/public/elements/bridge.js` (imports and module constants `:21-27`, `deviceOf` `:54-62`, `STATE_TEXT` `:64-70`, `pickPort` `:72-81`, the Run typedef `:83-93`, `start` `:102-114`, `reset` `:128-138`, `handleEvent` `:140-160`, `show` `:201-206`, `connect` `:256-287`, `pair` `:338`), `apps/timing/test/browser/bridge.test.js:50-59`
-- Create: `apps/timing/test/browser/decoders.test.js`
+- Modify:
+  - `apps/timing/public/elements/bridge.js` (imports and module constants `:21-27`, `deviceOf` `:54-62`, `STATE_TEXT` `:64-70`, `pickPort` `:72-81`, the Run typedef `:83-93`, `start` `:102-114`, `reset` `:128-138`, `handleEvent` `:140-160`, `show` `:201-206`, `connect` `:256-287`, `pair` `:338`). Today's `simulate` branch (`:24-27`, `:74`) goes;
+  - `apps/timing/public/sim/models.js` (`simulation(search)` → `simulation(value)`), `apps/timing/public/sim-port.js` (its comment), `apps/timing/test/sim.test.js` (Task 3's `simulation` test rewritten; `install` tests added);
+  - `apps/timing/test/server/simulate.test.js` (served while on);
+  - `apps/timing/test/browser/bridge.test.js` (`:50-59`, and every `?simulate=fast` switched to the server setting), `apps/timing/test/browser/bridge-element.test.js` (the same switch)
+- Create: `apps/timing/public/sim/install.js`, `apps/timing/test/browser/decoders.test.js`
 
 **Interfaces:**
 - Consumes:
   - `serialTransport`, `hidTransport`, `EASYLAP_FILTER`, `zroundProtocol`, `robitronicProtocol` (Task 5);
-  - `simulation`, `simulatedDevice` (Tasks 3–4);
+  - `simulatedDevice` (Task 4), and the server setting with `app.simulate` (Task 10);
   - `Bridge` with `link`, `openDelayMs`, `kind`, `mismatches`, and the `noise` event (Tasks 7–8);
   - the markup of Task 10.
-- Produces: `connect(run, which: 'serial' | 'hid' | 'last')`, and `run.transport`. Task 12 extends `connect` and the Run.
+- Produces: `connect(run, which: 'serial' | 'hid' | 'last')`, and `run.transport`. Task 12 extends `connect` and the Run. `install(nav, value)` and `simulation(value): null | { name, transport, lapMs }` in `public/sim/`. The browser tests' `simulating(t, value)` helper, which turns the server setting on for one test.
 
 - [ ] **Step 1: Write the failing browser tests**
 
 In `test/browser/bridge.test.js:53`, the init script becomes `delete Navigator.prototype.serial; delete Navigator.prototype.hid;`, and the test is renamed `'without Web Serial or WebHID, the notice stays and no button is offered'`.
+
+**The switch to the server setting**, in `test/browser/bridge.test.js` and `test/browser/bridge-element.test.js`. Add next to `before`:
+
+```js
+/** Turns the server's simulator on for this test only (decoders spec §5.4). */
+const simulating = (t, value) => {
+  app.simulate = value;
+  t.after(() => { app.simulate = null; });
+};
+```
+
+Then every `page.goto('/personal/bridge?simulate=fast')` (and `who.page.goto(…)` in the `toPairing` helpers) becomes `simulating(t, 'tinylap,fast');` followed by the same `goto` without the query. The tests that stub `navigator.serial` themselves (`SERIAL`, E4c, the no-JS and no-Web-Serial tests) leave the setting off, as they are.
+
+**The simulator, in Node** (append to `test/sim.test.js`; replace Task 3's `'?simulate picks a model and a lap time (spec §5.4)'` with the first test below, and add `install` to the imports from `../public/sim/install.js`):
+
+```js
+test('simulation reads <model>[,fast] (spec §5.4)', () => {
+  assert.equal(simulation(undefined), null);
+  assert.equal(simulation(''), null);
+  assert.deepEqual(simulation('tinylap'), { name: 'tinylap', transport: 'serial', lapMs: 8000 });
+  assert.deepEqual(simulation('tinylap,fast'), { name: 'tinylap', transport: 'serial', lapMs: 2000 });
+  assert.deepEqual(simulation('zround,fast'), { name: 'zround', transport: 'serial', lapMs: 2000 });
+  assert.deepEqual(simulation('easylap'), { name: 'easylap', transport: 'hid', lapMs: 8000 });
+  const warn = console.warn;
+  const said = [];
+  console.warn = (m) => said.push(m);
+  try {
+    assert.deepEqual(simulation('amb'), { name: 'tinylap', transport: 'serial', lapMs: 8000 });
+  } finally {
+    console.warn = warn;
+  }
+  assert.match(said[0], /tinylap, zround, easylap/);
+});
+
+test('install stands in for the pickers: the model\'s transport gets a fresh device, the other is a closed picker', async () => {
+  const plain = {};
+  install(plain, 'zround,fast');
+  assert.ok(plain.serial instanceof EventTarget && plain.hid instanceof EventTarget, 'defined where missing');
+  const port = await plain.serial.requestPort();
+  assert.deepEqual(port.getInfo(), { usbVendorId: 0x0403, usbProductId: 0x6001, simulated: true });
+  assert.notEqual(await plain.serial.requestPort(), port, 'a fresh device for every pick');
+  assert.deepEqual(await plain.hid.requestDevice({ filters: [] }), []);
+  assert.deepEqual(await plain.serial.getPorts(), []);
+  const lap = {};
+  install(lap, 'easylap');
+  const [device] = await lap.hid.requestDevice({ filters: [] });
+  assert.equal(device.productName, 'EasyLap USB');
+  await assert.rejects(lap.serial.requestPort(), (e) => e.name === 'NotFoundError');
+  assert.deepEqual(await lap.hid.getDevices(), []);
+  const none = {};
+  install(none, null);
+  assert.deepEqual(none, {}, 'no setting, no change');
+});
+```
+
+In `test/server/simulate.test.js`, inside the `try` of the install-script test, add `assert.equal((await fetch(`${app.base}/public/sim/install.js`)).status, 200, 'served while on');`.
 
 ```js
 // apps/timing/test/browser/decoders.test.js
@@ -2896,6 +3083,12 @@ async function fresh(t, options = {}) {
   t.after(() => who.context.close());
   return { ...who, member, space };
 }
+
+/** Turns the server's simulator on for this test only (decoders spec §5.4). */
+const simulating = (t, value) => {
+  app.simulate = value;
+  t.after(() => { app.simulate = null; });
+};
 
 /** navigator.hid with one device to pick, built in the page from the fake HID device and the EasyLap model. */
 const HID = (options) => {
@@ -2952,13 +3145,24 @@ test('D7: a device that says nothing is listening, not an error, and Try another
   assert.deepEqual(errors, []);
 });
 
-test('D8: under ?simulate=easylap, Connect decoder opens nothing and shows no error', async (t) => {
+test('D8: with the setting easylap,fast, Connect decoder is a closed picker, both buttons show, and with it off nothing loads', async (t) => {
   const { page, errors } = await fresh(t);
-  await page.goto('/personal/bridge?simulate=easylap');
+  simulating(t, 'easylap,fast');
+  await page.addInitScript(() => { delete Navigator.prototype.serial; delete Navigator.prototype.hid; });
+  await page.goto('/personal/bridge');
+  assert.equal(await page.getByText("This browser can't reach USB decoders, only an EasyLap.").isVisible(), false);
+  assert.equal(await page.getByText("This browser can't reach an EasyLap, only other USB decoders.").isVisible(), false);
   await page.getByRole('button', { name: 'Connect decoder' }).click();
   await page.waitForTimeout(500);
   assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), true);
   assert.equal(await page.getByRole('alert').count(), 0);
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  app.simulate = null;
+  const loads = [];
+  page.on('request', (r) => { if (r.url().includes('/sim/install.js')) loads.push(r.url()); });
+  await page.goto('/personal/bridge?simulate=easylap');
+  assert.deepEqual(loads, [], 'with the setting off, nothing of the simulator loads, whatever the URL says');
   assert.deepEqual(errors, []);
 });
 
@@ -3007,13 +3211,11 @@ import { robitronicProtocol } from '../link/robitronic.js';
 import { serialTransport } from '../link/serial.js';
 import { zroundProtocol } from '../link/zround.js';
 import { openOutbox } from '../outbox.js';
-import { simulatedDevice, simulation } from '../sim/models.js';
 
-const sim = simulation(location.search);
-/** Where simulated EasyLaps report a disconnect. */
-const simHid = new EventTarget();
+// No simulation code here: a simulator, when the server sets one, stands in for navigator.serial and
+// navigator.hid before this module runs (decoders spec §5.4).
 const has = { serial: 'serial' in navigator, hid: 'hid' in navigator };
-const supported = has.serial || has.hid || sim !== null;
+const supported = has.serial || has.hid;
 /** Opening a serial port resets an Arduino-based decoder: give it this long (decoders spec §2.4, C2). */
 const SERIAL_OPEN_DELAY_MS = 1500;
 const BROWSER_ASSIGNED = new Set(['zround', 'easylap']);
@@ -3036,17 +3238,8 @@ const STATE_TEXT = {
   - **`pickPort` becomes `pick`:**
 
 ```js
-/**
- * The picker for `which`; closing it is a choice, not an error (decoders spec §5.4). Under ?simulate,
- * the model's own transport gets a fresh simulated device, and the other acts as a closed picker.
- * @param {'serial' | 'hid'} which
- */
+/** The picker for `which`; closing it is a choice, not an error. @param {'serial' | 'hid'} which */
 async function pick(which) {
-  if (sim) {
-    if (sim.transport !== which) return null;
-    const device = simulatedDevice(sim, { hid: simHid });
-    return which === 'serial' ? serialTransport(device) : hidTransport(device, { hid: simHid });
-  }
   try {
     if (which === 'serial') return serialTransport(await /** @type {any} */ (navigator).serial.requestPort());
     const [device] = await /** @type {any} */ (navigator).hid.requestDevice({ filters: [EASYLAP_FILTER] });
@@ -3062,7 +3255,7 @@ async function pick(which) {
 
 ```js
     for (const which of /** @type {const} */ (['serial', 'hid'])) {
-      const missing = !sim && !has[which];
+      const missing = !has[which];
       this.$(run, `[data-bridge-connect="${which}"]`).hidden = missing;
       this.$(run, `[data-bridge-missing="${which}"]`).hidden = !missing;
     }
@@ -3115,7 +3308,7 @@ async function pick(which) {
     const outbox = await openOutbox();
     if (run !== this.run) return;
     const protocol = chosen === 'hid' ? robitronicProtocol() : zroundProtocol();
-    const next = new Bridge({ link: { transport, protocol }, outbox, post, openDelayMs: sim || chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
+    const next = new Bridge({ link: { transport, protocol }, outbox, post, openDelayMs: chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
     next.addEventListener('state', () => {
       if (run.bridge === next) this.show(run, next.state === 'idle' ? 'connecting' : next.state);
     });
@@ -3127,14 +3320,68 @@ async function pick(which) {
 ```
 
   - **`pair`:** `run.made = { ...made, device: run.bridge.device };` (was `deviceOf(run.bridge.port)`).
-  - **The header comment:** "Web Serial ↔ the server" becomes "Web Serial or WebHID ↔ the server", and "Without #bridge, or without Web Serial and ?simulate" becomes "Without #bridge, or without Web Serial, WebHID and ?simulate".
-- [ ] **Step 4: Run `decoders.test.js`, `bridge.test.js` and `bridge-element.test.js` (browser); expect PASS.** The replug tests of `bridge.test.js:265-284` now pay a 1.5 s open delay (they use the real path), which their default timeouts cover.
+  - **The header comment:** "Web Serial ↔ the server" becomes "Web Serial or WebHID ↔ the server", and "Without #bridge, or without Web Serial and ?simulate" becomes "Without #bridge, or without Web Serial and WebHID". Remove the import of `../sim-port.js`.
+  - **`public/sim/models.js`:** `simulation(search)` becomes
+
+```js
+/** What a TINYLAP_SIMULATE value, `<model>[,fast]`, asks for; null without one (decoders spec §5.4). @param {string | null | undefined} value */
+export function simulation(value) {
+  if (!value) return null;
+  const [model, speed] = value.split(',');
+  let name = model;
+  if (!Object.hasOwn(MODELS, name)) {
+    console.warn(`There is no simulated decoder "${model}". The known ones are ${Object.keys(MODELS).join(', ')}.`);
+    name = 'tinylap';
+  }
+  return { name: /** @type {keyof typeof MODELS} */ (name), transport: MODELS[name].transport, lapMs: speed === 'fast' ? 2000 : 8000 };
+}
+```
+
+    and its header comment says: "The simulated decoders the server's TINYLAP_SIMULATE can name (decoders spec §5.4): `<model>[,fast]`, with a 2 s lap for `,fast`. A later model (AMB, say) is one more entry."
+  - **`public/sim-port.js`:** its comment's "for trying the bridge without hardware (?simulate, ?simulate=fast), and for the browser tests that build one themselves" becomes "for the browser tests that build one themselves".
+  - **New `public/sim/install.js`:**
+
+```js
+// (AGPL header)
+
+// The simulator at the platform boundary (decoders spec §5.4). The layout loads it, before the page's
+// own scripts, only while the server's TINYLAP_SIMULATE is set; the server doesn't even serve it
+// otherwise. It stands in for Web Serial's and WebHID's pickers: the configured model's transport
+// returns a fresh simulated device when the member clicks Connect, and the other transport acts as a
+// closed picker. tl-bridge calls the real APIs, unaware of it.
+import { simulatedDevice, simulation } from './models.js';
+
+/** @param {any} nav the page's navigator, or a stand-in @param {string | null | undefined} value `<model>[,fast]` */
+export function install(nav, value) {
+  const sim = simulation(value);
+  if (!sim) return;
+  const serial = nav.serial ?? new EventTarget();
+  const hid = nav.hid ?? new EventTarget();
+  Object.assign(serial, {
+    requestPort: async () => {
+      if (sim.transport !== 'serial') throw new DOMException('No port selected by the user.', 'NotFoundError');
+      return simulatedDevice(sim);
+    },
+    getPorts: async () => [],
+  });
+  Object.assign(hid, {
+    requestDevice: async () => (sim.transport === 'hid' ? [simulatedDevice(sim, { hid })] : []),
+    getDevices: async () => [],
+  });
+  Object.defineProperty(nav, 'serial', { configurable: true, value: serial });
+  Object.defineProperty(nav, 'hid', { configurable: true, value: hid });
+}
+
+const script = typeof document === 'undefined' ? null : document.querySelector('script[data-model][src$="/sim/install.js"]');
+if (script) install(navigator, /** @type {HTMLElement} */ (script).dataset.model);
+```
+- [ ] **Step 4: Run `test/sim.test.js`, `test/server/simulate.test.js`, then `decoders.test.js`, `bridge.test.js` and `bridge-element.test.js` (browser); expect PASS.** Every serial connect now pays the 1.5 s open delay, simulated ones too, since `tl-bridge` can't tell them apart; the tests' default timeouts cover it.
 - [ ] **Step 5: Look at the page.** Use the `frontend-design` skill: check the listening and disconnected sections at 390×844 and 1280×800, with the gap note shown.
 - [ ] **Step 6: Checks, then commit**
 
 ```bash
-git add apps/timing/public/elements/bridge.js apps/timing/test/browser/decoders.test.js apps/timing/test/browser/bridge.test.js
-git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "feat(timing-app): connect a decoder or an easylap, and listen to a quiet one"
+git add apps/timing/public/elements/bridge.js apps/timing/public/sim apps/timing/public/sim-port.js apps/timing/test/sim.test.js apps/timing/test/server/simulate.test.js apps/timing/test/browser/decoders.test.js apps/timing/test/browser/bridge.test.js apps/timing/test/browser/bridge-element.test.js
+git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "feat(timing-app): connect a decoder or an easylap, listen to a quiet one, and simulate at the platform boundary"
 ```
 
 ---
@@ -3177,7 +3424,11 @@ function apiRequests(page) {
   return seen;
 }
 
-const ZROUND = '/personal/bridge?simulate=zround&speed=fast';
+/** The bridge page with the server's simulated plain decoder (setting zround,fast). */
+async function openZround(t, page) {
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+}
 /** The simulated plain decoder's device key: its FTDI chip. */
 const ZROUND_DEVICE = 'serial:1027:24577';
 
@@ -3197,7 +3448,7 @@ const decoderNamed = (space, name) => app.store.decoders(space).find((d) => d.na
 
 test('D1: a plain ZRound decoder is chosen as a new decoder and forwards; the browser keeps only { decoder }', async (t) => {
   const { page, errors, space } = await fresh(t);
-  await page.goto(ZROUND);
+  await openZround(t, page);
   await toChoose(page);
   assert.equal(await page.locator('[data-bridge-kind]').innerText(), "This decoder speaks plain ZRound, so it can't keep a pairing. This browser remembers which decoder it is for your personal space.");
   await page.getByLabel('Name for the new decoder').fill('Gate');
@@ -3218,7 +3469,7 @@ test('D1: a plain ZRound decoder is chosen as a new decoder and forwards; the br
 test('D2: a remembered decoder is confirmed, not forwarded silently', async (t) => {
   const { page, errors, space } = await fresh(t);
   await page.addInitScript(UNPLUG);
-  await page.goto(ZROUND);
+  await openZround(t, page);
   await toChoose(page);
   await page.getByLabel('Name for the new decoder').fill('Gate');
   await page.getByRole('button', { name: 'Use this decoder' }).click();
@@ -3241,7 +3492,7 @@ test('D2: a remembered decoder is confirmed, not forwarded silently', async (t) 
 test('D3: a remembered decoder removed on the server is not offered, and gets no passing', async (t) => {
   const { page, member, space } = await fresh(t);
   await page.addInitScript(UNPLUG);
-  await page.goto(ZROUND);
+  await openZround(t, page);
   await toChoose(page);
   await page.getByLabel('Name for the new decoder').fill('Gate');
   await page.getByRole('button', { name: 'Use this decoder' }).click();
@@ -3262,7 +3513,7 @@ test('D4: an existing decoder can be chosen without making one; one removed befo
   const { page, member, space } = await fresh(t);
   const old = await (await app.api(member, 'POST', `/workspaces/${space}/decoders`, { name: 'Old' })).json();
   const gone = await (await app.api(member, 'POST', `/workspaces/${space}/decoders`, { name: 'Gone' })).json();
-  await page.goto(ZROUND);
+  await openZround(t, page);
   await app.api(member, 'DELETE', `/workspaces/${space}/decoders/${gone.id}`);
   const seen = apiRequests(page);
   await toChoose(page);
@@ -3274,7 +3525,7 @@ test('D4: an existing decoder can be chosen without making one; one removed befo
 });
 
 /** Makes "Busy" and "Mine", both seen just now over the cable, and remembers "Mine" for the simulated device. */
-async function busyAndMine(page, member, space) {
+async function busyAndMine(t, page, member, space) {
   const make = async (name) => {
     const d = await (await app.api(member, 'POST', `/workspaces/${space}/decoders`, { name })).json();
     assert.equal((await app.api(member, 'POST', `/decoders/${d.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] })).status, 200);
@@ -3282,7 +3533,7 @@ async function busyAndMine(page, member, space) {
   };
   const busy = await make('Busy');
   const mine = await make('Mine');
-  await page.goto(ZROUND);
+  await openZround(t, page);
   await remember(page, space, mine.id);
   await page.reload();
   return { busy, mine };
@@ -3291,7 +3542,7 @@ async function busyAndMine(page, member, space) {
 test('D5: a decoder seen in the last 2 minutes is in use, by the server\'s clock; the remembered one says so but stays enabled', async (t) => {
   const { page, member, space } = await fresh(t);
   await page.addInitScript(() => { const real = Date.now; Date.now = () => real() + 600_000; });
-  const { busy, mine } = await busyAndMine(page, member, space);
+  const { busy, mine } = await busyAndMine(t, page, member, space);
   await toChoose(page, 'Is this Mine?');
   const option = (id) => page.locator(`#bridge-choose option[value="${id}"]`);
   assert.equal(await option(busy.id).innerText(), 'Busy (in use)');
@@ -3303,7 +3554,7 @@ test('D5: a decoder seen in the last 2 minutes is in use, by the server\'s clock
 
 test('D14: when the connect GET fails, the options stay as rendered, the remembered one is preselected, and the choice still works', async (t) => {
   const { page, member, space } = await fresh(t);
-  const { busy, mine } = await busyAndMine(page, member, space);
+  const { busy, mine } = await busyAndMine(t, page, member, space);
   await page.route('**/workspaces/*/decoders', (route) => (route.request().method() === 'GET' ? route.fulfill({ status: 503, contentType: 'application/problem+json', body: '{"status":503,"detail":"Down."}' }) : route.continue()));
   const seen = apiRequests(page);
   await toChoose(page, 'Is this Mine?');
@@ -3318,14 +3569,15 @@ test('D14: when the connect GET fails, the options stay as rendered, the remembe
 
 test('D14b: a connect GET that never answers is given up after 3 s, as a failed one', async (t) => {
   const { page, member, space } = await fresh(t);
-  const { mine } = await busyAndMine(page, member, space);
+  const { mine } = await busyAndMine(t, page, member, space);
   await page.route('**/workspaces/*/decoders', (route) => (route.request().method() === 'GET' ? new Promise(() => {}) : route.continue()));
   await toChoose(page, 'Is this Mine?');
   assert.equal(await page.locator('#bridge-choose').inputValue(), mine.id);
-  // A TinyLap decoder still reaches its pairing form: the 3 s cap plus its handshake.
-  await page.goto('/personal/bridge?simulate=fast');
+  // A TinyLap decoder still reaches its pairing form: the 3 s cap, the 1.5 s open delay and its handshake.
+  app.simulate = 'tinylap,fast';
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).click();
-  await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor({ timeout: 8000 });
+  await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor({ timeout: 10_000 });
 });
 
 test('D9: a replug says what it costs, and the passings after it carry a new boot', async (t) => {
@@ -3335,7 +3587,7 @@ test('D9: a replug says what it costs, and the passings after it carry a new boo
   page.on('request', (r) => {
     if (r.method() === 'POST' && r.url().endsWith('/passings')) boots.push(JSON.parse(r.postData() ?? '{}').boot);
   });
-  await page.goto(ZROUND);
+  await openZround(t, page);
   await toChoose(page);
   await page.getByLabel('Name for the new decoder').fill('Gate');
   await page.getByRole('button', { name: 'Use this decoder' }).click();
@@ -3372,7 +3624,7 @@ test('D10: noise (double reads and garbage) makes no page error, and laps still 
 
 test('Review focus 3: "Use this decoder" clicked twice makes one decoder', async (t) => {
   const { page, space } = await fresh(t);
-  await page.goto(ZROUND);
+  await openZround(t, page);
   await toChoose(page);
   await page.getByLabel('Name for the new decoder').fill('Once');
   await page.getByRole('button', { name: 'Use this decoder' }).dblclick();
@@ -3391,7 +3643,8 @@ test('E3c: a removal while the decoder-list GET is held opens nothing', async (t
   let release;
   const held = new Promise((resolve) => { release = resolve; });
   await page.route('**/workspaces/*/decoders', async (route) => { if (route.request().method() === 'GET') await held; await route.continue(); });
-  await page.goto('/personal/bridge?simulate=zround&speed=fast');
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
   await page.evaluate(() => {
     const el = document.querySelector('tl-bridge');
@@ -3412,7 +3665,8 @@ test('E4d: a move puts the choose form back as the server rendered it', async (t
   t.after(() => context.close());
   const busy = await (await app.api(member, 'POST', `/workspaces/${personal}/decoders`, { name: 'Busy' })).json();
   await app.api(member, 'POST', `/decoders/${busy.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] });
-  await page.goto('/personal/bridge?simulate=zround&speed=fast');
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).click();
   await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
   assert.equal(await page.locator(`#bridge-choose option[value="${busy.id}"]`).isDisabled(), true);
@@ -3441,7 +3695,8 @@ test('E6c: a choose POST that lands after a move writes nothing: no remember, no
     reached();
     return held.then(() => route.continue());
   });
-  await page.goto('/personal/bridge?simulate=zround&speed=fast');
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).click();
   await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
   await page.getByLabel('Name for the new decoder').fill('Late plain');
@@ -3640,7 +3895,7 @@ git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "feat(tim
 **UI task: use the `frontend-design` skill** to check the EasyLap flow on the page.
 
 **Files:**
-- Modify: `apps/timing/test/browser/decoders.test.js` (append), `docs/timing.md`
+- Modify: `apps/timing/test/browser/decoders.test.js` (append), `docs/timing.md`, `apps/timing/README.md:17`
 
 **Interfaces:**
 - Consumes: everything above. This task adds tests and docs; it should need no code change. If a test fails, fix the code in the task that owns it, and say so in the commit.
@@ -3648,9 +3903,10 @@ git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "feat(tim
 - [ ] **Step 1: Write the tests** (append to `decoders.test.js`):
 
 ```js
-test('D6a: an EasyLap (?simulate=easylap) is chosen and forwards, with its 24-bit codes as hex', async (t) => {
+test('D6a: an EasyLap (setting easylap,fast) is chosen and forwards, with its 24-bit codes as hex', async (t) => {
   const { page, errors } = await fresh(t);
-  await page.goto('/personal/bridge?simulate=easylap&speed=fast');
+  simulating(t, 'easylap,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect EasyLap' }).click();
   await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
   assert.equal(await page.locator('[data-bridge-kind]').innerText(), "An EasyLap can't keep a pairing. This browser remembers which decoder it is for your personal space.");
@@ -3722,14 +3978,20 @@ An EasyLap is a Silicon Labs CP2110 HID-to-UART bridge (`10C4:86B9`) in front of
 Until a capture from a real device confirms the checksum and the id bytes, this support is a preview.
 
 On Linux, WebHID needs a udev rule that lets your user open the device's hidraw node, and Web Serial needs the `dialout` group.
+
+## Without hardware
+
+Start the timing server with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production.
 ```
 
+  In `apps/timing/README.md:17`, "or the bridge with a simulated decoder at http://localhost:8100/personal/bridge?simulate=fast" becomes "or the bridge with a simulated decoder: start the server with `TINYLAP_SIMULATE=tinylap,fast` (or `zround,fast`, `easylap,fast`) and open http://localhost:8100/personal/bridge".
+
   Then change the ZRound section's last paragraph (`:33`): "If a `%T…&` clock comes in lower than the one before, the bridge sends `%TLHELLO&` again until the decoder answers, in case that `%TLID` got lost."
-- [ ] **Step 4: Look at the EasyLap flow on the page** with the `frontend-design` skill (`?simulate=easylap&speed=fast`, 390×844 and 1280×800).
+- [ ] **Step 4: Look at the EasyLap flow on the page** with the `frontend-design` skill (`TINYLAP_SIMULATE=easylap,fast pnpm --filter @tinylap/timing-app dev`, then `/personal/bridge`, at 390×844 and 1280×800).
 - [ ] **Step 5: Checks, then commit**
 
 ```bash
-git add apps/timing/test/browser/decoders.test.js docs/timing.md
+git add apps/timing/test/browser/decoders.test.js docs/timing.md apps/timing/README.md
 git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "docs: plain zround decoders and the easylap, and their end-to-end tests"
 ```
 
@@ -3784,7 +4046,10 @@ git -c user.email=1009814+jostsg@users.noreply.github.com commit -s -m "docs: pl
 | 32 | the missing-API rule hides `last` buttons, or never hides | WebHID-only test |
 | 33 | drop the run guard after `decoderList`; after the choose POST | E3c; E6c |
 | 34 | `resetChoose` not called from `reset` | E4d |
-| 35 | `simulation('?simulate=fast')` → 8000 ms | every existing browser test (timeouts) |
+| 35 | `simulation('tinylap,fast')` → 8000 ms | `test/sim.test.js`; every existing browser test (timeouts) |
+| 35b | the layout renders `install.js` with the setting off, or after `elements/bridge.js`; the gate in `dispatch` dropped | `test/server/simulate.test.js`; D8 |
+| 35c | `install` returns a device for the other transport | `test/sim.test.js` (install); D8 |
+| 35d | `readSimulate` accepts any value | `test/server/simulate.test.js` |
 | 36 | `choose` without `submit.disabled = true` | Review focus 3 (one decoder after a double click) |
 | 37 | `assign()` without the disconnected check | Review focus 4 |
 | 38 | no `%TLHELLO&` in `listening` (`#enterListening` without `#listenHello`) | the TinyLap-ignores-`%C&` test |
