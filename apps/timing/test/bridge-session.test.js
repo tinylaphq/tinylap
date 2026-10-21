@@ -165,18 +165,24 @@ test('a quiet running decoder, whose first clock comes after a while but before 
   await bridge.close();
 });
 
-test('the listening retry stops after listenMs', async () => {
+test('the listening retry stops after listenMs, with one hello per %C& while listening', async () => {
   const rig = modelPort(silent());
   const { bridge } = bridgeOn(rig, { synMs: 10, handshakeMs: 40, listenSynMs: 20, listenMs: 200 });
+  let listeningAt = Infinity;
+  bridge.addEventListener('state', () => { if (bridge.state === 'listening') listeningAt = performance.now(); });
   await bridge.start();
   await until(() => bridge.state === 'listening');
-  await wait(250);
+  // Writes come every 20 ms while the retry runs; a quiet 100 ms means it stopped.
+  await until(() => rig.writes.length > 0 && performance.now() - rig.writes.at(-1).at > 100);
   const n = count(rig.writes, commands.startup);
   const h = count(rig.writes, commands.hello);
   await wait(200);
   assert.equal(count(rig.writes, commands.startup), n);
   assert.equal(count(rig.writes, commands.hello), h, 'the listening hellos stop too');
   assert.ok(n > 3 && h >= 1);
+  // One hello on entering listening, then one after each %C& (the last may fall past listenMs).
+  const later = rig.writes.filter((w) => w.text === commands.startup && w.at >= listeningAt).length;
+  assert.ok(h === later + 1 || h === later, `${h} hellos for ${later} %C& while listening`);
   await bridge.close();
 });
 
@@ -331,12 +337,15 @@ test('boots for a plain decoder: a new one on %I& from it, on a clock back, and 
   await until(() => bridge.state === 'choose');
   await bridge.assign('dec_9');
   const boots = [bridge.boot];
-  const step = async (...lines) => { for (const l of lines) rig.say(l); await wait(30); boots.push(bridge.boot); };
-  await step('%I&');
+  const seen = [];
+  bridge.addEventListener('passing', (event) => seen.push(event.detail));
+  const step = async (done, ...lines) => { for (const l of lines) rig.say(l); await until(done); boots.push(bridge.boot); };
+  const newBoot = () => bridge.boot !== boots.at(-1);
+  await step(newBoot, '%I&');
   assert.equal(bridge.references.size, 0);
-  await step(commands.clock(5000), commands.clock(100));
-  await step(commands.lap('0A', 10_000), commands.lap('0B', 8000));
-  await step(commands.lap('0A', 20_000), commands.lap('0B', 19_000));
+  await step(newBoot, commands.clock(5000), commands.clock(100));
+  await step(() => seen.length === 2, commands.lap('0A', 10_000), commands.lap('0B', 8000));
+  await step(() => seen.length === 4, commands.lap('0A', 20_000), commands.lap('0B', 19_000));
   assert.equal(new Set(boots.slice(0, 4)).size, 4, 'a new boot each time');
   assert.equal(boots[4], boots[3], 'not for 1 s back');
   await bridge.close();
@@ -400,5 +409,143 @@ test('a protocol reader that throws ends the session: disconnected, no unhandled
   assert.equal(rig.writes.length, n);
   process.off('unhandledRejection', onRejection);
   assert.deepEqual(rejections, []);
+  await bridge.close();
+});
+
+/** A transport that counts the writes that reach it, and the session over it. */
+function counting(rig, options = {}) {
+  const transport = serialTransport(rig.port);
+  const counter = { calls: 0 };
+  const counted = { ...transport, write: (bytes) => { counter.calls += 1; return transport.write(bytes); } };
+  const bridge = new Bridge({ link: { transport: counted, protocol: zroundProtocol() }, outbox: memoryOutbox(), post: async () => ({ through: null }), ...FAST, ...options });
+  const states = [];
+  bridge.addEventListener('state', () => states.push(bridge.state));
+  return { bridge, counter, states };
+}
+const timeouts = () => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
+
+test('an unplug during the open delay ends disconnected: no write after it, no timer left', async () => {
+  const rig = modelPort(silent());
+  const before = timeouts();
+  const { bridge, counter, states } = counting(rig, { openDelayMs: 50 });
+  const starting = bridge.start();
+  await wait(10);
+  rig.port.unplug();
+  await until(() => bridge.state === 'disconnected');
+  await starting;
+  await wait(FAST.handshakeMs + 50);
+  assert.deepEqual(states, ['connecting', 'disconnected']);
+  assert.equal(counter.calls, 0);
+  assert.ok(timeouts() <= before, 'no timer left behind');
+  await bridge.close();
+});
+
+test('an unplug during the handshake ends disconnected: no write after it, no timer left', async () => {
+  const rig = modelPort(silent());
+  const before = timeouts();
+  const { bridge, counter, states } = counting(rig);
+  await bridge.start();
+  await until(() => counter.calls >= 2);
+  rig.port.unplug();
+  await until(() => bridge.state === 'disconnected');
+  const n = counter.calls;
+  await wait(FAST.handshakeMs + 50);
+  assert.equal(counter.calls, n);
+  assert.deepEqual(states, ['connecting', 'disconnected']);
+  assert.ok(timeouts() <= before, 'no timer left behind');
+  await bridge.close();
+});
+
+test('hello() keeps one retry: repeated clock-backs and pairings do not stack helloMs loops', async () => {
+  const model = tinylapModel({ cars: 0, decoder: 'dec_1' });
+  let swallow = false;
+  const rig = modelPort(model, { drop: (text) => swallow && text === commands.hello });
+  const { bridge } = bridgeOn(rig);
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  swallow = true;
+  for (let i = 0; i < 3; i += 1) {
+    rig.say(commands.clock(5000));
+    rig.say(commands.clock(100));
+  }
+  await until(() => bridge.state === 'connecting');
+  await bridge.pair('dec_1', 't'.repeat(43));
+  await bridge.pair('dec_1', 't'.repeat(43));
+  const from = rig.writes.length;
+  await wait(FAST.helloMs * 4 + 20);
+  const hellos = count(rig.writes.slice(from), commands.hello);
+  assert.ok(hellos >= 3 && hellos <= 5, `one hello per helloMs, not stacked: ${hellos} in 4 helloMs`);
+  await bridge.close();
+});
+
+test('close drops the queue: what was waiting on the chain stamps nothing and posts nothing', async () => {
+  const inner = memoryOutbox();
+  const added = [];
+  const outbox = { ...inner, add: async (p) => { await wait(10); added.push(p.t); return inner.add(p); } };
+  const rig = modelPort(plain({ clockEveryMs: 1e9 }));
+  const { bridge, posts } = bridgeOn(rig, { outbox });
+  await bridge.start();
+  rig.say(commands.lap('0A', 1000));
+  await until(() => bridge.state === 'choose');
+  for (let t = 2000; t <= 6000; t += 1000) rig.say(commands.lap('0A', t));
+  await wait(30);
+  const assigning = bridge.assign('dec_9').catch(() => {});
+  rig.say(commands.lap('0A', 99_000));
+  await until(() => added.length >= 1);
+  await bridge.close();
+  await assigning;
+  await wait(100);
+  assert.ok(added.length <= 2, `at most the add in flight finishes: ${added}`);
+  assert.ok(!added.includes(99_000), 'the queued live passing is not stamped');
+  const postedBefore = posts.length;
+  await wait(50);
+  assert.equal(posts.length, postedBefore);
+  assert.ok(sent(posts).length <= 1);
+});
+
+test('a late %TLID in choose drops the held passings (F2), and a passing after it carries the TinyLap identity', async () => {
+  const outbox = memoryOutbox();
+  const rig = modelPort(plain({ clockEveryMs: 1e9 }));
+  const { bridge, posts } = bridgeOn(rig, { outbox });
+  await bridge.start();
+  rig.say(commands.lap('0A', 1000));
+  await until(() => bridge.state === 'choose');
+  rig.say(commands.lap('0A', 9000));
+  rig.say('%TLID dec_1 b00tb00t&');
+  await until(() => bridge.kind === 'tinylap' && bridge.state === 'ready');
+  await wait(50);
+  assert.equal(posts.length, 0, 'the held passings are dropped, not stamped');
+  assert.equal(await outbox.count(), 0);
+  rig.say(commands.lap('0A', 20_000));
+  await until(() => sent(posts).length === 1);
+  assert.deepEqual(sent(posts), [{ decoder: 'dec_1', boot: 'b00tb00t', transponder: '0A', t: 20_000 }]);
+  await bridge.close();
+});
+
+test('the plain path sends exactly three hellos, helloEveryMs apart', async () => {
+  const rig = modelPort(plain({ waitsForStart: false, clockEveryMs: 30 }));
+  const { bridge } = bridgeOn(rig);
+  await bridge.start();
+  await until(() => bridge.state === 'choose');
+  await wait(200);
+  const hellos = rig.writes.filter((w) => w.text === commands.hello);
+  assert.equal(hellos.length, 3);
+  for (let i = 1; i < 3; i += 1) assert.ok(hellos[i].at - hellos[i - 1].at >= FAST.helloEveryMs - 2, 'helloEveryMs apart');
+  await bridge.close();
+});
+
+test('at most 500 passings are held: the oldest go first', async () => {
+  const rig = modelPort(plain({ clockEveryMs: 1e9 }));
+  const { bridge, posts } = bridgeOn(rig);
+  await bridge.start();
+  rig.say(commands.lap('0A', 1000));
+  await until(() => bridge.state === 'choose');
+  for (let i = 1; i <= 505; i += 1) rig.say(commands.lap('0A', 1000 + i * 2000));
+  await wait(50);
+  await bridge.assign('dec_9');
+  await until(() => sent(posts).length === 500);
+  const ts = sent(posts).map((p) => p.t).sort((a, b) => a - b);
+  assert.equal(ts[0], 1000 + 6 * 2000, 'the first six are dropped');
+  assert.equal(ts.at(-1), 1000 + 505 * 2000);
   await bridge.close();
 });

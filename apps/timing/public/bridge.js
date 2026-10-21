@@ -34,6 +34,8 @@ export class Bridge extends EventTarget {
   /** @type {Set<ReturnType<typeof setTimeout>>} */
   #timers = new Set();
   #retryTimer = null;
+  /** hello()'s one retry. @type {ReturnType<typeof setTimeout> | null} */
+  #helloTimer = null;
   #flushing = null;
   #again = false;
   #closed = false;
@@ -102,6 +104,8 @@ export class Bridge extends EventTarget {
   }
 
   #set(state) {
+    // A lost port is the end of this session: nothing that was already queued brings it back.
+    if (this.state === 'disconnected') return;
     this.state = state;
     this.dispatchEvent(new Event('state'));
   }
@@ -120,13 +124,19 @@ export class Bridge extends EventTarget {
     return run;
   }
 
-  /** @param {number} ms @param {() => unknown} fn */
+  /** Nothing is scheduled, and nothing runs, once the session is closed or its port is gone. @param {number} ms @param {() => unknown} fn */
   #later(ms, fn) {
+    if (this.#ended()) return null;
     const id = setTimeout(() => {
       this.#timers.delete(id);
-      if (!this.#closed) this.#chain(fn).catch((error) => this.#setOnline(false, error));
+      if (!this.#ended()) this.#chain(fn).catch((error) => this.#setOnline(false, error));
     }, ms);
     this.#timers.add(id);
+    return id;
+  }
+
+  #ended() {
+    return this.#closed || this.state === 'disconnected';
   }
 
   #stopTimers() {
@@ -136,7 +146,7 @@ export class Bridge extends EventTarget {
 
   /** Nothing is written after close (I13), nor once the port is gone: a queued item would only throw. @param {Uint8Array} bytes */
   async #write(bytes) {
-    if (this.#closed || this.state === 'disconnected') return;
+    if (this.#ended()) return;
     this.#lastWrite = performance.now();
     await this.transport.write(bytes);
   }
@@ -156,7 +166,7 @@ export class Bridge extends EventTarget {
     void this.#read();
     this.#set('connecting');
     if (this.openDelayMs) await new Promise((done) => setTimeout(done, this.openDelayMs));
-    if (this.#closed) return;
+    if (this.#ended()) return;
     this.#later(this.handshakeMs, () => this.#enterListening());
     await this.#chain(() => this.#syn());
     void this.flush();
@@ -187,8 +197,15 @@ export class Bridge extends EventTarget {
   /** Asks a TinyLap decoder who it is, again every helloMs until it answers (I5). Also after pairing. */
   async hello() {
     this.#set('connecting');
-    this.#later(this.helloMs, () => {
+    // One retry at a time: a second clock back or pairing restarts it rather than adding a loop.
+    if (this.#helloTimer) {
+      clearTimeout(this.#helloTimer);
+      this.#timers.delete(this.#helloTimer);
+    }
+    this.#helloTimer = this.#later(this.helloMs, () => {
+      this.#helloTimer = null;
       if (this.state === 'connecting' && this.kind === 'tinylap') return this.hello();
+      return undefined;
     });
     await this.#write(encode(commands.hello));
   }
@@ -224,6 +241,8 @@ export class Bridge extends EventTarget {
 
   /** @param {import('@tinylap/timing/types').DecoderEvent} event */
   async #handle(event) {
+    // close() drops the queue: what was waiting on the chain does nothing (spec §2.4).
+    if (this.#closed) return undefined;
     switch (event.type) {
       case 'alive': return this.#alive();
       case 'identity': return this.#identity(event);
@@ -357,6 +376,7 @@ export class Bridge extends EventTarget {
 
   /** @param {Held} held */
   async #stamp({ boot, transponder, t, hits, strength }) {
+    if (this.#closed) return;
     const passing = { decoder: this.decoder, boot, transponder, t };
     const step = nextLap(this.references.get(transponder) ?? null, { boot, t });
     this.references.set(transponder, step.reference);
@@ -375,7 +395,7 @@ export class Bridge extends EventTarget {
   /** The browser's choice of decoder for a plain ZRound decoder or an EasyLap (spec §3.2). Writes nothing to the device. @param {string} decoderId */
   assign(decoderId) {
     return this.#chain(async () => {
-      if (this.#closed || this.state === 'disconnected') throw new Error('The decoder is disconnected. Connect it again.');
+      if (this.#ended()) throw new Error('The decoder is disconnected. Connect it again.');
       if (!BROWSER_ASSIGNED.has(this.kind)) throw new Error('This decoder says who it is; it is paired, not chosen.');
       this.decoder = decoderId;
       this.#set('ready');
