@@ -70,13 +70,15 @@ test('built assets: /v/<sha>/public/sim/install.js is 404 while off and served w
   const root = mkdtempSync(join(tmpdir(), 'tinylap-simulate-'));
   mkdirSync(join(root, 'v', 'abc123', 'public', 'sim'), { recursive: true });
   writeFileSync(join(root, 'v', 'abc123', 'public', 'sim', 'install.js'), '// built\n');
-  const built = await startTiming({ root, build: 'abc123' });
+  let built;
   try {
-    for (const path of ['/v/abc123/public/sim/install.js', '/v/abc123/public/sim//install%2Ejs']) assert.equal((await fetch(`${built.base}${path}`)).status, 404, `${path} off`);
+    built = await startTiming({ root, build: 'abc123' });
+    const spellings = ['/v/abc123/public/sim/install.js', '/v/abc123/public/sim//install%2Ejs'];
+    for (const path of spellings) assert.equal((await fetch(`${built.base}${path}`)).status, 404, `${path} off`);
     built.simulate = 'easylap';
-    assert.equal((await fetch(`${built.base}/v/abc123/public/sim/install.js`)).status, 200, 'on');
+    for (const path of spellings) assert.equal((await fetch(`${built.base}${path}`)).status, 200, `${path} on`);
   } finally {
-    await built.close();
+    await built?.close();
     rmSync(root, { recursive: true, force: true });
   }
 });

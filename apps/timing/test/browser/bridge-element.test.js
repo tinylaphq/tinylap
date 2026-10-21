@@ -15,7 +15,7 @@ let member;
 let personal;
 
 before(async () => {
-  app = await startTiming();
+  app = await startTiming({ limits: { pair: 100 } });
   browser = await openBrowser();
   member = await app.login(await app.signUp('Ana'));
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
@@ -33,7 +33,8 @@ const simulating = (t, value) => {
 
 /**
  * Counts ports in the page: a port counts as opened on its first write (the
- * hello), and as closed once its readable's cancel ran. Only sim-port.js
+ * hello), and as closed once its readable's cancel ran. Only the simulated
+ * port (sim/serial-port.js, which install.js puts in place of navigator.serial)
  * makes these streams with a JS sink or source.
  */
 const COUNT = () => {
@@ -370,5 +371,85 @@ test('E7: after a move, the old pairing\'s answer leaves the new pairing\'s butt
   assert.equal(await pair.evaluate((x) => x.disabled), true, 'the old answer leaves it disabled');
   releases[1]();
   await page.getByText('Forwarding from New run', { exact: true }).first().waitFor();
+  assert.deepEqual(errors, []);
+});
+
+test('E3c: a removal while the decoder-list GET is held opens nothing', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(COUNT);
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route('**/workspaces/*/decoders', async (route) => { if (route.request().method() === 'GET') await held; await route.continue(); });
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  const listed = page.waitForRequest((r) => r.method() === 'GET' && /^\/workspaces\/[^/]+\/decoders$/.test(new URL(r.url()).pathname));
+  await page.evaluate(() => {
+    const el = document.querySelector('tl-bridge');
+    window.__el = el;
+    /** @type {HTMLElement} */ (el.querySelector('[data-bridge-connect]')).click();
+  });
+  await listed;
+  await page.evaluate(() => window.__el.remove());
+  release();
+  await page.waitForTimeout(1000);
+  assert.equal((await counts(page)).opened, 0);
+  assert.deepEqual(await page.evaluate(`(${shownIn})(window.__el)`), ['connect']);
+  assert.deepEqual(errors, []);
+});
+
+test('E4d: a move puts the choose form back as the server rendered it', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  const busy = await (await app.api(member, 'POST', `/workspaces/${personal}/decoders`, { name: 'Busy' })).json();
+  await app.api(member, 'POST', `/decoders/${busy.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] });
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
+  assert.equal(await page.locator(`#bridge-choose option[value="${busy.id}"]`).isDisabled(), true);
+  await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
+  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  const form = await page.evaluate(() => ({
+    heading: document.querySelector('[data-bridge-choose-heading]').textContent,
+    options: [...document.querySelectorAll('#bridge-choose option')].map((o) => [o.textContent, /** @type {HTMLOptionElement} */ (o).disabled, o.getAttribute('data-name')]),
+    value: /** @type {HTMLSelectElement} */ (document.querySelector('#bridge-choose')).value,
+  }));
+  assert.equal(form.heading, 'Which decoder is this?');
+  assert.ok(form.options.every(([text, disabled, name]) => !disabled && (name === null || text === name)));
+  assert.equal(form.value, '');
+  assert.deepEqual(errors, []);
+});
+
+test('E6c: a choose POST that lands after a move writes nothing: no remember, no assign', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  let release;
+  let reached;
+  const held = new Promise((resolve) => { release = resolve; });
+  const posted = new Promise((resolve) => { reached = resolve; });
+  await page.route('**/workspaces/*/decoders', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    reached();
+    return held.then(() => route.continue());
+  });
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
+  await page.getByLabel('Name for the new decoder').fill('Late plain');
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await posted;
+  await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
+  const finished = page.waitForEvent('requestfinished', (r) => r.method() === 'POST');
+  release();
+  const request = await finished;
+  assert.equal((await request.response()).status(), 201, 'the held POST made the decoder');
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), true);
+  assert.equal(await page.getByText('Forwarding from Late plain').count(), 0);
+  const remembered = await page.evaluate(async (w) => (await (await import('/public/devices.js')).openDevices()).recall(w, 'serial:1027:24577'), personal);
+  assert.equal(remembered, null);
   assert.deepEqual(errors, []);
 });

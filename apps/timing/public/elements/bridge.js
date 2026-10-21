@@ -17,6 +17,9 @@
 //   pairing request, a name lookup, earlier passings) finishes, unseen.
 // - Without #bridge, or without Web Serial and WebHID, it does nothing,
 //   and the server's "unsupported" notice stays.
+// - A plain ZRound decoder or an EasyLap is chosen on the choose form on
+//   every connect; the browser remembers only which decoder a device was,
+//   and offers that one to confirm.
 // The Bridge class itself (serial, outbox, retries) is ../bridge.js.
 import { Bridge, sendOutbox } from '../bridge.js';
 import { formatLap } from '../format.js';
@@ -24,6 +27,7 @@ import { EASYLAP_FILTER, hidTransport } from '../link/hid.js';
 import { robitronicProtocol } from '../link/robitronic.js';
 import { serialTransport } from '../link/serial.js';
 import { zroundProtocol } from '../link/zround.js';
+import { openDevices } from '../devices.js';
 import { openOutbox } from '../outbox.js';
 
 // No simulation code here: a simulator, when the server sets one, stands in for navigator.serial and
@@ -33,6 +37,29 @@ const supported = has.serial || has.hid;
 /** Opening a serial port resets an Arduino-based decoder: give it this long (decoders spec §2.4, C2). */
 const SERIAL_OPEN_DELAY_MS = 1500;
 const BROWSER_ASSIGNED = new Set(['zround', 'easylap']);
+/** A decoder seen this recently, by the server's clock, is in use elsewhere (decoders spec §3.2, I7). */
+const IN_USE_MS = 2 * 60_000;
+/** What a decoder without its own pairing is, in the choose form (decoders spec §4.2). */
+const KIND_TEXT = {
+  zround: (where) => `This decoder speaks plain ZRound, so it can't keep a pairing. This browser remembers which decoder it is for ${where}.`,
+  easylap: (where) => `An EasyLap can't keep a pairing. This browser remembers which decoder it is for ${where}.`,
+};
+
+/** The decoder-list GET gives up after this long, as a failed one (F3). */
+const LIST_TIMEOUT_MS = 3000;
+
+let warned = false;
+/**
+ * The remembered choices only suggest, so a failing store never blocks a connect or a choice:
+ * its failure gives `fallback`, logged once per page. @template T @param {Promise<T>} call @param {T} [fallback]
+ */
+const quietly = (call, fallback = null) => call.catch((caught) => {
+  if (!warned) {
+    warned = true;
+    console.warn('The remembered decoders are unavailable in this browser.', caught);
+  }
+  return fallback;
+});
 
 /** A same-origin JSON call; errors carry the server's status and detail. */
 async function api(method, path, body) {
@@ -45,6 +72,26 @@ async function api(method, path, body) {
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) throw Object.assign(new Error(data?.detail ?? data?.error ?? `Timing answered ${res.status}. Try again in a minute.`), { status: res.status });
   return data;
+}
+
+/**
+ * The club's decoders and the server's time from the answer's Date header, or null when they can't be
+ * fetched in time (decoders spec §2.4, R6, F3). serverNow is null without a readable Date header: then
+ * nothing is marked in use.
+ * @param {HTMLElement} root
+ */
+async function decoderList(root) {
+  try {
+    const res = await fetch(`/workspaces/${encodeURIComponent(root.dataset.workspace ?? '')}/decoders`, {
+      credentials: 'same-origin', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(LIST_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const { decoders } = await res.json();
+    const date = Date.parse(res.headers.get('date') ?? '');
+    return { decoders, serverNow: Number.isNaN(date) ? null : date };
+  } catch {
+    return null;
+  }
 }
 
 const post = (decoderId, batch) => api('POST', `/decoders/${encodeURIComponent(decoderId)}/passings`, batch);
@@ -89,9 +136,12 @@ async function pick(which) {
  * the protection works only between different models. Re-plugging the same
  * decoder reuses it, which is the intended trade-off; a future decoder
  * firmware could report a chip id to tell decoders of one model apart.
- * `transport` is the last one picked, for "Connect again".
+ * `transport` is the last one picked, for "Connect again". `list` is this connect's decoder list (null
+ * when it couldn't be fetched), `remembered` the decoder this browser remembers for the device, and
+ * `devices` the store it came from.
  * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any,
- *   transport: 'serial' | 'hid' | null }} Run
+ *   transport: 'serial' | 'hid' | null, list: { decoders: { id: string, name: string, lastSeenAt: number | null }[], serverNow: number | null } | null,
+ *   remembered: string | null, devices: any }} Run
  */
 
 class TlBridge extends HTMLElement {
@@ -105,7 +155,7 @@ class TlBridge extends HTMLElement {
     if (this.run) return;
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root || !supported) return;
-    const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null };
+    const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null };
     this.run = run;
     this.reset(run);
     for (const which of /** @type {const} */ (['serial', 'hid'])) {
@@ -149,6 +199,20 @@ class TlBridge extends HTMLElement {
     this.$(run, '[data-bridge-listening]').hidden = false;
     this.$(run, '[data-bridge-unreadable]').hidden = true;
     this.$(run, '[data-bridge-gap]').hidden = true;
+    this.resetChoose(run);
+  }
+
+  /** Puts the choose form back as the server rendered it (R6). Removed options stay removed: their decoder is gone. @param {Run} run */
+  resetChoose(run) {
+    const form = /** @type {HTMLFormElement} */ (this.$(run, '[data-bridge-choose]'));
+    this.$(run, '[data-bridge-choose-heading]').textContent = 'Which decoder is this?';
+    const select = /** @type {HTMLSelectElement} */ (form.elements.namedItem('decoder'));
+    for (const option of select.options) {
+      option.disabled = false;
+      if (option.value) option.textContent = option.dataset.name ?? option.textContent;
+    }
+    select.value = '';
+    /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]')).disabled = false;
   }
 
   /** @param {Event} event */
@@ -169,6 +233,9 @@ class TlBridge extends HTMLElement {
       if (form instanceof HTMLFormElement && form.matches('[data-bridge-pair]') && this.contains(form)) {
         event.preventDefault();
         void this.pair(run, form);
+      } else if (form instanceof HTMLFormElement && form.matches('[data-bridge-choose]') && this.contains(form)) {
+        event.preventDefault();
+        void this.choose(run, form);
       }
     }
   }
@@ -215,17 +282,20 @@ class TlBridge extends HTMLElement {
   /** @param {Run} run */
   show(run, state) {
     for (const section of /** @type {NodeListOf<HTMLElement>} */ (run.root.querySelectorAll('[data-bridge-state]'))) section.hidden = section.dataset.bridgeState !== state;
-    if (state === 'listening') this.unreadable(run);
     if (state === 'disconnected') this.$(run, '[data-bridge-gap]').hidden = !BROWSER_ASSIGNED.has(run.bridge?.kind);
     if (state === 'ready') this.update(run);
     else this.announce(run, STATE_TEXT[state] ?? '');
+    // After the state's own text, so unreadable data is what screen readers hear.
+    if (state === 'listening') this.unreadable(run);
   }
 
-  /** In listening: say so when data comes but fails its checksum (R8). @param {Run} run */
+  /** In listening: say so, and announce it, when data comes but fails its checksum (R8, spec §4.2). @param {Run} run */
   unreadable(run) {
     const bad = (run.bridge?.mismatches ?? 0) > 0;
     this.$(run, '[data-bridge-listening]').hidden = bad;
-    this.$(run, '[data-bridge-unreadable]').hidden = !bad;
+    const unreadable = this.$(run, '[data-bridge-unreadable]');
+    unreadable.hidden = !bad;
+    if (bad) this.announce(run, unreadable.textContent);
   }
 
   /** @param {Run} run */
@@ -285,12 +355,24 @@ class TlBridge extends HTMLElement {
     run.transport = chosen;
     if (run.made && run.made.device !== transport.device) this.forget(run);
     await run.bridge?.close();
-    const outbox = await openOutbox();
+    const [outbox, devices, list] = await Promise.all([openOutbox(), openDevices(), decoderList(run.root)]);
+    if (run !== this.run) return;
+    const remembered = await quietly(devices.recall(run.workspaceId, transport.device));
+    if (run !== this.run) return;
+    Object.assign(run, { devices, list, remembered });
+    await this.refreshChoose(run);
     if (run !== this.run) return;
     const protocol = chosen === 'hid' ? robitronicProtocol() : zroundProtocol();
     const next = new Bridge({ link: { transport, protocol }, outbox, post, openDelayMs: chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
     next.addEventListener('state', () => {
-      if (run.bridge === next) this.show(run, next.state === 'idle' ? 'connecting' : next.state);
+      if (run.bridge !== next) return;
+      const state = next.state === 'idle' ? 'connecting' : next.state;
+      if (state === 'choose') this.fillChoose(run);
+      this.show(run, state);
+      if (state === 'choose' && this.$(run, '#bridge-choose').value) /** @type {HTMLElement} */ (this.$(run, '[data-bridge-choose] button[type="submit"]')).focus();
+    });
+    next.addEventListener('identity-changed', () => {
+      if (run === this.run) void quietly(run.devices.forget(run.workspaceId, next.device));
     });
     next.addEventListener('noise', () => {
       if (run.bridge === next && next.state === 'listening') this.unreadable(run);
@@ -343,6 +425,98 @@ class TlBridge extends HTMLElement {
     if (blocked) more.push(blockedText(blocked));
     if (dropped) more.push(refusedText(dropped, refusal.message, ' from earlier'));
     say(count, ...more);
+  }
+
+  /**
+   * A decoder made since this page loaded has no option in the choose form: then the form's select is
+   * taken from a fresh copy of this page, as the server renders it. Without one in time, the options stay.
+   * @param {Run} run
+   */
+  async refreshChoose(run) {
+    const select = /** @type {HTMLSelectElement} */ (this.$(run, '#bridge-choose'));
+    const shown = new Set([...select.options].map((o) => o.value));
+    if (!run.list || run.list.decoders.every((d) => shown.has(d.id))) return;
+    try {
+      const res = await fetch(location.pathname, { credentials: 'same-origin', headers: { accept: 'text/html' }, signal: AbortSignal.timeout(LIST_TIMEOUT_MS) });
+      if (!res.ok) return;
+      const fresh = new DOMParser().parseFromString(await res.text(), 'text/html').getElementById('bridge-choose');
+      if (run !== this.run || !(fresh instanceof HTMLSelectElement)) return;
+      const value = select.value;
+      select.replaceWith(fresh);
+      fresh.value = [...fresh.options].some((o) => o.value === value) ? value : '';
+    } catch {
+      // The options stay as they are.
+    }
+  }
+
+  /** Fills the choose form for this connect (decoders spec §3.2). @param {Run} run */
+  fillChoose(run) {
+    // A second connect in the same run starts from the server's form, not the last connect's marks.
+    this.resetChoose(run);
+    const form = /** @type {HTMLFormElement} */ (this.$(run, '[data-bridge-choose]'));
+    const select = /** @type {HTMLSelectElement} */ (form.elements.namedItem('decoder'));
+    const kind = this.$(run, '[data-bridge-kind]');
+    kind.textContent = KIND_TEXT[run.bridge.kind](kind.dataset.where ?? 'this club');
+    const { list } = run;
+    if (list) {
+      for (const option of [...select.options]) {
+        if (!option.value) continue;
+        const found = list.decoders.find((d) => d.id === option.value);
+        if (!found) {
+          option.remove();
+          continue;
+        }
+        const inUse = list.serverNow !== null && found.lastSeenAt !== null && list.serverNow - found.lastSeenAt < IN_USE_MS;
+        option.textContent = inUse ? `${option.dataset.name} (in use)` : option.dataset.name;
+        option.disabled = inUse && option.value !== run.remembered;
+      }
+    }
+    const known = Boolean(run.remembered) && [...select.options].some((o) => o.value === run.remembered);
+    // Forgotten only when the server no longer has it: one made after this page loaded has no option yet, but stays remembered.
+    if (run.remembered && list && !list.decoders.some((d) => d.id === run.remembered)) void quietly(run.devices.forget(run.workspaceId, run.bridge.device));
+    select.value = known ? run.remembered : '';
+    this.$(run, '[data-bridge-choose-heading]').textContent = known ? `Is this ${select.selectedOptions[0].dataset.name}?` : 'Which decoder is this?';
+  }
+
+  /** "Use this decoder": an existing decoder, or a new one made on the server, then remembered and assigned. @param {Run} run @param {HTMLFormElement} form */
+  async choose(run, form) {
+    const bridge = run.bridge;
+    if (!bridge) return;
+    const select = /** @type {HTMLSelectElement} */ (form.elements.namedItem('decoder'));
+    const name = String(/** @type {HTMLInputElement} */ (form.elements.namedItem('name')).value).trim();
+    const submit = /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]'));
+    if (submit.disabled) return;
+    if (!select.value && !name) {
+      this.fail(run, new Error('A decoder name is 1 to 60 characters.'));
+      return;
+    }
+    submit.disabled = true;
+    try {
+      let id = select.value;
+      if (id) {
+        // Defence in depth: fillChoose already removed what the connect's list no longer has.
+        if (run.list && !run.list.decoders.some((d) => d.id === id)) {
+          select.selectedOptions[0].remove();
+          select.value = '';
+          throw new Error('That decoder was removed. Choose another.');
+        }
+        run.names.set(id, select.selectedOptions[0].dataset.name ?? id);
+      } else {
+        const made = await api('POST', `/workspaces/${encodeURIComponent(run.workspaceId)}/decoders`, { name });
+        if (run !== this.run) return;
+        id = made.id;
+        run.names.set(id, made.name);
+      }
+      await quietly(run.devices.remember(run.workspaceId, bridge.device, id));
+      if (run !== this.run || run.bridge !== bridge) return;
+      await bridge.assign(id);
+      if (run === this.run) this.ok(run);
+    } catch (caught) {
+      if (run === this.run) this.fail(run, caught);
+    } finally {
+      // After a move the new run shares this button; its reset enabled it.
+      if (run === this.run) submit.disabled = false;
+    }
   }
 
   /** Forgets the decoder made for another device; it stays on the server, unpaired. @param {Run} run */
