@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Html, html, safe } from '../server/views/html.js';
+import { selectField } from '../server/views/form-parts.js';
 
 test('interpolations are escaped', () => {
   const name = `<b>Ana</b> & "Ben" 'C'`;
@@ -77,4 +78,12 @@ test('signed out, the start page has one Sign in, in its card; other pages keep 
   assert.match(start, /<a class="btn btn-primary" href="\/auth\/login\?returnTo=%2F">Sign in<\/a>/);
   assert.doesNotMatch(start, /nav-sign-in/);
   assert.match(String(notFoundPage(signedOut('/nope'))), /<a class="btn btn-sm btn-outline nav-sign-in" href="\/auth\/login\?returnTo=%2Fnope">Sign in<\/a>/);
+});
+
+test('selectField without a hint or data-name renders as it always has', () => {
+  const options = [{ value: 'cw', label: 'Clockwise' }, { value: 'ccw', label: 'Counter-clockwise' }];
+  assert.equal(String(selectField({ id: 'x', label: 'Direction', name: 'direction', options, value: 'cw' })),
+    '<div class="field">\n  <label for="x">Direction</label>\n  <select id="x" name="direction">\n    <option value="cw" selected>Clockwise</option><option value="ccw">Counter-clockwise</option>\n  </select>\n  \n</div>');
+  assert.equal(String(selectField({ id: 'x', label: 'Direction', name: 'direction', options, value: 'cw', error: { field: 'direction', message: 'Pick one.' } })),
+    '<div class="field">\n  <label for="x">Direction</label>\n  <select id="x" name="direction" aria-invalid="true" aria-describedby="x-error">\n    <option value="cw" selected>Clockwise</option><option value="ccw">Counter-clockwise</option>\n  </select>\n  <p class="field-error" id="x-error">Pick one.</p>\n</div>');
 });

@@ -11,6 +11,8 @@
 // (`<id>:<base64 32 bytes>,…`, newest first), TINYLAP_FEED_TOKEN,
 // TINYLAP_PUBLIC_URL (in dev it defaults to http://localhost:<port>), and
 // TINYLAP_PLANNER_URL, the planner tracks are imported from.
+// TINYLAP_SIMULATE (`<model>[,fast]`) puts a simulated decoder behind the bridge's
+// Connect buttons, for development and tests; never set it in production.
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +22,7 @@ import { createAuth } from './auth.js';
 import { createEngine } from './engine.js';
 import { startFeed } from './feed.js';
 import { createHub } from './live.js';
+import { readSimulate } from './simulate.js';
 import { openStore } from './store.js';
 
 const env = process.env;
@@ -48,6 +51,14 @@ try {
 } catch (error) {
   refuse(`TINYLAP_TOKEN_KEYS: ${error.message}`);
 }
+
+let simulate = null;
+try {
+  simulate = readSimulate(env.TINYLAP_SIMULATE);
+} catch (error) {
+  refuse(`TINYLAP_SIMULATE: ${error.message}`);
+}
+if (simulate) console.log(`TINYLAP_SIMULATE=${simulate}: the bridge's Connect buttons open a simulated decoder.`);
 
 let store;
 try {
@@ -82,6 +93,7 @@ const handler = createHandler({
   plannerUrl: env.TINYLAP_PLANNER_URL,
   clientIpHeader: env.TINYLAP_CLIENT_IP_HEADER,
   build: env.TINYLAP_BUILD,
+  settings: { simulate },
 });
 
 const host = dev ? '127.0.0.1' : '0.0.0.0';

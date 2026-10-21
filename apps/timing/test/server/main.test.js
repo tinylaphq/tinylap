@@ -37,3 +37,12 @@ test('with its configuration it starts and stops cleanly on SIGTERM', async () =
   const [code] = await once(child, 'exit');
   assert.equal(code, 0);
 });
+
+test('timing refuses a TINYLAP_SIMULATE it does not understand', async () => {
+  const child = run({ ...FULL, TINYLAP_SIMULATE: 'amb' });
+  let err = '';
+  child.stderr.on('data', (d) => { err += d; });
+  const [code] = await once(child, 'exit');
+  assert.equal(code, 1);
+  assert.match(err, /TINYLAP_SIMULATE:/);
+});
