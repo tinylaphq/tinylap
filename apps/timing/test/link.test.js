@@ -44,8 +44,10 @@ test('the HID transport reads the first reportId bytes, padded or not, and ends 
   device.send(Uint8Array.of(4, 5)); // padded to 63
   hid.dispatchEvent(Object.assign(new Event('disconnect'), { device: {} }));
   await wait(10);
+  device.send(Uint8Array.of(6)); // still read after another device's disconnect
+  await wait(10);
   device.unplug();
-  assert.deepEqual(await read, [1, 2, 3, 4, 5]);
+  assert.deepEqual(await read, [1, 2, 3, 4, 5, 6]);
 });
 
 test('the HID transport throws when the device can\'t be opened', async () => {
