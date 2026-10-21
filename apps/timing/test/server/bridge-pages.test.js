@@ -63,7 +63,8 @@ test('two Connect buttons, the serial one first; the missing-API notes hidden; t
   assert.equal(body.match(/data-bridge-connect="last"/g).length, 2, 'Try another device and Connect again');
   assert.match(body, /<label for="bridge-choose-name">Name for the new decoder<\/label>/);
   assert.equal(body.match(/>Decoder name</g).length, 1, 'exactly one "Decoder name" label');
-  assert.match(body, /<h2 class="h3" data-bridge-choose-heading>Which decoder is this\?<\/h2>/);
+  assert.match(body, /<h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this\?<\/h2>/, 'focusable, for focus after Connect');
+  assert.match(body, /<p class="status status-warning" data-bridge-taken hidden>This decoder is connected in another tab\.<\/p>/);
   assert.match(body, /<p data-bridge-kind data-where="your personal space"><\/p>/);
   assert.match(body, /If it comes unplugged, crossings until you connect again are lost, and each car's lap starts over\./);
   assert.match(body, /Choose an existing decoder only if it is this same device\. A decoder that another laptop uses needs its own\./);
@@ -86,5 +87,6 @@ test('the choose list: the club\'s decoders, escaped, "A new decoder" last; none
   assert.match(select, new RegExp(`<option value="${gate.id}" data-name="Gate &lt;1&gt;">Gate &lt;1&gt;</option>`));
   assert.doesNotMatch(select, /Over Wi-Fi/);
   assert.match(select, /<option value="" selected>A new decoder<\/option>\s*$/);
-  assert.match(body, /<select id="bridge-choose" name="decoder" aria-describedby="bridge-choose-hint">/);
+  // data-known names every decoder the server knew, the one on Wi-Fi too, so tl-bridge doesn't take it for a new one.
+  assert.match(body, new RegExp(`<select id="bridge-choose" name="decoder" data-known="${gate.id} ${wifi.id}" aria-describedby="bridge-choose-hint">`));
 });

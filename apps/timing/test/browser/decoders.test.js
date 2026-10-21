@@ -6,7 +6,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
-import { openBrowser, pageAs } from './browser.js';
+import { openBrowser, pageAs, postPassings } from './browser.js';
 
 let app;
 let browser;
@@ -235,6 +235,55 @@ test('D1b: a store that fails every call blocks neither the connect nor the choi
   assert.deepEqual(errors, []);
 });
 
+test('with nothing remembered, focus moves from the hidden Connect button to the choose heading', async (t) => {
+  const { page, errors } = await fresh(t);
+  await openZround(t, page);
+  await toChoose(page);
+  assert.deepEqual(await page.evaluate(() => [document.activeElement?.tagName, document.activeElement?.textContent]), ['H2', 'Which decoder is this?']);
+  assert.deepEqual(errors, []);
+});
+
+test('a club with a decoder on Wi-Fi refreshes no page on connect: the server named every decoder it knew', async (t) => {
+  const { page, errors, member, space } = await fresh(t);
+  const wifi = await (await app.api(member, 'POST', `/workspaces/${space}/decoders`, { name: 'Wi-Fi' })).json();
+  assert.equal((await postPassings(app, wifi, [{ transponder: '0A', t: 1000 }])).status, 200);
+  assert.equal(app.store.choosableDecoders(space).length, 0, 'a decoder on Wi-Fi is not choosable');
+  await openZround(t, page);
+  const gets = [];
+  page.on('request', (r) => { if (r.resourceType() === 'fetch' && new URL(r.url()).pathname === '/personal/bridge') gets.push(r.url()); });
+  await toChoose(page);
+  // Shows that no refresh comes late.
+  await page.waitForTimeout(500);
+  assert.deepEqual(gets, []);
+  assert.deepEqual(errors, []);
+});
+
+test('a replaced bridge writes nothing while the next one connects, and no longer guards leaving', async (t) => {
+  const { page, errors } = await fresh(t);
+  await openZround(t, page);
+  await toChoose(page);
+  await page.getByLabel('Name for the new decoder').fill('Gate');
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  // The next connect's decoder list never answers, so it stays connecting for its 3 s cap.
+  await page.route('**/workspaces/*/decoders', (route) => (route.request().method() === 'GET' ? new Promise(() => {}) : route.continue()));
+  await page.evaluate(() => {
+    /** @type {any} */ (window).__old = /** @type {any} */ (document.querySelector('tl-bridge')).run.bridge;
+    /** @type {HTMLElement} */ (document.querySelector('[data-bridge-connect="serial"]')).click();
+  });
+  await page.locator('[data-bridge-state="connecting"]').waitFor();
+  const seen = await page.evaluate(() => {
+    const old = /** @type {any} */ (window).__old;
+    old.dispatchEvent(new Event('online'));
+    old.dispatchEvent(new Event('outbox'));
+    const leave = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leave);
+    return { live: document.querySelector('[data-bridge-live]')?.textContent, guarded: leave.defaultPrevented };
+  });
+  assert.deepEqual(seen, { live: 'Talking to the decoder.', guarded: false });
+  assert.deepEqual(errors, []);
+});
+
 test('D2: a remembered decoder is confirmed, not forwarded silently', async (t) => {
   const { page, errors, space } = await fresh(t);
   await page.addInitScript(UNPLUG);
@@ -317,7 +366,8 @@ test('D3: a remembered decoder removed on the server is not offered, and gets no
   assert.deepEqual(seen.filter((r) => r === `POST /decoders/${gate.id}/passings`), []);
 });
 
-// D4 covers a decoder removed before Connect only (see the note at the top of this task).
+// D4 covers a decoder removed before Connect only: one removed after the connect's decoder list can't be seen on
+// that connect, and its passings 404 and are dropped, as for any removed decoder (decoders spec §3.2, §3.3).
 test('D4: an existing decoder can be chosen without making one; one removed before Connect is not offered', async (t) => {
   const { page, member, space } = await fresh(t);
   const old = await (await app.api(member, 'POST', `/workspaces/${space}/decoders`, { name: 'Old' })).json();
@@ -449,7 +499,7 @@ test('D10: noise (double reads and garbage) makes no page error, and laps still 
   assert.deepEqual(errors, []);
 });
 
-test('Review focus 3: "Use this decoder" clicked twice makes one decoder', async (t) => {
+test('"Use this decoder" clicked twice makes one decoder', async (t) => {
   const { page, space } = await fresh(t);
   await openZround(t, page);
   await toChoose(page);
@@ -486,7 +536,7 @@ test('D6b: the CP2110 is configured, then enabled, and a removal disables its UA
   await page.waitForFunction(() => JSON.stringify(/** @type {any} */ (window).__device.log.at(-1)) === '[65,0]');
 });
 
-test('Review focus 5: an EasyLap unplugged while forwarding says so, with what a replug costs', async (t) => {
+test('an EasyLap unplugged while forwarding says so, with what a replug costs', async (t) => {
   const { page } = await fresh(t);
   await page.addInitScript(HID, {});
   await page.goto('/personal/bridge');
@@ -500,7 +550,70 @@ test('Review focus 5: an EasyLap unplugged while forwarding says so, with what a
   assert.equal(await page.getByText("Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.").isVisible(), true);
 });
 
-test('Review: an EasyLap that sends only corrupt frames ends in listening with the unreadable note, never the choose form', async (t) => {
+/** Opens the bridge with the simulated EasyLap, keeping each picked device in window.__devices. */
+async function openEasylap(page) {
+  await page.goto('/personal/bridge');
+  await page.evaluate(() => {
+    const hid = /** @type {any} */ (navigator).hid;
+    const pick = hid.requestDevice;
+    /** @type {any} */ (window).__devices = [];
+    hid.requestDevice = async (...options) => {
+      const picked = await pick(...options);
+      /** @type {any} */ (window).__devices.push(...picked);
+      return picked;
+    };
+  });
+}
+
+test('two tabs on one EasyLap: the second refuses before opening it, and connects once the first lets go', async (t) => {
+  const { page: first, context, errors } = await fresh(t);
+  simulating(t, 'easylap,fast');
+  const second = await context.newPage();
+  const taken = 'This decoder is connected in another tab.';
+  await openEasylap(first);
+  await openEasylap(second);
+  await first.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await first.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+
+  await second.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await second.locator('p.status-warning', { hasText: taken }).waitFor();
+  await second.locator('[data-bridge-live]', { hasText: taken }).waitFor({ state: 'attached' });
+  assert.equal(await second.getByRole('button', { name: 'Connect EasyLap' }).isVisible(), true);
+  // Shows that the refused tab never opens the device, nor turns its UART off.
+  await second.waitForTimeout(300);
+  assert.deepEqual(await second.evaluate(() => /** @type {any} */ (window).__devices.map((d) => ({ opened: d.opened, log: d.log }))), [{ opened: false, log: [] }]);
+  assert.equal(await first.getByRole('heading', { name: 'Which decoder is this?' }).isVisible(), true);
+
+  // An unplug in the first tab lets go of it.
+  await first.evaluate(() => /** @type {any} */ (window).__devices[0].unplug());
+  await first.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor();
+  await second.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await second.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  assert.equal(await second.locator('p.status-warning', { hasText: taken }).isVisible(), false);
+
+  // Now the first tab is refused, until the second navigates away.
+  await first.getByRole('button', { name: 'Connect again' }).click();
+  await first.locator('p.status-warning', { hasText: taken }).waitFor();
+  await second.goto('/personal');
+  await first.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await first.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  assert.deepEqual(errors, []);
+});
+
+test('the same tab connects its EasyLap again: the lock it held is free once its bridge closes', async (t) => {
+  const { page, errors } = await fresh(t);
+  simulating(t, 'easylap,fast');
+  await openEasylap(page);
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  await page.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('[data-bridge-connect="hid"]')).click());
+  await page.waitForFunction(() => /** @type {any} */ (window).__devices.length === 2 && /** @type {any} */ (window).__devices[1].opened);
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.locator('[data-bridge-taken]').isVisible(), false);
+  assert.deepEqual(errors, []);
+});
+
+test('an EasyLap that sends only corrupt frames ends in listening with the unreadable note, never the choose form', async (t) => {
   const { page, errors } = await fresh(t);
   await page.addInitScript(HID, { corrupt: true });
   await page.goto('/personal/bridge');
@@ -514,7 +627,7 @@ test('Review: an EasyLap that sends only corrupt frames ends in listening with t
   assert.deepEqual(errors, []);
 });
 
-test('Review: Try another device after an EasyLap picks over HID once more, and no third time', async (t) => {
+test('Try another device after an EasyLap picks over HID once more, and no third time', async (t) => {
   const { page, errors } = await fresh(t);
   await page.addInitScript(HID, { corrupt: true });
   await page.goto('/personal/bridge');
@@ -527,7 +640,7 @@ test('Review: Try another device after an EasyLap picks over HID once more, and 
   assert.deepEqual(errors, []);
 });
 
-test('Review: a TinyLap decoder that disconnects keeps the gap note hidden', async (t) => {
+test('a TinyLap decoder that disconnects keeps the gap note hidden', async (t) => {
   const { page } = await fresh(t);
   await page.addInitScript(UNPLUG);
   simulating(t, 'tinylap,fast');
@@ -542,7 +655,7 @@ test('Review: a TinyLap decoder that disconnects keeps the gap note hidden', asy
   assert.equal(await page.locator('[data-bridge-gap]').isVisible(), false);
 });
 
-test('Review: a plain ZRound decoder that disconnects while still undecided shows no gap note', async (t) => {
+test('a plain ZRound decoder that disconnects while still undecided shows no gap note', async (t) => {
   const { page } = await fresh(t);
   await page.addInitScript(() => {
     /** @type {any} */ (window).__picks = 0;

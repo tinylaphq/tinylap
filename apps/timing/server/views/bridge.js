@@ -19,8 +19,11 @@ export function bridgeImportMap(request) {
 /** @param {string} label @param {'serial' | 'hid' | 'last'} which @param {string} [style] */
 const connect = (label, which, style = 'btn-primary') => html`<button type="button" class="btn ${style} btn-lg" data-bridge-connect="${which}">${label}</button>`;
 
-/** @param {any} request @param {{ tag: unknown }} importMap @param {{ id: string, name: string }[]} [decoders] the decoders a device may be chosen as */
-export function bridgePage(request, importMap, decoders = []) {
+/**
+ * @param {any} request @param {{ tag: unknown }} importMap @param {{ id: string, name: string }[]} [decoders] the decoders a device may be chosen as
+ * @param {string[]} [known] every decoder's id, choosable or not, so tl-bridge can tell when one was made since this render
+ */
+export function bridgePage(request, importMap, decoders = [], known = decoders.map((d) => d.id)) {
   const base = request.space.base;
   const where = request.space.kind === 'personal' ? 'your personal space' : 'this club';
   return layout(request, {
@@ -45,6 +48,7 @@ export function bridgePage(request, importMap, decoders = []) {
       <p>An EasyLap? Use Connect EasyLap: it doesn't show up in the decoder list.</p>
       <p class="status status-warning" data-bridge-missing="serial" hidden>This browser can't reach USB decoders, only an EasyLap.</p>
       <p class="status status-warning" data-bridge-missing="hid" hidden>This browser can't reach an EasyLap, only other USB decoders.</p>
+      <p class="status status-warning" data-bridge-taken hidden>This decoder is connected in another tab.</p>
     </section>
     <section data-bridge-state="connecting" hidden class="card-static"><p>Talking to the decoder…</p></section>
     <section data-bridge-state="listening" hidden class="card-static stack-md">
@@ -64,11 +68,11 @@ export function bridgePage(request, importMap, decoders = []) {
       </form>
     </section>
     <section data-bridge-state="choose" hidden class="card-static stack-md">
-      <h2 class="h3" data-bridge-choose-heading>Which decoder is this?</h2>
+      <h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this?</h2>
       <p data-bridge-kind data-where="${where}"></p>
       <p>If it comes unplugged, crossings until you connect again are lost, and each car's lap starts over.</p>
       <form data-bridge-choose class="stack-sm">
-        ${selectField({ label: 'Decoder', name: 'decoder', id: 'bridge-choose', value: '',
+        ${selectField({ label: 'Decoder', name: 'decoder', id: 'bridge-choose', value: '', data: { known: known.join(' ') },
           hint: 'Choose an existing decoder only if it is this same device. A decoder that another laptop uses needs its own.',
           options: [...decoders.map((d) => ({ value: d.id, label: d.name, dataName: d.name })), { value: '', label: 'A new decoder' }] })}
         ${textField({ label: 'Name for the new decoder', name: 'name', id: 'bridge-choose-name', maxlength: 60 })}

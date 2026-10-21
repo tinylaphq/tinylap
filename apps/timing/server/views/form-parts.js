@@ -28,12 +28,12 @@ export function textField({ label, name, value = '', error = null, type = 'text'
 </div>`;
 }
 
-export function selectField({ label, name, options, value = '', error = null, labelHidden = false, hint = null, id }) {
+export function selectField({ label, name, options, value = '', error = null, labelHidden = false, hint = null, id, data = {} }) {
   const message = errorFor(error, name);
   const described = [message ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(' ');
   return html`<div class="field">
   <label for="${id}"${labelHidden ? html` class="visually-hidden"` : null}>${label}</label>
-  <select id="${id}" name="${name}"${message ? html` aria-invalid="true"` : null}${described ? html` aria-describedby="${described}"` : null}>
+  <select id="${id}" name="${name}"${Object.entries(data).map(([key, v]) => html` data-${key}="${v}"`)}${message ? html` aria-invalid="true"` : null}${described ? html` aria-describedby="${described}"` : null}>
     ${options.map((o) => html`<option value="${o.value}"${o.dataName === undefined ? null : html` data-name="${o.dataName}"`}${o.value === value ? html` selected` : null}>${o.label}</option>`)}
   </select>${hint ? html`<p class="field-hint" id="${id}-hint">${hint}</p>` : null}
   ${message ? html`<p class="field-error" id="${id}-error">${message}</p>` : null}

@@ -115,6 +115,29 @@ const STATE_TEXT = {
   disconnected: 'Decoder disconnected.',
 };
 
+/**
+ * Holds a Web Lock on an HID device for the life of a bridge: WebHID, unlike Web Serial, lets a second tab
+ * open a device, so the lock keeps two tabs from forwarding one EasyLap. Resolves with the function that
+ * lets go, whose promise settles once the lock is free, or null when another tab holds it. Without Web
+ * Locks it connects as before.
+ * @param {string} device
+ * @returns {Promise<(() => Promise<unknown>) | null>}
+ */
+function holdDevice(device) {
+  const locks = /** @type {any} */ (navigator).locks;
+  const free = () => Promise.resolve();
+  if (!locks) return Promise.resolve(free);
+  return new Promise((resolve) => {
+    const released = locks.request(`tinylap-bridge:${device}`, { ifAvailable: true }, (lock) => {
+      if (!lock) return resolve(null);
+      return new Promise((letGo) => resolve(() => {
+        letGo(undefined);
+        return released;
+      }));
+    }).catch(() => resolve(free));
+  });
+}
+
 /** The picker for `which`; closing it is a choice, not an error. @param {'serial' | 'hid'} which */
 async function pick(which) {
   try {
@@ -196,6 +219,7 @@ class TlBridge extends HTMLElement {
       this.$(run, `[data-bridge-connect="${which}"]`).hidden = false;
       this.$(run, `[data-bridge-missing="${which}"]`).hidden = true;
     }
+    this.$(run, '[data-bridge-taken]').hidden = true;
     this.$(run, '[data-bridge-listening]').hidden = false;
     this.$(run, '[data-bridge-unreadable]').hidden = true;
     this.$(run, '[data-bridge-gap]').hidden = true;
@@ -372,20 +396,47 @@ class TlBridge extends HTMLElement {
     if (!transport) return null;
     run.transport = chosen;
     if (run.made && run.made.device !== transport.device) this.forget(run);
+    this.$(run, '[data-bridge-taken]').hidden = true;
     await run.bridge?.close();
+    // From here the replaced bridge's late events find no bridge, and leaving the page isn't guarded.
+    run.bridge = null;
     if (run !== this.run) return null;
+    // Before the device is opened: an EasyLap another tab forwards is left alone.
+    const release = chosen === 'hid' ? await holdDevice(transport.device) : () => Promise.resolve();
+    if (!release) {
+      if (run === this.run) {
+        this.show(run, 'connect');
+        const taken = this.$(run, '[data-bridge-taken]');
+        taken.hidden = false;
+        this.announce(run, taken.textContent);
+      }
+      return null;
+    }
+    if (run !== this.run) {
+      void release();
+      return null;
+    }
     // From the pick on, the page says it is connecting, while the stores and the decoder list load.
     this.show(run, 'connecting');
     const [outbox, devices, list] = await Promise.all([openOutbox(), openDevices(), decoderList(run.root)]);
-    if (run !== this.run) return null;
+    if (run !== this.run) {
+      void release();
+      return null;
+    }
     const remembered = await quietly(devices.recall(run.workspaceId, transport.device));
-    if (run !== this.run) return null;
+    if (run !== this.run) {
+      void release();
+      return null;
+    }
     Object.assign(run, { devices, list, remembered });
     // In parallel with the start; the choose form waits for it.
     const refreshed = this.refreshChoose(run);
     const protocol = chosen === 'hid' ? robitronicProtocol() : zroundProtocol();
-    const next = new Bridge({ link: { transport, protocol }, outbox, post, openDelayMs: chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
+    // The lock goes with the device: when the bridge closes it, or it is unplugged.
+    const held = { ...transport, close: () => transport.close().finally(release) };
+    const next = new Bridge({ link: { transport: held, protocol }, outbox, post, openDelayMs: chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
     next.addEventListener('state', () => {
+      if (next.state === 'disconnected') void release();
       if (run.bridge !== next) return;
       const state = next.state === 'idle' ? 'connecting' : next.state;
       if (state !== 'choose') {
@@ -396,7 +447,8 @@ class TlBridge extends HTMLElement {
         if (run.bridge !== next || next.state !== 'choose') return;
         this.fillChoose(run);
         this.show(run, 'choose');
-        if (this.$(run, '#bridge-choose').value) /** @type {HTMLElement} */ (this.$(run, '[data-bridge-choose] button[type="submit"]')).focus();
+        // The Connect button that had focus is hidden now: focus goes to the form's confirm, or its heading.
+        /** @type {HTMLElement} */ (this.$(run, this.$(run, '#bridge-choose').value ? '[data-bridge-choose] button[type="submit"]' : '[data-bridge-choose-heading]')).focus();
       });
     });
     next.addEventListener('identity-changed', () => {
@@ -449,20 +501,20 @@ class TlBridge extends HTMLElement {
   /**
    * A decoder made since this page loaded has no option in the choose form: then the form's select is
    * taken from a fresh copy of this page, as the server renders it. Without one in time, the options stay.
+   * The select's data-known names every decoder the server knew when it rendered, choosable or not, so a
+   * decoder on Wi-Fi, which has no option, doesn't count as new.
    * @param {Run} run
    */
   async refreshChoose(run) {
     const select = /** @type {HTMLSelectElement} */ (this.$(run, '#bridge-choose'));
-    const shown = new Set([...select.options].map((o) => o.value));
-    if (!run.list || run.list.decoders.every((d) => shown.has(d.id))) return;
+    const known = new Set((select.dataset.known ?? '').split(' ').filter(Boolean));
+    if (!run.list || run.list.decoders.every((d) => known.has(d.id))) return;
     try {
       const res = await fetch(location.pathname, { credentials: 'same-origin', headers: { accept: 'text/html' }, signal: AbortSignal.timeout(LIST_TIMEOUT_MS) });
       if (!res.ok) return;
       const fresh = new DOMParser().parseFromString(await res.text(), 'text/html').getElementById('bridge-choose');
       if (run !== this.run || !(fresh instanceof HTMLSelectElement)) return;
-      const value = select.value;
       select.replaceWith(fresh);
-      fresh.value = [...fresh.options].some((o) => o.value === value) ? value : '';
     } catch {
       // The options stay as they are.
     }
@@ -513,12 +565,7 @@ class TlBridge extends HTMLElement {
     try {
       let id = select.value;
       if (id) {
-        // Defence in depth: fillChoose already removed what the connect's list no longer has.
-        if (run.list && !run.list.decoders.some((d) => d.id === id)) {
-          select.selectedOptions[0].remove();
-          select.value = '';
-          throw new Error('That decoder was removed. Choose another.');
-        }
+        // fillChoose removed what the connect's list no longer has; one removed since 404s, and its passings are dropped.
         run.names.set(id, select.selectedOptions[0].dataset.name ?? id);
       } else {
         const made = await api('POST', `/workspaces/${encodeURIComponent(run.workspaceId)}/decoders`, { name });
@@ -554,16 +601,21 @@ class TlBridge extends HTMLElement {
     const name = String(form.get('name') ?? '').trim();
     if (!run.made && !name) return this.fail(run, new Error('A decoder name is 1 to 60 characters.'));
     submit.disabled = true;
+    // While a connect replaces the bridge there is none: the pairing fails as for an unplugged decoder.
+    const current = () => {
+      if (!run.bridge) throw new Error('The decoder is disconnected. Connect it again.');
+      return run.bridge;
+    };
     try {
       if (!run.made) {
         const made = await api('POST', `/workspaces/${encodeURIComponent(run.workspaceId)}/decoders`, { name });
         if (run !== this.run) return;
-        run.made = { ...made, device: run.bridge.device };
+        run.made = { ...made, device: current().device };
         run.names.set(run.made.id, run.made.name);
         nameField.readOnly = true;
       }
       const ssid = String(form.get('ssid') ?? '').trim();
-      await run.bridge.pair(run.made.id, run.made.token, ssid ? { ssid, password: String(form.get('password') ?? '') } : null);
+      await current().pair(run.made.id, run.made.token, ssid ? { ssid, password: String(form.get('password') ?? '') } : null);
       run.made = null;
       nameField.readOnly = false;
       if (run === this.run) this.ok(run);
