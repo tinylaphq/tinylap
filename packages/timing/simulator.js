@@ -4,7 +4,8 @@
 
 // A pretend decoder: cars that cross the line at about their lap time, and
 // the replies a TinyLap decoder gives to ZRound and %TL… commands. Drives
-// tools/decoder-sim.js and the bridge's ?simulate port, so the whole chain
+// tools/decoder-sim.js and, when the server's simulator setting is on, the
+// bridge page's simulated devices (public/sim/install.js), so the whole chain
 // can be tried without hardware.
 
 import { randomBoot } from './passing.js';

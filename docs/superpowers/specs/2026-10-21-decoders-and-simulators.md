@@ -64,7 +64,7 @@ Coordinator rulings on the review (2026-10-21): the bridge sends `%I&` to a plai
 | `public/link/robitronic.js` | `robitronicProtocol()` over `createFrameReader` | new |
 | `public/bridge.js` | `Bridge` becomes the session (§2.4). `sendOutbox` is unchanged. | changed |
 | `public/devices.js` | the browser's remembered choice: device → decoder (§3.2) | new |
-| `public/sim/track.js`, `public/sim/serial-port.js`, `public/sim/hid-device.js`, `public/sim/models.js`, `public/sim/models/{tinylap,zround,easylap}.js` | simulators (§5) | new |
+| `public/sim/serial-port.js`, `public/sim/hid-device.js`, `public/sim/models.js`, `public/sim/models/{tinylap,zround,easylap}.js` | simulators (§5); the track is `createTrack` in `packages/timing/simulator.js` (§5.1), not a file of its own | new |
 | `public/sim-port.js` | stays, as `simulatedPort(options) = fakeSerialPort(tinylapModel(options))`, so `test/browser/bridge.test.js:240` and the stream-counting init scripts keep working | changed |
 | `public/elements/bridge.js` | two pickers, the choose form, new state texts; today's `simulate` branch (`:24-27`, `:74`) is removed | changed |
 | `public/sim/install.js` | the simulator at the platform boundary: `navigator.serial` and `navigator.hid` replaced, or defined where missing (§5.4) | new |
@@ -183,7 +183,7 @@ A Robitronic clock that wraps (2^24 or 2^32 ms, R fact 13) falls under rule 3: a
 
 **The run guard** (I13, R6). After each await in `connect` (the pick, `devices.recall`, the decoder-list GET, `openOutbox`, `start`) and in the choose submit (the POST, `remember`), `tl-bridge` returns if `run !== this.run`, as `elements/bridge.js:259`, `:264`, `:337` do today. Code that runs on a `Bridge` event (filling the choose form when `choose` opens) also checks `run.bridge === next`, as `:268` does. A choose answer that lands after a move calls neither `remember` nor `assign`.
 
-**One decoder-list GET per connect** (R6). `connect` GETs `/workspaces/:id/decoders` once, before it constructs the `Bridge`, and keeps the answer and its `Date` header on the run. The remembered choice (§3.2), the in-use marks and the submit check all use it. If the GET fails (offline, a 5xx), the server-rendered options stay as they are, with no in-use marks; the remembered decoder is preselected if it is among them; and the submit skips the existing-id check, so a decoder removed meanwhile 404s later and its passings are dropped, as for any removed decoder (F3).
+**One decoder-list GET per connect** (R6). `connect` GETs `/workspaces/:id/decoders` once, before it constructs the `Bridge`, and keeps the answer and its `Date` header on the run. The remembered choice (§3.2), the in-use marks and the removal of gone options all use it. If the GET fails (offline, a 5xx), the server-rendered options stay as they are, with no in-use marks; the remembered decoder is preselected if it is among them; and a decoder removed meanwhile 404s later and its passings are dropped, as for any removed decoder (F3).
 
 ### 2.5 The Robitronic reader (`packages/timing/robitronic.js`)
 
@@ -247,7 +247,7 @@ The device has no id and nowhere to store a token. So the member says which deco
    - **`reset` puts the server's choose form back** (R6). Each `<option>` carries `data-name`, its server-rendered name. `reset(run)` (`elements/bridge.js:129-138`) restores the heading to "Which decoder is this?", every option's text from `data-name`, `disabled = false`, and the preselect of "A new decoder". Removed options stay removed: their decoder is gone;
    - under the select: "Choose an existing decoder only if it is this same device. A decoder that another laptop uses needs its own."
 3. **The remembered choice** (I8). `device` is the USB chip (CH340 `1A86:7523`, FTDI `0403:6001`, CP210x `10C4:EA60`), not the decoder, so a match only suggests. With a remembered decoder that is still listed, `choose` shows with it preselected, the heading "Is this Gate?" (set as `textContent`), and focus on "Use this decoder". So connecting is one extra click, and a different decoder on the same chip is never forwarded unnoticed. Without one, "A new decoder" is preselected and the heading is "Which decoder is this?".
-4. **Submit.** For a new one: `POST /workspaces/:id/decoders` with the name, as today. The token in the answer is neither used nor kept, since the bridge posts with the member's session (`server/ingest.js:40-44`). For an existing one there is nothing to post, but its id is checked against the connect's GET answer first; if it is gone, the option is removed and the form says "That decoder was removed. Choose another." Then `devices.remember(workspace, device, decoderId)` and `bridge.assign(decoderId)`, both behind the run guard (§2.4).
+4. **Submit.** For a new one: `POST /workspaces/:id/decoders` with the name, as today. The token in the answer is neither used nor kept, since the bridge posts with the member's session (`server/ingest.js:40-44`). For an existing one there is nothing to post: the form offers only what the connect's GET answer has, since an option whose decoder is gone from it is removed (step 3). (A submit-time check that said "That decoder was removed. Choose another." was dropped as unreachable; a decoder removed after the GET 404s, and its passings are dropped, §3.3.) Then `devices.remember(workspace, device, decoderId)` and `bridge.assign(decoderId)`, both behind the run guard (§2.4).
 
 `devices.js` is a separate IndexedDB database, `tinylap-bridge-devices`, one store keyed `[workspace, device]` → `{ decoder }`, with the memory fallback of `outbox.js:43-55`. That is all it keeps: there is no boot and no clock (owner's decision). `outbox.js` and its database are untouched. Its API is `recall`, `remember` and `forget` (the last used on a late `%TLID`, §2.4, and when the remembered decoder is gone).
 
@@ -306,7 +306,7 @@ The two buttons sit inline in one paragraph and wrap at phone width; palace 0.12
 
 ## 5. Simulators
 
-### 5.1 The track (`public/sim/track.js`, over `packages/timing/simulator.js`)
+### 5.1 The track (`createTrack`, in `packages/timing/simulator.js`)
 
 `createTrack({ cars, jitterMs = 150, noise = {}, random = Math.random })` with `cars: { id: number, lapMs: number }[]`. `advance(until)` returns crossings in time order, `{ id, t, hits, strength }`, from the car loop of `packages/timing/simulator.js:24-49`. That loop moves into `createTrack` in `packages/timing`; `createSimulator` uses it and keeps its API, so the repo-root `tools/decoder-sim.js` and `packages/timing/test/simulator.test.js` don't change. `track.reset(now)` shifts every car's next crossing back by `now`, as `simulator.js:65`.
 
@@ -457,7 +457,7 @@ New, in `test/browser/decoders.test.js`:
 - **D1 Plain ZRound** (setting `zround,fast`, RiCino-style reads, waiting for `%I&`): Connect decoder → "Which decoder is this?" → "Name for the new decoder" "Gate" → "Use this decoder" → "Forwarding from Gate" → a preview row. The store has one decoder "Gate", and the engine has crossings.
 - **D2 Remembered, confirmed** (I8): Connect again → "Is this Gate?" with Gate preselected and focus on "Use this decoder"; nothing is posted before the click; no `POST …/decoders`.
 - **D3 Removed on the server**: delete "Gate" through `app.api`, reconnect → "Which decoder is this?", Gate is not an option, and no POST goes to `/decoders/<old id>/passings`.
-- **D4 An existing decoder**: pick it in the select; no `POST …/decoders`. A decoder removed after the page loaded, then chosen: its option goes and the form says so (m24).
+- **D4 An existing decoder**: pick it in the select; no `POST …/decoders`. A decoder removed after the page loaded, before Connect: its option goes (m24).
 - **D5 In use** (I7, R5): a decoder posted to within 2 minutes (through `app.api`) is `disabled` and reads "(in use)". The remembered one reads "(in use)" too but stays enabled. With the page's clock moved 10 minutes ahead (an init script), the marks are the same: they follow the server's `Date`.
 - **E4d Reset of the choose form** (R6): at "Is this Gate?" with an option disabled, move the element, then Connect again: the heading reads "Which decoder is this?" until the new run's remembered match applies, every option's text comes from `data-name`, and none is disabled before the new GET answers.
 - **D14 The connect GET fails** (F3): with `/workspaces/*/decoders` routed to a 503, Connect decoder with the setting `zround,fast` shows the server-rendered options unchanged, with none disabled or marked "(in use)"; the remembered decoder is preselected; and "Use this decoder" goes to "Forwarding from Gate" with no `POST …/decoders`.
@@ -547,11 +547,13 @@ New, in `test/browser/decoders.test.js`:
 9. The range of hits and strength, and one passing per crossing (no repeats within a lap).
 10. Rollover, if a 4.7 h run is possible; otherwise accept the new-boot fallback.
 11. WebHID `open()` on Linux (with and without a udev rule), macOS and Windows.
+12. Two tabs on one EasyLap: whether a second tab can really open the device while the first holds it (WebHID's shared open). The bridge holds a Web Lock per vendor and product id for the life of a bridge, so the second tab refuses with "This decoder is connected in another tab."; confirm it never turns the first tab's UART off.
 
 For a plain ZRound decoder (RiCino, or any ZRound-compatible box):
-12. Whether opening the port resets it, and how long it takes to answer.
-13. `%A&` after the retried `%C&`, and that the spaced `%TLHELLO&`s don't disturb it.
-14. Whether it sends anything before `%I&`, and that one `%I&` starts `%T` clocks and `%L` passings.
+13. Whether opening the port resets it, and how long it takes to answer.
+14. Whether an Arduino-based decoder raises a non-fatal serial error (BreakError, FramingError, ParityError, BufferOverrunError) after the DTR reset at open. Today any of them ends the session; if one comes, the serial transport should take a new reader while `port.readable` is not null.
+15. `%A&` after the retried `%C&`, and that the spaced `%TLHELLO&`s don't disturb it.
+16. Whether it sends anything before `%I&`, and that one `%I&` starts `%T` clocks and `%L` passings.
 
 Until items 3 and 4 are done, `docs/timing.md` marks EasyLap support "preview".
 

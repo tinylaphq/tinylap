@@ -34,7 +34,7 @@ A TinyLap decoder sends `%TLID` on its own whenever its boot changes (power-up, 
 
 ### The handshake
 
-The bridge opens the port, waits 1.5 s (opening it resets Arduino-based decoders), and sends `%C&` every 500 ms until something in ZRound comes back. Then it sends `%TLHELLO&`, 300 ms after its last write, up to three times 700 ms apart. A `%TLID` makes it a TinyLap decoder for the rest of the connection. Every command is a multiple of 3 bytes, so firmware that reads 3 bytes at a time (RiCino) still sees each one whole.
+The bridge opens the port, waits 1.5 s (opening it resets Arduino-based decoders), and sends `%C&` every 500 ms until something in ZRound comes back, for up to 6 s. With no answer by then it is listening: it sends `%C&`, then `%TLHELLO&`, every 2 s, until 60 s after opening. Once something in ZRound comes back, it sends `%TLHELLO&`, 300 ms after its last write, up to three times 700 ms apart. A `%TLID` makes it a TinyLap decoder for the rest of the connection. Every command is a multiple of 3 bytes, so firmware that reads 3 bytes at a time (RiCino) still sees each one whole.
 
 ### Plain ZRound decoders
 
@@ -56,7 +56,9 @@ An EasyLap is a Silicon Labs CP2110 HID-to-UART bridge (`10C4:86B9`) in front of
   - `0x83` is a heartbeat: time in ms u32 and four bytes.
 - The transponder code is the id in upper-case hex.
 - A frame whose CRC-8 (poly `0x07`, init `0xDE`, byte 1 read as 0) is wrong is skipped.
-- The choice and the boots work as for a plain ZRound decoder. The bridge sends `03 B9 01` (start) only if no frame comes within 6 s.
+- The choice and the boots work as for a plain ZRound decoder. The bridge sends `03 B9 01` (start) only if no good frame comes within 6 s, up to three times 500 ms apart; with still nothing, it is listening.
+
+Only one tab at a time can connect an EasyLap: WebHID, unlike Web Serial, would let a second tab open it too, so the bridge holds a lock on it for as long as it is connected, and a second tab says "This decoder is connected in another tab." WebHID exposes no serial number, so the lock is per vendor and product id: two EasyLaps on one laptop can't be connected in two tabs either.
 
 Until a capture from a real device confirms the checksum and the id bytes, this support is a preview.
 
