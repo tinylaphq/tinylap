@@ -4,6 +4,9 @@
 
 // The only way the timing app makes HTML (spec §4.1): every interpolated
 // value is escaped unless it is itself made by html`` or marked safe().
+// The escaping is right for text and for quoted attribute values only, so
+// interpolate there and nowhere else: never into an unquoted attribute, and
+// never inside <script> or <style>, where escaping does not protect.
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
@@ -11,14 +14,15 @@ export class Html {
   /** @param {string} text */
   constructor(text) {
     this.text = text;
+    Object.freeze(this);
   }
   toString() {
     return this.text;
   }
 }
 
-/** Trusted markup, rendered as is. @param {unknown} text */
-export const safe = (text) => new Html(String(text));
+/** Trusted markup, rendered as is; null and undefined render as nothing. @param {unknown} text */
+export const safe = (text) => new Html(text === null || text === undefined ? '' : String(text));
 
 /** @param {unknown} value @returns {string} */
 function render(value) {

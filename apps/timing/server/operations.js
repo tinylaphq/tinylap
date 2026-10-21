@@ -10,6 +10,7 @@ import { DIRECTIONS } from '@tinylap/track-format';
 import { transponderCode } from '@tinylap/timing';
 import { publicSession } from './engine.js';
 import { TrackError, fetchTrack } from './planner.js';
+import { PROBLEMS } from './problems.js';
 
 /** Driver colours, handed out in order (palace's accents first). */
 export const COLOURS = ['#ff2d9b', '#2d9bff', '#ffb82d', '#2dff9b', '#b82dff', '#ff5a2d', '#2dfff0', '#f0ff2d'];
@@ -22,12 +23,18 @@ const KINDS = new Set(['qualifying', 'race']);
 /** SHA-256, hex: what is stored of a decoder token. @param {string} token */
 export const tokenHash = (token) => createHash('sha256').update(token).digest('hex');
 
-/** @param {string} problem @param {number} status @param {string} message @param {string} [field] @param {number} [retryAfter] seconds, for a 429 */
-const fail = (problem, status, message, field, retryAfter) => ({ error: { problem, status, message, ...(field ? { field } : {}), ...(retryAfter ? { retryAfter } : {}) } });
+/**
+ * The status comes from the problem table, so the two cannot disagree; a name not in it throws.
+ * @param {string} problem @param {string} message @param {string} [field] @param {number} [retryAfter] seconds, for a 429
+ */
+export const fail = (problem, message, field, retryAfter) => {
+  if (!Object.hasOwn(PROBLEMS, problem)) throw new Error(`unknown problem ${problem}`);
+  return { error: { problem, status: PROBLEMS[problem].status, message, ...(field ? { field } : {}), ...(retryAfter ? { retryAfter } : {}) } };
+};
 /** @param {string} message @param {number} retryAfter seconds */
-const limited = (message, retryAfter) => fail('rate-limited', 429, message, undefined, retryAfter);
-const invalid = (message, field) => fail('invalid-request', 422, message, field);
-const missing = (what) => fail('not-found', 404, `There is no such ${what} here.`);
+const limited = (message, retryAfter) => fail('rate-limited', message, undefined, retryAfter);
+const invalid = (message, field) => fail('invalid-request', message, field);
+const missing = (what) => fail('not-found', `There is no such ${what} here.`);
 
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/;
@@ -38,9 +45,11 @@ const nameOf = (value) => {
   return name.length >= 1 && name.length <= MAX_NAME ? name : null;
 };
 const colourOf = (value) => (typeof value === 'string' && COLOUR.test(value) ? value.toLowerCase() : null);
-/** An integer in [min, max], `fallback` when absent, or null. */
+const DIGITS = /^[0-9]+$/;
+/** An integer in [min, max], `fallback` when absent, or null. A string counts only as plain digits: not "1e1", "0x10" or " 5". */
 const intIn = (value, min, max, fallback) => {
   if (value === undefined) return fallback;
+  if (typeof value === 'string' && !DIGITS.test(value)) return null;
   const n = typeof value === 'string' ? Number(value) : value;
   return Number.isInteger(n) && n >= min && n <= max ? n : null;
 };
@@ -91,8 +100,8 @@ export function assignTransponder(request, { code: rawCode, driverId }) {
   return { value: { code, driverId } };
 }
 
-/** @type {Record<string, [string, number]>} */
-const TRACK_PROBLEMS = { invalid: ['invalid-request', 422], 'not-a-circuit': ['not-a-circuit', 422], unavailable: ['planner-unavailable', 502] };
+/** @type {Record<string, string>} */
+export const TRACK_PROBLEMS = { invalid: 'invalid-request', 'not-a-circuit': 'not-a-circuit', unavailable: 'planner-unavailable' };
 
 export async function setTrack(request, { link, name: rawName, direction }) {
   if (!DIRECTIONS.includes(direction)) return invalid('Pick the direction you race.', 'direction');
@@ -104,8 +113,7 @@ export async function setTrack(request, { link, name: rawName, direction }) {
     track = await fetchTrack(request.plannerUrl, link.trim(), { fetch: request.fetch });
   } catch (caught) {
     if (!(caught instanceof TrackError)) throw caught;
-    const [problem, status] = TRACK_PROBLEMS[caught.code];
-    return fail(problem, status, caught.message, 'link');
+    return fail(TRACK_PROBLEMS[caught.code], caught.message, 'link');
   }
   const ws = request.workspaceId;
   request.store.setTrack(ws, { ...track, name }, direction);
@@ -148,7 +156,7 @@ export function startSession(request, { kind, roster, durationSeconds, countdown
   const countdown = intIn(countdownSeconds, 0, 30, 10);
   if (countdown === null) return invalid('The countdown is 0 to 30 seconds.', 'countdown');
   const result = request.engine.start(request.workspaceId, { kind, roster, durationMs: duration * 1000, countdownMs: kind === 'race' ? countdown * 1000 : 0 });
-  if (result.error) return fail('conflict', 409, 'A qualifying or race is already running here.');
+  if (result.error) return fail('conflict', 'A qualifying or race is already running here.');
   return { value: publicSession(result.session) };
 }
 

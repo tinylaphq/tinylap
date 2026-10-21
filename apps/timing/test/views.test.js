@@ -22,6 +22,15 @@ test('templates nest, arrays join, empties vanish', () => {
 test('safe() passes trusted markup through', () => {
   assert.equal(String(html`<p>${safe('<br>')}</p>`), '<p><br></p>');
   assert.equal(safe('<i>').text, '<i>');
+  assert.equal(String(html`<p>${safe(null)}${safe(undefined)}</p>`), '<p></p>');
+});
+
+test('made markup cannot be changed afterwards', () => {
+  for (const made of [html`<p>x</p>`, safe('<p>x</p>')]) {
+    assert.ok(Object.isFrozen(made));
+    assert.throws(() => { made.text = '<script>'; }, TypeError);
+    assert.equal(String(made), '<p>x</p>');
+  }
 });
 
 import { copyable, textField } from '../server/views/form-parts.js';
