@@ -6,6 +6,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFrameReader, frames } from '@tinylap/timing';
+import { simulatedPort } from '../public/sim-port.js';
+import { fakeHidDevice } from '../public/sim/hid-device.js';
+import { fakeSerialPort } from '../public/sim/serial-port.js';
 import { simulation } from '../public/sim/models.js';
 import { easylapModel } from '../public/sim/models/easylap.js';
 import { tinylapModel } from '../public/sim/models/tinylap.js';
@@ -82,4 +85,56 @@ test('the EasyLap model sends heartbeats and passings, answers a start with 00, 
   const bad = createFrameReader();
   bad.push(Uint8Array.from(easylapModel({ cars: 0, corrupt: true }).tick(1000).flatMap((f) => [...f])));
   assert.ok(bad.mismatches > 0);
+});
+
+const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+
+test('the fake serial port streams what its model sends and hands it what is written', async () => {
+  const port = fakeSerialPort(tinylapModel({ cars: 0 }), { tickMs: 5 });
+  await port.open();
+  const reader = port.readable.getReader();
+  const writer = port.writable.getWriter();
+  await writer.write(enc('%C&'));
+  assert.equal(new TextDecoder().decode((await reader.read()).value), '%A&');
+  port.send(enc('%T1F4&'));
+  assert.equal(new TextDecoder().decode((await reader.read()).value), '%T1F4&');
+  port.unplug();
+  assert.equal((await reader.read()).done, true);
+  await port.close();
+});
+
+test('sim-port.js is the TinyLap model on the fake serial port', () => {
+  assert.deepEqual(simulatedPort().getInfo(), { usbVendorId: 0x1209, usbProductId: 0x0001, simulated: true });
+});
+
+test('the fake HID device needs the CP2110 config and enable, reports in 1 to 63 bytes, and checks report ids', async () => {
+  const hid = new EventTarget();
+  const device = fakeHidDevice(easylapModel({ cars: 0, heartbeatMs: 5 }), { hid, tickMs: 5 });
+  const reports = [];
+  device.addEventListener('inputreport', (e) => reports.push(e));
+  await device.open();
+  await assert.rejects(device.sendReport(3, frames.start), /UART is off/);
+  await device.sendFeatureReport(0x50, Uint8Array.of(0, 0, 0x96, 0, 0, 0, 2, 0));
+  await device.sendFeatureReport(0x41, Uint8Array.of(1));
+  await wait(30);
+  assert.equal(reports.length, 0, 'nothing with a wrong UART config');
+  await device.sendFeatureReport(0x50, Uint8Array.of(0, 0, 0x96, 0, 0, 0, 3, 0));
+  await device.sendFeatureReport(0x41, Uint8Array.of(1));
+  await wait(50);
+  assert.ok(reports.length > 0);
+  assert.ok(reports.every((r) => r.reportId >= 1 && r.reportId <= 63 && (r.data.byteLength === r.reportId || r.data.byteLength === 63)));
+  assert.ok(reports.some((r) => r.data.byteLength === 63) && reports.some((r) => r.data.byteLength === r.reportId), 'padded and exact reports');
+  await assert.rejects(device.sendReport(4, frames.start), /number of bytes/);
+  await device.sendReport(3, frames.start);
+  assert.deepEqual(device.writes, [[3, 0xb9, 1]]);
+  const gone = [];
+  hid.addEventListener('disconnect', (e) => gone.push(e.device));
+  device.unplug();
+  assert.deepEqual(gone, [device]);
+  await device.close();
+});
+
+test('the fake HID device can refuse to open', async () => {
+  const device = fakeHidDevice(easylapModel(), { failOpen: true });
+  await assert.rejects(device.open(), (e) => e.name === 'NotAllowedError');
 });

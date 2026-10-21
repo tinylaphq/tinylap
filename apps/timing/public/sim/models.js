@@ -5,8 +5,10 @@
 // The simulated decoders a bridge page can use (decoders spec §5.4):
 // ?simulate=tinylap|zround|easylap, ?simulate and ?simulate=fast for TinyLap,
 // and &speed=fast for a 2 s lap. A later model (AMB, say) is one more entry.
+import { fakeHidDevice } from './hid-device.js';
 import { easylapModel } from './models/easylap.js';
 import { tinylapModel } from './models/tinylap.js';
+import { fakeSerialPort } from './serial-port.js';
 import { zroundModel } from './models/zround.js';
 
 export const MODELS = Object.freeze({
@@ -27,4 +29,14 @@ export function simulation(search) {
   }
   const fast = value === 'fast' || params.get('speed') === 'fast';
   return { name: /** @type {keyof typeof MODELS} */ (name), transport: MODELS[name].transport, lapMs: fast ? 2000 : 8000 };
+}
+
+/**
+ * A fresh simulated device for one pick (spec §5.4): every pick is a new device, so an unplug and
+ * Connect again is one too. @param {{ name: keyof typeof MODELS, transport: 'serial' | 'hid', lapMs: number }} sim
+ * @param {{ hid?: EventTarget }} [options]
+ */
+export function simulatedDevice(sim, { hid } = {}) {
+  const model = MODELS[sim.name].create({ lapMs: sim.lapMs });
+  return sim.transport === 'serial' ? fakeSerialPort(model) : fakeHidDevice(model, { hid });
 }
