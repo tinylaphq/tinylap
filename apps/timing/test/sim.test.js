@@ -88,6 +88,11 @@ test('the EasyLap model sends heartbeats and passings, answers a start with 00, 
 });
 
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+const waitFor = async (condition, deadlineMs = 2000) => {
+  for (const start = Date.now(); !condition(); await wait(5)) {
+    if (Date.now() - start > deadlineMs) throw new Error('Timed out waiting for the condition.');
+  }
+};
 
 test('the fake serial port streams what its model sends and hands it what is written', async () => {
   const port = fakeSerialPort(tinylapModel({ cars: 0 }), { tickMs: 5 });
@@ -174,21 +179,20 @@ test('the fake HID device streams only while configured and enabled, and its rep
   await device.open();
   await config(device, good);
   await enable(device, true);
-  await wait(40);
-  assert.ok(received.length > 0, 'streams once enabled');
+  await waitFor(() => received.length > 0);
   await enable(device, false);
   await wait(15);
   const stopped = received.length;
   await wait(40);
   assert.equal(received.length, stopped, 'nothing after a stop');
   await enable(device, true);
-  await wait(150); // the model keeps its beat count, so the restarted clock has to catch up first
-  assert.ok(received.length > stopped, 'streams again after re-enabling');
+  // The model keeps its beat count, so the restarted clock has to catch up first.
+  await waitFor(() => received.length > stopped + 10);
   await device.close();
 
   // The reports, trimmed to their report id, are the model's bytes: no byte lost, doubled or reordered.
   const reader = createFrameReader();
-  const items = reader.push(Uint8Array.from(received.flatMap((r) => [...new Uint8Array(r.data.buffer, 0, r.reportId)])));
+  const items = reader.push(Uint8Array.from(received.flatMap((r) => [...new Uint8Array(r.data.buffer, r.data.byteOffset, r.reportId)])));
   assert.ok(items.filter((x) => x.type === 'heartbeat').length >= 3);
   assert.equal(reader.mismatches, 0);
 });
