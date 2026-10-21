@@ -158,6 +158,18 @@ test('%I& is retried with a new boot each time; after the last one the state sta
   await b.bridge.close();
 });
 
+test('a %TLID after the first %I& makes the decoder TinyLap: no further %I&', async () => {
+  const rig = modelPort(plain({ ignoresStarts: 3 }));
+  const { bridge } = bridgeOn(rig);
+  await bridge.start();
+  await until(() => count(rig.writes, commands.reset) === 1);
+  rig.say('%TLID dec_1 b00tb00t&');
+  await until(() => bridge.kind === 'tinylap');
+  await wait(FAST.startMs * 3);
+  assert.equal(count(rig.writes, commands.reset), 1);
+  await bridge.close();
+});
+
 test('a quiet running decoder, whose first clock comes after a while but before startMs, gets one %I&', async () => {
   // Scaled: RiCino's first clock at 5 s against startMs 6 s (spec §2.4, R1).
   const rig = modelPort(plain({ clockEveryMs: 120 }));
