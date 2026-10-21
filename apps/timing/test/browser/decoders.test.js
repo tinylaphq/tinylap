@@ -351,9 +351,26 @@ async function busyAndMine(t, page, member, space) {
 test('D5: a decoder seen in the last 2 minutes is in use, by the server\'s clock; the remembered one says so but stays enabled', async (t) => {
   const { page, member, space } = await fresh(t);
   await page.addInitScript(() => { const real = Date.now; Date.now = () => real() + 600_000; });
+  const idle = await (await app.api(member, 'POST', `/workspaces/${space}/decoders`, { name: 'Idle' })).json();
   const { busy, mine } = await busyAndMine(t, page, member, space);
+  // The Date header has whole seconds, so "just seen" would pass even with a zero window: pin 30 s and 3 min instead.
+  await page.route('**/workspaces/*/decoders', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const res = await route.fetch();
+    const body = await res.json();
+    const now = Date.parse(res.headers().date);
+    for (const d of body.decoders) {
+      if (d.id === busy.id) d.lastSeenAt = now - 30_000;
+      if (d.id === idle.id) d.lastSeenAt = now - 180_000;
+    }
+    const headers = res.headers();
+    delete headers['content-length'];
+    return route.fulfill({ status: res.status(), headers, body: JSON.stringify(body) });
+  });
   await toChoose(page, 'Is this Mine?');
   const option = (id) => page.locator(`#bridge-choose option[value="${id}"]`);
+  assert.equal(await option(idle.id).innerText(), 'Idle');
+  assert.equal(await option(idle.id).isDisabled(), false);
   assert.equal(await option(busy.id).innerText(), 'Busy (in use)');
   assert.equal(await option(busy.id).isDisabled(), true);
   assert.equal(await option(mine.id).innerText(), 'Mine (in use)');
