@@ -125,8 +125,7 @@ test('the fake HID device needs the CP2110 config and enable, reports in 1 to 63
   assert.equal(reports.length, 0, 'nothing with a wrong UART config');
   await device.sendFeatureReport(0x50, Uint8Array.of(0, 0, 0x96, 0, 0, 0, 3, 0));
   await device.sendFeatureReport(0x41, Uint8Array.of(1));
-  await wait(50);
-  assert.ok(reports.length > 0);
+  await waitFor(() => reports.length >= 4);
   assert.ok(reports.every((r) => r.reportId >= 1 && r.reportId <= 63 && (r.data.byteLength === r.reportId || r.data.byteLength === 63)));
   assert.ok(reports.some((r) => r.data.byteLength === 63) && reports.some((r) => r.data.byteLength === r.reportId), 'padded and exact reports');
   await assert.rejects(device.sendReport(4, frames.start), /number of bytes/);
