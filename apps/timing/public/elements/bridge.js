@@ -138,10 +138,10 @@ async function pick(which) {
  * firmware could report a chip id to tell decoders of one model apart.
  * `transport` is the last one picked, for "Connect again". `list` is this connect's decoder list (null
  * when it couldn't be fetched), `remembered` the decoder this browser remembers for the device, and
- * `devices` the store it came from.
+ * `devices` the store it came from. `connecting` is true from a click until its bridge exists.
  * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any,
  *   transport: 'serial' | 'hid' | null, list: { decoders: { id: string, name: string, lastSeenAt: number | null }[], serverNow: number | null } | null,
- *   remembered: string | null, devices: any }} Run
+ *   remembered: string | null, devices: any, connecting: boolean }} Run
  */
 
 class TlBridge extends HTMLElement {
@@ -155,7 +155,7 @@ class TlBridge extends HTMLElement {
     if (this.run) return;
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root || !supported) return;
-    const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null };
+    const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false };
     this.run = run;
     this.reset(run);
     for (const which of /** @type {const} */ (['serial', 'hid'])) {
@@ -348,31 +348,59 @@ class TlBridge extends HTMLElement {
 
   /** @param {Run} run @param {'serial' | 'hid' | 'last'} which */
   async connect(run, which) {
+    // One connect at a time until its bridge exists: a second click would put a second bridge on the picked port.
+    if (run.connecting) return;
+    run.connecting = true;
+    const next = await this.prepare(run, which).finally(() => { run.connecting = false; });
+    if (!next) return;
+    try {
+      await next.start();
+      if (run !== this.run) await next.close();
+    } catch (caught) {
+      await next.close();
+      if (run.bridge === next) run.bridge = null;
+      if (run === this.run) this.show(run, 'connect');
+      throw caught;
+    }
+  }
+
+  /** Picks the device and makes its bridge, or null when the picker was closed or the run ended. @param {Run} run @param {'serial' | 'hid' | 'last'} which */
+  async prepare(run, which) {
     const chosen = which === 'last' ? run.transport ?? 'serial' : which;
     const transport = await pick(chosen);
-    if (run !== this.run) return;
-    if (!transport) return;
+    if (run !== this.run) return null;
+    if (!transport) return null;
     run.transport = chosen;
     if (run.made && run.made.device !== transport.device) this.forget(run);
     await run.bridge?.close();
+    if (run !== this.run) return null;
+    // From the pick on, the page says it is connecting, while the stores and the decoder list load.
+    this.show(run, 'connecting');
     const [outbox, devices, list] = await Promise.all([openOutbox(), openDevices(), decoderList(run.root)]);
-    if (run !== this.run) return;
+    if (run !== this.run) return null;
     const remembered = await quietly(devices.recall(run.workspaceId, transport.device));
-    if (run !== this.run) return;
+    if (run !== this.run) return null;
     Object.assign(run, { devices, list, remembered });
-    await this.refreshChoose(run);
-    if (run !== this.run) return;
+    // In parallel with the start; the choose form waits for it.
+    const refreshed = this.refreshChoose(run);
     const protocol = chosen === 'hid' ? robitronicProtocol() : zroundProtocol();
     const next = new Bridge({ link: { transport, protocol }, outbox, post, openDelayMs: chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
     next.addEventListener('state', () => {
       if (run.bridge !== next) return;
       const state = next.state === 'idle' ? 'connecting' : next.state;
-      if (state === 'choose') this.fillChoose(run);
-      this.show(run, state);
-      if (state === 'choose' && this.$(run, '#bridge-choose').value) /** @type {HTMLElement} */ (this.$(run, '[data-bridge-choose] button[type="submit"]')).focus();
+      if (state !== 'choose') {
+        this.show(run, state);
+        return;
+      }
+      void refreshed.then(() => {
+        if (run.bridge !== next || next.state !== 'choose') return;
+        this.fillChoose(run);
+        this.show(run, 'choose');
+        if (this.$(run, '#bridge-choose').value) /** @type {HTMLElement} */ (this.$(run, '[data-bridge-choose] button[type="submit"]')).focus();
+      });
     });
     next.addEventListener('identity-changed', () => {
-      if (run === this.run) void quietly(run.devices.forget(run.workspaceId, next.device));
+      if (run.bridge === next) void quietly(run.devices.forget(run.workspaceId, next.device));
     });
     next.addEventListener('noise', () => {
       if (run.bridge === next && next.state === 'listening') this.unreadable(run);
@@ -384,16 +412,7 @@ class TlBridge extends HTMLElement {
       if (run.bridge === next) this.update(run);
     });
     run.bridge = next;
-    this.show(run, 'connecting');
-    try {
-      await next.start();
-      if (run !== this.run) await next.close();
-    } catch (caught) {
-      await next.close();
-      if (run.bridge === next) run.bridge = null;
-      if (run === this.run) this.show(run, 'connect');
-      throw caught;
-    }
+    return next;
   }
 
   /**
@@ -507,6 +526,8 @@ class TlBridge extends HTMLElement {
         id = made.id;
         run.names.set(id, made.name);
       }
+      // A late %TLID can make it a TinyLap decoder meanwhile: that one says who it is, so nothing is remembered.
+      if (run.bridge !== bridge || !BROWSER_ASSIGNED.has(bridge.kind)) return;
       await quietly(run.devices.remember(run.workspaceId, bridge.device, id));
       if (run !== this.run || run.bridge !== bridge) return;
       await bridge.assign(id);

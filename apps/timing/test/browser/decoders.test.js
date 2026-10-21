@@ -258,6 +258,30 @@ test('D2: a remembered decoder is confirmed, not forwarded silently', async (t) 
   assert.deepEqual(errors, []);
 });
 
+test('D2c: a replaced bridge\'s late identity change forgets nothing the new connect remembered', async (t) => {
+  const { page, errors, space } = await fresh(t);
+  await page.addInitScript(UNPLUG);
+  await openZround(t, page);
+  await toChoose(page);
+  await page.getByLabel('Name for the new decoder').fill('Gate');
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  await page.evaluate(() => {
+    /** @type {any} */ (window).__old = /** @type {any} */ (document.querySelector('tl-bridge')).run.bridge;
+    /** @type {any} */ (window).__unplug();
+  });
+  await page.getByRole('button', { name: 'Connect again' }).waitFor();
+  await toChoose(page, 'Is this Gate?');
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  await page.evaluate(() => /** @type {any} */ (window).__old.dispatchEvent(new Event('identity-changed')));
+  // Shows that no forget lands late.
+  await page.waitForTimeout(300);
+  const remembered = await page.evaluate(async ([w, d]) => (await (await import('/public/devices.js')).openDevices()).recall(w, d), [space, ZROUND_DEVICE]);
+  assert.equal(remembered, decoderNamed(space, 'Gate').id);
+  assert.deepEqual(errors, []);
+});
+
 test('D2b: when the page can\'t be refreshed for a decoder made since it loaded, the form still opens, with nothing preselected', async (t) => {
   const { page, errors, member, space } = await fresh(t);
   await openZround(t, page);

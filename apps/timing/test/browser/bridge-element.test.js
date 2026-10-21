@@ -228,17 +228,23 @@ test('E3b: a removal during the start writes nothing and closes the port it open
   await page.evaluate(() => {
     const el = document.querySelector('tl-bridge');
     window.__el = el;
-    const connecting = el.querySelector('[data-bridge-state="connecting"]');
-    const watch = new MutationObserver(() => {
-      if (connecting.hidden) return;
-      watch.disconnect();
-      el.remove();
-      window.__atRemoval = [...el.querySelectorAll('[data-bridge-state]:not([hidden])')].map((x) => x.getAttribute('data-bridge-state'));
-    });
-    watch.observe(connecting, { attributes: true, attributeFilter: ['hidden'] });
+    // Removed as the bridge's start opens the port.
+    const real = navigator.serial.requestPort;
+    navigator.serial.requestPort = async (...args) => {
+      const port = await real(...args);
+      const open = port.open.bind(port);
+      port.open = (...options) => {
+        el.remove();
+        window.__atRemoval = [...el.querySelectorAll('[data-bridge-state]:not([hidden])')].map((x) => x.getAttribute('data-bridge-state'));
+        return open(...options);
+      };
+      return port;
+    };
     /** @type {HTMLElement} */ (el.querySelector('[data-bridge-connect]')).click();
   });
-  await page.waitForTimeout(1000);
+  await page.waitForFunction(() => window.__cancelled === 1);
+  // Shows that nothing is written, nor shown, after the removal.
+  await page.waitForTimeout(500);
   const state = await page.evaluate(`({
     opened: window.__opened,
     cancelled: window.__cancelled,
@@ -395,20 +401,29 @@ test('E3c: a removal while the decoder-list GET is held opens nothing', async (t
   release();
   await page.waitForTimeout(1000);
   assert.equal((await counts(page)).opened, 0);
-  assert.deepEqual(await page.evaluate(`(${shownIn})(window.__el)`), ['connect']);
+  assert.deepEqual(await page.evaluate(`(${shownIn})(window.__el)`), ['connecting'], 'as it was at the removal: connecting shows from the pick on');
   assert.deepEqual(errors, []);
 });
 
 test('E4d: a move puts the choose form back as the server rendered it', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
-  const busy = await (await app.api(member, 'POST', `/workspaces/${personal}/decoders`, { name: 'Busy' })).json();
-  await app.api(member, 'POST', `/decoders/${busy.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] });
+  const seen = async (name) => {
+    const d = await (await app.api(member, 'POST', `/workspaces/${personal}/decoders`, { name })).json();
+    await app.api(member, 'POST', `/decoders/${d.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] });
+    return d;
+  };
+  const busy = await seen('Busy');
+  const mine = await seen('Mine 4d');
   simulating(t, 'zround,fast');
   await page.goto('/personal/bridge');
+  await page.evaluate(async ([w, id]) => (await (await import('/public/devices.js')).openDevices()).remember(w, 'serial:1027:24577', id), [personal, mine.id]);
+  await page.reload();
   await page.getByRole('button', { name: 'Connect decoder' }).click();
-  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
+  await page.getByRole('heading', { name: 'Is this Mine 4d?' }).waitFor({ timeout: 30_000 });
   assert.equal(await page.locator(`#bridge-choose option[value="${busy.id}"]`).isDisabled(), true);
+  assert.equal(await page.locator('#bridge-choose').inputValue(), mine.id);
+  assert.equal(await page.locator(`#bridge-choose option[value="${mine.id}"]`).innerText(), 'Mine 4d (in use)');
   await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
   await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
   const form = await page.evaluate(() => ({
@@ -451,5 +466,38 @@ test('E6c: a choose POST that lands after a move writes nothing: no remember, no
   assert.equal(await page.getByText('Forwarding from Late plain').count(), 0);
   const remembered = await page.evaluate(async (w) => (await (await import('/public/devices.js')).openDevices()).recall(w, 'serial:1027:24577'), personal);
   assert.equal(remembered, null);
+  assert.deepEqual(errors, []);
+});
+
+test('E3e: a double click on Connect, and a click while the decoder-list GET is held, pick once and make one bridge; connecting shows meanwhile', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route('**/workspaces/*/decoders', async (route) => { if (route.request().method() === 'GET') await held; await route.continue(); });
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.evaluate(() => {
+    Object.assign(window, { __picks: 0, __opens: 0 });
+    const real = navigator.serial.requestPort;
+    navigator.serial.requestPort = async (...args) => {
+      window.__picks += 1;
+      const port = await real(...args);
+      const open = port.open.bind(port);
+      port.open = (...options) => { window.__opens += 1; return open(...options); };
+      return port;
+    };
+  });
+  const listed = page.waitForRequest((r) => r.method() === 'GET' && /^\/workspaces\/[^/]+\/decoders$/.test(new URL(r.url()).pathname));
+  await page.getByRole('button', { name: 'Connect decoder' }).dblclick();
+  await listed;
+  assert.deepEqual(await page.evaluate(`(${shownIn})(document.querySelector('tl-bridge'))`), ['connecting'], 'connecting shows while the GET is held');
+  await page.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('[data-bridge-connect="serial"]')).click());
+  release();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
+  // Shows that no second pick or open comes late.
+  await page.waitForTimeout(500);
+  assert.deepEqual(await page.evaluate(() => [window.__picks, window.__opens]), [1, 1]);
   assert.deepEqual(errors, []);
 });
