@@ -14,8 +14,14 @@ test('remember, recall and forget a device\'s decoder, per club or personal spac
   assert.equal(await devices.recall('w2', 'serial:1027:24577'), null);
   await devices.remember('w1', 'serial:1027:24577', 'dec_2');
   assert.equal(await devices.recall('w1', 'serial:1027:24577'), 'dec_2');
+  // Different device in the same workspace is kept separate
+  await devices.remember('w1', 'serial:9999:99999', 'dec_other');
+  assert.equal(await devices.recall('w1', 'serial:9999:99999'), 'dec_other');
+  assert.equal(await devices.recall('w1', 'serial:1027:24577'), 'dec_2');
+  // forget leaves other keys alone
   await devices.forget('w1', 'serial:1027:24577');
   assert.equal(await devices.recall('w1', 'serial:1027:24577'), null);
+  assert.equal(await devices.recall('w1', 'serial:9999:99999'), 'dec_other');
 });
 
 test('without IndexedDB the devices fall back to memory', async () => {

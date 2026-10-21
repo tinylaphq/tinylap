@@ -34,8 +34,8 @@ function inTransaction(db, mode, fn) {
     const tx = db.transaction(STORE, mode);
     const request = fn(tx.objectStore(STORE));
     tx.oncomplete = () => resolve(request ? request.result : undefined);
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
+    tx.onerror = (event) => reject(event.target.error ?? tx.error);
+    tx.onabort = (event) => reject(event.target.error ?? tx.error);
   });
 }
 
@@ -44,10 +44,24 @@ export async function openDevices(name = 'tinylap-bridge-devices') {
   let db;
   try {
     db = await new Promise((resolve, reject) => {
+      let timer;
       const request = indexedDB.open(name, 1);
       request.onupgradeneeded = () => request.result.createObjectStore(STORE);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        clearTimeout(timer);
+        resolve(request.result);
+      };
+      request.onerror = () => {
+        clearTimeout(timer);
+        reject(request.error);
+      };
+      request.onblocked = () => {
+        clearTimeout(timer);
+        reject(new Error('IndexedDB open blocked'));
+      };
+      timer = setTimeout(() => {
+        reject(new Error('IndexedDB open timeout'));
+      }, 1000);
     });
   } catch {
     return memoryDevices();
