@@ -8,7 +8,7 @@
 // { status, headers, stream(req, res) } and write the body itself (SSE).
 import { rateLimiter } from '@tinylap/auth';
 import { problem } from './responses.js';
-import { INSTALL_PATH } from './simulate.js';
+import { isInstallPath } from './simulate.js';
 import { staticFiles } from './static.js';
 import { routes as defaultRoutes } from './routes.js';
 
@@ -71,7 +71,7 @@ async function dispatch(request, routes, serveStatic) {
     const { credentials, ...rest } = response;
     return { ...rest, headers: withRouteHeaders(route, response.headers, credentials) };
   }
-  if (!request.settings.simulate && INSTALL_PATH.test(url.pathname)) {
+  if (!request.settings.simulate && isInstallPath(url.pathname)) {
     return { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }, body: 'not found' };
   }
   return serveStatic(req, url);

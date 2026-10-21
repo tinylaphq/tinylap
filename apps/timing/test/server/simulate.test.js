@@ -4,8 +4,9 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { readSimulate } from '../../server/simulate.js';
-import { startTiming } from './helpers.js';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { appDir, startTiming } from './helpers.js';
+import { isInstallPath, readSimulate } from '../../server/simulate.js';
 
 let app;
 let member;
@@ -13,7 +14,18 @@ before(async () => {
   app = await startTiming();
   member = await app.login(await app.signUp('Ana'));
 });
-after(() => app.close());
+// install.js arrives with the simulators; a stand-in lets the gate be tested against a file that exists.
+const FIXTURE = `${appDir}/public/sim/install.js`;
+const planted = !existsSync(FIXTURE);
+before(() => {
+  if (planted) {
+    writeFileSync(FIXTURE, '// test stand-in\n');
+  }
+});
+after(() => {
+  if (planted) rmSync(FIXTURE, { force: true });
+  return app.close();
+});
 
 test('readSimulate takes <model>[,fast], and nothing else', () => {
   for (const value of ['tinylap', 'zround,fast', 'easylap', 'easylap,fast']) assert.equal(readSimulate(value), value);
@@ -39,4 +51,21 @@ test('the install script is on the bridge page exactly while the setting is on, 
     app.simulate = null;
   }
   assert.doesNotMatch(await page(), /sim\/install\.js/);
+});
+
+const VARIANTS = ['/public/sim/install.js', '/public/sim//install.js', '/public//sim/install.js', '/public/sim/install%2Ejs', '/public/sim/../sim/install.js', '/public/sim/INSTALL.js'];
+
+test('the gate holds for every spelling that reaches the file: 404 while off, served while on', async () => {
+  for (const path of VARIANTS) assert.equal((await fetch(`${app.base}${path}`)).status, 404, `${path} off`);
+  app.simulate = 'tinylap';
+  try {
+    for (const path of VARIANTS.slice(0, 5)) assert.equal((await fetch(`${app.base}${path}`)).status, 200, `${path} on`);
+  } finally {
+    app.simulate = null;
+  }
+});
+
+test('isInstallPath sees through decoding, repeated slashes, dot segments, case and the /v/<sha>/ prefix', () => {
+  for (const path of [...VARIANTS, '/v/abc123/public/sim/install.js', '/v/abc123/public/sim//install%2ejs']) assert.equal(isInstallPath(path), true, path);
+  for (const path of ['/public/sim/other.js', '/public/elements/bridge.js', '/public/sim/install.json', '/x/public/sim/install.js', '/%E0%A4%A']) assert.equal(isInstallPath(path), false, path);
 });

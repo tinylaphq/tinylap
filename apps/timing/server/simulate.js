@@ -6,9 +6,23 @@
 // zround or easylap. With it, the layout loads public/sim/install.js, which stands in for Web Serial's
 // and WebHID's pickers. Production never sets it.
 
+import { posix } from 'node:path';
+
 const FORMAT = /^(tinylap|zround|easylap)(,fast)?$/;
-/** The one file that changes a page's platform: served only while the setting is on. */
-export const INSTALL_PATH = /\/public\/sim\/install\.js$/;
+/**
+ * The one file that changes a page's platform: served only while the setting is on. Tested the way
+ * static serving resolves a path (decoded, normalized, case-blind for case-insensitive disks), so no
+ * spelling, `//`, `%2E`, `..` or /v/<build>/ prefix, reaches it. @param {string} pathname
+ */
+export function isInstallPath(pathname) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return false;
+  }
+  return /^(\/v\/[^/]+)?\/public\/sim\/install\.js$/i.test(posix.normalize(decoded));
+}
 
 /** The setting, checked; null when unset or empty. @param {string | null | undefined} value */
 export function readSimulate(value) {
