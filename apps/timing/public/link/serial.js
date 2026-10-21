@@ -51,6 +51,12 @@ export function serialTransport(port) {
         cancelled = true;
         await reader.cancel().catch(() => {});
       }
+      // A SerialPort won't close while a stream is locked.
+      try {
+        reader?.releaseLock();
+      } catch {
+        // Already released.
+      }
       try {
         writer?.releaseLock();
       } catch {
