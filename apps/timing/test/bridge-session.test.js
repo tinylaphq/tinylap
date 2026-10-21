@@ -399,7 +399,7 @@ test('no write after close', async () => {
   assert.equal(calls, n);
 });
 
-test('Review focus 4: a choice made after the device was unplugged is refused', async () => {
+test('a choice made after the device was unplugged is refused', async () => {
   const rig = modelPort(plain({ clockEveryMs: 50 }));
   const { bridge } = bridgeOn(rig);
   await bridge.start();
@@ -570,16 +570,20 @@ test('a late %TLID in choose drops the held passings (F2), and a passing after i
   await bridge.close();
 });
 
-test('the plain path sends exactly three hellos, helloEveryMs apart', async () => {
+test('the plain path sends exactly three hellos, helloEveryMs apart', async (t) => {
+  // The third hello is due about 200 ms after the first, well inside the 600 ms window.
+  const timing = { helloMs: 600, helloEveryMs: 100 };
   const rig = modelPort(plain({ waitsForStart: false, clockEveryMs: 30 }));
-  const { bridge } = bridgeOn(rig);
+  const { bridge } = bridgeOn(rig, timing);
+  // Closed even when an assertion fails, so its timers can't keep the test process alive.
+  t.after(() => bridge.close());
   await bridge.start();
   await until(() => bridge.state === 'choose');
-  await wait(200);
+  // Shows that no fourth hello comes.
+  await wait(300);
   const hellos = rig.writes.filter((w) => w.text === commands.hello);
   assert.equal(hellos.length, 3);
-  for (let i = 1; i < 3; i += 1) assert.ok(hellos[i].at - hellos[i - 1].at >= FAST.helloEveryMs - 2, 'helloEveryMs apart');
-  await bridge.close();
+  for (let i = 1; i < 3; i += 1) assert.ok(hellos[i].at - hellos[i - 1].at >= timing.helloEveryMs - 2, 'helloEveryMs apart');
 });
 
 test('at most 500 passings are held: the oldest go first', async () => {

@@ -142,7 +142,7 @@ test('Risk 3: open then close, without ever reading, leaves the port closed and 
   assert.equal(rig.port.isOpen(), true);
 });
 
-test('Review focus 1: a serial read that rejects ends the bytes, not in an unhandled rejection', async () => {
+test('a serial read that rejects ends the bytes, not in an unhandled rejection', async () => {
   const rig = recordingPort();
   const transport = serialTransport(rig.port);
   await transport.open({ baudRate: 19200 });
@@ -167,7 +167,7 @@ test('the ZRound reader maps every message to a session event, alive first', () 
   ]);
 });
 
-test('Review focus 2: bytes that aren\'t UTF-8, or a % with no real message, never make a ZRound decoder alive', () => {
+test('bytes that aren\'t UTF-8, or a % with no real message, never make a ZRound decoder alive', () => {
   const chunked = zroundProtocol();
   const split = [...chunked.push(Uint8Array.of(0xff, 0xfe, 0x25, 0xc3)), ...chunked.push(Uint8Array.of(0xa9, 0x26))];
   assert.deepEqual(split, [{ type: 'noise', detail: '\u00e9' }], '%é& with the é split across chunks');
