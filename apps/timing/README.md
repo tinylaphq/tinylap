@@ -14,7 +14,7 @@ Timing always needs sign-in. Run accounts, the planner and timing side by side. 
       TINYLAP_FEED_TOKEN=timing-dev TINYLAP_TOKEN_KEYS=dev:$(openssl rand -base64 32) \
       TINYLAP_PLANNER_URL=http://localhost:8000 pnpm dev:timing
 
-Open http://localhost:8100 and sign in. Without hardware: Setup → "Pair over Wi-Fi only", then `node tools/decoder-sim.js net --url http://localhost:8100 --decoder <id> --token <token>`, or the bridge with a simulated decoder at http://localhost:8100/personal/bridge?simulate=fast.
+Open http://localhost:8100 and sign in. Without hardware: Setup → "Pair over Wi-Fi only", then `node tools/decoder-sim.js net --url http://localhost:8100 --decoder <id> --token <token>`, or the bridge with a simulated decoder: start the server with `TINYLAP_SIMULATE=tinylap,fast` (or `zround,fast`, `easylap,fast`) and open http://localhost:8100/personal/bridge.
 
 Tests: `pnpm --filter @tinylap/timing-app test`; in Chrome, `pnpm --filter @tinylap/timing-app test:browser`.
 

@@ -441,3 +441,104 @@ test('Review focus 3: "Use this decoder" clicked twice makes one decoder', async
   await page.getByText('Forwarding from Once', { exact: true }).first().waitFor();
   assert.deepEqual(app.store.decoders(space).map((d) => d.name), ['Once']);
 });
+
+test('D6a: an EasyLap (setting easylap,fast) is chosen and forwards, with its 24-bit codes as hex', async (t) => {
+  const { page, errors } = await fresh(t);
+  simulating(t, 'easylap,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.locator('[data-bridge-kind]').innerText(), "An EasyLap can't keep a pairing. This browser remembers which decoder it is for your personal space.");
+  await page.getByLabel('Name for the new decoder').fill('Lap box');
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await page.getByText('Forwarding from Lap box', { exact: true }).first().waitFor();
+  const code = page.locator('[data-bridge-preview] li .bridge-code').first();
+  await code.waitFor({ timeout: 30_000 });
+  assert.match(await code.innerText(), /^A1B2[CDE]$/);
+  assert.deepEqual(errors, []);
+});
+
+test('D6b: the CP2110 is configured, then enabled, and a removal disables its UART', async (t) => {
+  const { page } = await fresh(t);
+  await page.addInitScript(HID, {});
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  assert.deepEqual(await page.evaluate(() => /** @type {any} */ (window).__device.log.slice(0, 2)), [[0x50, 0x00, 0x00, 0x96, 0x00, 0x00, 0x00, 0x03, 0x00], [0x41, 0x01]]);
+  await page.evaluate(() => document.querySelector('tl-bridge').remove());
+  await page.waitForFunction(() => JSON.stringify(/** @type {any} */ (window).__device.log.at(-1)) === '[65,0]');
+});
+
+test('Review focus 5: an EasyLap unplugged while forwarding says so, with what a replug costs', async (t) => {
+  const { page } = await fresh(t);
+  await page.addInitScript(HID, {});
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  await page.getByLabel('Name for the new decoder').fill('Lap box');
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await page.getByText('Forwarding from Lap box', { exact: true }).first().waitFor();
+  await page.evaluate(() => /** @type {any} */ (window).__device.unplug());
+  await page.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor();
+  assert.equal(await page.getByText("Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.").isVisible(), true);
+});
+
+test('Review: an EasyLap that sends only corrupt frames ends in listening with the unreadable note, never the choose form', async (t) => {
+  const { page, errors } = await fresh(t);
+  await page.addInitScript(HID, { corrupt: true });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.locator('[data-bridge-unreadable]', { hasText: "Data is coming, but it can't be read. Report this device." }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.locator('[data-bridge-state="listening"]').isVisible(), true);
+  // The note shows only when the element sees mismatches > 0 (bridge.js unreadable()).
+  await page.waitForTimeout(3000);
+  assert.equal(await page.getByRole('heading', { name: 'Which decoder is this?' }).isVisible(), false);
+  assert.equal(await page.locator('[data-bridge-unreadable]').isVisible(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('Review: Try another device after an EasyLap picks over HID once more, and no third time', async (t) => {
+  const { page, errors } = await fresh(t);
+  await page.addInitScript(HID, { corrupt: true });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.locator('[data-bridge-unreadable]').waitFor({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Try another device' }).click();
+  await page.waitForFunction(() => /** @type {any} */ (window).__picks === 2, null, { timeout: 20_000 });
+  await page.waitForTimeout(1500);
+  assert.equal(await page.evaluate(() => /** @type {any} */ (window).__picks), 2);
+  assert.deepEqual(errors, []);
+});
+
+test('Review: a TinyLap decoder that disconnects keeps the gap note hidden', async (t) => {
+  const { page } = await fresh(t);
+  await page.addInitScript(UNPLUG);
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor({ timeout: 20_000 });
+  await page.getByLabel('Decoder name').fill('Gate');
+  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  await page.evaluate(() => /** @type {any} */ (window).__unplug());
+  await page.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor();
+  assert.equal(await page.locator('[data-bridge-gap]').isVisible(), false);
+});
+
+test('Review: a plain ZRound decoder that disconnects while still undecided shows no gap note', async (t) => {
+  const { page } = await fresh(t);
+  await page.addInitScript(() => {
+    /** @type {any} */ (window).__picks = 0;
+    Object.defineProperty(navigator, 'serial', { configurable: true, value: { requestPort: async () => {
+      /** @type {any} */ (window).__picks += 1;
+      const readable = new ReadableStream({ start: (c) => { /** @type {any} */ (window).__unplug = () => c.close(); } });
+      return { readable, writable: new WritableStream(), open: async () => {}, close: async () => {}, getInfo: () => ({ usbVendorId: 0x1a86, usbProductId: 0x7523 }) };
+    } } });
+  });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByText('Connected, but nothing has come from this device yet.').waitFor({ timeout: 20_000 });
+  await page.evaluate(() => /** @type {any} */ (window).__unplug());
+  await page.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor({ timeout: 10_000 });
+  assert.equal(await page.locator('[data-bridge-gap]').isVisible(), false);
+});
