@@ -2,12 +2,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The bridge (spec §5): a decoder on USB, read with Web Serial, forwarded
+// The bridge (spec §5): a decoder on USB, read through a transport and a protocol reader (decoders spec §2), forwarded
 // to the server with the member's session. It asks the decoder who it is
 // (%TLHELLO&) — again whenever its clock goes back, a reboot — so its passings carry the same key as the copies the decoder
 // sends over Wi-Fi, pairs unpaired decoders, keeps an outbox while offline,
 // and computes laps locally for an instant preview.
-import { MAX_BATCH, ZROUND_BAUD, commands, createReader, nextLap } from '@tinylap/timing';
+import { MAX_BATCH, commands, nextLap } from '@tinylap/timing';
+import { serialTransport } from './link/serial.js';
+import { zroundProtocol } from './link/zround.js';
+
+const encode = (line) => new TextEncoder().encode(line);
 
 export class Bridge extends EventTarget {
   #replies = [];
@@ -15,11 +19,12 @@ export class Bridge extends EventTarget {
   #retryTimer = null;
   #flushing = null;
   #again = false;
-  #writer = null;
-  #reader = null;
   #closed = false;
   /** The last %T…& clock the decoder sent. @type {number | null} */
   #clock = null;
+  /** @type {any} */ transport;
+  /** @type {any} */ protocol;
+  /** @type {any} */ device;
   /** @type {any} */ port;
   /** @type {ReturnType<typeof import('./outbox.js').memoryOutbox>} */ outbox;
   /** @type {(decoderId: string, batch: any) => Promise<{ through: number | null }>} */ post;
@@ -28,13 +33,15 @@ export class Bridge extends EventTarget {
   /** @type {number} */ replyMs;
 
   /**
-   * @param {{ port: any, outbox: ReturnType<typeof import('./outbox.js').memoryOutbox>,
+   * @param {{ link?: { transport: any, protocol: any } | null, port?: any, outbox: ReturnType<typeof import('./outbox.js').memoryOutbox>,
    *   post: (decoderId: string, batch: { boot: string, passings: { transponder: string, t: number }[] }) => Promise<{ through: number | null }>,
    *   helloMs?: number, retryMs?: number, replyMs?: number }} options
    */
-  constructor({ port, outbox, post, helloMs = 2000, retryMs = 5000, replyMs = 3000 }) {
+  constructor({ link = null, port = null, outbox, post, helloMs = 2000, retryMs = 5000, replyMs = 3000 }) {
     super();
-    Object.assign(this, { port, outbox, post, helloMs, retryMs, replyMs });
+    const { transport, protocol } = link ?? { transport: serialTransport(port), protocol: zroundProtocol() };
+    Object.assign(this, { transport, protocol, port, outbox, post, helloMs, retryMs, replyMs });
+    this.device = transport.device;
     this.state = 'idle';
     this.decoder = null;
     this.boot = null;
@@ -60,13 +67,13 @@ export class Bridge extends EventTarget {
     this.dispatchEvent(new Event('online'));
   }
 
-  async #write(line) {
-    await this.#writer.write(new TextEncoder().encode(line));
+  /** @param {Uint8Array} bytes */
+  async #write(bytes) {
+    await this.transport.write(bytes);
   }
 
   async start() {
-    await this.port.open({ baudRate: ZROUND_BAUD });
-    this.#writer = this.port.writable.getWriter();
+    await this.transport.open({ baudRate: this.protocol.baudRate });
     void this.#read();
     await this.hello();
     void this.flush();
@@ -79,42 +86,29 @@ export class Bridge extends EventTarget {
     this.#helloTimer = setTimeout(() => {
       if (this.state === 'connecting') this.#set('not-tinylap');
     }, this.helloMs);
-    await this.#write(commands.hello);
+    await this.#write(encode(commands.hello));
   }
 
   async #read() {
-    const lines = createReader();
-    const text = new TextDecoder();
-    this.#reader = this.port.readable.getReader();
     try {
-      for (;;) {
-        const { value, done } = await this.#reader.read();
-        if (done) break;
-        for (const message of lines.push(text.decode(value, { stream: true }))) {
+      for await (const bytes of this.transport.bytes()) {
+        for (const event of this.protocol.push(bytes)) {
           try {
-            await this.#handle(message);
+            await this.#handle(event);
           } catch (error) {
             // A handler failure (say the outbox can't store) is not a lost port: say so and keep reading.
             this.#setOnline(false, error);
           }
         }
       }
-    } catch {
-      // The port went away; answered below.
     } finally {
-      this.#reader.releaseLock();
-      try {
-        this.#writer?.releaseLock();
-      } catch {
-        // Already released.
-      }
       clearTimeout(this.#helloTimer);
       if (!this.#closed) this.#set('disconnected');
     }
   }
 
   async #handle(message) {
-    if (message.type === 'hello') {
+    if (message.type === 'identity') {
       clearTimeout(this.#helloTimer);
       if (message.boot !== this.boot) {
         this.references.clear();
@@ -131,7 +125,7 @@ export class Bridge extends EventTarget {
       if (back) await this.hello();
     } else if (message.type === 'ok' || message.type === 'error') {
       this.#replies.shift()?.(message);
-    } else if (message.type === 'lap' && this.state === 'ready') {
+    } else if (message.type === 'passing' && this.state === 'ready') {
       const passing = { decoder: this.decoder, boot: this.boot, transponder: message.transponder, t: message.t };
       const step = nextLap(this.references.get(message.transponder) ?? null, { boot: this.boot, t: message.t });
       this.references.set(message.transponder, step.reference);
@@ -162,11 +156,11 @@ export class Bridge extends EventTarget {
   /** Stores the decoder's id and token on the board (and Wi-Fi, if given), then asks again who it is. */
   async pair(decoderId, token, wifi = null) {
     let reply = this.#reply();
-    await this.#write(commands.pair(decoderId, token));
+    await this.#write(encode(commands.pair(decoderId, token)));
     await reply;
     if (wifi) {
       reply = this.#reply();
-      await this.#write(commands.wifi(wifi.ssid, wifi.password));
+      await this.#write(encode(commands.wifi(wifi.ssid, wifi.password)));
       await reply;
     }
     await this.hello();
@@ -208,9 +202,7 @@ export class Bridge extends EventTarget {
     this.#closed = true;
     clearTimeout(this.#retryTimer);
     clearTimeout(this.#helloTimer);
-    await this.#reader?.cancel().catch(() => {});
-    this.#writer?.releaseLock();
-    await this.port.close().catch(() => {});
+    await this.transport.close();
   }
 }
 
