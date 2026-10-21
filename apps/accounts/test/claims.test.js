@@ -49,7 +49,7 @@ async function login(userId) {
   return oidc.authorizationCodeGrant(config, new URL(res.headers.get('location')), { pkceCodeVerifier, expectedNonce, expectedState }, { resource: accounts.client.resource });
 }
 
-/** @returns {{ id: string, role: string, name: string, kind: string }[]} */
+/** @returns {{ id: string, role: string, name: string, kind: 'personal' | 'club' }[]} */
 const claimOf = (tokens) => /** @type {any} */ (decodeJwt(tokens.access_token).workspaces);
 
 async function setUp() {

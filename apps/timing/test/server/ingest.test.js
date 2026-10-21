@@ -61,10 +61,17 @@ test('wrong, foreign, malformed and revoked tokens are refused', async () => {
 });
 
 test('the bridge path needs a member of the decoder\'s workspace, from the app', async () => {
+  // Signed out or not allowed may change with the next sign-in, so the bridge keeps the passings: 401 and 403.
   await problemOf(await app.api(null, 'POST', `/decoders/${gate.id}/passings`, batch), 401, 'unauthorized');
-  await problemOf(await app.api(stranger, 'POST', `/decoders/${gate.id}/passings`, batch), 401, 'unauthorized');
-  await problemOf(await app.api(member, 'POST', '/decoders/nope/passings', batch), 401, 'unauthorized');
+  await problemOf(await app.api(null, 'POST', '/decoders/nope/passings', batch), 401, 'unauthorized');
+  await problemOf(await app.api(stranger, 'POST', `/decoders/${gate.id}/passings`, batch), 403, 'forbidden');
   await problemOf(await app.api(member, 'POST', `/decoders/${gate.id}/passings`, batch, { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }), 403, 'forbidden');
+  await problemOf(await app.api(member, 'POST', '/decoders/nope/passings', batch, { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }), 403, 'forbidden');
+  // A decoder that doesn't exist (never paired, or removed) never will: 404, and the bridge drops them.
+  await problemOf(await app.api(member, 'POST', '/decoders/nope/passings', batch), 404, 'not-found');
+  const temp = await (await app.api(member, 'POST', `/workspaces/${office.id}/decoders`, {})).json();
+  assert.equal((await app.api(member, 'DELETE', `/workspaces/${office.id}/decoders/${temp.id}`)).status, 204);
+  await problemOf(await app.api(member, 'POST', `/decoders/${temp.id}/passings`, batch), 404, 'not-found');
 });
 
 test('bad batches are refused whole', async () => {

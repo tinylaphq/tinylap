@@ -100,13 +100,18 @@ test('a bad form comes back with one summary and what was chosen', async () => {
 
 test('a bad minutes or countdown value says what is allowed and keeps the input', async () => {
   const [a] = app.store.drivers(office.id);
-  for (const duration of ['abc', '1e3', '-5', '0.0001']) {
+  for (const duration of ['abc', '1e3', '1e1', '0x10', ' 5', '-5', '0.0001']) {
     const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', duration], ['countdown', '10']]);
     assert.equal(res.status, 422, duration);
     const body = await res.text();
     assert.match(body, /<p class="status status-error" role="alert"><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/p>/, duration);
     assert.match(body, /id="race-duration"[^>]*aria-invalid="true"/, duration);
     if (duration !== 'abc') assert.match(body, new RegExp(`id="race-duration"[^>]*value="${duration}"`), duration);
+  }
+  for (const countdown of ['1e1', '0x10', ' 5']) {
+    const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '5'], ['countdown', countdown]]);
+    assert.equal(res.status, 422, countdown);
+    assert.match(await res.text(), /<a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a>/, countdown);
   }
   const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '5'], ['countdown', '2.5']]);
   assert.equal(res.status, 422);

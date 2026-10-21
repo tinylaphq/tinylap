@@ -141,7 +141,7 @@ test('E1b: passings an earlier visit left go to the server once', async (t) => {
     if (res.request().method() === 'POST' && new URL(res.url()).pathname.endsWith('/passings')) posts.push([new URL(res.url()).pathname, res.status()]);
   });
   await page.reload();
-  await page.locator('[data-bridge-earlier]', { hasText: '1 passing from earlier is waiting. Sending them now…' }).waitFor();
+  await page.locator('[data-bridge-earlier]', { hasText: '1 passing from earlier is waiting in this browser, from any club or personal space. Sending them now…' }).waitFor();
   const answered = page.waitForResponse((res) => res.request().method() === 'POST' && new URL(res.url()).pathname.endsWith('/passings'));
   release();
   await answered;

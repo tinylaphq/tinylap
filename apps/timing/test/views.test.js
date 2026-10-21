@@ -22,6 +22,15 @@ test('templates nest, arrays join, empties vanish', () => {
 test('safe() passes trusted markup through', () => {
   assert.equal(String(html`<p>${safe('<br>')}</p>`), '<p><br></p>');
   assert.equal(safe('<i>').text, '<i>');
+  assert.equal(String(html`<p>${safe(null)}${safe(undefined)}</p>`), '<p></p>');
+});
+
+test('made markup cannot be changed afterwards', () => {
+  for (const made of [html`<p>x</p>`, safe('<p>x</p>')]) {
+    assert.ok(Object.isFrozen(made));
+    assert.throws(() => { made.text = '<script>'; }, TypeError);
+    assert.equal(String(made), '<p>x</p>');
+  }
 });
 
 import { copyable, textField } from '../server/views/form-parts.js';
@@ -57,4 +66,15 @@ test('a copyable value: the Copy button and its hint are hidden until tl-copy sh
 test('a copyable field wraps its input, not its label', () => {
   const out = String(textField({ id: 'w', label: 'Link', name: 'link', value: 'https://x', readonly: true, copy: true }));
   assert.match(out, /<label for="w">Link<\/label>\s*<tl-copy class="copy"><input type="text" id="w"[^>]*readonly>/);
+});
+
+import { notFoundPage, startPage } from '../server/views/notice.js';
+
+test('signed out, the start page has one Sign in, in its card; other pages keep the navbar one', () => {
+  const signedOut = (path) => ({ session: null, url: new URL(path, 'https://timing.example') });
+  const start = String(startPage(signedOut('/')));
+  assert.equal(start.match(/>Sign in</g)?.length, 1);
+  assert.match(start, /<a class="btn btn-primary" href="\/auth\/login\?returnTo=%2F">Sign in<\/a>/);
+  assert.doesNotMatch(start, /nav-sign-in/);
+  assert.match(String(notFoundPage(signedOut('/nope'))), /<a class="btn btn-sm btn-outline nav-sign-in" href="\/auth\/login\?returnTo=%2Fnope">Sign in<\/a>/);
 });

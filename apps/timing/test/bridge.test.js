@@ -91,20 +91,132 @@ test('a device that does not answer is not a TinyLap decoder; a lost port is dis
   await until(() => bridge.state === 'disconnected');
 });
 
-test('a group the server refuses for good does not block the others', async () => {
+test('a group the server refuses for good is dropped and does not block the others', async () => {
   const outbox = memoryOutbox();
   await outbox.add({ decoder: 'd1', boot: 'b1', transponder: '0A', t: 1 });
   await outbox.add({ decoder: 'd2', boot: 'b2', transponder: '0B', t: 2 });
   const posted = [];
   const bridge = new Bridge({ port: fakePort(null).port, outbox, retryMs: 10_000, post: async (decoder, batch) => {
-    if (decoder === 'd1') throw Object.assign(new Error('no'), { status: 401 });
+    if (decoder === 'd1') throw Object.assign(new Error('no'), { status: 404 });
     posted.push(decoder);
     return { through: batch.passings.at(-1).t };
   } });
   await bridge.flush();
   assert.deepEqual(posted, ['d2']);
-  assert.deepEqual((await outbox.list()).map((x) => x.decoder), ['d1']);
+  assert.equal(await outbox.count(), 0, 'a refused passing does not wait forever');
   assert.equal(bridge.lastError.message, 'no');
+  assert.equal(bridge.dropped, 1);
+  await bridge.close();
+});
+
+const p = (t, decoder = 'd1') => ({ decoder, boot: 'b1', transponder: '0A', t });
+const failing = (status, message = `answered ${status}`) => Object.assign(new Error(message), { status });
+
+test('only a 404 or a 422 drops the passings: they will never be taken', async () => {
+  for (const status of [404, 422]) {
+    const outbox = memoryOutbox();
+    for (const t of [1000, 2000, 3000]) await outbox.add(p(t));
+    await outbox.add(p(500, 'd2'));
+    const refused = await sendOutbox(outbox, async (decoder, batch) => {
+      if (decoder === 'd1') throw failing(status, 'There is no such decoder.');
+      return { through: batch.passings.at(-1).t };
+    });
+    assert.equal(refused.refusal.message, 'There is no such decoder.');
+    assert.equal(refused.dropped, 3, String(status));
+    assert.equal(await outbox.count(), 0, String(status));
+  }
+});
+
+test('signed out, too large, rate limited, a 5xx or the network: the passings wait for a retry', async () => {
+  const outbox = memoryOutbox();
+  for (const failure of [new Error('offline'), failing(401), failing(413), failing(415), failing(429), failing(500), failing(503)]) {
+    await outbox.add(p(1000));
+    await assert.rejects(sendOutbox(outbox, async () => { throw failure; }), failure);
+    assert.equal(await outbox.count(), 1, failure.message);
+    await outbox.remove([p(1000)]);
+  }
+  assert.deepEqual(await sendOutbox(outbox, async () => ({ through: null })), { refusal: null, dropped: 0, forbidden: null, blocked: 0 });
+});
+
+test('a decoder of a club without access waits, and does not hold up the others', async () => {
+  const outbox = memoryOutbox();
+  await outbox.add(p(1, 'a-other-club'));
+  await outbox.add(p(2, 'a-other-club'));
+  const posted = [];
+  const post = async (decoder, batch) => {
+    posted.push(decoder);
+    if (decoder === 'a-other-club') throw failing(403, 'This decoder is not paired in one of your clubs or your personal space.');
+    return { through: batch.passings.at(-1).t };
+  };
+  for (const t of [10, 20, 30]) {
+    await outbox.add(p(t, 'z-mine'));
+    const sent = await sendOutbox(outbox, post);
+    assert.equal(sent.blocked, 2, 'the other club\'s passings are counted');
+    assert.equal(sent.forbidden.status, 403);
+    assert.deepEqual(sent.dropped, 0);
+    assert.deepEqual((await outbox.list()).map((x) => x.decoder), ['a-other-club', 'a-other-club'], `flush at ${t}: mine went, theirs wait`);
+  }
+  assert.equal(posted.filter((d) => d === 'z-mine').length, 3, 'every flush sends mine');
+});
+
+test('signed out stops the flush at once and keeps everything', async () => {
+  const outbox = memoryOutbox();
+  await outbox.add(p(1, 'a'));
+  await outbox.add(p(2, 'b'));
+  const posted = [];
+  await assert.rejects(sendOutbox(outbox, async (decoder) => { posted.push(decoder); throw failing(401); }), { status: 401 });
+  assert.deepEqual(posted, ['a'], 'every group would fail the same way');
+  assert.equal(await outbox.count(), 2);
+});
+
+test('the bridge is online and counts what waits for a club without access', async () => {
+  const outbox = memoryOutbox();
+  await outbox.add(p(1, 'a-other-club'));
+  await outbox.add(p(2, 'z-mine'));
+  const bridge = new Bridge({ port: fakePort(null).port, outbox, retryMs: 10_000, post: async (decoder, batch) => {
+    if (decoder === 'a-other-club') throw failing(403, 'no access');
+    return { through: batch.passings.at(-1).t };
+  } });
+  await bridge.flush();
+  assert.equal(bridge.online, true);
+  assert.equal(bridge.blocked, 1);
+  assert.equal(bridge.lastError, null, 'nothing was refused for good');
+  assert.deepEqual((await outbox.list()).map((x) => x.decoder), ['a-other-club']);
+  await bridge.close();
+});
+
+test('a failure after a drop still reports the drop', async () => {
+  const outbox = memoryOutbox();
+  await outbox.add(p(1000, 'd1'));
+  await outbox.add(p(2000, 'd2'));
+  const offline = new Error('offline');
+  await assert.rejects(sendOutbox(outbox, async (decoder) => { throw decoder === 'd1' ? failing(404, 'gone') : offline; }), (error) => {
+    assert.equal(error, offline);
+    assert.equal(error.dropped, 1);
+    assert.equal(error.refusal.message, 'gone');
+    return true;
+  });
+  assert.deepEqual((await outbox.list()).map((x) => x.decoder), ['d2']);
+});
+
+test('a drop after an outage is an answer: the bridge is online again and says the outbox changed', async () => {
+  const outbox = memoryOutbox();
+  await outbox.add(p(1000));
+  let down = true;
+  const bridge = new Bridge({ port: fakePort(null).port, outbox, retryMs: 10_000, post: async () => {
+    throw down ? new Error('offline') : failing(404, 'gone');
+  } });
+  await bridge.flush();
+  assert.equal(bridge.online, false);
+  down = false;
+  let changes = 0;
+  bridge.addEventListener('outbox', () => { changes += 1; });
+  await bridge.flush();
+  assert.equal(bridge.online, true);
+  assert.equal(bridge.dropped, 1);
+  assert.equal(bridge.lastError.message, 'gone');
+  assert.ok(changes >= 1);
+  assert.equal(await outbox.count(), 0);
   await bridge.close();
 });
 

@@ -29,10 +29,11 @@ async function start(request) {
   if (error) return error;
   const values = { kind: form.get('kind') ?? '', roster: form.getAll('roster'), duration: form.get('duration') ?? '', countdown: form.get('countdown') ?? '' };
   // A blank box is "use the default" on a form; the operation only takes a missing value.
-  // The box takes whole minutes, as its min and max say.
-  const minutes = values.duration === '' ? undefined : Number(values.duration);
+  // The box takes whole minutes, as its min and max say: plain digits only, not "1e1" or "0x10".
+  const minutes = values.duration === '' ? undefined : /^[0-9]+$/.test(values.duration) ? Number(values.duration) : NaN;
   if (minutes !== undefined && !(Number.isInteger(minutes) && minutes >= 1 && minutes <= 60)) {
-    return renderRace(request, 422, { error: { problem: 'invalid-request', status: 422, field: 'duration', message: 'A session lasts 1 to 60 minutes.' }, values });
+    const { error } = ops.fail('invalid-request', 'A session lasts 1 to 60 minutes.', 'duration');
+    return renderRace(request, error.status, { error, values });
   }
   const result = ops.startSession(request, {
     kind: values.kind,

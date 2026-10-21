@@ -33,11 +33,15 @@ const postPassings = withSession(async (request, match) => {
     decoder = found;
     via = 'net';
   } else {
-    decoder = request.store.decoder(decoderId);
-    if (!request.session || !decoder || !can(request.session.claims, decoder.workspaceId, 'timing.run')) {
-      return refuse('unauthorized', 'This decoder is not paired in one of your clubs or your personal space, or you are not signed in.');
-    }
+    // The bridge keeps passings refused with a 401 or 403 (a new sign-in may send them) and drops
+    // them on a 404: a decoder that doesn't exist never takes them.
+    if (!request.session) return refuse('unauthorized', 'You are not signed in. Sign in to forward passings.');
     if (!request.auth.bff.requireSameOrigin(request.req)) return refuse('forbidden', "Forward passings from the app's own pages.");
+    decoder = request.store.decoder(decoderId);
+    if (!decoder) return refuse('not-found', 'There is no such decoder: it was removed, or never paired.');
+    if (!can(request.session.claims, decoder.workspaceId, 'timing.run')) {
+      return refuse('forbidden', 'This decoder is not paired in one of your clubs or your personal space.');
+    }
     via = 'serial';
   }
   const wait = request.limiters.ingest.take(decoderId);

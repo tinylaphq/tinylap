@@ -101,7 +101,7 @@ test('B2: removing tl-board ends its stream without a reload, and putting it bac
   const streams = boardStreams();
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => { streams.restore(); return context.close(); });
-  await page.addInitScript(() => { /** @type {any} */ (globalThis).tinylapReloadMs = 300; });
+  await page.clock.install();
   let loads = 0;
   page.on('load', () => { loads += 1; });
   await page.goto('/personal/board');
@@ -109,7 +109,8 @@ test('B2: removing tl-board ends its stream without a reload, and putting it bac
 
   await page.evaluate(() => { const board = document.querySelector('tl-board'); /** @type {any} */ (window).board = board; board?.remove(); });
   await until(() => streams.counts.unsubscribed === 1, 'the subscription to end');
-  await page.waitForTimeout(1000);
+  await page.clock.fastForward(11_000); // past the 10 s a closed stream waits before it reloads
+  await page.waitForTimeout(300);
   assert.equal(loads, 1, 'no reload after a disconnect');
 
   await page.evaluate(() => document.querySelector('main')?.append(/** @type {any} */ (window).board));

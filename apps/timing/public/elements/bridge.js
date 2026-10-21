@@ -41,6 +41,26 @@ async function api(method, path, body) {
 
 const post = (decoderId, batch) => api('POST', `/decoders/${encodeURIComponent(decoderId)}/passings`, batch);
 
+/** "1 passing", "2 passings from earlier": the subject of a sentence about `n` passings. @param {number} n @param {string} [from] */
+const passings = (n, from = '') => `${n} ${n === 1 ? 'passing' : 'passings'}${from}`;
+/** Says that `n` passings were refused for good and left the outbox. @param {number} n @param {string} message @param {string} [from] */
+const refusedText = (n, message, from = '') => `${passings(n, from)} ${n === 1 ? 'was' : 'were'} refused and ${n === 1 ? 'is' : 'are'} no longer waiting to send: ${message}`;
+
+/** A 401: signed out, so the passings wait for a new sign-in. */
+const needsSignIn = (error) => error?.status === 401;
+/** Says that `n` passings wait for a club this sign-in has no access to (a 403). Signing in again doesn't help. @param {number} n */
+const blockedText = (n) => `${passings(n)} ${n === 1 ? 'is' : 'are'} for a decoder in a club you don't have access to, so ${n === 1 ? 'it waits' : 'they wait'} here.`;
+
+/**
+ * The device behind a port, as Web Serial shows it: its USB vendor and product ids. Web Serial
+ * exposes no serial number, so two decoders of the same model count as one device.
+ * @param {any} port
+ */
+const deviceOf = (port) => {
+  const { usbVendorId, usbProductId } = port.getInfo?.() ?? {};
+  return `${usbVendorId ?? ''}:${usbProductId ?? ''}`;
+};
+
 const STATE_TEXT = {
   connect: 'Ready to connect.',
   connecting: 'Talking to the decoder.',
@@ -63,7 +83,12 @@ async function pickPort() {
 /**
  * One start's state. `names` maps a decoder id to the name it was paired
  * with; `made` is a decoder the server made but the cable didn't get yet:
- * its token is shown once, so a retry reuses it.
+ * its token is shown once, so a retry reuses it. It is bound to deviceOf:
+ * Web Serial exposes no serial number, so two decoders of the same model
+ * count as one device, and the protection works only between different
+ * models. Re-plugging the same decoder reuses it, which is the intended
+ * trade-off; a future decoder firmware could report a chip id to tell
+ * decoders of one model apart.
  * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any }} Run
  */
 
@@ -143,6 +168,23 @@ class TlBridge extends HTMLElement {
     if (live.textContent !== text) live.textContent = text;
   }
 
+  /** "Sign in again to send them.", with its link, from the server's template. @param {Run} run @returns {Node} */
+  signIn(run) {
+    return /** @type {HTMLTemplateElement} */ (this.$(run, 'template[data-bridge-sign-in]')).content.cloneNode(true);
+  }
+
+  /** Sentences, a space between them. @param {(string | Node)[]} parts */
+  spaced(parts) {
+    return parts.flatMap((part, i) => (i > 0 ? [' ', part] : [part]));
+  }
+
+  /** @param {(string | Node)[]} parts */
+  textOf(parts) {
+    const holder = document.createElement('p');
+    holder.replaceChildren(...this.spaced(parts.map((x) => (typeof x === 'string' ? x : x.cloneNode(true)))));
+    return holder.textContent;
+  }
+
   /** @param {Run} run */
   nameOf(run, id) { return run.names.get(id) ?? `decoder ${String(id).slice(0, 8)}`; }
 
@@ -168,13 +210,21 @@ class TlBridge extends HTMLElement {
     const bridge = run.bridge;
     if (!bridge || bridge.state !== 'ready') return;
     this.$(run, '[data-bridge-status-box]').classList.toggle('is-offline', !bridge.online);
-    const status = bridge.online ? `Forwarding from ${this.nameOf(run, bridge.decoder)}` : `Offline: passings wait here. ${bridge.lastError?.message ?? ''}`.trim();
-    this.$(run, '[data-bridge-status]').textContent = status;
-    this.announce(run, status);
+    const statusLine = this.$(run, '[data-bridge-status]');
+    if (!bridge.online && needsSignIn(bridge.lastError)) {
+      const parts = ['Passings wait here.', "You're signed out.", this.signIn(run)];
+      // Rebuilt only when it changes, so a focused link stays put as passings come in.
+      if (statusLine.textContent !== this.textOf(parts)) statusLine.replaceChildren(...this.spaced(parts));
+    } else {
+      statusLine.textContent = bridge.online ? `Forwarding from ${this.nameOf(run, bridge.decoder)}` : `Offline: passings wait here. ${bridge.lastError?.message ?? ''}`.trim();
+    }
+    this.announce(run, statusLine.textContent);
     if (!run.names.has(bridge.decoder) && !run.asked.has(bridge.decoder)) void this.learnName(run, bridge.decoder);
     const refused = this.$(run, '[data-bridge-refused]');
-    refused.hidden = !(bridge.online && bridge.lastError);
-    refused.textContent = bridge.online && bridge.lastError ? `Some passings were refused: ${bridge.lastError.message}` : '';
+    const told = bridge.online ? [bridge.lastError ? refusedText(bridge.dropped, bridge.lastError.message) : '', bridge.blocked ? blockedText(bridge.blocked) : ''].filter(Boolean).join(' ') : '';
+    refused.hidden = told === '';
+    // Rewritten only when it changes, so the alert isn't announced again with every passing.
+    if (refused.textContent !== told) refused.textContent = told;
     void bridge.outbox.count().then((n) => { if (run === this.run) this.$(run, '[data-bridge-outbox]').textContent = String(n); });
     const list = this.$(run, '[data-bridge-preview]');
     const row = (kind) => /** @type {HTMLTemplateElement} */ (this.$(run, `template[data-bridge-row="${kind}"]`)).content.firstElementChild;
@@ -208,6 +258,7 @@ class TlBridge extends HTMLElement {
     const port = await pickPort();
     if (run !== this.run) return;
     if (!port) return;
+    if (run.made && run.made.device !== deviceOf(port)) this.forget(run);
     await run.bridge?.close();
     const outbox = await openOutbox();
     if (run !== this.run) return;
@@ -235,22 +286,41 @@ class TlBridge extends HTMLElement {
     }
   }
 
-  /** Passings an earlier tab left behind (a reload, a crash) go now, without waiting for the cable. @param {Run} run */
+  /**
+   * Passings an earlier tab left behind (a reload, a crash) go now, without waiting for the cable.
+   * The outbox is this browser's, so the note counts what waits for any club or personal space.
+   * @param {Run} run
+   */
   async sendEarlier(run) {
     const note = this.$(run, '[data-bridge-earlier]');
     const outbox = await openOutbox();
-    const say = (count, why = '') => {
+    /** @param {number} count @param {(string | Node)[]} more */
+    const say = (count, ...more) => {
       if (run !== this.run) return;
-      note.hidden = count === 0;
-      note.textContent = `${count} ${count === 1 ? 'passing' : 'passings'} from earlier ${count === 1 ? 'is' : 'are'} waiting. ${why}`.trim();
-      if (count > 0) this.announce(run, note.textContent);
+      const waiting = count > 0 ? [`${passings(count, ' from earlier')} ${count === 1 ? 'is' : 'are'} waiting in this browser, from any club or personal space.`] : [];
+      note.replaceChildren(...this.spaced([...waiting, ...more]));
+      note.hidden = note.textContent === '';
+      if (!note.hidden) this.announce(run, note.textContent);
     };
     let count = await outbox.count();
     if (count === 0) return;
     say(count, 'Sending them now…');
-    const { refusal } = await sendOutbox(outbox, post, async () => say(await outbox.count(), 'Sending them now…')).catch((caught) => ({ refusal: caught }));
+    // A failure after a drop carries the drop with it (sendOutbox), so the note tells both.
+    const { failure, refusal, dropped, blocked } = await sendOutbox(outbox, post, async () => say(await outbox.count(), 'Sending them now…'))
+      .then((sent) => ({ failure: null, ...sent }), (caught) => ({ failure: caught, refusal: caught?.refusal ?? null, dropped: caught?.dropped ?? 0, blocked: caught?.blocked ?? 0 }));
     count = await outbox.count();
-    say(count, refusal && count ? `They couldn't be sent: ${refusal.message}` : '');
+    /** @type {(string | Node)[]} */
+    const more = [];
+    if (failure && count) more.push(...(needsSignIn(failure) ? ["You're signed out.", this.signIn(run)] : [`They couldn't be sent: ${failure.message}`]));
+    if (blocked) more.push(blockedText(blocked));
+    if (dropped) more.push(refusedText(dropped, refusal.message, ' from earlier'));
+    say(count, ...more);
+  }
+
+  /** Forgets the decoder made for another device; it stays on the server, unpaired. @param {Run} run */
+  forget(run) {
+    run.made = null;
+    /** @type {HTMLInputElement} */ (/** @type {HTMLFormElement} */ (this.$(run, '[data-bridge-pair]')).elements.namedItem('name')).readOnly = false;
   }
 
   /** @param {Run} run @param {HTMLFormElement} pairForm */
@@ -265,7 +335,7 @@ class TlBridge extends HTMLElement {
       if (!run.made) {
         const made = await api('POST', `/workspaces/${encodeURIComponent(run.workspaceId)}/decoders`, { name });
         if (run !== this.run) return;
-        run.made = made;
+        run.made = { ...made, device: deviceOf(run.bridge.port) };
         run.names.set(run.made.id, run.made.name);
         nameField.readOnly = true;
       }
