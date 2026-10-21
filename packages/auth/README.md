@@ -23,6 +23,8 @@ console.log(claims.sub); // user ID
 console.log(claims.workspaces); // [{ id, role, name?, kind? }]
 ```
 
+A workspace's `kind` is `'personal'` for a personal space or `'club'` for a club.
+
 ## `can(claims, workspaceId, action)`
 
 Checks whether the user identified by `claims` has permission to perform `action` in `workspaceId`. Returns `false` if the user is not a member of the workspace, if the action is unknown, or if their role does not allow the action.
