@@ -9,13 +9,14 @@
 // - The handshake: %C& until the decoder answers, then %TLHELLO&, spaced so
 //   RiCino-style firmware reads both, and retried.
 // - A TinyLap decoder says who it is (%TLID): its id and its boot.
-// - A plain ZRound decoder (or an EasyLap, Task 8) can't: the member chooses
+// - A plain ZRound decoder (or an EasyLap, which streams once its UART is on and
+//   gets a start only as a fallback) can't: the member chooses
 //   which decoder it is (assign), and the bridge makes its boots. A plain
 //   decoder that doesn't stream gets %I&, its race start.
 // - Passings wait in memory until the identity is known, then in an outbox
 //   until the server holds them. Laps are computed locally for the preview.
 // - Decoder events, timers and assign() run on one chain, in order.
-import { MAX_BATCH, MIN_LAP_MS, commands, nextLap, passingKey, randomBoot } from '@tinylap/timing';
+import { MAX_BATCH, MIN_LAP_MS, commands, frames, nextLap, passingKey, randomBoot } from '@tinylap/timing';
 import { serialTransport } from './link/serial.js';
 import { zroundProtocol } from './link/zround.js';
 
@@ -25,6 +26,8 @@ const HELD_MAX = 500;
 /** %TLHELLO& at most this often in the handshake, and %I& at most this often (spec §2.4). */
 const HELLOS = 3;
 const STARTS = 3;
+/** The EasyLap start fallback, at most STARTS times, this far apart (spec §2.4). */
+const ROBITRONIC_START_EVERY_MS = 500;
 const BROWSER_ASSIGNED = new Set(['zround', 'easylap']);
 
 /** @typedef {{ boot: string | null, transponder: string, t: number, hits?: number, strength?: number }} Held */
@@ -156,6 +159,16 @@ export class Bridge extends EventTarget {
     return Math.max(0, this.#lastWrite + this.spacingMs - performance.now());
   }
 
+  /** How many frames failed their checksum (only an EasyLap's reader counts them). */
+  get mismatches() {
+    return this.protocol.mismatches ?? 0;
+  }
+
+  /** How many passings wait for the decoder's identity. */
+  get heldCount() {
+    return this.#held.length;
+  }
+
   async start() {
     await this.transport.open({ baudRate: this.protocol.baudRate });
     if (this.#closed) {
@@ -167,8 +180,13 @@ export class Bridge extends EventTarget {
     this.#set('connecting');
     if (this.openDelayMs) await new Promise((done) => setTimeout(done, this.openDelayMs));
     if (this.#ended()) return;
-    this.#later(this.handshakeMs, () => this.#enterListening());
-    await this.#chain(() => this.#syn());
+    if (this.protocol.kind === 'robitronic') {
+      // The EasyLap streams once its UART is on; a start is only a fallback (spec §2.4).
+      this.#later(this.handshakeMs, () => this.#robitronicStart(0));
+    } else {
+      this.#later(this.handshakeMs, () => this.#enterListening());
+      await this.#chain(() => this.#syn());
+    }
     void this.flush();
   }
 
@@ -202,11 +220,14 @@ export class Bridge extends EventTarget {
       clearTimeout(this.#helloTimer);
       this.#timers.delete(this.#helloTimer);
     }
-    this.#helloTimer = this.#later(this.helloMs, () => {
+    const mine = this.#later(this.helloMs, () => {
+      // A hello() queued ahead of this callback made a newer timer: this one is stale and does nothing.
+      if (this.#helloTimer !== mine) return undefined;
       this.#helloTimer = null;
       if (this.state === 'connecting' && this.kind === 'tinylap') return this.hello();
       return undefined;
     });
+    this.#helloTimer = mine;
     await this.#write(encode(commands.hello));
   }
 
@@ -251,6 +272,9 @@ export class Bridge extends EventTarget {
         if (this.kind !== 'tinylap' && this.boot) this.#newBoot();
         return undefined;
       case 'passing': return this.#onPassing(event);
+      case 'noise':
+        if (event.detail === 'checksum') this.dispatchEvent(new Event('noise'));
+        return undefined;
       case 'ok':
       case 'error':
         this.#replies.shift()?.(event);
@@ -260,11 +284,13 @@ export class Bridge extends EventTarget {
   }
 
   #alive() {
-    if (this.#heard) return;
+    if (this.#heard) return undefined;
     this.#heard = true;
-    if (this.kind) return;
+    if (this.protocol.kind === 'robitronic') return this.#decide('easylap');
+    if (this.kind) return undefined;
     if (this.state === 'listening') this.#set('connecting');
     this.#later(this.#spaced(), () => this.#sendHello());
+    return undefined;
   }
 
   /** Up to HELLOS hellos, helloEveryMs apart, stopping at the first %TLID (R7). The first opens the window. */
@@ -287,6 +313,22 @@ export class Bridge extends EventTarget {
     this.kind = kind;
     this.#newBoot();
     this.#set('choose');
+  }
+
+  /**
+   * The Robitronic start, only if no good frame came within handshakeMs: up to three, 500 ms apart, as
+   * FlipSide sends it, then listening (spec §2.4). While the kind is undecided nothing is held, since
+   * a passing needs a good frame, which decides the kind first; so no boot is made for this write.
+   * @param {number} sentSoFar
+   */
+  async #robitronicStart(sentSoFar) {
+    if (this.kind) return;
+    if (sentSoFar === STARTS) {
+      this.#set('listening');
+      return;
+    }
+    await this.#write(frames.start);
+    this.#later(ROBITRONIC_START_EVERY_MS, () => this.#robitronicStart(sentSoFar + 1));
   }
 
   /** %I& to a plain decoder that doesn't stream, up to STARTS times, startMs apart, each after a new boot (C1, R1). */

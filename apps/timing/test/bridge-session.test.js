@@ -7,12 +7,16 @@
 // scaled down; the defaults test pins the real ones.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOOT_ID, commands } from '@tinylap/timing';
+import { BOOT_ID, commands, frames } from '@tinylap/timing';
 import { Bridge } from '../public/bridge.js';
+import { hidTransport } from '../public/link/hid.js';
+import { robitronicProtocol } from '../public/link/robitronic.js';
 import { serialTransport } from '../public/link/serial.js';
 import { zroundProtocol } from '../public/link/zround.js';
 import { memoryOutbox } from '../public/outbox.js';
 import { fakeSerialPort } from '../public/sim/serial-port.js';
+import { fakeHidDevice } from '../public/sim/hid-device.js';
+import { easylapModel } from '../public/sim/models/easylap.js';
 import { tinylapModel } from '../public/sim/models/tinylap.js';
 import { zroundModel } from '../public/sim/models/zround.js';
 
@@ -478,6 +482,37 @@ test('hello() keeps one retry: repeated clock-backs and pairings do not stack he
   await bridge.close();
 });
 
+test('hello(): a retry timer that fired behind a newer hello() does nothing, so no second loop starts', async () => {
+  const rig = modelPort(tinylapModel({ cars: 0, decoder: 'dec_1' }), { drop: (text) => text === commands.hello });
+  const { bridge } = bridgeOn(rig);
+  rig.say('%TLID dec_1 b00tb00t&');
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  // Hold the write of the first hello, so its retry timer fires and queues behind it, and a second hello() (as pair() makes) comes before that callback runs.
+  const write = bridge.transport.write.bind(bridge.transport);
+  let release;
+  const gate = new Promise((done) => { release = done; });
+  let held = false;
+  bridge.transport.write = async (bytes) => {
+    if (!held && new TextDecoder().decode(bytes) === commands.hello) {
+      held = true;
+      await gate;
+    }
+    return write(bytes);
+  };
+  rig.say(commands.clock(5000));
+  rig.say(commands.clock(100));
+  await until(() => held);
+  await wait(FAST.helloMs + 40);
+  await bridge.hello();
+  release();
+  const from = rig.writes.length;
+  await wait(FAST.helloMs * 5);
+  const hellos = count(rig.writes.slice(from), commands.hello);
+  assert.ok(hellos >= 4 && hellos <= 7, `one retry loop: ${hellos} hellos in 5 helloMs`);
+  await bridge.close();
+});
+
 test('close drops the queue: what was waiting on the chain stamps nothing and posts nothing', async () => {
   const inner = memoryOutbox();
   const added = [];
@@ -541,11 +576,92 @@ test('at most 500 passings are held: the oldest go first', async () => {
   rig.say(commands.lap('0A', 1000));
   await until(() => bridge.state === 'choose');
   for (let i = 1; i <= 505; i += 1) rig.say(commands.lap('0A', 1000 + i * 2000));
-  await wait(50);
+  await until(() => bridge.heldCount === 500 && bridge.mismatches === 0 && sent(posts).length === 0);
   await bridge.assign('dec_9');
   await until(() => sent(posts).length === 500);
   const ts = sent(posts).map((p) => p.t).sort((a, b) => a - b);
   assert.equal(ts[0], 1000 + 6 * 2000, 'the first six are dropped');
   assert.equal(ts.at(-1), 1000 + 505 * 2000);
+  await bridge.close();
+});
+
+function hidRig(model, options = {}) {
+  const hid = new EventTarget();
+  const device = fakeHidDevice(model, { hid, tickMs: 10 });
+  const { posts, post } = posting();
+  const bridge = new Bridge({ link: { transport: hidTransport(device, { hid }), protocol: robitronicProtocol() }, outbox: memoryOutbox(), post, ...FAST, ...options });
+  return { device, bridge, posts };
+}
+
+test('an EasyLap: easylap on the first good heartbeat, then it forwards as the chosen decoder, and a heartbeat back is a new boot', async () => {
+  const { device, bridge, posts } = hidRig(easylapModel({ cars: 0, heartbeatMs: 20 }));
+  await bridge.start();
+  await until(() => bridge.state === 'choose');
+  assert.equal(bridge.kind, 'easylap');
+  await bridge.assign('dec_9');
+  device.send(frames.passing(0x123456, 12345, 12, 200));
+  await until(() => sent(posts).length === 1);
+  assert.deepEqual(sent(posts)[0], { decoder: 'dec_9', boot: bridge.boot, transponder: '123456', t: 12345 });
+  const before = bridge.boot;
+  // Each try is a clock far behind the device's own beats; the first one that follows a beat is a clock back.
+  await until(() => {
+    device.send(frames.heartbeat(1));
+    return bridge.boot !== before;
+  });
+  assert.deepEqual(device.writes, [], 'nothing is written while frames come');
+  await bridge.close();
+});
+
+test('an EasyLap frame that fails its checksum never makes a boot and never posts', async () => {
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const { device, bridge, posts } = hidRig(easylapModel({ cars: 0, heartbeatMs: 20 }));
+    const noise = [];
+    bridge.addEventListener('noise', () => noise.push(true));
+    await bridge.start();
+    await until(() => bridge.state === 'choose');
+    await bridge.assign('dec_9');
+    const before = bridge.boot;
+    const back = frames.heartbeat(1);
+    back[1] ^= 0xff;
+    const passing = frames.passing(0x123456, 99_999, 1, 1);
+    passing[1] ^= 0xff;
+    device.send(back);
+    device.send(passing);
+    await until(() => bridge.mismatches >= 2 && noise.length >= 2);
+    assert.equal(bridge.boot, before);
+    assert.equal(posts.length, 0);
+    await bridge.close();
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test('an EasyLap that waits for a start gets 03 B9 01 after handshakeMs, then forwards; a silent one gets three, then listening', async () => {
+  const waiting = hidRig(easylapModel({ cars: 0, waitsForStart: true, heartbeatMs: 20 }), { handshakeMs: 50 });
+  await waiting.bridge.start();
+  await until(() => waiting.bridge.state === 'choose');
+  assert.deepEqual(waiting.device.writes, [[0x03, 0xb9, 0x01]]);
+  await waiting.bridge.close();
+  const quiet = { transport: 'hid', info: { vendorId: 0x10c4, productId: 0x86b9 }, start: () => [], tick: () => [], write: () => [] };
+  const silentLap = hidRig(quiet, { handshakeMs: 50 });
+  await silentLap.bridge.start();
+  await until(() => silentLap.bridge.state === 'listening', 4000);
+  await wait(600);
+  assert.equal(silentLap.device.writes.length, 3);
+  await silentLap.bridge.close();
+});
+
+test('heartbeats are never held: 600 of them during choose drop no passing', async () => {
+  const { device, bridge, posts } = hidRig(easylapModel({ cars: 0, heartbeatMs: 1 }));
+  await bridge.start();
+  await until(() => bridge.state === 'choose');
+  device.send(frames.passing(0x0a1b2c, 50_000, 9, 180));
+  await until(() => bridge.heldCount === 1);
+  await wait(800);
+  await bridge.assign('dec_9');
+  await until(() => sent(posts).length === 1);
+  assert.equal(sent(posts)[0].transponder, 'A1B2C');
   await bridge.close();
 });
