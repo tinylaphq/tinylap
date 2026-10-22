@@ -7,6 +7,7 @@ import { authRoutes } from './auth.js';
 import { controlRoutes } from './control.js';
 import { discoveryRoutes } from './discovery.js';
 import { ingestRoutes } from './ingest.js';
+import { noticeRoutes } from './notices.js';
 import { pageRoutes } from './page-routes.js';
 import { setupRoutes } from './setup.js';
 import { streamRoutes } from './stream.js';
@@ -19,6 +20,7 @@ export const routes = [
   ...setupRoutes,
   ...controlRoutes,
   ...ingestRoutes,
+  ...noticeRoutes,
   ...streamRoutes,
   ...discoveryRoutes,
   // Anything else under the API answers a problem, not the static 404.

@@ -11,6 +11,8 @@
 // (`<id>:<base64 32 bytes>,…`, newest first), TINYLAP_FEED_TOKEN,
 // TINYLAP_PUBLIC_URL (in dev it defaults to http://localhost:<port>), and
 // TINYLAP_PLANNER_URL, the planner tracks are imported from.
+// TINYLAP_NOTICE_TOKEN is optional: the bearer token accounts sends its membership
+// notices with (POST /notices/membership); without it that route answers 404.
 // TINYLAP_SIMULATE (`<model>[,fast]`) puts a simulated decoder behind the bridge's
 // Connect buttons, for development and tests; never set it in production.
 import { createServer } from 'node:http';
@@ -94,6 +96,7 @@ const handler = createHandler({
   clientIpHeader: env.TINYLAP_CLIENT_IP_HEADER,
   build: env.TINYLAP_BUILD,
   settings: { simulate },
+  noticeToken: env.TINYLAP_NOTICE_TOKEN || undefined,
 });
 
 const host = dev ? '127.0.0.1' : '0.0.0.0';

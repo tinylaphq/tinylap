@@ -8,6 +8,7 @@
 // { status, headers, stream(req, res) } and write the body itself (SSE).
 import { rateLimiter } from '@tinylap/auth';
 import { createMemberStreams } from './member-streams.js';
+import { noticeDigest } from './notices.js';
 import { problem } from './responses.js';
 import { isInstallPath } from './simulate.js';
 import { staticFiles } from './static.js';
@@ -86,7 +87,7 @@ const ACCESS_CHECK_MS = 15_000;
 /**
  * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string,
  *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
- *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number }, accessCheckMs?: number,
+ *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number }, accessCheckMs?: number, noticeToken?: string,
  *   streams?: import('./member-streams.js').MemberStreams }} options
  */
 export function createHandler(options) {
@@ -106,6 +107,7 @@ export function createHandler(options) {
     clientIpHeader: options.clientIpHeader?.toLowerCase() || null,
     fetch: options.fetch ?? globalThis.fetch,
     now,
+    noticeDigest: options.noticeToken ? noticeDigest(options.noticeToken) : null,
     streams: options.streams ?? createMemberStreams({ retryMs: options.accessCheckMs ?? ACCESS_CHECK_MS }),
     limiters: {
       // Batches per decoder per minute; a race of 8 cars is a few passings a second.

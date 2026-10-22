@@ -35,7 +35,7 @@ export async function startServer(options = {}) {
  * @param {{ clock?: { now: number }, hostname?: string, env?: Record<string, string>, [key: string]: any }} [options]
  */
 export async function startTiming(options = {}) {
-  const { clock, hostname, env, simulate = null, ...rest } = options;
+  const { clock, hostname, env, simulate = null, noticeToken, ...rest } = options;
   const settings = { simulate: readSimulate(simulate) };
   const now = clock ? () => clock.now : Date.now;
   const store = openStore(':memory:');
@@ -52,7 +52,7 @@ export async function startTiming(options = {}) {
     keys, publicUrl: base, sessions: store.sessions,
     logger: { warn: () => {} },
   });
-  handler = createHandler({ appDir, log: false, store, hub, engine, auth, keys, publicUrl: base, now, settings, ...rest });
+  handler = createHandler({ appDir, log: false, store, hub, engine, auth, keys, publicUrl: base, now, settings, noticeToken, ...rest });
   const db = suite.accounts.db;
 
   /** A new accounts user with their personal space, as a real sign-up makes. */
