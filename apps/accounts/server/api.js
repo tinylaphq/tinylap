@@ -41,6 +41,7 @@ export function problemOf(issuer, error) {
  * @property {boolean} sameOrigin
  * @property {() => boolean} allowRedeem true if the invite rate limit lets it through (else the 429 is sent)
  * @property {boolean} fresh the session was made by a passkey within the fresh window (app.js)
+ * @property {(users: string[]) => void} notify tells the registered clients these users' memberships changed (never awaited)
  * @property {string[]} clearCookie Set-Cookie lines that end this browser's session
  */
 
@@ -64,6 +65,7 @@ const ROUTES = [
   ['GET', /^\/api\/me$/, (_ctx, user) => [200, { id: user.id, name: user.name }]],
   ['DELETE', /^\/api\/me$/, async (ctx, user) => {
     await ws.deleteUser(ctx.db, null, user.id);
+    ctx.notify([user.id]);
     return [204, undefined, { 'Set-Cookie': ctx.clearCookie }];
   }, FRESH],
   ['GET', /^\/api\/me\/export$/, (ctx, user) => [200, exportAccount(ctx.db, user.id), { 'Content-Disposition': 'attachment; filename="tinylap-account.json"' }]],
@@ -76,20 +78,35 @@ const ROUTES = [
   ['POST', /^\/api\/clubs$/, async (ctx, user) => [201, ws.createClub(ctx.db, user.id, (await body(ctx)).name)]],
   ['GET', /^\/api\/clubs\/([^/]+)$/, (ctx, user, [id]) => [200, ws.getWorkspace(ctx.db, user.id, id)]],
   ['PATCH', /^\/api\/clubs\/([^/]+)$/, async (ctx, user, [id]) => [200, ws.renameClub(ctx.db, user.id, id, (await body(ctx)).name)]],
-  ['DELETE', /^\/api\/clubs\/([^/]+)$/, (ctx, user, [id]) => (ws.deleteClub(ctx.db, user.id, id), [204])],
+  ['DELETE', /^\/api\/clubs\/([^/]+)$/, (ctx, user, [id]) => {
+    const members = ws.memberIds(ctx.db, id);
+    ws.deleteClub(ctx.db, user.id, id);
+    ctx.notify(members);
+    return [204];
+  }],
   ['GET', /^\/api\/clubs\/([^/]+)\/members$/, (ctx, user, [id]) => [200, { members: ws.listMembers(ctx.db, user.id, id) }]],
   ['PATCH', /^\/api\/clubs\/([^/]+)\/members\/([^/]+)$/, async (ctx, user, [id, member]) => {
     ws.setRole(ctx.db, user.id, id, member, (await body(ctx)).role);
+    ctx.notify([member]);
     return [200, { members: ws.listMembers(ctx.db, user.id, id) }];
   }],
-  ['DELETE', /^\/api\/clubs\/([^/]+)\/members\/([^/]+)$/, (ctx, user, [id, member]) => (ws.removeMember(ctx.db, user.id, id, member), [204])],
+  ['DELETE', /^\/api\/clubs\/([^/]+)\/members\/([^/]+)$/, (ctx, user, [id, member]) => {
+    ws.removeMember(ctx.db, user.id, id, member);
+    ctx.notify([member]);
+    return [204];
+  }],
   ['POST', /^\/api\/clubs\/([^/]+)\/transfer$/, async (ctx, user, [id]) => {
     const { userId } = await body(ctx);
     if (typeof userId !== 'string') throw new ws.WorkspaceError('invalid', 'Send { "userId": "<member>" }.');
     ws.transferOwnership(ctx.db, user.id, id, userId);
+    ctx.notify([user.id, userId]);
     return [200, { members: ws.listMembers(ctx.db, user.id, id) }];
   }],
-  ['POST', /^\/api\/clubs\/([^/]+)\/leave$/, (ctx, user, [id]) => (ws.leaveClub(ctx.db, user.id, id), [204])],
+  ['POST', /^\/api\/clubs\/([^/]+)\/leave$/, (ctx, user, [id]) => {
+    ws.leaveClub(ctx.db, user.id, id);
+    ctx.notify([user.id]);
+    return [204];
+  }],
   ['GET', /^\/api\/clubs\/([^/]+)\/invites$/, (ctx, user, [id]) => [200, { invites: ws.listInvites(ctx.db, user.id, id) }]],
   ['POST', /^\/api\/clubs\/([^/]+)\/invites$/, async (ctx, user, [id]) => {
     const { singleUse, ttlDays } = await body(ctx);

@@ -10,7 +10,9 @@
 //   TINYLAP_DB          SQLite path (default /data/accounts.sqlite)
 //   BETTER_AUTH_SECRET  at least 32 characters
 //   TINYLAP_CLIENTS     JSON: [{ clientId, clientSecret, redirectUris,
-//                       postLogoutRedirectUris, resource }], all trusted
+//                       postLogoutRedirectUris, resource, noticeUri?,
+//                       noticeToken? }], all trusted. A client that wants
+//                       membership notices sets both noticeUri and noticeToken.
 //   TINYLAP_FEED_TOKENS comma-separated bearer tokens for /deletions
 //   TINYLAP_ACCESS_TTL  access token seconds, dev mode only (tests)
 //   TINYLAP_CLIENT_IP_HEADER  the header a trusted proxy puts the client's
@@ -19,7 +21,8 @@
 
 /**
  * @typedef {{ clientId: string, clientSecret: string, redirectUris: string[],
- *   postLogoutRedirectUris: string[], resource: string, trusted: true }} ClientConfig
+ *   postLogoutRedirectUris: string[], resource: string, noticeUri?: string, noticeToken?: string,
+ *   trusted: true }} ClientConfig
  * @typedef {{ issuer: string, dev: boolean, dbPath: string, secret: string, port: number,
  *   clients: ClientConfig[], feedTokens: string[], accessTtlSeconds: number,
  *   clientIpHeader: string | null }} Config
@@ -71,12 +74,21 @@ function readClients(text, dev) {
     for (const uri of c.redirectUris) checkRedirect(uri, `${where}.redirectUris`, dev);
     for (const uri of postLogout) checkRedirect(uri, `${where}.postLogoutRedirectUris`, dev);
     checkRedirect(c.resource, `${where}.resource`, dev);
+    // The membership notice: where to POST it and the bearer to send, both or neither.
+    if ((c.noticeUri === undefined) !== (c.noticeToken === undefined)) throw new Error(`${where}.noticeUri and ${where}.noticeToken must be set together.`);
+    if (c.noticeUri !== undefined) {
+      if (typeof c.noticeUri !== 'string' || c.noticeUri === '') throw new Error(`${where}.noticeUri must be a URL.`);
+      if (typeof c.noticeToken !== 'string' || c.noticeToken === '') throw new Error(`${where}.noticeToken must be a non-empty string.`);
+      if (c.noticeToken === c.clientSecret) throw new Error(`${where}.noticeToken must not be the client secret.`);
+      checkRedirect(c.noticeUri, `${where}.noticeUri`, dev);
+    }
     return {
       clientId: c.clientId,
       clientSecret: c.clientSecret,
       redirectUris: [...c.redirectUris],
       postLogoutRedirectUris: [...postLogout],
       resource: c.resource,
+      ...(c.noticeUri === undefined ? {} : { noticeUri: c.noticeUri, noticeToken: c.noticeToken }),
       trusted: /** @type {const} */ (true),
     };
   });

@@ -19,9 +19,9 @@ export const PLANNER_CLIENT_SECRET = 's3cret-planner-test';
  * confidential client, `planner-test`, whose redirect URI and resource are
  * on `plannerPort`. `hostname` names the issuer: browser tests need
  * `localhost`, because a WebAuthn RP ID can't be an IP address.
- * @param {{ plannerPort?: number, hostname?: string, env?: Record<string, string> }} [overrides]
+ * @param {{ plannerPort?: number, hostname?: string, env?: Record<string, string>, notice?: { uri: string, token: string } }} [overrides]
  */
-export async function startAccounts({ plannerPort = 9, hostname = '127.0.0.1', env = {} } = {}) {
+export async function startAccounts({ plannerPort = 9, hostname = '127.0.0.1', env = {}, notice } = {}) {
   /** @type {(req: any, res: any) => void} */
   let handler = (_req, res) => res.writeHead(503).end();
   const server = createServer((req, res) => handler(req, res));
@@ -35,6 +35,7 @@ export async function startAccounts({ plannerPort = 9, hostname = '127.0.0.1', e
     redirectUri: `${planner}/auth/callback`,
     postLogoutRedirectUri: `${planner}/`,
     resource: planner,
+    ...(notice ? { noticeUri: notice.uri, noticeToken: notice.token } : {}),
   };
   const config = readConfig({
     TINYLAP_DEV: '1',
@@ -47,6 +48,7 @@ export async function startAccounts({ plannerPort = 9, hostname = '127.0.0.1', e
       redirectUris: [client.redirectUri],
       postLogoutRedirectUris: [client.postLogoutRedirectUri],
       resource: client.resource,
+      ...(notice ? { noticeUri: notice.uri, noticeToken: notice.token } : {}),
     }]),
     TINYLAP_FEED_TOKENS: 'feed-test',
     ...env,

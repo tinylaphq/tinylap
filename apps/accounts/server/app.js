@@ -32,6 +32,7 @@ import { accountPage } from './pages/account.js';
 import { privacyPage } from './pages/privacy.js';
 import { signedOutPage } from './pages/signed-out.js';
 import { listPasskeys, ownedClubs, recoveryCodesLeft } from './account.js';
+import { createNotifier } from './notices.js';
 
 const APP_DIR = fileURLToPath(new URL('..', import.meta.url));
 
@@ -251,6 +252,8 @@ export async function createAccounts(config) {
   // The planner, whose /library/export holds the user's tracks.
   const planner = config.clients.find((c) => c.trusted)?.resource ?? null;
 
+  const notify = createNotifier({ clients: config.clients });
+
   const limiters = Object.fromEntries(Object.entries(LIMITS).map(([name, limit]) => [name, rateLimiter({ limit })]));
   const { issuer } = config;
 
@@ -451,6 +454,7 @@ export async function createAccounts(config) {
         sameOrigin: sameOrigin(req),
         allowRedeem: () => allow(req, res, 'invite', clientOf(req)),
         fresh: isFresh(session),
+        notify,
         clearCookie,
       });
     }

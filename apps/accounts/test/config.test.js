@@ -98,3 +98,15 @@ test('TINYLAP_ACCESS_TTL is honoured only in dev mode', () => {
   assert.throws(() => readConfig(env({ TINYLAP_ACCESS_TTL: '5' })), /TINYLAP_ACCESS_TTL.*TINYLAP_DEV/);
   assert.throws(() => readConfig(env({ ...dev, TINYLAP_ACCESS_TTL: 'soon' })), /TINYLAP_ACCESS_TTL/);
 });
+
+test('noticeUri and noticeToken come together, and noticeUri is checked like resource', () => {
+  const withNotice = (extra) => env({ TINYLAP_CLIENTS: JSON.stringify([{ ...client(), ...extra }]) });
+  const ok = readConfig(withNotice({ noticeUri: 'https://timing.tinylap.test/notices/membership', noticeToken: 'n' }));
+  assert.equal(ok.clients[0].noticeUri, 'https://timing.tinylap.test/notices/membership');
+  assert.equal(ok.clients[0].noticeToken, 'n');
+  assert.throws(() => readConfig(withNotice({ noticeUri: 'https://timing.tinylap.test/n' })), /noticeToken/);
+  assert.throws(() => readConfig(withNotice({ noticeToken: 'n' })), /noticeUri/);
+  assert.throws(() => readConfig(withNotice({ noticeUri: 'http://timing.tinylap.test/n', noticeToken: 'n' })), /https/);
+  assert.throws(() => readConfig(withNotice({ noticeUri: 'https://timing.tinylap.test/n', noticeToken: '' })), /noticeToken/);
+  assert.throws(() => readConfig(withNotice({ noticeUri: 'https://timing.tinylap.test/n', noticeToken: 'planner-secret' })), /secret/);
+});

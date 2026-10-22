@@ -152,6 +152,11 @@ export function listMembers(db, actor, workspaceId) {
     .map((r) => ({ id: String(r.id), name: String(r.name), role: /** @type {Role} */ (r.role) }));
 }
 
+/** The ids of a workspace's members, unchecked: for notices, not for showing. @param {Db} db @param {string} workspaceId */
+export function memberIds(db, workspaceId) {
+  return db.prepare('SELECT user_id FROM membership WHERE workspace_id = ?').all(workspaceId).map((r) => String(r.user_id));
+}
+
 /** What counts toward the invite quota and can still be redeemed. */
 const ACTIVE = 'revoked_at IS NULL AND expires_at > ? AND NOT (single_use = 1 AND used_by IS NOT NULL)';
 
