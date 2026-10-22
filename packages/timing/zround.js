@@ -105,6 +105,8 @@ const hex = (n) => n.toString(16).toUpperCase();
 export const commands = Object.freeze({
   startup: '%C&',
   ack: '%A&',
+  /** Race start: the decoder's clock to zero. A plain ZRound decoder streams only after it (decoders spec §2.4). */
+  reset: '%I&',
   hello: '%TLHELLO&',
   ok: '%TLOK&',
   /** @param {string} decoder @param {string} token */

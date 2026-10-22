@@ -48,7 +48,7 @@ export function layout(request, { title, body, screen = null, scripts = [], modu
 <link rel="stylesheet" href="${asset(request, 'public/app.css')}">
 <link rel="icon" href="${asset(request, 'pkg/design/mark.svg')}" type="image/svg+xml">
 ${safe(SPECULATION_RULES)}
-${importMap}${scripts.map((s) => html`<script type="module" src="${asset(request, `public/${s}`)}"></script>\n`)}${[...menu, ...modules].map((m) => html`<script type="module" src="${asset(request, m)}"></script>\n`)}${head}</head>
+${importMap}${importMap && request.settings?.simulate ? html`<script type="module" src="${asset(request, 'public/sim/install.js')}" data-model="${request.settings.simulate}"></script>\n` : null}${scripts.map((s) => html`<script type="module" src="${asset(request, `public/${s}`)}"></script>\n`)}${[...menu, ...modules].map((m) => html`<script type="module" src="${asset(request, m)}"></script>\n`)}${head}</head>
 <body${big ? html` class="big"` : null}>
 <nav class="navbar">
   ${safe(brand({ href: '/', name: 'TinyLap Timing', markSrc: asset(request, 'pkg/design/mark.svg') }))}

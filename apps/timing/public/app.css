@@ -201,6 +201,9 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 [data-state="error"] .tap-state { background: var(--p-error); color: var(--p-text); }
 .tap-bar:has(#tap-alert > *) .tap-result:empty { display: none; }
 
+/* The two Connect buttons share a line when they fit, and keep a gap when they wrap. */
+p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); }
+
 /* The bridge screen: the status strip is the loud part, like the lamp on a decoder. */
 .bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-surface); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
 .bridge-state p { margin: 0; }

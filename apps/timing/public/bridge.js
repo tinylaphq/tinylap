@@ -2,40 +2,98 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The bridge (spec §5): a decoder on USB, read with Web Serial, forwarded
-// to the server with the member's session. It asks the decoder who it is
-// (%TLHELLO&) — again whenever its clock goes back, a reboot — so its passings carry the same key as the copies the decoder
-// sends over Wi-Fi, pairs unpaired decoders, keeps an outbox while offline,
-// and computes laps locally for an instant preview.
-import { MAX_BATCH, ZROUND_BAUD, commands, createReader, nextLap } from '@tinylap/timing';
+// The bridge (spec §5; decoders spec §2.4): a decoder on USB, read through a
+// transport (Web Serial, or WebHID for an EasyLap) and a protocol reader
+// (ZRound with TinyLap's %TL… commands, or Robitronic), forwarded to the
+// server with the member's session.
+// - The handshake: %C& until the decoder answers, then %TLHELLO&, spaced so
+//   RiCino-style firmware reads both, and retried.
+// - A TinyLap decoder says who it is (%TLID): its id and its boot.
+// - A plain ZRound decoder (or an EasyLap, which streams once its UART is on and
+//   gets a start only as a fallback) can't: the member chooses
+//   which decoder it is (assign), and the bridge makes its boots. A plain
+//   decoder that doesn't stream gets %I&, its race start.
+// - Passings wait in memory until the identity is known, then in an outbox
+//   until the server holds them. Laps are computed locally for the preview.
+// - Decoder events, timers and assign() run on one chain, in order.
+import { MAX_BATCH, MIN_LAP_MS, commands, frames, nextLap, passingKey, randomBoot } from '@tinylap/timing';
+import { serialTransport } from './link/serial.js';
+import { zroundProtocol } from './link/zround.js';
+
+const encode = (line) => new TextEncoder().encode(line);
+/** At most this many passings wait for the decoder's identity, oldest dropped first (spec §2.4). */
+const HELD_MAX = 500;
+/** %TLHELLO& at most this often in the handshake, and %I& at most this often (spec §2.4). */
+const HELLOS = 3;
+const STARTS = 3;
+/** The EasyLap start fallback, at most STARTS times, this far apart (spec §2.4). */
+const ROBITRONIC_START_EVERY_MS = 500;
+const BROWSER_ASSIGNED = new Set(['zround', 'easylap']);
+
+/** @typedef {{ boot: string | null, transponder: string, t: number, hits?: number, strength?: number }} Held */
 
 export class Bridge extends EventTarget {
   #replies = [];
-  #helloTimer = null;
+  /** @type {Set<ReturnType<typeof setTimeout>>} */
+  #timers = new Set();
   #retryTimer = null;
+  /** hello()'s one retry. @type {ReturnType<typeof setTimeout> | null} */
+  #helloTimer = null;
   #flushing = null;
   #again = false;
-  #writer = null;
-  #reader = null;
   #closed = false;
-  /** The last %T…& clock the decoder sent. @type {number | null} */
+  /** The one chain every decoder event, timer and assign() runs on (spec §2.4, R3). @type {Promise<unknown>} */
+  #serial = Promise.resolve();
+  #openedAt = 0;
+  #lastWrite = -Infinity;
+  /** The device answered something in its protocol. */
+  #heard = false;
+  /** The decoder sent a clock or a passing. */
+  #streaming = false;
+  #hellos = 0;
+  #starts = 0;
+  /** The last clock the decoder sent. @type {number | null} */
   #clock = null;
+  /** The latest passing time of this boot, for a browser-assigned decoder (rule 4). @type {number | null} */
+  #latest = null;
+  /** Passings waiting for the decoder's identity. @type {Held[]} */
+  #held = [];
+  /** Keys of the passings this connection stamped with a browser-assigned id. */
+  #stamped = new Set();
+  /** @type {any} */ transport;
+  /** @type {any} */ protocol;
+  /** @type {any} */ device;
   /** @type {any} */ port;
   /** @type {ReturnType<typeof import('./outbox.js').memoryOutbox>} */ outbox;
   /** @type {(decoderId: string, batch: any) => Promise<{ through: number | null }>} */ post;
+  /** @type {number} */ openDelayMs;
+  /** @type {number} */ synMs;
+  /** @type {number} */ handshakeMs;
+  /** @type {number} */ spacingMs;
   /** @type {number} */ helloMs;
+  /** @type {number} */ helloEveryMs;
+  /** @type {number} */ startMs;
+  /** @type {number} */ listenSynMs;
+  /** @type {number} */ listenMs;
+  /** @type {number} */ flushWaitMs;
   /** @type {number} */ retryMs;
   /** @type {number} */ replyMs;
 
   /**
-   * @param {{ port: any, outbox: ReturnType<typeof import('./outbox.js').memoryOutbox>,
+   * @param {{ link?: { transport: any, protocol: any } | null, port?: any, outbox: ReturnType<typeof import('./outbox.js').memoryOutbox>,
    *   post: (decoderId: string, batch: { boot: string, passings: { transponder: string, t: number }[] }) => Promise<{ through: number | null }>,
-   *   helloMs?: number, retryMs?: number, replyMs?: number }} options
+   *   openDelayMs?: number, synMs?: number, handshakeMs?: number, spacingMs?: number, helloMs?: number, helloEveryMs?: number,
+   *   startMs?: number, listenSynMs?: number, listenMs?: number, flushWaitMs?: number, retryMs?: number, replyMs?: number }} options
    */
-  constructor({ port, outbox, post, helloMs = 2000, retryMs = 5000, replyMs = 3000 }) {
+  constructor({ link = null, port = null, outbox, post, openDelayMs = 0, synMs = 500, handshakeMs = 6000, spacingMs = 300, helloMs = 2500,
+    helloEveryMs = 700, startMs = 6000, listenSynMs = 2000, listenMs = 60_000, flushWaitMs = 10_000, retryMs = 5000, replyMs = 3000 }) {
     super();
-    Object.assign(this, { port, outbox, post, helloMs, retryMs, replyMs });
+    const { transport, protocol } = link ?? { transport: serialTransport(port), protocol: zroundProtocol() };
+    Object.assign(this, { transport, protocol, port, outbox, post, openDelayMs, synMs, handshakeMs, spacingMs, helloMs, helloEveryMs, startMs, listenSynMs, listenMs, flushWaitMs, retryMs, replyMs });
+    this.device = transport.device;
     this.state = 'idle';
+    /** @type {'tinylap' | 'zround' | 'easylap' | null} */
+    this.kind = null;
     this.decoder = null;
     this.boot = null;
     this.online = true;
@@ -49,6 +107,8 @@ export class Bridge extends EventTarget {
   }
 
   #set(state) {
+    // A lost port is the end of this session: nothing that was already queued brings it back.
+    if (this.state === 'disconnected') return;
     this.state = state;
     this.dispatchEvent(new Event('state'));
   }
@@ -60,85 +120,330 @@ export class Bridge extends EventTarget {
     this.dispatchEvent(new Event('online'));
   }
 
-  async #write(line) {
-    await this.#writer.write(new TextEncoder().encode(line));
+  /** Runs fn after everything before it on the one chain; the result is fn's. @template T @param {() => T | Promise<T>} fn @returns {Promise<T>} */
+  #chain(fn) {
+    const run = this.#serial.then(fn);
+    this.#serial = run.catch(() => {});
+    return run;
+  }
+
+  /** Nothing is scheduled, and nothing runs, once the session is closed or its port is gone. @param {number} ms @param {() => unknown} fn */
+  #later(ms, fn) {
+    if (this.#ended()) return null;
+    const id = setTimeout(() => {
+      this.#timers.delete(id);
+      if (!this.#ended()) this.#chain(fn).catch((error) => this.#setOnline(false, error));
+    }, ms);
+    this.#timers.add(id);
+    return id;
+  }
+
+  #ended() {
+    return this.#closed || this.state === 'disconnected';
+  }
+
+  #stopTimers() {
+    for (const id of this.#timers) clearTimeout(id);
+    this.#timers.clear();
+  }
+
+  /** Nothing is written after close (I13), nor once the port is gone: a queued item would only throw. @param {Uint8Array} bytes */
+  async #write(bytes) {
+    if (this.#ended()) return;
+    this.#lastWrite = performance.now();
+    await this.transport.write(bytes);
+  }
+
+  /** How long until spacingMs has passed since the last write. */
+  #spaced() {
+    return Math.max(0, this.#lastWrite + this.spacingMs - performance.now());
+  }
+
+  /** How many frames failed their checksum (only an EasyLap's reader counts them). */
+  get mismatches() {
+    return this.protocol.mismatches ?? 0;
+  }
+
+  /** How many passings wait for the decoder's identity. */
+  get heldCount() {
+    return this.#held.length;
   }
 
   async start() {
-    await this.port.open({ baudRate: ZROUND_BAUD });
-    this.#writer = this.port.writable.getWriter();
+    await this.transport.open({ baudRate: this.protocol.baudRate });
+    if (this.#closed) {
+      await this.transport.close();
+      return;
+    }
+    this.#openedAt = performance.now();
     void this.#read();
-    await this.hello();
+    this.#set('connecting');
+    if (this.openDelayMs) await new Promise((done) => setTimeout(done, this.openDelayMs));
+    if (this.#ended()) return;
+    if (this.protocol.kind === 'robitronic') {
+      // The EasyLap streams once its UART is on; a start is only a fallback (spec §2.4).
+      this.#later(this.handshakeMs, () => this.#robitronicStart(0));
+    } else {
+      this.#later(this.handshakeMs, () => this.#enterListening());
+      await this.#chain(() => this.#syn());
+    }
     void this.flush();
   }
 
-  /** Asks the decoder who it is; no answer in time means it isn't a TinyLap decoder. */
+  /** %C& until the decoder answers; while listening, every listenSynMs with a %TLHELLO& after it, until listenMs after open (spec §2.4, R1, R7). */
+  async #syn() {
+    if (this.#heard || this.kind) return;
+    if (performance.now() - this.#openedAt >= this.listenMs) return;
+    await this.#write(encode(commands.startup));
+    if (this.state === 'listening') this.#later(this.spacingMs, () => this.#listenHello());
+    this.#later(this.state === 'listening' ? this.listenSynMs : this.synMs, () => this.#syn());
+  }
+
+  /** No answer within handshakeMs: listening, with a %TLHELLO& for TinyLap firmware that ignores %C&, as today's bridge asked at once. */
+  #enterListening() {
+    if (this.#heard || this.kind) return;
+    this.#set('listening');
+    this.#later(this.#spaced(), () => this.#listenHello());
+  }
+
+  /** One %TLHELLO& while listening, until listenMs after open. A %TLID makes the decoder TinyLap; RiCino ignores it. */
+  async #listenHello() {
+    if (this.#heard || this.kind || performance.now() - this.#openedAt >= this.listenMs) return;
+    await this.#write(encode(commands.hello));
+  }
+
+  /** Asks a TinyLap decoder who it is, again every helloMs until it answers (I5). Also after pairing. */
   async hello() {
     this.#set('connecting');
-    clearTimeout(this.#helloTimer);
-    this.#helloTimer = setTimeout(() => {
-      if (this.state === 'connecting') this.#set('not-tinylap');
-    }, this.helloMs);
-    await this.#write(commands.hello);
+    // One retry at a time: a second clock back or pairing restarts it rather than adding a loop.
+    if (this.#helloTimer) {
+      clearTimeout(this.#helloTimer);
+      this.#timers.delete(this.#helloTimer);
+    }
+    const mine = this.#later(this.helloMs, () => {
+      // A hello() queued ahead of this callback made a newer timer: this one is stale and does nothing.
+      if (this.#helloTimer !== mine) return undefined;
+      this.#helloTimer = null;
+      if (this.state === 'connecting' && this.kind === 'tinylap') return this.hello();
+      return undefined;
+    });
+    this.#helloTimer = mine;
+    await this.#write(encode(commands.hello));
   }
 
   async #read() {
-    const lines = createReader();
-    const text = new TextDecoder();
-    this.#reader = this.port.readable.getReader();
+    let broken = false;
     try {
-      for (;;) {
-        const { value, done } = await this.#reader.read();
-        if (done) break;
-        for (const message of lines.push(text.decode(value, { stream: true }))) {
+      for await (const bytes of this.transport.bytes()) {
+        let events;
+        try {
+          events = this.protocol.push(bytes);
+        } catch (error) {
+          // A reader that can't read the bytes leaves nothing to go on: the session ends, as for a lost port.
+          this.lastError = error;
+          broken = true;
+          break;
+        }
+        for (const event of events) {
           try {
-            await this.#handle(message);
+            await this.#chain(() => this.#handle(event));
           } catch (error) {
             // A handler failure (say the outbox can't store) is not a lost port: say so and keep reading.
             this.#setOnline(false, error);
           }
         }
       }
-    } catch {
-      // The port went away; answered below.
     } finally {
-      this.#reader.releaseLock();
-      try {
-        this.#writer?.releaseLock();
-      } catch {
-        // Already released.
-      }
-      clearTimeout(this.#helloTimer);
+      this.#stopTimers();
       if (!this.#closed) this.#set('disconnected');
+    }
+    if (broken) await this.transport.close().catch(() => {});
+  }
+
+  /** @param {import('@tinylap/timing/types').DecoderEvent} event */
+  async #handle(event) {
+    // close() drops the queue: what was waiting on the chain does nothing (spec §2.4).
+    if (this.#closed) return undefined;
+    switch (event.type) {
+      case 'alive': return this.#alive();
+      case 'identity': return this.#identity(event);
+      case 'clock': return this.#onClock(event.t);
+      case 'reset':
+        if (this.kind !== 'tinylap' && this.boot) this.#newBoot();
+        return undefined;
+      case 'passing': return this.#onPassing(event);
+      case 'noise':
+        if (event.detail === 'checksum') this.dispatchEvent(new Event('noise'));
+        return undefined;
+      case 'ok':
+      case 'error':
+        this.#replies.shift()?.(event);
+        return undefined;
+      default: return undefined;
     }
   }
 
-  async #handle(message) {
-    if (message.type === 'hello') {
-      clearTimeout(this.#helloTimer);
-      if (message.boot !== this.boot) {
-        this.references.clear();
-        this.#clock = null;
-      }
-      this.decoder = message.decoder;
-      this.boot = message.boot;
-      this.#set(message.decoder ? 'ready' : 'unpaired');
-      if (message.decoder) void this.flush();
-    } else if (message.type === 'clock') {
-      // A clock that went back means the decoder rebooted (power, %I&) with the port open: ask who it is now.
-      const back = this.#clock !== null && message.t < this.#clock;
-      this.#clock = message.t;
-      if (back) await this.hello();
-    } else if (message.type === 'ok' || message.type === 'error') {
-      this.#replies.shift()?.(message);
-    } else if (message.type === 'lap' && this.state === 'ready') {
-      const passing = { decoder: this.decoder, boot: this.boot, transponder: message.transponder, t: message.t };
-      const step = nextLap(this.references.get(message.transponder) ?? null, { boot: this.boot, t: message.t });
-      this.references.set(message.transponder, step.reference);
-      await this.outbox.add(passing);
-      this.dispatchEvent(new CustomEvent('passing', { detail: { ...passing, lapMs: step.kind === 'lap' ? step.ms : null } }));
-      void this.flush();
+  #alive() {
+    if (this.#heard) return undefined;
+    this.#heard = true;
+    if (this.protocol.kind === 'robitronic') return this.#decide('easylap');
+    if (this.kind) return undefined;
+    if (this.state === 'listening') this.#set('connecting');
+    this.#later(this.#spaced(), () => this.#sendHello());
+    return undefined;
+  }
+
+  /** Up to HELLOS hellos, helloEveryMs apart, stopping at the first %TLID (R7). The first opens the window. */
+  async #sendHello() {
+    if (this.kind || this.#hellos >= HELLOS) return;
+    this.#hellos += 1;
+    if (this.#hellos === 1) this.#later(this.helloMs, () => this.#windowOver());
+    if (this.#hellos < HELLOS) this.#later(this.helloEveryMs, () => this.#sendHello());
+    await this.#write(encode(commands.hello));
+  }
+
+  #windowOver() {
+    if (this.kind) return;
+    this.#decide('zround');
+    if (!this.#streaming) this.#later(this.#spaced(), () => this.#raceStart());
+  }
+
+  /** @param {'zround' | 'easylap'} kind */
+  #decide(kind) {
+    this.kind = kind;
+    this.#newBoot();
+    this.#set('choose');
+  }
+
+  /**
+   * The Robitronic start, only if no good frame came within handshakeMs: up to three, 500 ms apart, as
+   * FlipSide sends it, then listening (spec §2.4). While the kind is undecided nothing is held, since
+   * a passing needs a good frame, which decides the kind first; so no boot is made for this write.
+   * @param {number} sentSoFar
+   */
+  async #robitronicStart(sentSoFar) {
+    if (this.kind) return;
+    if (sentSoFar === STARTS) {
+      this.#set('listening');
+      return;
     }
+    await this.#write(frames.start);
+    this.#later(ROBITRONIC_START_EVERY_MS, () => this.#robitronicStart(sentSoFar + 1));
+  }
+
+  /** %I& to a plain decoder that doesn't stream, up to STARTS times, startMs apart, each after a new boot (C1, R1). */
+  async #raceStart() {
+    if (this.#streaming || this.#starts >= STARTS || this.kind !== 'zround') return;
+    this.#starts += 1;
+    this.#newBoot();
+    await this.#write(encode(commands.reset));
+    if (this.#starts < STARTS) this.#later(this.startMs, () => this.#later(this.#spaced(), () => this.#raceStart()));
+  }
+
+  /** @param {{ decoder: string | null, boot: string }} identity */
+  async #identity({ decoder, boot }) {
+    if (this.kind === 'zround') await this.#dropBrowserStamped();
+    this.kind = 'tinylap';
+    if (boot !== this.boot) {
+      this.references.clear();
+      this.#clock = null;
+    }
+    this.decoder = decoder;
+    this.boot = boot;
+    for (const p of this.#held) p.boot ??= boot;
+    this.#set(decoder ? 'ready' : 'unpaired');
+    if (!decoder) {
+      this.#held = [];
+      return;
+    }
+    await this.#stampHeld();
+    void this.flush();
+  }
+
+  /**
+   * A late %TLID (I6, R4, F2): once the flush in flight is done, the passings this connection stamped with the browser's id
+   * leave the outbox, unsent, and the held ones go too. Nothing is re-stamped. The wait is bounded by flushWaitMs: a post
+   * that hangs must not stall every decoder event behind it on the chain.
+   */
+  async #dropBrowserStamped() {
+    let timer;
+    await Promise.race([this.#flushing, new Promise((done) => { timer = setTimeout(done, this.flushWaitMs); })]);
+    clearTimeout(timer);
+    const mine = (await this.outbox.list()).filter((p) => this.#stamped.has(passingKey(p)));
+    await this.outbox.remove(mine);
+    this.#stamped.clear();
+    this.#held = [];
+    this.dispatchEvent(new Event('identity-changed'));
+  }
+
+  /** @param {number} t */
+  async #onClock(t) {
+    this.#streaming = true;
+    const back = this.#clock !== null && t < this.#clock;
+    this.#clock = t;
+    if (!back) return;
+    // A clock that went back means the decoder rebooted (power, %I&) with the port open.
+    if (this.kind === 'tinylap') {
+      await this.hello();
+    } else if (this.boot) {
+      this.#newBoot();
+      this.#clock = t;
+    }
+  }
+
+  /** @param {{ transponder: string, t: number, hits?: number, strength?: number }} passing */
+  async #onPassing({ transponder, t, hits, strength }) {
+    this.#streaming = true;
+    if (this.kind !== 'tinylap' && this.boot) {
+      if (this.#latest !== null && t < this.#latest - MIN_LAP_MS) this.#newBoot();
+      this.#latest = Math.max(this.#latest ?? t, t);
+    }
+    /** @type {Held} */
+    const held = { boot: this.kind === 'tinylap' && this.state !== 'ready' ? null : this.boot, transponder, t, hits, strength };
+    if (this.state === 'ready') return this.#stamp(held);
+    if (this.kind === 'tinylap' && this.state === 'unpaired') return undefined;
+    this.#held.push(held);
+    if (this.#held.length > HELD_MAX) this.#held.shift();
+    return undefined;
+  }
+
+  /** A browser-made boot (spec §2.4, rules 1–4). A passing held before any boot takes the first one (F1). */
+  #newBoot() {
+    this.boot = randomBoot();
+    this.references.clear();
+    this.#clock = null;
+    this.#latest = null;
+    for (const p of this.#held) p.boot ??= this.boot;
+  }
+
+  /** @param {Held} held */
+  async #stamp({ boot, transponder, t, hits, strength }) {
+    if (this.#closed) return;
+    const passing = { decoder: this.decoder, boot, transponder, t };
+    const step = nextLap(this.references.get(transponder) ?? null, { boot, t });
+    this.references.set(transponder, step.reference);
+    await this.outbox.add(passing);
+    if (BROWSER_ASSIGNED.has(this.kind)) this.#stamped.add(passingKey(passing));
+    this.dispatchEvent(new CustomEvent('passing', { detail: { ...passing, lapMs: step.kind === 'lap' ? step.ms : null, hits, strength } }));
+    void this.flush();
+  }
+
+  async #stampHeld() {
+    const held = this.#held;
+    this.#held = [];
+    for (const p of held) await this.#stamp(p);
+  }
+
+  /** The browser's choice of decoder for a plain ZRound decoder or an EasyLap (spec §3.2). Writes nothing to the device. @param {string} decoderId */
+  assign(decoderId) {
+    return this.#chain(async () => {
+      if (this.#ended()) throw new Error('The decoder is disconnected. Connect it again.');
+      if (!BROWSER_ASSIGNED.has(this.kind)) throw new Error('This decoder says who it is; it is paired, not chosen.');
+      this.decoder = decoderId;
+      this.#set('ready');
+      await this.#stampHeld();
+      void this.flush();
+    });
   }
 
   /** The decoder's next %TLOK& or %TLERR&, or a timeout. */
@@ -161,12 +466,13 @@ export class Bridge extends EventTarget {
 
   /** Stores the decoder's id and token on the board (and Wi-Fi, if given), then asks again who it is. */
   async pair(decoderId, token, wifi = null) {
+    if (BROWSER_ASSIGNED.has(this.kind)) throw new Error("This decoder can't be paired over the cable.");
     let reply = this.#reply();
-    await this.#write(commands.pair(decoderId, token));
+    await this.#write(encode(commands.pair(decoderId, token)));
     await reply;
     if (wifi) {
       reply = this.#reply();
-      await this.#write(commands.wifi(wifi.ssid, wifi.password));
+      await this.#write(encode(commands.wifi(wifi.ssid, wifi.password)));
       await reply;
     }
     await this.hello();
@@ -207,10 +513,9 @@ export class Bridge extends EventTarget {
   async close() {
     this.#closed = true;
     clearTimeout(this.#retryTimer);
-    clearTimeout(this.#helloTimer);
-    await this.#reader?.cancel().catch(() => {});
-    this.#writer?.releaseLock();
-    await this.port.close().catch(() => {});
+    this.#stopTimers();
+    this.#held = [];
+    await this.transport.close();
   }
 }
 

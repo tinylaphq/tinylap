@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS passing (
   PRIMARY KEY (decoder_id, boot, transponder, t)
 );
 CREATE INDEX IF NOT EXISTS passing_workspace ON passing (workspace_id);
+CREATE INDEX IF NOT EXISTS passing_net ON passing (workspace_id, via, decoder_id);
 CREATE TABLE IF NOT EXISTS session (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, kind TEXT NOT NULL, track_id TEXT, direction TEXT NOT NULL,
   roster TEXT, state TEXT NOT NULL, created_at INTEGER NOT NULL, opens_at INTEGER, closes_at INTEGER,
@@ -145,6 +146,7 @@ export function openStore(path) {
     assignTransponder: q(`INSERT INTO transponder (workspace_id, code, driver_id, first_seen_at) VALUES (?, ?, ?, ?)
       ON CONFLICT (workspace_id, code) DO UPDATE SET driver_id = excluded.driver_id`),
     decoders: q('SELECT id, name, created_at, last_seen_at FROM decoder WHERE workspace_id = ? ORDER BY created_at, id'),
+    netDecoders: q("SELECT DISTINCT decoder_id FROM passing WHERE workspace_id = ? AND via = 'net'"),
     decoder: q('SELECT id, workspace_id, name FROM decoder WHERE id = ?'),
     decoderByHash: q('SELECT id, workspace_id FROM decoder WHERE token_hash = ?'),
     addDecoder: q('INSERT INTO decoder (id, workspace_id, name, token_hash, created_at) VALUES (?, ?, ?, ?, ?)'),
@@ -279,6 +281,11 @@ export function openStore(path) {
     },
 
     decoders: (ws) => s.decoders.all(ws).map((r) => ({ id: String(r.id), name: String(r.name), createdAt: Number(r.created_at), lastSeenAt: num(r.last_seen_at) })),
+    /** The decoders a plain ZRound decoder or an EasyLap may be chosen as: none that sends over Wi-Fi (decoders spec §3.2, I7). */
+    choosableDecoders(ws) {
+      const net = new Set(s.netDecoders.all(ws).map((r) => String(r.decoder_id)));
+      return s.decoders.all(ws).filter((r) => !net.has(String(r.id))).map((r) => ({ id: String(r.id), name: String(r.name), createdAt: Number(r.created_at), lastSeenAt: num(r.last_seen_at) }));
+    },
     decoder(id) {
       const r = s.decoder.get(id);
       return r ? { id: String(r.id), workspaceId: String(r.workspace_id), name: String(r.name) } : null;

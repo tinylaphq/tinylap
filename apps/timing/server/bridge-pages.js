@@ -11,7 +11,7 @@ import { bridgeImportMap, bridgePage } from './views/bridge.js';
 
 function showBridge(request) {
   const map = bridgeImportMap(request);
-  return page(request, 200, bridgePage(request, map), { scriptHashes: [map.hash] });
+  return page(request, 200, bridgePage(request, map, request.store.choosableDecoders(request.workspaceId), request.store.decoders(request.workspaceId).map((d) => d.id)), { scriptHashes: [map.hash] });
 }
 
 export const bridgePageRoutes = [

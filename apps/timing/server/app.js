@@ -8,6 +8,7 @@
 // { status, headers, stream(req, res) } and write the body itself (SSE).
 import { rateLimiter } from '@tinylap/auth';
 import { problem } from './responses.js';
+import { isInstallPath } from './simulate.js';
 import { staticFiles } from './static.js';
 import { routes as defaultRoutes } from './routes.js';
 
@@ -70,6 +71,9 @@ async function dispatch(request, routes, serveStatic) {
     const { credentials, ...rest } = response;
     return { ...rest, headers: withRouteHeaders(route, response.headers, credentials) };
   }
+  if (!request.settings.simulate && isInstallPath(url.pathname)) {
+    return { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }, body: 'not found' };
+  }
   return serveStatic(req, url);
 }
 
@@ -79,7 +83,7 @@ const LIMITS = { ingest: 600, tap: 120, pair: 10 };
 /**
  * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string,
  *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
- *   routes?: any[], fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number } }} options
+ *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number } }} options
  */
 export function createHandler(options) {
   const log = typeof options.log === 'function' ? options.log : options.log === false ? null : (line) => console.log(line);
@@ -94,6 +98,7 @@ export function createHandler(options) {
     publicUrl: options.publicUrl?.replace(/\/$/, '') ?? null,
     plannerUrl: options.plannerUrl?.replace(/\/$/, '') ?? null,
     build: options.build ?? 'dev',
+    settings: options.settings ?? { simulate: null },
     clientIpHeader: options.clientIpHeader?.toLowerCase() || null,
     fetch: options.fetch ?? globalThis.fetch,
     now,

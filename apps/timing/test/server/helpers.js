@@ -11,6 +11,7 @@ import { openStore } from '../../server/store.js';
 import { createHub } from '../../server/live.js';
 import { createEngine } from '../../server/engine.js';
 import { createAuth } from '../../server/auth.js';
+import { readSimulate } from '../../server/simulate.js';
 import { driveAuthorize, Jar, startSuite } from '../../../../tools/test-env.js';
 import { testSession } from '../../../accounts/test/helpers.js';
 import { createClub, createInvite, createPersonalWorkspace, redeemInvite, setRole } from '../../../accounts/server/workspaces.js';
@@ -34,7 +35,8 @@ export async function startServer(options = {}) {
  * @param {{ clock?: { now: number }, hostname?: string, env?: Record<string, string>, [key: string]: any }} [options]
  */
 export async function startTiming(options = {}) {
-  const { clock, hostname, env, ...rest } = options;
+  const { clock, hostname, env, simulate = null, ...rest } = options;
+  const settings = { simulate: readSimulate(simulate) };
   const now = clock ? () => clock.now : Date.now;
   const store = openStore(':memory:');
   const hub = createHub({ now });
@@ -50,7 +52,7 @@ export async function startTiming(options = {}) {
     keys, publicUrl: base, sessions: store.sessions,
     logger: { warn: () => {} },
   });
-  handler = createHandler({ appDir, log: false, store, hub, engine, auth, keys, publicUrl: base, now, ...rest });
+  handler = createHandler({ appDir, log: false, store, hub, engine, auth, keys, publicUrl: base, now, settings, ...rest });
   const db = suite.accounts.db;
 
   /** A new accounts user with their personal space, as a real sign-up makes. */
@@ -104,6 +106,13 @@ export async function startTiming(options = {}) {
 
   return {
     base, store, hub, engine, suite, clock, signUp, club, join, login, api, form,
+    /** The server's simulator setting (decoders spec §5.4), switchable between tests. */
+    get simulate() {
+      return settings.simulate;
+    },
+    set simulate(value) {
+      settings.simulate = readSimulate(value);
+    },
     close: async () => {
       server.closeAllConnections();
       await new Promise((done) => server.close(done));

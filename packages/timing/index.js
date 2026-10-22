@@ -7,3 +7,4 @@ export * from './laps.js';
 export * from './sessions.js';
 export * from './zround.js';
 export * from './simulator.js';
+export * from './robitronic.js';

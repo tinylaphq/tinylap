@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The bridge page in the browser (spec step three §4, E1–E6), with the
-// simulated decoder (?simulate=fast, a lap every 2 s).
+// simulated decoder (the server's TINYLAP_SIMULATE=tinylap,fast, a lap every 2 s).
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
@@ -15,7 +15,7 @@ let member;
 let personal;
 
 before(async () => {
-  app = await startTiming();
+  app = await startTiming({ limits: { pair: 100 } });
   browser = await openBrowser();
   member = await app.login(await app.signUp('Ana'));
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
@@ -25,9 +25,16 @@ after(async () => {
   await app?.close();
 });
 
+/** Turns the server's simulator on for this test only (decoders spec §5.4). */
+const simulating = (t, value) => {
+  app.simulate = value;
+  t.after(() => { app.simulate = null; });
+};
+
 /**
  * Counts ports in the page: a port counts as opened on its first write (the
- * hello), and as closed once its readable's cancel ran. Only sim-port.js
+ * hello), and as closed once its readable's cancel ran. Only the simulated
+ * port (sim/serial-port.js, which install.js puts in place of navigator.serial)
  * makes these streams with a JS sink or source.
  */
 const COUNT = () => {
@@ -55,7 +62,7 @@ const COUNT = () => {
   };
 };
 
-/** The simulated decoder swallows the first pair command, so the bridge gets no answer (as bridge.test.js:99-108). */
+/** The simulated decoder swallows the first pair command, so the bridge gets no answer (as bridge.test.js does). */
 const DROP_FIRST_PAIR = () => {
   const Original = window.WritableStream;
   let dropped = false;
@@ -92,7 +99,8 @@ async function toPairing(t, { viewport, init = [] } = {}) {
   const who = await pageAs(browser, app, member, viewport ? { viewport } : {});
   t.after(() => who.context.close());
   for (const script of init) await who.page.addInitScript(script);
-  await who.page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await who.page.goto('/personal/bridge');
   await who.page.getByRole('button', { name: 'Connect decoder' }).click();
   await who.page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   return who;
@@ -113,7 +121,8 @@ test('E1a: tl-bridge starts the page, and Connect opens one port', async (t) => 
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.addInitScript(COUNT);
-  await page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
   const connect = page.getByRole('button', { name: 'Connect decoder' });
   await connect.waitFor();
   assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-bridge'))), true);
@@ -192,7 +201,8 @@ test('E3a: a removal right after the click opens nothing', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.addInitScript(COUNT);
-  await page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
   const seen = apiRequests(page);
   await page.evaluate(() => {
@@ -208,36 +218,41 @@ test('E3a: a removal right after the click opens nothing', async (t) => {
   assert.deepEqual(errors, []);
 });
 
-test('E3b: a removal during the start closes the port it opened', async (t) => {
+test('E3b: a removal during the start writes nothing and closes the port it opened', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.addInitScript(COUNT);
-  await page.goto('/personal/bridge?simulate=fast');
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
   await page.evaluate(() => {
     const el = document.querySelector('tl-bridge');
     window.__el = el;
-    const connecting = el.querySelector('[data-bridge-state="connecting"]');
-    const watch = new MutationObserver(() => {
-      if (connecting.hidden) return;
-      watch.disconnect();
-      el.remove();
-      window.__atRemoval = [...el.querySelectorAll('[data-bridge-state]:not([hidden])')].map((x) => x.getAttribute('data-bridge-state'));
-    });
-    watch.observe(connecting, { attributes: true, attributeFilter: ['hidden'] });
+    // Removed as the bridge's start opens the port.
+    const real = navigator.serial.requestPort;
+    navigator.serial.requestPort = async (...args) => {
+      const port = await real(...args);
+      const open = port.open.bind(port);
+      port.open = (...options) => {
+        el.remove();
+        window.__atRemoval = [...el.querySelectorAll('[data-bridge-state]:not([hidden])')].map((x) => x.getAttribute('data-bridge-state'));
+        return open(...options);
+      };
+      return port;
+    };
     /** @type {HTMLElement} */ (el.querySelector('[data-bridge-connect]')).click();
   });
-  await page.waitForTimeout(1000);
+  await page.waitForFunction(() => window.__cancelled === 1);
+  // Shows that nothing is written, nor shown, after the removal.
+  await page.waitForTimeout(500);
   const state = await page.evaluate(`({
     opened: window.__opened,
     cancelled: window.__cancelled,
-    late: window.__writes.filter((w) => w > window.__cancelledAt).length,
     atRemoval: window.__atRemoval,
     now: (${shownIn})(window.__el),
   })`);
-  assert.equal(state.opened, 1);
-  assert.equal(state.cancelled, 1);
-  assert.equal(state.late, 0, 'no write after the cancel');
+  assert.equal(state.opened, 0, 'no write at all: nothing is written after close');
+  assert.equal(state.cancelled, 1, 'the port it opened is closed');
   assert.deepEqual(state.atRemoval, ['connecting']);
   assert.deepEqual(state.now, ['connecting'], 'nothing changed after the removal');
   assert.deepEqual(errors, []);
@@ -362,5 +377,128 @@ test('E7: after a move, the old pairing\'s answer leaves the new pairing\'s butt
   assert.equal(await pair.evaluate((x) => x.disabled), true, 'the old answer leaves it disabled');
   releases[1]();
   await page.getByText('Forwarding from New run', { exact: true }).first().waitFor();
+  assert.deepEqual(errors, []);
+});
+
+test('E3c: a removal while the decoder-list GET is held opens nothing', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(COUNT);
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route('**/workspaces/*/decoders', async (route) => { if (route.request().method() === 'GET') await held; await route.continue(); });
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  const listed = page.waitForRequest((r) => r.method() === 'GET' && /^\/workspaces\/[^/]+\/decoders$/.test(new URL(r.url()).pathname));
+  await page.evaluate(() => {
+    const el = document.querySelector('tl-bridge');
+    window.__el = el;
+    /** @type {HTMLElement} */ (el.querySelector('[data-bridge-connect]')).click();
+  });
+  await listed;
+  await page.evaluate(() => window.__el.remove());
+  release();
+  // Past the serial open delay (1.5 s): a bridge started for the removed element would write its %C& by then.
+  await page.waitForTimeout(2500);
+  assert.equal((await counts(page)).opened, 0);
+  assert.deepEqual(await page.evaluate(`(${shownIn})(window.__el)`), ['connecting'], 'as it was at the removal: connecting shows from the pick on');
+  assert.deepEqual(errors, []);
+});
+
+test('E4d: a move puts the choose form back as the server rendered it', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  const seen = async (name) => {
+    const d = await (await app.api(member, 'POST', `/workspaces/${personal}/decoders`, { name })).json();
+    await app.api(member, 'POST', `/decoders/${d.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] });
+    return d;
+  };
+  const busy = await seen('Busy');
+  const mine = await seen('Mine 4d');
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  await page.evaluate(async ([w, id]) => (await (await import('/public/devices.js')).openDevices()).remember(w, 'serial:1027:24577', id), [personal, mine.id]);
+  await page.reload();
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('heading', { name: 'Is this Mine 4d?' }).waitFor({ timeout: 30_000 });
+  assert.equal(await page.locator(`#bridge-choose option[value="${busy.id}"]`).isDisabled(), true);
+  assert.equal(await page.locator('#bridge-choose').inputValue(), mine.id);
+  assert.equal(await page.locator(`#bridge-choose option[value="${mine.id}"]`).innerText(), 'Mine 4d (in use)');
+  await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
+  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  const form = await page.evaluate(() => ({
+    heading: document.querySelector('[data-bridge-choose-heading]').textContent,
+    options: [...document.querySelectorAll('#bridge-choose option')].map((o) => [o.textContent, /** @type {HTMLOptionElement} */ (o).disabled, o.getAttribute('data-name')]),
+    value: /** @type {HTMLSelectElement} */ (document.querySelector('#bridge-choose')).value,
+  }));
+  assert.equal(form.heading, 'Which decoder is this?');
+  assert.ok(form.options.every(([text, disabled, name]) => !disabled && (name === null || text === name)));
+  assert.equal(form.value, '');
+  assert.deepEqual(errors, []);
+});
+
+test('E6c: a choose POST that lands after a move writes nothing: no remember, no assign', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  let release;
+  let reached;
+  const held = new Promise((resolve) => { release = resolve; });
+  const posted = new Promise((resolve) => { reached = resolve; });
+  await page.route('**/workspaces/*/decoders', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    reached();
+    return held.then(() => route.continue());
+  });
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
+  await page.getByLabel('Name for the new decoder').fill('Late plain');
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await posted;
+  await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
+  const finished = page.waitForEvent('requestfinished', (r) => r.method() === 'POST');
+  release();
+  const request = await finished;
+  assert.equal((await request.response()).status(), 201, 'the held POST made the decoder');
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), true);
+  assert.equal(await page.getByText('Forwarding from Late plain').count(), 0);
+  const remembered = await page.evaluate(async (w) => (await (await import('/public/devices.js')).openDevices()).recall(w, 'serial:1027:24577'), personal);
+  assert.equal(remembered, null);
+  assert.deepEqual(errors, []);
+});
+
+test('E3e: a double click on Connect, and a click while the decoder-list GET is held, pick once and make one bridge; connecting shows meanwhile', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route('**/workspaces/*/decoders', async (route) => { if (route.request().method() === 'GET') await held; await route.continue(); });
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.evaluate(() => {
+    Object.assign(window, { __picks: 0, __opens: 0 });
+    const real = navigator.serial.requestPort;
+    navigator.serial.requestPort = async (...args) => {
+      window.__picks += 1;
+      const port = await real(...args);
+      const open = port.open.bind(port);
+      port.open = (...options) => { window.__opens += 1; return open(...options); };
+      return port;
+    };
+  });
+  const listed = page.waitForRequest((r) => r.method() === 'GET' && /^\/workspaces\/[^/]+\/decoders$/.test(new URL(r.url()).pathname));
+  await page.getByRole('button', { name: 'Connect decoder' }).dblclick();
+  await listed;
+  assert.deepEqual(await page.evaluate(`(${shownIn})(document.querySelector('tl-bridge'))`), ['connecting'], 'connecting shows while the GET is held');
+  await page.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('[data-bridge-connect="serial"]')).click());
+  release();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
+  // Shows that no second pick or open comes late.
+  await page.waitForTimeout(500);
+  assert.deepEqual(await page.evaluate(() => [window.__picks, window.__opens]), [1, 1]);
   assert.deepEqual(errors, []);
 });

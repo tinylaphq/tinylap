@@ -142,3 +142,12 @@ test('a transaction is all or nothing', () => {
   }), /stop/);
   assert.deepEqual(store.drivers(W), []);
 });
+
+test('choosableDecoders drops a decoder that sends over Wi-Fi, keeps one that only came by cable', () => {
+  const store = openStore(':memory:');
+  store.addDecoder(W, { id: 'd1', name: 'Wi-Fi', tokenHash: 'h1', createdAt: 1 });
+  store.addDecoder(W, { id: 'd2', name: 'Cable', tokenHash: 'h2', createdAt: 2 });
+  store.insertPassing({ decoder: 'd1', boot: 'b00tb00t', transponder: '0A', t: 1, receivedAt: 1, via: 'net', workspaceId: W });
+  store.insertPassing({ decoder: 'd2', boot: 'b00tb00t', transponder: '0A', t: 1, receivedAt: 1, via: 'serial', workspaceId: W });
+  assert.deepEqual(store.choosableDecoders(W), [{ id: 'd2', name: 'Cable', createdAt: 2, lastSeenAt: null }]);
+});

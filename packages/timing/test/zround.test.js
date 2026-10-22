@@ -38,6 +38,7 @@ test('commands round-trip, Wi-Fi credentials included', () => {
   assert.deepEqual(parseMessage(body(commands.wifi('Office 5G & Co', 'p%ss wörd'))), { type: 'wifi', ssid: 'Office 5G & Co', password: 'p%ss wörd' });
   // "%" and "&" are removed, so two spaces remain.
   assert.equal(commands.error('50% & more'), '%TLERR 50  more&');
+  assert.deepEqual(parseMessage(body(commands.reset)), { type: 'reset' });
 });
 
 test('the reader splits a stream at any chunk boundary and drops noise', () => {
