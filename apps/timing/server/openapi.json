@@ -64,7 +64,7 @@
     "not-found": { "status": 404, "title": "Not found", "description": "No such route, club, personal space, driver, decoder, session or watchers link, or it is not one of yours. Posting passings for a decoder that exists but is not yours is forbidden instead." },
     "method-not-allowed": { "status": 405, "title": "Method not allowed", "description": "The Allow header lists the methods this URL supports." },
     "unavailable": { "status": 503, "title": "The service is unavailable", "description": "Timing data cannot be read or stored right now, or sign-in is unavailable." },
-    "unauthorized": { "status": 401, "title": "Not signed in", "description": "Sign in, or send a valid decoder token." },
+    "unauthorized": { "status": 401, "title": "Not signed in", "description": "Sign in, or send a valid decoder token or notice token." },
     "forbidden": { "status": 403, "title": "Forbidden", "description": "Your role may not do this, or the request did not come from the app's own pages." },
     "invalid-request": { "status": 422, "title": "The request is not valid", "description": "A field is missing or out of range; the detail says which." },
     "unsupported-media-type": { "status": 415, "title": "Unsupported media type", "description": "Send application/json." },

@@ -55,6 +55,21 @@ test('a notice for a removed member ends their board stream and the reconnect ge
   assert.equal(again.status, 404);
 });
 
+test('a notice for a removed member ends their JSON live stream and the reconnect gets 404', async () => {
+  const user = await app.signUp('Gus');
+  app.join(ana, office.id, user);
+  const who = await app.login(user);
+  const res = await app.api(who, 'GET', `/workspaces/${office.id}/live`);
+  assert.equal(res.status, 200);
+  const it = events(res);
+  assert.ok(await next(it, 'snapshot'));
+  removeMember(app.suite.accounts.db, ana.id, office.id, user.id);
+  assert.equal((await notice({ users: [user.id] })).status, 204);
+  assert.equal(await next(it, 'ended'), null);
+  const again = await app.api(who, 'GET', `/workspaces/${office.id}/live`);
+  assert.equal(again.status, 404);
+});
+
 test('removing a member in accounts\' API ends their open stream in timing', async () => {
   const { user, it } = await watching('Fay');
   const owner = await testSession(app.suite.accounts.auth, ana.id);
