@@ -197,7 +197,9 @@ test('callback sets __Host-tinylap-session (HttpOnly, Secure, SameSite=Lax, Path
   assert.ok(row);
   assert.equal(row.userId, user.id);
   assert.ok(row.expiresAt > Date.now() + 29 * 86_400_000);
-  assert.ok(!row.sealedTokens.includes('eyJ'), 'tokens are sealed');
+  // The sealed value is random base64url, so it may contain "eyJ" by chance; look for the token itself.
+  const { accessToken } = /** @type {import('../types.js').BffSession} */ (await app.bff.session(reqFor(appJar)));
+  assert.ok(!row.sealedTokens.includes(accessToken), 'tokens are sealed');
 
   const me = await fetch(`${app.origin}/me`, { headers: { cookie: appJar.header() } });
   assert.equal(me.status, 200);
