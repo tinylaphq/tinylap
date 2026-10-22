@@ -354,6 +354,38 @@ test('a mark made before the tokens were obtained forces nothing', async () => {
   assert.equal((app.calls.get('/oauth2/token') ?? 0) - calls, 0);
 });
 
+test('a mark made while a refresh is in flight is not lost: the next session() refreshes again', async () => {
+  const { appJar, user } = await login();
+  const old = await expireSoon(appJar);
+  /** @type {() => void} */
+  let release = () => {};
+  /** @type {() => void} */
+  let reached = () => {};
+  const atToken = new Promise((resolve) => (reached = () => resolve(undefined)));
+  const held = new Promise((resolve) => (release = () => resolve(undefined)));
+  app.tap.hook = async (path, res) => {
+    if (path === '/oauth2/token') {
+      app.tap.hook = null;
+      reached();
+      await held;
+    }
+    return res;
+  };
+  const inFlight = app.bff.session(reqFor(appJar));
+  await atToken;
+  await tick();
+  app.bff.stale(user.id);
+  release();
+  const first = await inFlight;
+  assert.ok(first);
+  assert.notEqual(first.accessToken, old.accessToken);
+  const calls = app.calls.get('/oauth2/token') ?? 0;
+  const second = await app.bff.session(reqFor(appJar));
+  assert.equal((app.calls.get('/oauth2/token') ?? 0) - calls, 1, 'refreshed again');
+  assert.ok(second);
+  assert.notEqual(second.accessToken, first.accessToken);
+});
+
 test('a request that read the old row while a refresh ran does not refresh again with the spent token', async () => {
   const { appJar } = await login();
   await expireSoon(appJar);

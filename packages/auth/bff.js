@@ -199,9 +199,10 @@ export function createBff(options) {
 
   /**
    * @param {oidc.TokenEndpointResponse} response
+   * @param {number} asked When the request for them was sent: a stale mark made while it ran must still count.
    * @param {Partial<import('./types.js').SealedTokens>} [previous]
    */
-  async function tokensFrom(response, previous = {}) {
+  async function tokensFrom(response, asked, previous = {}) {
     const claims = await verify(response.access_token);
     const refreshToken = response.refresh_token ?? previous.refreshToken;
     if (!refreshToken) throw new Error('The issuer sent no refresh token; ask for offline_access.');
@@ -211,7 +212,7 @@ export function createBff(options) {
       refreshToken,
       idToken: response.id_token ?? previous.idToken,
       expiresAt: claims.exp * 1000,
-      obtainedAt: Date.now(),
+      obtainedAt: asked,
     };
     return { tokens, claims };
   }
@@ -308,6 +309,7 @@ export function createBff(options) {
     const config = await configuration();
     /** @type {oidc.TokenEndpointResponse} */
     let response;
+    const asked = Date.now();
     try {
       response = await oidc.refreshTokenGrant(config, tokens.refreshToken, { resource });
     } catch (error) {
@@ -327,7 +329,7 @@ export function createBff(options) {
     /** @type {Awaited<ReturnType<typeof tokensFrom>>} */
     let next;
     try {
-      next = await tokensFrom(response, tokens);
+      next = await tokensFrom(response, asked, tokens);
     } catch (error) {
       if (error instanceof AuthError && error.code === 'unavailable') {
         // The keys can't be fetched to check it: keep the rotated tokens,
@@ -409,6 +411,7 @@ export function createBff(options) {
       current.search = new URL(req.url ?? '/', appOrigin).search;
       /** @type {Awaited<ReturnType<typeof oidc.authorizationCodeGrant>>} */
       let response;
+      const asked = Date.now();
       try {
         response = await oidc.authorizationCodeGrant(
           config, current,
@@ -422,7 +425,7 @@ export function createBff(options) {
       /** @type {Awaited<ReturnType<typeof tokensFrom>>} */
       let issued;
       try {
-        issued = await tokensFrom(response);
+        issued = await tokensFrom(response, asked);
       } catch (error) {
         if (error instanceof AuthError && error.code === 'unavailable') throw error;
         return fail('The sign-in did not complete.');
