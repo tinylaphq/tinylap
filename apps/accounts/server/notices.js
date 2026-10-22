@@ -6,6 +6,9 @@
 // a `noticeUri` is told which users it touched, so it can recheck what they
 // may still do. The notice carries no claims and ends nothing by itself.
 // Best effort: it is never awaited, never retried, and a failure only logs.
+// A notice names at most `BATCH` users (timing's cap), so a long list is split.
+
+const BATCH = 1000;
 
 /**
  * @param {{ clients: { noticeUri?: string, noticeToken?: string }[], fetch?: typeof globalThis.fetch,
@@ -15,7 +18,9 @@
 export function createNotifier({ clients, fetch = globalThis.fetch, timeoutMs = 5000, logger = console }) {
   const targets = clients.filter((c) => c.noticeUri);
   return (users) => {
-    if (users.length === 0) return;
+    for (let from = 0; from < users.length; from += BATCH) send(users.slice(from, from + BATCH));
+  };
+  function send(users) {
     for (const { noticeUri, noticeToken } of targets) {
       const uri = /** @type {string} */ (noticeUri);
       // No user ids in the log, only where the notice went and why it failed.
@@ -33,5 +38,5 @@ export function createNotifier({ clients, fetch = globalThis.fetch, timeoutMs = 
         (error) => failed(error?.name === 'TimeoutError' ? 'timeout' : error?.cause?.code ?? error?.message ?? 'error'),
       );
     }
-  };
+  }
 }
