@@ -26,7 +26,7 @@ import { serverErrorPage, unavailablePage } from './views/notice.js';
 
 const UNAVAILABLE = 'Sign-in is unavailable right now.';
 const NO_STORE = { 'Cache-Control': 'no-store' };
-const isOutage = (/** @type {unknown} */ error) => error instanceof AuthError && error.code === 'unavailable';
+export const isOutage = (/** @type {unknown} */ error) => error instanceof AuthError && error.code === 'unavailable';
 
 /**
  * Log-in for the app served at `publicUrl`: the BFF, the account page's

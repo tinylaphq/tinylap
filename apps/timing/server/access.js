@@ -6,10 +6,54 @@
 // through can(). Not a member is 404, like a workspace that doesn't exist;
 // a role that may not is 403; every write must come from the app's pages.
 import { can } from '@tinylap/auth';
-import { withSession } from './auth.js';
+import { isOutage, withSession } from './auth.js';
 import { problem } from './responses.js';
 
 export const NO_STORE = { 'Cache-Control': 'no-store' };
+
+/** Whether the viewer behind an open request may still do `action`, by the session as it is now. */
+async function stillAllowed(request, workspaceId, action) {
+  try {
+    const session = await request.auth.bff.session(request.req);
+    return Boolean(session) && can(session.claims, workspaceId, action);
+  } catch (error) {
+    // An outage at the issuer keeps access, as the BFF keeps the session.
+    if (isOutage(error)) return true;
+    throw error;
+  }
+}
+
+/**
+ * Calls `end` once a member stream's viewer loses `action` in the workspace
+ * (#39), checking every `request.accessCheckMs`. `end` must stop everything
+ * that writes before it ends the response. A watcher has no session:
+ * replacing the link ends its stream. Returns the stop for the stream's close.
+ * @param {any} request @param {string} workspaceId @param {import('@tinylap/auth').Action} action
+ * @param {boolean} watcher @param {() => void} end
+ */
+export function endWhenDenied(request, workspaceId, action, watcher, end) {
+  if (watcher) return () => {};
+  let checking = false;
+  let stopped = false;
+  const check = async () => {
+    if (checking || stopped) return;
+    checking = true;
+    try {
+      if (!(await stillAllowed(request, workspaceId, action)) && !stopped) end();
+    } catch (error) {
+      console.error('stream: access check failed', error);
+      if (!stopped) end();
+    } finally {
+      checking = false;
+    }
+  };
+  const timer = setInterval(check, request.accessCheckMs);
+  timer.unref();
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+}
 
 /**
  * @param {import('@tinylap/auth').Action} action an @tinylap/auth action @param {(request: any, match: RegExpExecArray) => any} handler

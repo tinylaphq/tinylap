@@ -105,7 +105,7 @@ export async function startTiming(options = {}) {
   }
 
   return {
-    base, store, hub, engine, suite, clock, signUp, club, join, login, api, form,
+    base, store, hub, engine, auth, suite, clock, signUp, club, join, login, api, form,
     /** The server's simulator setting (decoders spec §5.4), switchable between tests. */
     get simulate() {
       return settings.simulate;
