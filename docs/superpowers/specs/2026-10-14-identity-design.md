@@ -93,6 +93,13 @@ at every issuance, so the club drops out with the member's next token, and
 they stay logged in. Account deletion and "sign out everywhere" revoke the
 user's refresh tokens. Apps make no call to `accounts` per request.
 
+To shorten the window, `accounts` pushes a membership change (removal, role
+change, leaving, transfer, club or account deletion) to registered clients
+that name a `noticeUri`: `POST` with a bearer `noticeToken` and
+`{ "users": [...] }`. It is best-effort: never awaited, 5 s timeout, no
+retry. A notice carries no authority; the app re-reads the users' claims, and
+the token stays the source of truth.
+
 ## 4. Data
 
 ### `apps/accounts`

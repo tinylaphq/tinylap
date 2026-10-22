@@ -153,6 +153,21 @@ after verifying the request out of band
 (`node apps/accounts/admin.js transfer-ownership <workspace> <user>`, see
 `apps/accounts/README.md`).
 
+## Membership notices
+
+A role change or removal reaches an app with the member's next token. To
+shorten that wait, `accounts` can tell a client at once. Add `noticeUri` and
+`noticeToken` to the client's entry in `TINYLAP_CLIENTS`, both or neither.
+`noticeUri` is checked like `resource`. `noticeToken` is a random string of
+its own, never the client secret.
+
+After a removal, role change, leaving, ownership transfer, club deletion or
+account deletion, `accounts` posts `{ "users": [...] }` to `noticeUri` with
+`Authorization: Bearer <noticeToken>`. It does not wait for the answer, gives
+up after 5 s, does not retry and logs one warning per failure. A missed
+notice costs nothing: the token expires as before. The app treats a notice as
+a hint to re-read the users' claims, never as proof.
+
 ## Data protection
 
 `accounts` stores a display name, passkeys (public keys), recovery code hashes,

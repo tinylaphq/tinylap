@@ -6,6 +6,7 @@
 // no CORS, Problem Details, the recovery restriction, the invite rate limit,
 // and pages that show only what the viewer's role may do (spec §5, §6, §9).
 import test, { after, before, describe } from 'node:test';
+import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
 import { PAGE_CSP } from '../server/app.js';
 import { createRecoveryCodes } from '../server/recovery.js';
@@ -15,10 +16,30 @@ import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 
 /** @type {Awaited<ReturnType<typeof startAccounts>>} */
 let accounts;
-before(async () => {
-  accounts = await startAccounts({ env: { TINYLAP_CLIENT_IP_HEADER: 'X-Test-Client' } });
+/** The notices accounts sent the capture server below, and whether it answers them. @type {{ auth: string | undefined, body: any }[]} */
+const notices = [];
+let silent = false;
+/** Requests left unanswered while `silent`; ended afterwards so no warning is logged at teardown. @type {import('node:http').ServerResponse[]} */
+const unanswered = [];
+const noticeServer = createServer((req, res) => {
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    notices.push({ auth: req.headers.authorization, body: JSON.parse(Buffer.concat(chunks).toString()) });
+    if (silent) unanswered.push(res);
+    else res.writeHead(204).end();
+  });
 });
-after(() => accounts.close());
+before(async () => {
+  await new Promise((resolve) => noticeServer.listen(0, '127.0.0.1', () => resolve(undefined)));
+  const { port } = /** @type {import('node:net').AddressInfo} */ (noticeServer.address());
+  accounts = await startAccounts({ env: { TINYLAP_CLIENT_IP_HEADER: 'X-Test-Client' }, notice: { uri: `http://127.0.0.1:${port}/notices/membership`, token: 'n-test' } });
+});
+after(async () => {
+  await accounts.close();
+  noticeServer.closeAllConnections();
+  await new Promise((resolve) => noticeServer.close(() => resolve(undefined)));
+});
 
 let clients = 0;
 
@@ -193,6 +214,90 @@ describe('the API', () => {
       const res = await navigate(`${accounts.issuer}${path}`, { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() });
       assert.equal(res.status, 403, path);
       assert.match(await res.text(), /Add a passkey first/);
+    }
+  });
+});
+
+describe('membership notices', () => {
+  /** The users of the one notice sent since `notices` was emptied, sorted. */
+  async function sent() {
+    for (let i = 0; i < 50 && notices.length === 0; i += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0].auth, 'Bearer n-test');
+    return [...notices[0].body.users].sort();
+  }
+  const sorted = (...ids) => ids.sort();
+
+  test('removing a member notifies with the member', async () => {
+    notices.length = 0;
+    const { id, owner, member } = await club();
+    assert.equal((await call(`/api/clubs/${id}/members/${member.id}`, { method: 'DELETE', jar: owner.jar })).status, 204);
+    assert.deepEqual(await sent(), [member.id]);
+  });
+
+  test('leaving a club notifies with the leaver', async () => {
+    notices.length = 0;
+    const { id, member } = await club();
+    assert.equal((await call(`/api/clubs/${id}/leave`, { method: 'POST', jar: member.jar })).status, 204);
+    assert.deepEqual(await sent(), [member.id]);
+  });
+
+  test('changing a role notifies with the member', async () => {
+    notices.length = 0;
+    const { id, owner, member } = await club();
+    assert.equal((await call(`/api/clubs/${id}/members/${member.id}`, { method: 'PATCH', jar: owner.jar, body: { role: 'admin' } })).status, 200);
+    assert.deepEqual(await sent(), [member.id]);
+  });
+
+  test('transferring ownership notifies with both users', async () => {
+    notices.length = 0;
+    const { id, owner, admin } = await club();
+    assert.equal((await call(`/api/clubs/${id}/transfer`, { method: 'POST', jar: owner.jar, body: { userId: admin.id } })).status, 200);
+    assert.deepEqual(await sent(), sorted(owner.id, admin.id));
+  });
+
+  test('deleting a club notifies every member', async () => {
+    notices.length = 0;
+    const { id, owner, admin, member } = await club();
+    assert.equal((await call(`/api/clubs/${id}`, { method: 'DELETE', jar: owner.jar })).status, 204);
+    assert.deepEqual(await sent(), sorted(owner.id, admin.id, member.id));
+  });
+
+  test('deleting the account notifies with the user', async () => {
+    notices.length = 0;
+    const p = await person();
+    assert.equal((await call('/api/me', { method: 'DELETE', jar: p.jar })).status, 204);
+    assert.deepEqual(await sent(), [p.id]);
+  });
+
+  test('an unreachable notice URI neither fails nor delays the change', async () => {
+    notices.length = 0;
+    silent = true;
+    try {
+      const { id, owner } = await club();
+      const started = Date.now();
+      assert.equal((await call(`/api/clubs/${id}`, { method: 'DELETE', jar: owner.jar })).status, 204);
+      assert.ok(Date.now() - started < 1000);
+      await sent(); // it did go out, and was left unanswered
+    } finally {
+      silent = false;
+      for (const res of unanswered.splice(0)) res.writeHead(204).end();
+    }
+  });
+
+  test('a client without noticeUri gets nothing', async () => {
+    notices.length = 0;
+    const other = await startAccounts();
+    try {
+      const user = await createTestUser(other.auth, 'Solo');
+      createPersonalWorkspace(other.db, user.id, 'Solo');
+      const jar = await testSession(other.auth, user.id);
+      const res = await fetch(`${other.issuer}/api/me`, { method: 'DELETE', headers: { 'sec-fetch-site': 'same-origin', cookie: jar.header() } });
+      assert.equal(res.status, 204);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      assert.equal(notices.length, 0);
+    } finally {
+      await other.close();
     }
   });
 });

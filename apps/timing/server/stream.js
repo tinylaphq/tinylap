@@ -5,7 +5,7 @@
 // Server-Sent Events (spec §7) for members and for the watchers view. A
 // stream starts with what the client missed (Last-Event-ID) or a snapshot.
 // Watcher streams are tagged with their token, so rotating it ends them.
-import { endWhenDenied, NO_STORE, workspaceRoute } from './access.js';
+import { NO_STORE, workspaceRoute } from './access.js';
 import { prefersHtml } from './negotiate.js';
 import { json, problem } from './responses.js';
 import { page } from './respond.js';
@@ -38,7 +38,7 @@ function eventStream(request, workspaceId, { watcher, tag }) {
         stopChecks();
         sub.unsubscribe();
       };
-      const stopChecks = endWhenDenied(request, workspaceId, 'timing.run', watcher, () => {
+      const stopChecks = request.streams.watch(request, workspaceId, 'timing.run', watcher, () => {
         close();
         res.end();
       });

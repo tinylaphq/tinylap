@@ -19,6 +19,9 @@ const SESSION_MAX_MS = 90 * DAY;
 const LOGIN_TTL_S = 600;
 /** Refresh when the access token has less than this left. */
 const REFRESH_MARGIN_MS = 60_000;
+// How long a stale mark is kept: above any access token lifetime, which the
+// BFF doesn't know.
+const STALE_KEEP_MS = 3_600_000;
 const COOKIE_VALUE = /^[A-Za-z0-9_-]{43}$/;
 /** Logout waits at most this long for discovery and revocation. */
 const LOGOUT_WAIT_MS = 3_000;
@@ -196,9 +199,10 @@ export function createBff(options) {
 
   /**
    * @param {oidc.TokenEndpointResponse} response
+   * @param {number} asked When the request for them was sent: a stale mark made while it ran must still count.
    * @param {Partial<import('./types.js').SealedTokens>} [previous]
    */
-  async function tokensFrom(response, previous = {}) {
+  async function tokensFrom(response, asked, previous = {}) {
     const claims = await verify(response.access_token);
     const refreshToken = response.refresh_token ?? previous.refreshToken;
     if (!refreshToken) throw new Error('The issuer sent no refresh token; ask for offline_access.');
@@ -208,6 +212,7 @@ export function createBff(options) {
       refreshToken,
       idToken: response.id_token ?? previous.idToken,
       expiresAt: claims.exp * 1000,
+      obtainedAt: asked,
     };
     return { tokens, claims };
   }
@@ -255,6 +260,30 @@ export function createBff(options) {
     }
   }
 
+  /** When each user was last marked stale, in ms. @type {Map<string, number>} */
+  const marks = new Map();
+
+  /**
+   * Whether `userId` was marked stale after these tokens were obtained.
+   * Compared with when this BFF got them, never the token's `iat`: clocks differ.
+   * @param {string} userId
+   * @param {import('./types.js').SealedTokens} tokens
+   */
+  const isStale = (userId, tokens) => (tokens.obtainedAt ?? 0) < (marks.get(userId) ?? 0);
+
+  /**
+   * @param {string} userId
+   * @param {import('./types.js').SealedTokens} tokens
+   * @param {import('./types.js').AccessClaims} claims
+   * @returns {import('./types.js').BffSession}
+   */
+  const sessionOf = (userId, tokens, claims) => ({
+    userId,
+    accessToken: tokens.accessToken,
+    claims,
+    refreshAt: tokens.expiresAt - REFRESH_MARGIN_MS,
+  });
+
   /** @type {Map<string, Promise<import('./types.js').BffSession | null>>} */
   const refreshing = new Map();
 
@@ -269,9 +298,9 @@ export function createBff(options) {
     const current = await load(id);
     if (!current) return null;
     const { row, tokens } = current;
-    if (tokens.expiresAt - Date.now() >= REFRESH_MARGIN_MS) {
+    if (tokens.expiresAt - Date.now() >= REFRESH_MARGIN_MS && !isStale(row.userId, tokens)) {
       try {
-        return { userId: row.userId, accessToken: tokens.accessToken, claims: await verify(tokens.accessToken) };
+        return sessionOf(row.userId, tokens, await verify(tokens.accessToken));
       } catch (error) {
         if (!(error instanceof AuthError) || error.code !== 'invalid_token') throw error;
         // Not usable after all (a retired signing key, say): refresh it.
@@ -280,6 +309,7 @@ export function createBff(options) {
     const config = await configuration();
     /** @type {oidc.TokenEndpointResponse} */
     let response;
+    const asked = Date.now();
     try {
       response = await oidc.refreshTokenGrant(config, tokens.refreshToken, { resource });
     } catch (error) {
@@ -299,7 +329,7 @@ export function createBff(options) {
     /** @type {Awaited<ReturnType<typeof tokensFrom>>} */
     let next;
     try {
-      next = await tokensFrom(response, tokens);
+      next = await tokensFrom(response, asked, tokens);
     } catch (error) {
       if (error instanceof AuthError && error.code === 'unavailable') {
         // The keys can't be fetched to check it: keep the rotated tokens,
@@ -329,7 +359,7 @@ export function createBff(options) {
       sealedTokens: seal(keys, JSON.stringify(next.tokens), TOKENS),
       expiresAt: Math.min(now + SESSION_IDLE_MS, row.createdAt + SESSION_MAX_MS),
     });
-    return { userId: row.userId, accessToken: next.tokens.accessToken, claims: next.claims };
+    return sessionOf(row.userId, next.tokens, next.claims);
   }
 
   return {
@@ -381,6 +411,7 @@ export function createBff(options) {
       current.search = new URL(req.url ?? '/', appOrigin).search;
       /** @type {Awaited<ReturnType<typeof oidc.authorizationCodeGrant>>} */
       let response;
+      const asked = Date.now();
       try {
         response = await oidc.authorizationCodeGrant(
           config, current,
@@ -394,7 +425,7 @@ export function createBff(options) {
       /** @type {Awaited<ReturnType<typeof tokensFrom>>} */
       let issued;
       try {
-        issued = await tokensFrom(response);
+        issued = await tokensFrom(response, asked);
       } catch (error) {
         if (error instanceof AuthError && error.code === 'unavailable') throw error;
         return fail('The sign-in did not complete.');
@@ -460,9 +491,9 @@ export function createBff(options) {
       const current = await load(id);
       if (!current) return null;
       const { row, tokens } = current;
-      if (tokens.expiresAt - Date.now() >= REFRESH_MARGIN_MS) {
+      if (tokens.expiresAt - Date.now() >= REFRESH_MARGIN_MS && !isStale(row.userId, tokens)) {
         try {
-          return { userId: row.userId, accessToken: tokens.accessToken, claims: await verify(tokens.accessToken) };
+          return sessionOf(row.userId, tokens, await verify(tokens.accessToken));
         } catch (error) {
           if (!(error instanceof AuthError) || error.code !== 'invalid_token') throw error;
         }
@@ -477,6 +508,12 @@ export function createBff(options) {
 
     sessionId(req) {
       return sessionIdOf(req);
+    },
+
+    stale(userId) {
+      const now = Date.now();
+      for (const [id, markedAt] of marks) if (now - markedAt > STALE_KEEP_MS) marks.delete(id);
+      marks.set(userId, now);
     },
 
     requireSameOrigin(req) {

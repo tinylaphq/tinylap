@@ -110,6 +110,8 @@ export interface SealedTokens {
   idToken?: string;
   /** The access token's `exp`, in ms. */
   expiresAt: number;
+  /** When this BFF obtained the tokens, in ms; tokens sealed before it was added lack it and count as 0. */
+  obtainedAt?: number;
 }
 
 export interface BffOptions {
@@ -152,6 +154,8 @@ export interface BffSession {
   userId: string;
   accessToken: string;
   claims: AccessClaims;
+  /** When `session()` will refresh the token, in ms since the epoch: its expiry less 60 s. */
+  refreshAt: number;
 }
 
 export interface Bff {
@@ -163,6 +167,8 @@ export interface Bff {
   logout(req: BffRequest): Promise<BffResponse>;
   /** The session, refreshed when under 60 s are left (one refresh in flight per session); null when logged out. */
   session(req: BffRequest): Promise<BffSession | null>;
+  /** Marks the user's tokens stale: the next `session()` of any of their sessions, whose tokens this BFF obtained before this call, refreshes once even when the token isn't near expiry. Marks are kept for an hour. */
+  stale(userId: string): void;
   /** The store id (SHA-256 hex) of the request's session cookie, or null; it doesn't check that the session exists. For apps that keep data next to a session. */
   sessionId(req: BffRequest): string | null;
   /** `Sec-Fetch-Site: same-origin`, or else an `Origin` equal to the app origin. */

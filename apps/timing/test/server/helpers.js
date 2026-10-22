@@ -35,7 +35,7 @@ export async function startServer(options = {}) {
  * @param {{ clock?: { now: number }, hostname?: string, env?: Record<string, string>, [key: string]: any }} [options]
  */
 export async function startTiming(options = {}) {
-  const { clock, hostname, env, simulate = null, ...rest } = options;
+  const { clock, hostname, env, simulate = null, noticeToken, ...rest } = options;
   const settings = { simulate: readSimulate(simulate) };
   const now = clock ? () => clock.now : Date.now;
   const store = openStore(':memory:');
@@ -45,14 +45,14 @@ export async function startTiming(options = {}) {
   const server = createServer((req, res) => handler(req, res));
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const suite = await startSuite({ plannerPort: server.address().port, hostname, env });
+  const suite = await startSuite({ plannerPort: server.address().port, hostname, env, notice: noticeToken ? { uri: `${base}/notices/membership`, token: noticeToken } : undefined });
   const keys = [{ id: 'k1', key: randomBytes(32) }];
   const auth = createAuth({
     issuer: suite.issuer, clientId: suite.clientId, clientSecret: suite.clientSecret,
     keys, publicUrl: base, sessions: store.sessions,
     logger: { warn: () => {} },
   });
-  handler = createHandler({ appDir, log: false, store, hub, engine, auth, keys, publicUrl: base, now, settings, ...rest });
+  handler = createHandler({ appDir, log: false, store, hub, engine, auth, keys, publicUrl: base, now, settings, noticeToken, ...rest });
   const db = suite.accounts.db;
 
   /** A new accounts user with their personal space, as a real sign-up makes. */

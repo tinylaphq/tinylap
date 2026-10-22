@@ -15,11 +15,12 @@ export { driveAuthorize, Jar, navigate };
  * the app's redirect URI is `/auth/callback`, its post-logout redirect URI
  * `/`, its resource its origin. Start the app's server first (port 0) and
  * pass the port it got. `hostname` names the issuer's host (a browser test
- * needs `localhost`: a passkey's RP ID cannot be an IP address).
- * @param {{ plannerPort: number, env?: Record<string, string>, hostname?: string }} options
+ * needs `localhost`: a passkey's RP ID cannot be an IP address). `notice`
+ * registers the app's membership notice endpoint with accounts.
+ * @param {{ plannerPort: number, env?: Record<string, string>, hostname?: string, notice?: { uri: string, token: string } }} options
  */
-export async function startSuite({ plannerPort, env = {}, hostname }) {
-  const accounts = await startAccounts({ plannerPort, env, hostname });
+export async function startSuite({ plannerPort, env = {}, hostname, notice }) {
+  const accounts = await startAccounts({ plannerPort, env, hostname, notice });
   const { client } = accounts;
   /** @type {Promise<void> | undefined} */
   let closing;

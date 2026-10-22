@@ -27,4 +27,6 @@ Tests: `pnpm --filter @tinylap/timing-app test`; in Chrome, `pnpm --filter @tiny
 5. Sign in at https://tinylap-timing.fly.dev and check the board loads.
 6. Let CI deploy from now on: `gh variable set TIMING_DEPLOY_ENABLED --body true`.
 
+Membership notices (optional): generate `openssl rand -base64 32`, set it on timing with `fly secrets set --app tinylap-timing TINYLAP_NOTICE_TOKEN=<token>`, and add `"noticeUri": "https://tinylap-timing.fly.dev/notices/membership", "noticeToken": "<token>"` to timing's entry in `TINYLAP_CLIENTS`. Without `TINYLAP_NOTICE_TOKEN` the route answers 404.
+
 Key rotation and backups work as for the planner (`apps/accounts/README.md`): `TINYLAP_TOKEN_KEYS` takes the new key first and the old ones after it; Fly snapshots the volume daily.
