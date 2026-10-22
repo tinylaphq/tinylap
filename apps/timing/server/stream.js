@@ -33,13 +33,16 @@ function eventStream(request, workspaceId, { watcher, tag }) {
       if (sub.replay === 'snapshot') write({ id: request.hub.lastId(), type: 'snapshot', data: request.engine.snapshot(workspaceId, { watcher }) });
       const beat = setInterval(() => res.write(': beat\n\n'), HEARTBEAT_MS);
       beat.unref();
-      // A watcher has no session; rotating the token ends its stream (onClose).
-      const stopChecks = watcher ? () => {} : endWhenDenied(request, res, workspaceId, 'timing.run');
-      res.on('close', () => {
+      const close = () => {
         clearInterval(beat);
         stopChecks();
         sub.unsubscribe();
+      };
+      const stopChecks = endWhenDenied(request, workspaceId, 'timing.run', watcher, () => {
+        close();
+        res.end();
       });
+      res.on('close', close);
     },
   };
 }

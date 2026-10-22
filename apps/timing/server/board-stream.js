@@ -52,14 +52,17 @@ function boardStream(request, workspaceId, { watcher, token = null }) {
       render();
       const beat = setInterval(() => res.write(': beat\n\n'), HEARTBEAT_MS);
       beat.unref();
-      // A watcher has no session; replacing the link ends its stream (onClose).
-      const stopChecks = watcher ? () => {} : endWhenDenied(request, res, workspaceId, 'timing.run');
-      res.on('close', () => {
+      const close = () => {
         clearInterval(beat);
         stopChecks();
         if (timer) clearTimeout(timer);
         sub.unsubscribe();
+      };
+      const stopChecks = endWhenDenied(request, workspaceId, 'timing.run', watcher, () => {
+        close();
+        res.end();
       });
+      res.on('close', close);
     },
   };
 }
