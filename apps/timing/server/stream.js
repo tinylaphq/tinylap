@@ -5,7 +5,7 @@
 // Server-Sent Events (spec §7) for members and for the watchers view. A
 // stream starts with what the client missed (Last-Event-ID) or a snapshot.
 // Watcher streams are tagged with their token, so rotating it ends them.
-import { NO_STORE, workspaceRoute } from './access.js';
+import { endWhenDenied, NO_STORE, workspaceRoute } from './access.js';
 import { prefersHtml } from './negotiate.js';
 import { json, problem } from './responses.js';
 import { page } from './respond.js';
@@ -33,8 +33,11 @@ function eventStream(request, workspaceId, { watcher, tag }) {
       if (sub.replay === 'snapshot') write({ id: request.hub.lastId(), type: 'snapshot', data: request.engine.snapshot(workspaceId, { watcher }) });
       const beat = setInterval(() => res.write(': beat\n\n'), HEARTBEAT_MS);
       beat.unref();
+      // A watcher has no session; rotating the token ends its stream (onClose).
+      const stopChecks = watcher ? () => {} : endWhenDenied(request, res, workspaceId, 'timing.run');
       res.on('close', () => {
         clearInterval(beat);
+        stopChecks();
         sub.unsubscribe();
       });
     },
