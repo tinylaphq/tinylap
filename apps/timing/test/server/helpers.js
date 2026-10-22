@@ -45,7 +45,7 @@ export async function startTiming(options = {}) {
   const server = createServer((req, res) => handler(req, res));
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const suite = await startSuite({ plannerPort: server.address().port, hostname, env });
+  const suite = await startSuite({ plannerPort: server.address().port, hostname, env, notice: noticeToken ? { uri: `${base}/notices/membership`, token: noticeToken } : undefined });
   const keys = [{ id: 'k1', key: randomBytes(32) }];
   const auth = createAuth({
     issuer: suite.issuer, clientId: suite.clientId, clientSecret: suite.clientSecret,

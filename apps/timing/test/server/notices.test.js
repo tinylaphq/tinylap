@@ -8,6 +8,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { removeMember } from '../../../accounts/server/workspaces.js';
+import { testSession } from '../../../accounts/test/helpers.js';
 import { startTiming } from './helpers.js';
 import { events, next } from './sse.js';
 
@@ -52,6 +53,17 @@ test('a notice for a removed member ends their board stream and the reconnect ge
   assert.equal(await next(it, 'ended'), null);
   const again = await app.api(who, 'GET', `/clubs/${office.id}/board/events`);
   assert.equal(again.status, 404);
+});
+
+test('removing a member in accounts\' API ends their open stream in timing', async () => {
+  const { user, it } = await watching('Fay');
+  const owner = await testSession(app.suite.accounts.auth, ana.id);
+  const res = await fetch(`${app.suite.issuer}/api/clubs/${office.id}/members/${user.id}`, {
+    method: 'DELETE',
+    headers: { 'sec-fetch-site': 'same-origin', cookie: owner.header() },
+  });
+  assert.equal(res.status, 204);
+  assert.equal(await next(it, 'ended'), null);
 });
 
 test('a notice for a member still allowed leaves the stream open', async () => {
