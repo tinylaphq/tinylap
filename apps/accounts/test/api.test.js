@@ -19,12 +19,15 @@ let accounts;
 /** The notices accounts sent the capture server below, and whether it answers them. @type {{ auth: string | undefined, body: any }[]} */
 const notices = [];
 let silent = false;
+/** Requests left unanswered while `silent`; ended afterwards so no warning is logged at teardown. @type {import('node:http').ServerResponse[]} */
+const unanswered = [];
 const noticeServer = createServer((req, res) => {
   const chunks = [];
   req.on('data', (c) => chunks.push(c));
   req.on('end', () => {
     notices.push({ auth: req.headers.authorization, body: JSON.parse(Buffer.concat(chunks).toString()) });
-    if (!silent) res.writeHead(204).end();
+    if (silent) unanswered.push(res);
+    else res.writeHead(204).end();
   });
 });
 before(async () => {
@@ -278,6 +281,7 @@ describe('membership notices', () => {
       await sent(); // it did go out, and was left unanswered
     } finally {
       silent = false;
+      for (const res of unanswered.splice(0)) res.writeHead(204).end();
     }
   });
 
