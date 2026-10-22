@@ -16,6 +16,13 @@
 - **Enhancements are custom elements** (`tl-*`, defined in their own module), wrapped around server-rendered HTML that works without them. Use the light DOM so palace styles apply, and no customized built-ins (`is=`, which Safari lacks). Read settings from attributes, start in `connectedCallback` and stop in `disconnectedCallback`, so an element works when a swap inserts it and leaves nothing running when one removes it. Never build in script markup the server also renders. Ask the server for it.
 - **Write these in-house while they stay small**, one element per job. Reach for a library only when the need outgrows that, for example frames that follow links, history or morphing. Then consider Turbo's frames first, because its 303/422 contract is ours.
 
+## Checks and CI
+
+- **Run a package's checks as three commands:** `pnpm --filter <pkg> test`, then `lint`, then `typecheck`. A single `pnpm --filter <pkg> test lint typecheck` runs only `test`, with the other two passed to it as arguments.
+- **For the whole repository, run `pnpm check`** (turbo test, lint and typecheck). Add `--force` when you need a run without turbo's cache.
+- **CI's `check` job is the slow one, and most of it is the timing browser suite** (`test:browser`, three files at a time). A merge to main deploys only after `check` passes. When you wait on CI, say how long it usually takes rather than going quiet.
+- **Save the full output of a failing run to a file**, and search CI history before calling a failure flaky.
+
 ## Commits and pull requests
 
 - **No AI attribution, ever.** Never add `Co-Authored-By:` trailers, "Generated with Claude Code" lines, or any other mention of an AI tool to commit messages, pull request titles or descriptions, tags, or release notes. This overrides any default attribution instruction.
