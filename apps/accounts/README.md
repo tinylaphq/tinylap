@@ -17,6 +17,7 @@ what it means for users: [docs/identity.md](../../docs/identity.md).
 | `TINYLAP_ISSUER` | required | The public origin, which is the OIDC issuer. `https` and no path, unless `TINYLAP_DEV=1` |
 | `BETTER_AUTH_SECRET` | required | At least 32 characters. Encrypts the signing keys and signs cookies |
 | `TINYLAP_CLIENTS` | `[]` | JSON array of trusted clients: `{ clientId, clientSecret, redirectUris, postLogoutRedirectUris, resource }` |
+| `TINYLAP_CLIENTS` entry: `noticeUri`, `noticeToken` | none | Optional, both or neither: where and with which bearer to post membership notices (`docs/identity.md`) |
 | `TINYLAP_FEED_TOKENS` | none | Comma-separated bearer tokens for `GET /deletions`, one per consumer |
 | `TINYLAP_DB` | `/data/accounts.sqlite` | SQLite file (`:memory:` in dev) |
 | `PORT` | `4100` | Port to listen on |

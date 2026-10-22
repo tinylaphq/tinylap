@@ -64,6 +64,17 @@ Until a capture from a real device confirms the checksum and the id bytes, this 
 
 On Linux, WebHID needs a udev rule that lets your user open the device's hidraw node, and Web Serial needs the `dialout` group.
 
+## Membership notices
+
+Timing takes membership notices from accounts at `POST /notices/membership`,
+so a removed member's open streams end at once rather than with their next
+token. Set `TINYLAP_NOTICE_TOKEN` on timing and the same value as `noticeToken`
+(with `noticeUri`: `https://<timing>/notices/membership`) in timing's entry
+in accounts' `TINYLAP_CLIENTS`; see `docs/identity.md`. The route answers 204,
+401 for a wrong or missing bearer, 422 for a bad body, and 404 while
+`TINYLAP_NOTICE_TOKEN` is unset. A notice ends nothing by itself: timing
+re-reads the users' claims and ends only the streams they no longer allow.
+
 ## Without hardware
 
 Start the timing server with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production.
