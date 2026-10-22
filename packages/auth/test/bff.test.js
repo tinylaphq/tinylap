@@ -307,6 +307,53 @@ test('two concurrent session() calls on an expiring token cause one refresh, and
   assert.notEqual(c.accessToken, a.accessToken);
 });
 
+test('session() reports refreshAt as the token\'s expiry less 60 s', async () => {
+  const { appJar } = await login();
+  const s = await app.bff.session(reqFor(appJar));
+  assert.ok(s);
+  assert.equal(s.refreshAt, s.claims.exp * 1000 - 60_000);
+});
+
+/** Lets the clock move past the moment the tokens were obtained. */
+const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test('a stale mark forces one refresh, not one per call', async () => {
+  const { appJar, user } = await login();
+  const before = /** @type {any} */ (await app.bff.session(reqFor(appJar)));
+  await tick();
+  const calls = app.calls.get('/oauth2/token') ?? 0;
+  app.bff.stale(user.id);
+  const first = await app.bff.session(reqFor(appJar));
+  const second = await app.bff.session(reqFor(appJar));
+  assert.equal((app.calls.get('/oauth2/token') ?? 0) - calls, 1, 'one refresh');
+  assert.ok(first && second);
+  assert.notEqual(first.accessToken, before.accessToken);
+  assert.equal(second.accessToken, first.accessToken);
+});
+
+test('a mark for another user forces nothing', async () => {
+  const { appJar } = await login();
+  await tick();
+  const calls = app.calls.get('/oauth2/token') ?? 0;
+  app.bff.stale('someone-else');
+  assert.ok(await app.bff.session(reqFor(appJar)));
+  assert.equal((app.calls.get('/oauth2/token') ?? 0) - calls, 0);
+});
+
+test('a mark made before the tokens were obtained forces nothing', async () => {
+  const appJar = new Jar();
+  const start = await fetch(`${app.origin}/auth/login`, { redirect: 'manual' });
+  appJar.store(start);
+  const { user, jar } = await app.suite.signInUser();
+  app.bff.stale(user.id);
+  await tick();
+  const back = await driveAuthorize(/** @type {string} */ (start.headers.get('location')), jar);
+  appJar.store(await fetch(/** @type {string} */ (back.headers.get('location')), { redirect: 'manual', headers: { cookie: appJar.header() } }));
+  const calls = app.calls.get('/oauth2/token') ?? 0;
+  assert.ok(await app.bff.session(reqFor(appJar)));
+  assert.equal((app.calls.get('/oauth2/token') ?? 0) - calls, 0);
+});
+
 test('a request that read the old row while a refresh ran does not refresh again with the spent token', async () => {
   const { appJar } = await login();
   await expireSoon(appJar);
