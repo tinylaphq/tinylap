@@ -37,11 +37,20 @@ jobs:
       # token opens or updates, so the release pull request would never get
       # its required checks. Running ci on its branch by dispatch (which that
       # token may do) reports them on the pull request's head commit.
-      - if: steps.rp.outputs.prs_created == 'true' && steps.rp.outputs.pr != ''
-        run: gh workflow run ci --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+      # A push that leaves the release pull request as it was gives no pull
+      # request here (its last ci run still stands), so the branch is read in
+      # the shell, where an empty value skips the dispatch instead of failing.
+      - if: steps.rp.outputs.prs_created == 'true'
+        run: |
+          branch=$(jq -r '.headBranchName // empty' <<< "$PR")
+          if [ -z "$branch" ]; then
+            echo "The release pull request did not change; no ci to dispatch."
+            exit 0
+          fi
+          gh workflow run ci --repo "$GITHUB_REPOSITORY" --ref "$branch"
         env:
           GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
+          PR: ${{ steps.rp.outputs.pr }}
       - if: steps.rp.outputs.releases_created == 'true'
         uses: actions/checkout@v4
       - if: steps.rp.outputs.releases_created == 'true'
