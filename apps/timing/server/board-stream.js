@@ -5,7 +5,6 @@
 // The board's live stream for pages (spec §3, §6.1): the server renders
 // #board-live and sends it whole, so the board is only ever built in one
 // place. At most one render per THROTTLE_MS; the latest state wins.
-import { endWhenDenied } from './access.js';
 import { pageRoute } from './page-access.js';
 import { page } from './respond.js';
 import { spacePath } from './spaces.js';
@@ -58,7 +57,7 @@ function boardStream(request, workspaceId, { watcher, token = null }) {
         if (timer) clearTimeout(timer);
         sub.unsubscribe();
       };
-      const stopChecks = endWhenDenied(request, workspaceId, 'timing.run', watcher, () => {
+      const stopChecks = request.streams.watch(request, workspaceId, 'timing.run', watcher, () => {
         close();
         res.end();
       });

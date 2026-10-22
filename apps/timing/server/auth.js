@@ -157,6 +157,8 @@ async function callback(request) {
 async function logout(request) {
   if (!request.auth) return off(request);
   if (!request.auth.bff.requireSameOrigin(request.req)) return problem(request, 'forbidden', "Sign out from the app's own page.");
+  // Its streams end now, not at their next check.
+  request.streams.endSession(request.auth.bff.sessionId(request.req));
   return request.auth.bff.logout(request.req);
 }
 

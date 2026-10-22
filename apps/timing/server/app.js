@@ -7,6 +7,7 @@
 // about headers lives here once. A route may instead return
 // { status, headers, stream(req, res) } and write the body itself (SSE).
 import { rateLimiter } from '@tinylap/auth';
+import { createMemberStreams } from './member-streams.js';
 import { problem } from './responses.js';
 import { isInstallPath } from './simulate.js';
 import { staticFiles } from './static.js';
@@ -79,13 +80,14 @@ async function dispatch(request, routes, serveStatic) {
 
 /** Per-minute and per-hour budgets (spec §9). */
 const LIMITS = { ingest: 600, tap: 120, pair: 10 };
-/** How often an open member stream checks its viewer's access again (#39). */
+/** When an open member stream checks its viewer's access again after an outage or error (#39). */
 const ACCESS_CHECK_MS = 15_000;
 
 /**
  * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string,
  *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
- *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number }, accessCheckMs?: number }} options
+ *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number }, accessCheckMs?: number,
+ *   streams?: import('./member-streams.js').MemberStreams }} options
  */
 export function createHandler(options) {
   const log = typeof options.log === 'function' ? options.log : options.log === false ? null : (line) => console.log(line);
@@ -104,7 +106,7 @@ export function createHandler(options) {
     clientIpHeader: options.clientIpHeader?.toLowerCase() || null,
     fetch: options.fetch ?? globalThis.fetch,
     now,
-    accessCheckMs: options.accessCheckMs ?? ACCESS_CHECK_MS,
+    streams: options.streams ?? createMemberStreams({ retryMs: options.accessCheckMs ?? ACCESS_CHECK_MS }),
     limiters: {
       // Batches per decoder per minute; a race of 8 cars is a few passings a second.
       ingest: rateLimiter({ limit: limits.ingest, windowMs: 60_000, now }),
