@@ -95,14 +95,19 @@ void test_valid_ids() {
   TEST_ASSERT_FALSE(validToken(std::string(42, 'a')));
 }
 
-int main() {
+// Runs first: the tests after it read the vectors it loads.
+void test_vectors_load() {
   std::ifstream file(VECTORS_PATH);
+  TEST_ASSERT_TRUE_MESSAGE(file.is_open(), "cannot open " VECTORS_PATH);
   std::stringstream text;
   text << file.rdbuf();
   DeserializationError err = deserializeJson(vectors, text.str());
-  UNITY_BEGIN();
-  TEST_ASSERT_TRUE_MESSAGE(file.is_open(), "cannot open " VECTORS_PATH);
   TEST_ASSERT_FALSE_MESSAGE(err, err.c_str());
+}
+
+int main() {
+  UNITY_BEGIN();
+  RUN_TEST(test_vectors_load);
   RUN_TEST(test_to_decoder);
   RUN_TEST(test_from_decoder);
   RUN_TEST(test_streams);

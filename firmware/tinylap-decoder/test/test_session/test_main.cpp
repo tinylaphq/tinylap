@@ -1,7 +1,6 @@
 #include <unity.h>
 #include <string>
 #include <vector>
-#include "base64url.h"
 #include "session.h"
 
 using namespace tinylap;
