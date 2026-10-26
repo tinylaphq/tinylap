@@ -8,6 +8,10 @@ struct Level { bool low; uint16_t us; };  // low: carrier present (the TSOP pull
 
 struct FrameLimits {
   uint16_t glitchMax, startMin, startMax, oneMin, oneMax, zeroMin, zeroMax, burstMin, burstMax, frameMax;
+  // The least high level around a frame (spec §5.1). Set from the capture's measured pauses inside
+  // a frame (spec §4.3). 1550 (startMax - burstMin) is the safe default before any measurement; with it,
+  // two transponders in view at once decode nothing, since their gaps sum to under 3.1 ms.
+  uint16_t silenceMin;
 };
 extern const FrameLimits kLimits;  // the README's values (spec §5.1)
 

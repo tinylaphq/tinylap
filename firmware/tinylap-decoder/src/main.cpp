@@ -25,7 +25,7 @@ namespace {
 struct QueuedFrame { uint8_t id; int64_t tUs; };
 constexpr uint8_t kOverflow = 0xFF;
 constexpr int kIrPin = 4;
-constexpr uint32_t kIrStackBytes = 8192;  // the buffers below are static; decodeBatch needs ~3 KB of stack
+constexpr uint32_t kIrStackBytes = 12288;  // the buffers below are static; decodeBatch takes 5184 B
 constexpr size_t kMaxFrames = 32;         // a batch of 512 levels holds at most ~28 frames
 constexpr int64_t kStatUs = 10000000;     // a stat line every 10 s (spec §6.1)
 constexpr size_t kFwMax = 48;             // keeps the boot line well under 512 bytes

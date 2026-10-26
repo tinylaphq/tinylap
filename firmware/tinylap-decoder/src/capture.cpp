@@ -6,6 +6,9 @@
 
 using namespace tinylap;
 
+// decodeBatch's arrays run on loop()'s stack; Arduino's default 8 KB leaves too little margin.
+SET_LOOP_TASK_STACK_SIZE(12 * 1024);
+
 static ir::Batch batch;
 static Level work[ir::kMaxLevels];
 static Frame frames[16];

@@ -3,7 +3,7 @@
 
 namespace tinylap {
 
-const FrameLimits kLimits = {100, 1100, 1700, 751, 1100, 421, 750, 150, 1200, 9000};
+const FrameLimits kLimits = {100, 1100, 1700, 751, 1100, 421, 750, 150, 1200, 9000, 1550};
 
 size_t filterGlitches(Level* levels, size_t n, uint16_t glitchMax) {
   size_t w = 0;  // write index
@@ -47,25 +47,26 @@ size_t decodeBatch(const Level* levels, size_t n, const FrameLimits& lim,
   };
 
   // Every low level's start (µs from the batch's start) and length. At most n of each.
+  // 16-bit where a level fits, to keep the frame small on the IR task's stack.
   uint32_t starts[512];
   uint16_t lens[512];
-  uint32_t before[512];  // the high level before each burst; UINT32_MAX at the batch's start
-  uint32_t after[512];   // the high level after it; UINT32_MAX at the batch's end
+  uint16_t before[512];  // the high level before each burst; UINT16_MAX (silence) at the batch's start
+  uint16_t after[512];   // the high level after it; UINT16_MAX (silence) at the batch's end
   size_t bursts = 0;
   uint32_t t = 0;
   for (size_t k = 0; k < n; k++) {
     if (levels[k].low && bursts < 512) {
       starts[bursts] = t;
       lens[bursts] = levels[k].us;
-      before[bursts] = bursts == 0 ? UINT32_MAX : (k > 0 && !levels[k - 1].low ? levels[k - 1].us : 0);
-      after[bursts] = k + 1 < n ? (!levels[k + 1].low ? levels[k + 1].us : 0) : UINT32_MAX;
+      before[bursts] = bursts == 0 ? UINT16_MAX : (k > 0 && !levels[k - 1].low ? levels[k - 1].us : 0);
+      after[bursts] = k + 1 < n ? (!levels[k + 1].low ? levels[k + 1].us : 0) : UINT16_MAX;
       bursts++;
     }
     t += levels[k].us;
   }
   // A frame is bounded by silence (spec §5.1): nothing can sit closer to it than the longest pause
   // inside a frame. Two overlapping frames would otherwise hide a third id in their union.
-  uint32_t silence = uint32_t(lim.startMax) - lim.burstMin;
+  uint16_t silence = lim.silenceMin;
 
   size_t found = 0;
   size_t i = 0;

@@ -184,7 +184,7 @@ void test_overlap_is_not_a_third_id() {
   size_t third = 0;
   for (uint8_t a : ids)
     for (uint8_t c : ids)
-      for (size_t off = 0; off <= 3200; off += 40) {
+      for (size_t off = 0; off <= 8000; off += 40) {
         Levels u = overlap(a, c, off);
         Frame out[8];
         Rejection r;
@@ -194,6 +194,24 @@ void test_overlap_is_not_a_third_id() {
       }
   // No checksum: two ids (85 with 99, aligned, both orders) still read as 101. Ghost risk, spec §5.1.
   TEST_ASSERT_EQUAL(2, third);
+}
+
+// Two transponders in view at once, their frames 1.2 ms apart: a bound measured below that lets both
+// through; the safe default lets neither (spec §4.3, §5.1).
+void test_silence_bound_is_a_parameter() {
+  Levels v = train(5);
+  v.push_back({false, 1200});
+  Levels b = train(99);
+  v.insert(v.end(), b.begin(), b.end());
+  Frame out[4];
+  Rejection r;
+  FrameLimits measured = kLimits;
+  measured.silenceMin = 1000;
+  TEST_ASSERT_EQUAL(2, decodeBatch(v.data(), v.size(), measured, out, 4, &r));
+  TEST_ASSERT_EQUAL(5, out[0].id);
+  TEST_ASSERT_EQUAL(99, out[1].id);
+  TEST_ASSERT_EQUAL(1550, kLimits.silenceMin);
+  TEST_ASSERT_EQUAL(0, decodeBatch(v.data(), v.size(), kLimits, out, 4, &r));
 }
 
 void test_noise_batch_at_capacity() {
@@ -226,6 +244,7 @@ int main() {
   RUN_TEST(test_seven_bits_then_noise);
   RUN_TEST(test_two_frames_in_one_batch);
   RUN_TEST(test_overlap_is_not_a_third_id);
+  RUN_TEST(test_silence_bound_is_a_parameter);
   RUN_TEST(test_noise_batch_at_capacity);
   RUN_TEST(test_batch_start);
   return UNITY_END();
