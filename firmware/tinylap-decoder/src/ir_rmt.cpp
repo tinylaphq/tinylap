@@ -16,7 +16,7 @@ bool begin(int pin) {
   cfg.mem_block_num = 4;
   cfg.rx_config.filter_en = true;
   cfg.rx_config.filter_ticks_thresh = 255;  // APB ticks, the hardware maximum
-  cfg.rx_config.idle_threshold = 2500;      // µs of silence that ends a batch
+  cfg.rx_config.idle_threshold = kIdleUs;   // µs of silence that ends a batch
   if (rmt_config(&cfg) != ESP_OK) return false;
   if (rmt_driver_install(kChannel, kRingBytes, 0) != ESP_OK) return false;
   if (rmt_get_ringbuf_handle(kChannel, &ring) != ESP_OK || ring == nullptr) return false;
@@ -24,8 +24,11 @@ bool begin(int pin) {
 }
 
 bool receive(Batch& out, uint32_t waitMs) {
+  if (ring == nullptr) return false;  // begin() failed: no driver to read from
   size_t bytes = 0;
-  auto* items = static_cast<rmt_item32_t*>(xRingbufferReceive(ring, &bytes, pdMS_TO_TICKS(waitMs)));
+  // pdMS_TO_TICKS would overflow on portMAX_DELAY, which means wait forever.
+  TickType_t ticks = waitMs == portMAX_DELAY ? portMAX_DELAY : pdMS_TO_TICKS(waitMs);
+  auto* items = static_cast<rmt_item32_t*>(xRingbufferReceive(ring, &bytes, ticks));
   if (items == nullptr) return false;
   out.readUs = esp_timer_get_time();
   // Measured while this batch still holds its space.

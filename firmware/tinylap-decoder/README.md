@@ -2,7 +2,7 @@
 
 Firmware for a decoder you build yourself: an ESP32 with infrared receivers at the finish line, reading the transponders in the cars. Over USB it speaks ZRound plus TinyLap's four `%TL…` commands, as `docs/timing.md` describes, so the timing app's bridge can pair it and forward its passings. Wi-Fi delivery comes later.
 
-Status: no firmware yet. The spec and plan come first (`docs/superpowers/specs/`, `docs/superpowers/plans/`).
+The design is in `docs/superpowers/specs/2026-10-26-decoder-firmware-design.md`.
 
 ## Hardware
 
@@ -45,3 +45,39 @@ Times are measured from one falling edge of the receiver's output to the next, t
 - To ZRound and the app the id is the transponder code, in upper-case hex: car 42 is `%L2A,<hex ms>&`. Label each transponder with its hex code, since that is what the app shows.
 
 The receiving code on the board today prints text at 115200 baud and speaks no ZRound. This firmware replaces it.
+
+## Build and flash
+
+Three PlatformIO environments, all run from this directory (`firmware/tinylap-decoder/`):
+
+| Env | What |
+| --- | --- |
+| `esp32dev` | The decoder: ZRound and `%TL…` over USB at 19200 baud. |
+| `capture` | The capture build: logs every receiver pulse at 921600 baud, to measure the transponders. |
+| `native` | The host tests of `lib/tinylap/`. No board needed. |
+
+```sh
+pio test -e native                    # host tests
+pio run -e esp32dev -e capture        # build both firmwares
+pio run -e esp32dev -t upload --upload-port /dev/cu.usbserial-XXXX
+pio device monitor -e esp32dev --port /dev/cu.usbserial-XXXX     # 19200 baud
+```
+
+For the capture build, upload with `-e capture` and open the monitor with `-e capture`, which sets 921600 baud.
+
+Name the port every time: other devices (a monitor, a phone) show up as serial ports too. Only one program can hold the port, so close the monitor before an upload.
+
+### Backing up and restoring a board
+
+Before the first upload over the board's old firmware, keep a copy of the whole flash (4 MB on an ESP32-WROOM-32E):
+
+```sh
+esptool.py --port /dev/cu.usbserial-XXXX read_flash 0 0x400000 backup.bin
+esptool.py --port /dev/cu.usbserial-XXXX write_flash 0 backup.bin    # to restore it
+```
+
+`esptool.py` comes with PlatformIO, in `~/.platformio/packages/tool-esptoolpy/`.
+
+### The pairing and the token
+
+The decoder keeps its pairing (decoder id and token) and the Wi-Fi settings in NVS, the board's flash. They are **not encrypted**: anyone holding the board can read the token with `esptool`. To unpair, pair again (a new `%TLPAIR` replaces the old pairing), or erase the flash with `pio run -e esp32dev -t erase --upload-port /dev/cu.usbserial-XXXX`, which also removes the firmware.

@@ -27,7 +27,7 @@ void loop() {
     n = filterGlitches(work, n, kLimits.glitchMax);
     Rejection first = {Reject::None, 0};
     size_t found = decodeBatch(work, n, kLimits, frames, 16, &first);
-    int64_t startUs = batchStartUs(batch.readUs, batch.levels, batch.n, 2500);
+    int64_t startUs = batchStartUs(batch.readUs, batch.levels, batch.n, ir::kIdleUs);
     Serial.println(formatBatch(startUs, batch.levels, batch.n, frames, found, first).c_str());
     stats.add(startUs, frames, found);
     if (batch.n == ir::kMaxLevels) stats.overflowed();
