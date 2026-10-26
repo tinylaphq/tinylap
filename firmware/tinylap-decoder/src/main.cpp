@@ -29,6 +29,9 @@ constexpr uint32_t kIrStackBytes = 12288;  // the buffers below are static; deco
 constexpr size_t kMaxFrames = 32;         // a batch of 512 levels holds at most ~28 frames
 constexpr int64_t kStatUs = 10000000;     // a stat line every 10 s (spec §6.1)
 constexpr size_t kFwMax = 48;             // keeps the boot line well under 512 bytes
+// How far tick runs behind the clock: the idle threshold (2.5 ms), the longest frame (~8 ms) and
+// wake-up margin. Frames already stamped may still be in the RMT or the queue (spec §5.3).
+constexpr uint32_t kTickLagMs = 15;
 
 QueueHandle_t queue;
 
@@ -65,16 +68,29 @@ void event(const std::string& line) {
     own.suppressed++;
 }
 
-// Counts every crossing's end and writes its pass or event line (spec §6.1).
+// Counts every crossing's end and keeps it, so its pass or event line follows the %L it explains
+// (spec §6.1). A tick ends at most one crossing per car, an onFrame at most one.
 struct Observer : CrossingObserver {
+  CrossingEnd ends[130];
+  size_t count = 0;
   void ended(const CrossingEnd& e) override {
     switch (e.outcome) {
-      case Outcome::Passed: own.pass++; sink.write(passLine(e)); return;
+      case Outcome::Passed: own.pass++; break;
       case Outcome::Single: own.single++; break;
       case Outcome::Quiet: own.quiet++; break;
       case Outcome::MinLap: own.minlap++; break;
     }
-    event(eventLine(e));
+    if (count < sizeof ends / sizeof ends[0]) ends[count++] = e;
+  }
+  // After each onFrame or tick, once its passings are written.
+  void flush() {
+    for (size_t i = 0; i < count; i++) {
+      if (ends[i].outcome == Outcome::Passed)
+        sink.write(passLine(ends[i]));
+      else
+        event(eventLine(ends[i]));
+    }
+    count = 0;
   }
 } observer;
 
@@ -219,13 +235,16 @@ void loop() {
     }
     size_t n = crossings.onFrame(q.id, tMs, out, 2);
     for (size_t i = 0; i < n; i++) session.onPassing(out[i]);
+    observer.flush();
   }
 
   int64_t now = esp_timer_get_time();
   uint32_t nowMs;
   if (toBootMs(now, session.bootStartUs(), &nowMs)) {
-    size_t n = crossings.tick(nowMs, out, 128);
+    // Behind the clock, so a crossing is never closed before its last frames arrive (spec §5.3).
+    size_t n = crossings.tick(nowMs > kTickLagMs ? nowMs - kTickLagMs : 0, out, 128);
     for (size_t i = 0; i < n; i++) session.onPassing(out[i]);
+    observer.flush();
   }
   session.tick(now);
 
