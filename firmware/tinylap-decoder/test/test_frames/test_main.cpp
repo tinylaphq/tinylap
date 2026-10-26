@@ -116,6 +116,8 @@ void test_glitch_inside_a_bit() {
   Levels w = withGlitch(150);
   n = filterGlitches(w.data(), w.size(), 100);
   TEST_ASSERT_EQUAL(0, decodeBatch(w.data(), n, kLimits, out, 4, &r));
+  TEST_ASSERT_EQUAL(Reject::Bit, r.why);
+  TEST_ASSERT_EQUAL(3, r.bit);
 }
 
 void test_filter_at_the_ends() {
@@ -153,17 +155,19 @@ void test_two_frames_in_one_batch() {
   TEST_ASSERT_EQUAL(total(a) + 2000, out[1].offsetUs);
 }
 
-// The union of two frames' carrier, as two transponders seen at once.
-void test_overlap_is_not_a_third_id() {
-  Levels a = train(0x2A);
-  Levels b = train(0x55);
-  std::vector<bool> low(10000, false);
-  for (const Levels* v : {&a, &b}) {
-    size_t t = 0;
-    for (auto& l : *v) {
-      if (l.low) for (size_t k = 0; k < l.us; k++) low[t + k] = true;
-      t += l.us;
-    }
+// ORs two frames' carrier (the second shifted by offUs), as two transponders seen at once.
+static Levels overlap(uint8_t a, uint8_t c, size_t offUs) {
+  Levels x = train(a), y = train(c);
+  std::vector<bool> low(offUs + 10000, false);
+  size_t t = 0;
+  for (auto& l : x) {
+    if (l.low) for (size_t k = 0; k < l.us; k++) low[t + k] = true;
+    t += l.us;
+  }
+  t = offUs;
+  for (auto& l : y) {
+    if (l.low) for (size_t k = 0; k < l.us; k++) low[t + k] = true;
+    t += l.us;
   }
   Levels u;
   for (size_t k = 0; k < low.size();) {
@@ -172,10 +176,24 @@ void test_overlap_is_not_a_third_id() {
     u.push_back({low[k], uint16_t(j - k)});
     k = j;
   }
-  Frame out[8];
-  Rejection r;
-  size_t n = decodeBatch(u.data(), u.size(), kLimits, out, 8, &r);
-  for (size_t k = 0; k < n; k++) TEST_ASSERT_TRUE(out[k].id == 0x2A || out[k].id == 0x55);
+  return u;
+}
+
+void test_overlap_is_not_a_third_id() {
+  const uint8_t ids[] = {0, 5, 0x2A, 0x55, 99, 127};
+  size_t third = 0;
+  for (uint8_t a : ids)
+    for (uint8_t c : ids)
+      for (size_t off = 0; off <= 3200; off += 40) {
+        Levels u = overlap(a, c, off);
+        Frame out[8];
+        Rejection r;
+        size_t n = decodeBatch(u.data(), u.size(), kLimits, out, 8, &r);
+        for (size_t k = 0; k < n; k++)
+          if (out[k].id != a && out[k].id != c) third++;
+      }
+  // No checksum: two ids (85 with 99, aligned, both orders) still read as 101. Ghost risk, spec §5.1.
+  TEST_ASSERT_EQUAL(2, third);
 }
 
 void test_noise_batch_at_capacity() {

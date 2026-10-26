@@ -1,4 +1,5 @@
 #include "frames.h"
+#include <stdint.h>
 
 namespace tinylap {
 
@@ -48,16 +49,23 @@ size_t decodeBatch(const Level* levels, size_t n, const FrameLimits& lim,
   // Every low level's start (µs from the batch's start) and length. At most n of each.
   uint32_t starts[512];
   uint16_t lens[512];
+  uint32_t before[512];  // the high level before each burst; UINT32_MAX at the batch's start
+  uint32_t after[512];   // the high level after it; UINT32_MAX at the batch's end
   size_t bursts = 0;
   uint32_t t = 0;
   for (size_t k = 0; k < n; k++) {
     if (levels[k].low && bursts < 512) {
       starts[bursts] = t;
       lens[bursts] = levels[k].us;
+      before[bursts] = bursts == 0 ? UINT32_MAX : (k > 0 && !levels[k - 1].low ? levels[k - 1].us : 0);
+      after[bursts] = k + 1 < n ? (!levels[k + 1].low ? levels[k + 1].us : 0) : UINT32_MAX;
       bursts++;
     }
     t += levels[k].us;
   }
+  // A frame is bounded by silence (spec §5.1): nothing can sit closer to it than the longest pause
+  // inside a frame. Two overlapping frames would otherwise hide a third id in their union.
+  uint32_t silence = uint32_t(lim.startMax) - lim.burstMin;
 
   size_t found = 0;
   size_t i = 0;
@@ -80,6 +88,9 @@ size_t decodeBatch(const Level* levels, size_t n, const FrameLimits& lim,
       if (!within(lens[k], lim.burstMin, lim.burstMax)) { ok = false; break; }
     }
     if (!ok) { note(Reject::Burst); i++; continue; }
+
+    if (before[i] < silence) { note(Reject::Start); i++; continue; }
+    if (after[i + 8] < silence) { note(Reject::Stop); i++; continue; }
 
     if (starts[i + 8] + lens[i + 8] - starts[i] > lim.frameMax) { note(Reject::Long); i++; continue; }
 
