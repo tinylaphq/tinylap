@@ -1,5 +1,6 @@
 #include "ir_rmt.h"
 #include <Arduino.h>
+#include <atomic>
 #include <driver/rmt.h>
 #include <freertos/ringbuf.h>
 
@@ -8,7 +9,7 @@ namespace ir {
 static constexpr rmt_channel_t kChannel = RMT_CHANNEL_0;
 static constexpr size_t kRingBytes = 8192;
 static RingbufHandle_t ring = nullptr;
-static size_t lowWater = kRingBytes;
+static std::atomic<size_t> lowWater{kRingBytes};  // written by the reading task, read by others
 
 bool begin(int pin) {
   rmt_config_t cfg = RMT_DEFAULT_CONFIG_RX(static_cast<gpio_num_t>(pin), kChannel);

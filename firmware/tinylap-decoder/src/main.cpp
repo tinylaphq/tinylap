@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <atomic>
 #include <bootloader_random.h>
+#include <esp_log.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <freertos/queue.h>
@@ -180,6 +181,11 @@ void setup() {
   Serial.setRxBufferSize(1024);
   Serial.setTxBufferSize(2048);  // a boot line takes ~270 ms at 19200; loop() shouldn't wait on it
   Serial.begin(19200);
+  // Only loop() may write to this port (spec §2.4). The IDF logs straight into UART0's FIFO,
+  // past Serial's buffer and mid-line: the RMT driver from its interrupt on a full ring buffer
+  // (through the ROM's putc1, which this removes), NVS and the drivers from their tasks.
+  Serial.setDebugOutput(false);
+  esp_log_level_set("*", ESP_LOG_NONE);
   Serial.onReceiveError([](hardwareSerial_error_t e) {
     if (e != UART_BREAK_ERROR) rxdrop++;  // a full buffer, an overrun, a framing or parity error
   });
@@ -191,8 +197,8 @@ void setup() {
   session.begin(esp_timer_get_time());
 
   queue = xQueueCreate(64, sizeof(QueuedFrame));
-  // Without the receiver there is nothing to read; the stat lines then show batches=0.
-  if (ir::begin(kIrPin)) xTaskCreatePinnedToCore(irTask, "ir", kIrStackBytes, nullptr, 10, nullptr, 0);
+  // Without the queue or the receiver there is nothing to read; the stat lines then show batches=0.
+  if (queue && ir::begin(kIrPin)) xTaskCreatePinnedToCore(irTask, "ir", kIrStackBytes, nullptr, 10, nullptr, 0);
 }
 
 void loop() {
@@ -204,7 +210,7 @@ void loop() {
 
   Passing out[128];
   QueuedFrame q;
-  while (xQueueReceive(queue, &q, 0) == pdTRUE) {
+  while (queue && xQueueReceive(queue, &q, 0) == pdTRUE) {
     uint32_t tMs;
     if (!toBootMs(q.tUs, session.bootStartUs(), &tMs)) continue;  // from before this boot
     if (q.id == kOverflow) {
