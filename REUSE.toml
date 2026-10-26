@@ -28,3 +28,9 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 The TinyLap contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["firmware/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The TinyLap contributors"
+SPDX-License-Identifier = "MPL-2.0"
