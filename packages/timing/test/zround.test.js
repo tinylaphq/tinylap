@@ -4,6 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { commands, createReader, parseMessage } from '../index.js';
 
 test('ZRound messages', () => {
@@ -66,4 +67,31 @@ test('a cut-off message resyncs at the last % before the &', () => {
   const reader = createReader();
   assert.deepEqual(reader.push('%L01,2%A&'), [{ type: 'ack' }]);
   assert.deepEqual(reader.push('%L01,2%TLID dec bootid12&'), [{ type: 'hello', decoder: 'dec', boot: 'bootid12' }]);
+});
+
+// Shared with the decoder firmware's tests, so the two protocol codes cannot drift.
+const vectors = JSON.parse(readFileSync(new URL('./zround-vectors.json', import.meta.url), 'utf8'));
+
+test('vectors: messages to the decoder', () => {
+  for (const { body, message } of vectors.toDecoder) {
+    const parsed = parseMessage(body);
+    if (message.type === 'unknown') assert.equal(parsed.type, 'unknown', body);
+    else assert.deepEqual(parsed, message, body);
+  }
+});
+
+test('vectors: lines from the decoder', () => {
+  for (const { call, line } of vectors.fromDecoder) {
+    const [name, ...args] = Array.isArray(call) ? call : [call];
+    if (name === 'transponder') continue;
+    const command = commands[name];
+    assert.equal(typeof command === 'function' ? command(...args) : command, line, name);
+  }
+});
+
+test('vectors: streams', () => {
+  for (const { chunks, messages } of vectors.streams) {
+    const reader = createReader();
+    assert.deepEqual(chunks.flatMap((chunk) => reader.push(chunk)), messages);
+  }
 });

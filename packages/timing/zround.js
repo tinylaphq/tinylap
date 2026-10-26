@@ -21,6 +21,7 @@ const MAX_PENDING = 1024;
 const encode = (text) => base64url(new TextEncoder().encode(text));
 /** @param {string} value @returns {string | null} */
 function decode(value) {
+  if (!/^[A-Za-z0-9_-]*$/.test(value)) return null;
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
   } catch {
