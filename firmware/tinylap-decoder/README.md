@@ -42,7 +42,7 @@ Measured with the capture build: one test transponder, 1 µs resolution on GPIO 
 | Gap | – | 10–16 ms, evenly spread |
 
 - The bit is in the burst's length, not in the time between bursts. There is no stop burst: the 7th data burst ends the frame. A frame lasts 4.6 ms, so a transponder sends about 76 frames a second.
-- The test transponder reads 0011000, which is id 12 (`0C`) if long = 1.
+- A long burst is 1: the test transponder reads 0011000, id 12 (`0C`).
 - The id is 0–127, with no check bit.
 - To ZRound and the app the id is the transponder code, in upper-case hex: car 42 is `%L2A,<hex ms>&`. Label each transponder with its hex code, since that is what the app shows.
 
