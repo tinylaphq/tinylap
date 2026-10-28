@@ -7,7 +7,7 @@
 //
 // A frame is TL_LEVELS levels, a burst first, then alternating pause and burst: the start burst and pause,
 // then per bit (id bit 0 first, then bit 7 = even parity over the 7-bit id) a burst and a pause, then the
-// stop burst. A bit is told by its pause alone.
+// stop burst. A bit is told by the time from one burst's start to the next, since every data burst has the same length.
 constexpr uint32_t TL_CARRIER_HZ = 38000;
 constexpr uint8_t TL_START_BURST = 46, TL_START_PAUSE = 30, TL_BURST = 15, TL_ZERO_PAUSE = 15, TL_ONE_PAUSE = 30,
                   TL_BITS = 8;

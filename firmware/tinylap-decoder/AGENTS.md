@@ -1,6 +1,6 @@
 # TinyLap decoder firmware: agent rules
 
-The hardware, the wiring and the IR frame format are in `README.md`; the USB protocol is in `docs/timing.md`. The repository's rules (`/AGENTS.md`) apply here too.
+The hardware, the wiring is in `README.md`; the IR frame format is in `firmware/lib/tinylap-ir`; the USB protocol is in `docs/timing.md`. The repository's rules (`/AGENTS.md`) apply here too.
 
 ## Boards and ports
 

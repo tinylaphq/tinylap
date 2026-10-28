@@ -13,7 +13,7 @@ struct FrameLimits {
   uint16_t silenceMin;
   uint16_t startBurstMin, startBurstMax;  // the start burst; burstMin/burstMax are the 9 others
 };
-extern const FrameLimits kLimits;  // the README's values (spec §5.1)
+extern const FrameLimits kLimits;  // the limits derived from firmware/lib/tinylap-ir (design §5.2)
 
 struct Frame { uint8_t id; uint32_t offsetUs; };  // offsetUs: the frame's first falling edge, from the batch's start
 

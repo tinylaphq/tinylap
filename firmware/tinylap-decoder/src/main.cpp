@@ -26,7 +26,7 @@ struct QueuedFrame { uint8_t id; int64_t tUs; };
 constexpr uint8_t kOverflow = 0xFF;
 constexpr int kIrPin = 4;
 constexpr uint32_t kIrStackBytes = 12288;  // the buffers below are static; decodeBatch takes 5184 B
-constexpr size_t kMaxFrames = 32;         // a batch of 512 levels holds at most ~28 frames
+constexpr size_t kMaxFrames = 32;         // a batch of 512 levels holds at most ~25 frames
 constexpr int64_t kStatUs = 10000000;     // a stat line every 10 s (spec §6.1)
 // How far tick runs behind the clock: the idle threshold (2.5 ms), the longest frame (~12 ms) and
 // wake-up margin. Frames already stamped may still be in the RMT or the queue (spec §5.3).
