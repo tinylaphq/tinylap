@@ -91,7 +91,7 @@ Python 3.9 or later. The script runs avrdude through PlatformIO, so build first 
 5. **Reflash with the new value, and check again.**
 
    ```sh
-   python3 tools/flash.py flash --id 12 --osccal 140
+   python3 tools/flash.py flash --id 12 --osccal 154
    ```
 
    Repeat the check from step 3 until the start period is within ±1.5%.

@@ -23,5 +23,5 @@ After any change to `carrier` in `src/main.cpp`, check the loop's cycle count by
 
 ## Tooling
 
-- PlatformIO Core is at `/opt/homebrew/bin/pio`. The program is plain avr-libc, not Arduino: Arduino's timer interrupt would break the carrier loop's timing.
+- PlatformIO Core (`pio`) builds and tests it. The program is plain avr-libc, not Arduino: Arduino's timer interrupt would break the carrier loop's timing.
 - The transponder library and `tinylap-ir` compile for AVR: no STL containers, no exceptions, no heap.

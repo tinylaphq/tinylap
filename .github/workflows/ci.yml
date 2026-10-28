@@ -90,9 +90,10 @@ jobs:
       - run: pnpm test:e2e
 
   # The decoder and transponder firmware (firmware/tinylap-decoder and
-  # firmware/tinylap-transponder): host tests, then a build of each image. Only when firmware files change on a pull request; a
-  # push to main or a run by hand always runs it. Nothing waits on it: deploy
-  # needs check and smoke only.
+  # firmware/tinylap-transponder): host tests, then a build of each image.
+  # Only when firmware files change on a pull request; a push to main or a run
+  # by hand always runs it. Nothing waits on it: deploy needs check and smoke
+  # only.
   changes:
     runs-on: ubuntu-latest
     permissions:
