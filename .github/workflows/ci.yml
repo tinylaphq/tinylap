@@ -89,8 +89,8 @@ jobs:
       - run: google-chrome --version
       - run: pnpm test:e2e
 
-  # The decoder firmware (firmware/tinylap-decoder): host tests, then a build of
-  # both boards' images. Only when firmware files change on a pull request; a
+  # The decoder and transponder firmware (firmware/tinylap-decoder and
+  # firmware/tinylap-transponder): host tests, then a build of each image. Only when firmware files change on a pull request; a
   # push to main or a run by hand always runs it. Nothing waits on it: deploy
   # needs check and smoke only.
   changes:
@@ -124,11 +124,11 @@ jobs:
         with:
           python-version: '3.12'
       # PlatformIO's platforms, toolchains and libraries: the slow part of a
-      # cold run. Keyed on platformio.ini, which pins them.
+      # cold run. Keyed on both projects' platformio.ini, which pin them.
       - uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-${{ hashFiles('firmware/tinylap-decoder/platformio.ini') }}
+          key: pio-${{ hashFiles('firmware/*/platformio.ini') }}
       - run: pip install platformio==6.2.0
       # The native env builds with the address and undefined-behaviour
       # sanitizers, which ubuntu-latest's gcc supports.
@@ -136,6 +136,14 @@ jobs:
         working-directory: firmware/tinylap-decoder
       - run: pio run -e esp32dev -e capture
         working-directory: firmware/tinylap-decoder
+      # The transponder: host tests, the ATtiny45 image, and the flash script's
+      # tests (plain Python, no board).
+      - run: pio test -e native
+        working-directory: firmware/tinylap-transponder
+      - run: pio run -e attiny45
+        working-directory: firmware/tinylap-transponder
+      - run: python3 -m unittest discover -s tools
+        working-directory: firmware/tinylap-transponder
 
   reuse:
     runs-on: ubuntu-latest
