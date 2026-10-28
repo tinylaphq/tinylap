@@ -1,9 +1,10 @@
 #include "frames.h"
 #include <stdint.h>
+#include "tinylap_ir.h"
 
 namespace tinylap {
 
-const FrameLimits kLimits = {100, 1100, 1700, 751, 1100, 421, 750, 150, 1200, 9000, 1550};
+const FrameLimits kLimits = {100, 1593, 2400, 987, 1592, 590, 986, 200, 700, 15836, 2000, 800, 1700};
 
 size_t filterGlitches(Level* levels, size_t n, uint16_t glitchMax) {
   size_t w = 0;  // write index
@@ -70,34 +71,38 @@ size_t decodeBatch(const Level* levels, size_t n, const FrameLimits& lim,
 
   size_t found = 0;
   size_t i = 0;
-  while (i + 8 < bursts) {
+  // A frame is 10 bursts: the start, 8 bits (the 7-bit id LSB first, then even parity), the stop.
+  while (i + 9 < bursts) {
     uint32_t sp = starts[i + 1] - starts[i];
     if (!within(sp, lim.startMin, lim.startMax)) { note(Reject::Start); i++; continue; }
 
-    uint8_t id = 0;
+    uint8_t bits = 0;
     bool ok = true;
-    for (size_t k = i + 1; k <= i + 7; k++) {
+    for (size_t k = i + 1; k <= i + 8; k++) {
       uint32_t p = starts[k + 1] - starts[k];
       uint8_t bit = uint8_t(k - i - 1);
-      if (within(p, lim.oneMin, lim.oneMax)) id |= uint8_t(1u << bit);
+      if (within(p, lim.oneMin, lim.oneMax)) bits |= uint8_t(1u << bit);
       else if (within(p, lim.zeroMin, lim.zeroMax)) { /* a 0 */ }
       else { note(Reject::Bit, bit); ok = false; break; }
     }
     if (!ok) { i++; continue; }
 
-    for (size_t k = i; k <= i + 8; k++) {
-      if (!within(lens[k], lim.burstMin, lim.burstMax)) { ok = false; break; }
-    }
+    ok = within(lens[i], lim.startBurstMin, lim.startBurstMax);
+    for (size_t k = i + 1; ok && k <= i + 9; k++) ok = within(lens[k], lim.burstMin, lim.burstMax);
     if (!ok) { note(Reject::Burst); i++; continue; }
 
     if (before[i] < silence) { note(Reject::Start); i++; continue; }
-    if (after[i + 8] < silence) { note(Reject::Stop); i++; continue; }
+    if (after[i + 9] < silence) { note(Reject::Stop); i++; continue; }
 
-    if (starts[i + 8] + lens[i + 8] - starts[i] > lim.frameMax) { note(Reject::Long); i++; continue; }
+    if (starts[i + 9] + lens[i + 9] - starts[i] > lim.frameMax) { note(Reject::Long); i++; continue; }
+
+    // Last, so a frame that fails anything else keeps that reason.
+    uint8_t id = bits & 0x7F;
+    if (tlParity(id) != bool(bits >> 7)) { note(Reject::Parity); i++; continue; }
 
     if (found < maxOut) out[found] = {id, starts[i]};
     found++;
-    i += 9;
+    i += 10;
   }
   if (found > maxOut) found = maxOut;
 
@@ -107,7 +112,7 @@ size_t decodeBatch(const Level* levels, size_t n, const FrameLimits& lim,
     if (within(starts[k + 1] - starts[k], lim.startMin, lim.startMax)) { tailStart = true; break; }
   }
   if (tailStart) note(Reject::Stop);
-  else if (bursts < 9) note(Reject::Short);
+  else if (bursts < 10) note(Reject::Short);
   return found;
 }
 

@@ -57,7 +57,7 @@ Measured with the capture build: one test transponder, 1 µs resolution on GPIO 
 
 With the transponder off for two minutes the receivers picked up nothing, apart from a single stray burst about every 45 minutes.
 
-The fix is a new transponder program with longer bursts and pauses, the bit in the time between bursts and a parity bit. The design is in `docs/superpowers/specs/2026-10-28-transponder-firmware-design.md`. **Until the decoder reads the new format, `kLimits` in `lib/tinylap/frames.cpp` still describes the old receiving code's guess (start about 1350 µs, bits of 600 and 900 µs from falling edge to falling edge), which matches neither format.**
+The fix is a new transponder program with longer bursts and pauses, the bit in the time between bursts and a parity bit. The design is in `docs/superpowers/specs/2026-10-28-transponder-firmware-design.md`. The decoder reads only that format, defined in `firmware/lib/tinylap-ir`: 10 bursts, 8 bits from the time between burst starts, a frame whose parity fails is dropped. `kLimits` in `lib/tinylap/frames.cpp` holds its windows (design §5.2).
 
 The receiving code that was on the board before this firmware printed text at 115200 baud and spoke no ZRound.
 
