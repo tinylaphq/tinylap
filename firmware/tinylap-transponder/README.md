@@ -77,7 +77,13 @@ Python 3.9 or later. The script runs avrdude through PlatformIO, so build first 
    python3 tools/flash.py flash --id 12
    ```
 
-3. **Check the clock.** The chip's oscillator is within ±10% of 8 MHz at worst, which moves the carrier and every time by the same share. Point the transponder at the decoder and run the decoder's capture build (`firmware/tinylap-decoder`, env `capture`). In the log, read the start period: the target is **2000 µs on the capture**, not 8 MHz. Within ±1.5% the chip is good; stop here.
+3. **Check the clock.** The chip's oscillator is within ±10% of 8 MHz at worst, which moves the carrier and every time by the same share. Point the transponder at the decoder and run the decoder's capture build (`firmware/tinylap-decoder`, env `capture`). Save the log to a file. The capture build prints no start period; an `F` line holds the frame's raw levels, such as `F t=… n=19 L1211 H789 …`, and the start period is the first `L` plus the first `H`. One frame is too noisy to read it from (the receiver moves each burst start by up to ±79 µs, more than the ±30 µs tolerance), so average it over 20 or more decoded `F` lines, those with an id (not `id=?`). This prints the average and the count:
+
+   ```sh
+   awk '/^F / && /id=[0-9]/ && $4 ~ /^L/ && $5 ~ /^H/ { s += substr($4, 2) + substr($5, 2); n++ } END { if (n) printf "start period %.0f us over %d frames\n", s / n, n }' capture.log
+   ```
+
+   The target is **2000 µs on the capture**, not 8 MHz. Within ±1.5% (1970–2030 µs) the chip is good; stop here.
 
 4. **If it is outside ±1.5%, calibrate.** Read the chip's factory value, then let the script compute a corrected one from it and the measured start period:
 
@@ -86,7 +92,7 @@ Python 3.9 or later. The script runs avrdude through PlatformIO, so build first 
    python3 tools/flash.py osccal --current 150 --start-us 2080
    ```
 
-   `--current` is the value `read-cal` printed (or the one already stored); `--start-us` is the capture's start period. The script keeps the step within the chip's own OSCCAL range and below the value where EEPROM writes become unreliable.
+   `--current` is the value `read-cal` printed (or the one already stored); `--start-us` is the averaged start period. The script moves OSCCAL by one step per about 1% of error, stays within the chip's half of the range, and refuses a reading more than 15% off. Aiming at a 2000 µs start period keeps the clock at about 8 MHz, below the 8.8 MHz limit for EEPROM writes.
 
 5. **Reflash with the new value, and check again.**
 
@@ -98,7 +104,17 @@ Python 3.9 or later. The script runs avrdude through PlatformIO, so build first 
 
 `flash` and `read-cal` take `--programmer` (default `usbasp`) and `--port`; `flash` also takes `--hex` (default `.pio/build/attiny45/firmware.hex`).
 
-For a programmer PlatformIO does not know, use avrdude directly, with the same EEPROM layout as above.
+To flash without PlatformIO, use avrdude directly, with `-C` (config file), `-c` (programmer) and `-p t45`. The fuses first, once per chip:
+
+```sh
+avrdude -C avrdude.conf -c usbasp -p t45 -U lfuse:w:0xE2:m -U hfuse:w:0xD5:m
+```
+
+Then the flash and the EEPROM, with the EEPROM given inline as the three bytes of the layout above: the id, the id XOR 0xFF, and the OSCCAL value or 0xFF. For id 12 without calibration, `0x0C,0xF3,0xFF`:
+
+```sh
+avrdude -C avrdude.conf -c usbasp -p t45 -U flash:w:.pio/build/attiny45/firmware.hex:i -U eeprom:w:0x0C,0xF3,0xFF:m
+```
 
 ## Checks on the bench
 

@@ -19,7 +19,7 @@ Run from this directory, as three separate commands:
 
 ## The carrier loop
 
-After any change to `carrier` in `src/main.cpp`, check the loop's cycle count by disassembly (`avr-objdump -d` on `.pio/build/attiny45/firmware.elf`): every carrier cycle must stay at the clock count the comments in the file state. The native tests cannot see it.
+After any change to `carrier` in `src/main.cpp`, to the main loop that calls it (it holds 17 of the 26 overhead clocks), or to the toolchain or platform version, check the loop's cycle count by disassembly (`avr-objdump -d` on `.pio/build/attiny45/firmware.elf`): every carrier cycle must stay at the clock count the comments in the file state. The native tests cannot see it.
 
 ## Tooling
 
