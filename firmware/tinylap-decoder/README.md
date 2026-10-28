@@ -10,8 +10,9 @@ The design is in `docs/superpowers/specs/2026-10-26-decoder-firmware-design.md`.
 
 | Part | What | Notes |
 | --- | --- | --- |
-| Board | ESP32-WROOM-32E module (classic ESP32, dual core, Wi-Fi) | PlatformIO board `esp32dev`, Arduino framework. The USB-to-serial chip on the board is not yet known (CP2102 or CH340 are common); it decides the USB vendor and product id the bridge sees. |
-| Receivers | 4 × Vishay TSOP38238 | Demodulating IR receivers for a 38 kHz carrier. The output is active low: it goes low while a burst of carrier arrives. It reports that light came, not which car sent it. |
+| Board | ESP32-WROOM-32E module (classic ESP32, chip ESP32-D0WD-V3, dual core, Wi-Fi) | PlatformIO board `esp32dev`, Arduino framework. The USB-to-serial chip is a Silicon Labs CP2102N, USB vendor and product id `10C4:EA60`; on a Mac it shows up as `/dev/cu.usbserial-…`. |
+| Receivers | 4 × Vishay TSOP38238 | Demodulating IR receivers for a 38 kHz carrier. The output is active low: it goes low while a burst of carrier arrives. It reports that light came, not which car sent it. The datasheet's minimum burst is 10 carrier cycles, about 263 µs. |
+| Mounting | A gantry over the track, about 30 cm up | The receivers look down through 3D-printed funnels, which narrow their view to a strip at the line. The transponders point up at them from the cars. |
 | Wiring | All four receivers' outputs in parallel on **GPIO 4** | The pin is an input without the internal pull-up; the receivers' own output stages pull it high. Any receiver that sees a burst pulls the line low. |
 | Power and data | The board's USB socket | One cable for power and the serial link to the bridge. |
 
@@ -21,30 +22,44 @@ One per car:
 
 | Part | What |
 | --- | --- |
-| Controller | Microchip ATtiny45, already programmed |
-| Emitter | Vishay TSAL6200: IR LED, GaAlAs, 940 nm, 34°, 5 mm (T-1 ¾) |
+| Controller | Microchip ATtiny45 on its internal 8 MHz oscillator, already programmed (the old program's source is lost) |
+| Driver | A transistor switches the LED |
+| Emitter | Vishay TSAL6200: IR LED, GaAlAs, 940 nm, 34°, 5 mm (T-1 ¾). Half the light 17° off its axis, so the transponder's aim matters more than the distance. |
+| Connector | Three wires: red is 5 V, grey is ground, blue is not connected (the car's socket has three pins) |
 
-Reprogramming the ATtiny45s is possible, if the measurements on the track show it is warranted. It needs an AVR ISP programmer, or the ESP32 acting as one.
+The test transponder is powered by an ESP32-C3 SuperMini on a power bank, used only as a 5 V supply: red to its `5V` pin, grey (through a yellow jumper) to `G`.
+
+Reprogramming the ATtiny45s is warranted (see below). It needs an AVR ISP programmer on the chip's SCK, MISO, MOSI and RESET legs, which are not on the three-wire connector.
 
 ### The IR frame
 
-Read from the receiving code that runs on the decoder today; **to be confirmed** against the transponder code and by a capture of the raw pulses on GPIO 4.
+Measured with the capture build: one test transponder, 1 µs resolution on GPIO 4. Times are lengths of the receiver's output: a burst is the time it is low (carrier arriving), a pause the time it is high.
 
-Times are measured from one falling edge of the receiver's output to the next, that is, from the start of one carrier burst to the start of the next:
-
-| Part | Time | Meaning |
+| Part | Burst (µs) | Pause after it (µs) |
 | --- | --- | --- |
-| Gap | more than 2.5 ms of silence (4–7 ms in practice) | A frame starts with the next burst. |
-| Start | about 1350 µs (900 µs burst, 450 µs pause) | Accepted between 1100 and 1700 µs. |
-| 7 data bits, least significant first | about 900 µs for 1, about 600 µs for 0 | 1 between 750 and 1100 µs, 0 between 420 and 750 µs. How each splits into burst and pause is not yet known. |
-| Stop | one more burst | Its falling edge ends the last bit. |
+| Start | 820 (790–870) | 375 (320–400) |
+| 7 data bursts, least significant first | short 130–220 = 0, long 380–410 = 1 | about 275 |
+| Gap | – | 10–16 ms, evenly spread |
 
-- A frame takes about 7 ms and, with its gap, repeats every 11–14 ms, so a car sends 70–90 frames a second and two or more while it crosses the line.
-- The id is 0–127. There is no checksum: the receiving code counts a car only after two frames with the same id within 150 ms, so one garbled frame can't make a ghost car.
-- The receiving code ignores a car for 2 s after it passed (the minimum lap time; its comment says 3 s for real races).
+- The bit is in the burst's length, not in the time between bursts. There is no stop burst: the 7th data burst ends the frame. A frame lasts 4.6 ms, so a transponder sends about 76 frames a second.
+- The test transponder reads 0011000, which is id 12 (`0C`) if long = 1.
+- The id is 0–127, with no check bit.
 - To ZRound and the app the id is the transponder code, in upper-case hex: car 42 is `%L2A,<hex ms>&`. Label each transponder with its hex code, since that is what the app shows.
 
-The receiving code on the board today prints text at 115200 baud and speaks no ZRound. This firmware replaces it.
+**The frames mostly arrive broken.** The short bursts are 5–8 carrier cycles, below the receiver's minimum of 10. The receiver also stretches or shrinks bursts by up to about 100 µs depending on signal strength, so the 275 µs pauses vanish and bursts merge. The four receivers sharing one pin may smear them further.
+
+| Position | Frames arriving whole |
+| --- | --- |
+| Hand-held, about 5 cm | 20–45% |
+| Hand-held, about 20 cm | 19% |
+| Hand-held, about 30 cm | 0% |
+| Under the gantry at car height, about 25 cm | 0–4% |
+
+With the transponder off for two minutes the receivers picked up nothing, apart from a single stray burst about every 45 minutes.
+
+The fix is a new transponder program with longer bursts and pauses, the bit in the time between bursts and a parity bit. The design is in `docs/superpowers/specs/2026-10-28-transponder-firmware-design.md`. **Until the decoder reads the new format, `kLimits` in `lib/tinylap/frames.cpp` still describes the old receiving code's guess (start about 1350 µs, bits of 600 and 900 µs from falling edge to falling edge), which matches neither format.**
+
+The receiving code that was on the board before this firmware printed text at 115200 baud and spoke no ZRound.
 
 ## Build and flash
 
@@ -72,7 +87,7 @@ Name the port every time: other devices (a monitor, a phone) show up as serial p
 Before the first upload over the board's old firmware, keep a copy of the whole flash (4 MB on an ESP32-WROOM-32E):
 
 ```sh
-esptool.py --port /dev/cu.usbserial-XXXX read_flash 0 0x400000 backup.bin
+esptool.py --port /dev/cu.usbserial-XXXX --baud 921600 read_flash 0 0x400000 backup.bin    # about 6 minutes without --baud
 esptool.py --port /dev/cu.usbserial-XXXX write_flash 0 backup.bin    # to restore it
 ```
 
