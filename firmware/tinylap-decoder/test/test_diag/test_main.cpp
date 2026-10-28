@@ -41,7 +41,7 @@ void test_stat_line() {
 void test_lines_fit() {
   Counters c;
   memset(&c, 0xFF, sizeof c);
-  std::string fw(40, 'x');
+  std::string fw(kFwMax, 'x');
   std::string s = statLine(c, UINT32_MAX, UINT32_MAX);
   std::string b = bootLine("brownout", fw.c_str(), &c);
   TEST_ASSERT_LESS_THAN(512, s.size());

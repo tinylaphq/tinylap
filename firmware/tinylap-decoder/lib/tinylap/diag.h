@@ -14,6 +14,10 @@ struct Counters {
 constexpr uint32_t kCounterCount = sizeof(Counters) / sizeof(uint32_t);
 static_assert(sizeof(Counters) == kCounterCount * sizeof(uint32_t), "Counters must have no padding");
 
+// The longest firmware version a boot line carries; with every counter at its maximum the line stays
+// under 512 bytes (spec §6.1).
+constexpr size_t kFwMax = 32;
+
 // Every line is `%TLLOG <kind> key=value ...&`; values hold no space, % or &.
 // prev may be null (nothing survived the reset).
 std::string bootLine(const char* reason, const char* fw, const Counters* prev);
