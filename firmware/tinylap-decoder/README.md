@@ -18,18 +18,7 @@ The design is in `docs/superpowers/specs/2026-10-26-decoder-firmware-design.md`.
 
 ### The transponders
 
-One per car:
-
-| Part | What |
-| --- | --- |
-| Controller | Microchip ATtiny45 on its internal 8 MHz oscillator, already programmed (the old program's source is lost) |
-| Driver | A transistor switches the LED |
-| Emitter | Vishay TSAL6200: IR LED, GaAlAs, 940 nm, 34°, 5 mm (T-1 ¾). Half the light 17° off its axis, so the transponder's aim matters more than the distance. |
-| Connector | Three wires: red is 5 V, grey is ground, blue is not connected (the car's socket has three pins) |
-
-The test transponder is powered by an ESP32-C3 SuperMini on a power bank, used only as a 5 V supply: red to its `5V` pin, grey (through a yellow jumper) to `G`.
-
-Reprogramming the ATtiny45s is warranted (see below). It needs an AVR ISP programmer on the chip's SCK, MISO, MOSI and RESET legs, which are not on the three-wire connector.
+One per car, an ATtiny45 with an IR LED. Its hardware, settings and flashing are in `../tinylap-transponder/README.md`.
 
 ### The IR frame
 
