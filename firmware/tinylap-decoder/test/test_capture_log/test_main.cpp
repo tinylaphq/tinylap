@@ -24,6 +24,7 @@ void test_line_rejected() {
   const Case cases[] = {
     {{Reject::Bit, 3}, "id=? bit 3"}, {{Reject::Start, 0}, "id=? start"}, {{Reject::Stop, 0}, "id=? stop"},
     {{Reject::Short, 0}, "id=? short"}, {{Reject::Burst, 0}, "id=? burst"}, {{Reject::Long, 0}, "id=? long"},
+    {{Reject::Parity, 0}, "id=? parity"},
   };
   for (const Case& c : cases) {
     std::string line = formatBatch(0, kThree, 3, nullptr, 0, c.r);

@@ -9,9 +9,10 @@ namespace tinylap {
 // All uint32_t, so there is no padding and the checksum reads no uninitialised bytes.
 struct Counters {
   uint32_t batches, frames, rejStart, rejBit, rejStop, rejShort, rejBurst, rejLong,
-      overflow, ringlow, qdrop, pass, single, quiet, minlap, rxdrop, suppressed;
+      rejParity, overflow, ringlow, qdrop, pass, single, quiet, minlap, rxdrop, suppressed;
 };
-static_assert(sizeof(Counters) == 17 * sizeof(uint32_t), "Counters must have no padding");
+constexpr uint32_t kCounterCount = sizeof(Counters) / sizeof(uint32_t);
+static_assert(sizeof(Counters) == kCounterCount * sizeof(uint32_t), "Counters must have no padding");
 
 // Every line is `%TLLOG <kind> key=value ...&`; values hold no space, % or &.
 // prev may be null (nothing survived the reset).
@@ -33,6 +34,8 @@ class EventLimit {
 };
 
 // Lives in RTC_NOINIT memory on the board, so the last counters survive a crash.
+// Counters saved by a build with another counter set fail the checksum, so restore reports nothing
+// after a reflash.
 struct Saved { uint32_t magic; Counters c; uint32_t sum; };
 void save(Saved& s, const Counters& c);
 bool restore(const Saved& s, Counters& out);  // false unless magic and sum match

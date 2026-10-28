@@ -5,9 +5,9 @@
 namespace tinylap {
 namespace {
 
-const char* const kKeys[17] = {"batches", "frames", "rej.start", "rej.bit", "rej.stop", "rej.short",
-                               "rej.burst", "rej.long", "overflow", "ringlow", "qdrop", "pass",
-                               "single", "quiet", "minlap", "rxdrop", "suppressed"};
+const char* const kKeys[kCounterCount] = {"batches", "frames", "rej.start", "rej.bit", "rej.stop", "rej.short",
+                               "rej.burst", "rej.long", "rej.parity", "overflow", "ringlow",
+                               "qdrop", "pass", "single", "quiet", "minlap", "rxdrop", "suppressed"};
 const uint32_t kMagic = 0x544C4C47;  // "TLLG"
 const uint32_t kWindowMs = 10000;
 const uint8_t kPerWindow = 20;
@@ -29,7 +29,7 @@ std::string hex(uint32_t v) {
 
 void counters(std::string& out, const Counters& c, const char* prefix) {
   const uint32_t* p = reinterpret_cast<const uint32_t*>(&c);
-  for (int i = 0; i < 17; i++) out += std::string(" ") + prefix + kKeys[i] + "=" + std::to_string(p[i]);
+  for (uint32_t i = 0; i < kCounterCount; i++) out += std::string(" ") + prefix + kKeys[i] + "=" + std::to_string(p[i]);
 }
 
 uint32_t fnv1a(const void* data, size_t n) {

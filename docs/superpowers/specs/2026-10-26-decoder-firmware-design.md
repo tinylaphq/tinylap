@@ -239,7 +239,7 @@ The decoder says what it sees and drops, as `%TLLOG` lines over USB. They are wr
 | Line | When | Fields |
 | --- | --- | --- |
 | `%TLLOG boot …&` | right after every `%TLID` that starts a boot | `reason=` `poweron`, `reset` (`%I&`), `brownout`, `panic`, `wdt`, `sw`, `ext` or `other` (from `esp_reset_reason()`); `fw=` the build's `git describe`; after a crash, the previous run's counters as `prev.<key>=` when they survived (below) |
-| `%TLLOG stat …&` | every 10 s | `up=` seconds since power-up; `batches`, `frames`, `rej.start`, `rej.bit`, `rej.stop`, `rej.short`, `rej.burst`, `rej.long`, `overflow`, `ringlow` (bytes), `qdrop`, `pass`, `single` (crossings with one frame), `quiet` and `minlap` (crossings that didn't count, by rule), `rxdrop` (serial input lost), `heap` (free bytes) |
+| `%TLLOG stat …&` | every 10 s | `up=` seconds since power-up; `batches`, `frames`, `rej.start`, `rej.bit`, `rej.stop`, `rej.short`, `rej.burst`, `rej.long`, `rej.parity`, `overflow`, `ringlow` (bytes), `qdrop`, `pass`, `single` (crossings with one frame), `quiet` and `minlap` (crossings that didn't count, by rule), `rxdrop` (serial input lost), `heap` (free bytes) |
 | `%TLLOG pass …&` | when a crossing that made a passing ends | `id=` (hex, as in `%L`), `t=` its stamp, `first=`, `last=`, `frames=` |
 | `%TLLOG event …&` | as it happens, at most 20 per 10 s; beyond that only counted, as `suppressed=` in the next `stat` | `what=single`, `quiet` or `minlap` with `id=` and `t=`; `what=overflow` with `t=` |
 

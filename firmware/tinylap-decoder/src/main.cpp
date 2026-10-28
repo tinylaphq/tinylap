@@ -38,7 +38,7 @@ QueueHandle_t queue;
 // The IR task's counters: it only increments them, loop() only reads them (spec §2.4).
 struct IrCounters {
   std::atomic<uint32_t> batches{0}, frames{0}, rejStart{0}, rejBit{0}, rejStop{0}, rejShort{0},
-      rejBurst{0}, rejLong{0}, overflow{0}, qdrop{0};
+      rejBurst{0}, rejLong{0}, rejParity{0}, overflow{0}, qdrop{0};
 };
 IrCounters ir_;
 std::atomic<uint32_t> rxdrop{0};  // counted on the serial driver's event task
@@ -145,6 +145,7 @@ Counters snapshot() {
   c.rejShort = ir_.rejShort;
   c.rejBurst = ir_.rejBurst;
   c.rejLong = ir_.rejLong;
+  c.rejParity = ir_.rejParity;
   c.overflow = ir_.overflow;
   c.qdrop = ir_.qdrop;
   c.ringlow = uint32_t(ir::ringLowWater());
@@ -161,6 +162,7 @@ void countRejection(Reject why) {
     case Reject::Short: ir_.rejShort++; break;
     case Reject::Burst: ir_.rejBurst++; break;
     case Reject::Long: ir_.rejLong++; break;
+    case Reject::Parity: ir_.rejParity++; break;
   }
 }
 

@@ -38,7 +38,7 @@ A TinyLap decoder sends `%TLID` on its own whenever its boot changes (power-up, 
 `%TLLOG` lines are for logs, not for the app: every field is `key=value`, values hold no space, `%` or `&`, times are upper-case hex ms on the boot's clock (as in `%L`), counts are decimal. ZRound software ignores them, as it does `%TLID`. Four kinds:
 
 - `boot`: after every `%TLID` that starts a boot. `reason=` (`poweron`, `reset`, `brownout`, `panic`, `wdt`, `sw`, `ext`, `other`), `fw=` the build, and after a crash the last counters as `prev.<key>=`.
-- `stat`: every 10 s. `up=` seconds since power-up, the counters (`batches`, `frames`, `rej.start`, `rej.bit`, `rej.stop`, `rej.short`, `rej.burst`, `rej.long`, `overflow`, `ringlow`, `qdrop`, `pass`, `single`, `quiet`, `minlap`, `rxdrop`, `suppressed`) and `heap=`. Counters run from power-up and never reset.
+- `stat`: every 10 s. `up=` seconds since power-up, the counters (`batches`, `frames`, `rej.start`, `rej.bit`, `rej.stop`, `rej.short`, `rej.burst`, `rej.long`, `rej.parity`, `overflow`, `ringlow`, `qdrop`, `pass`, `single`, `quiet`, `minlap`, `rxdrop`, `suppressed`) and `heap=`. Counters run from power-up and never reset.
 - `pass`: a crossing that made a passing. `id=`, `t=` (its stamp), `first=`, `last=`, `frames=`.
 - `event`: a crossing that made none, or an overflow, at most 20 per 10 s (the rest only count in `suppressed=`). `what=single`, `quiet` or `minlap` with `id=` and `t=`; `what=overflow` with `t=`.
 

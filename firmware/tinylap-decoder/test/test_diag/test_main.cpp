@@ -11,18 +11,18 @@ void tearDown() {}
 static Counters sample() {
   Counters c;
   uint32_t* p = reinterpret_cast<uint32_t*>(&c);
-  for (uint32_t i = 0; i < 17; i++) p[i] = i + 1;
+  for (uint32_t i = 0; i < kCounterCount; i++) p[i] = i + 1;
   return c;
 }
 
-static const char* const kKeys[17] = {"batches", "frames", "rej.start", "rej.bit", "rej.stop", "rej.short",
-                                      "rej.burst", "rej.long", "overflow", "ringlow", "qdrop", "pass",
-                                      "single", "quiet", "minlap", "rxdrop", "suppressed"};
+static const char* const kKeys[kCounterCount] = {"batches", "frames", "rej.start", "rej.bit", "rej.stop", "rej.short",
+                                      "rej.burst", "rej.long", "rej.parity", "overflow", "ringlow", "qdrop",
+                                      "pass", "single", "quiet", "minlap", "rxdrop", "suppressed"};
 
 void test_boot_line() {
   TEST_ASSERT_EQUAL_STRING("%TLLOG boot reason=poweron fw=v0.1.0-3-gabc&", bootLine("poweron", "v0.1.0-3-gabc", nullptr).c_str());
   std::string want = "%TLLOG boot reason=panic fw=v0.1.0-3-gabc";
-  for (int i = 0; i < 17; i++) want += std::string(" prev.") + kKeys[i] + "=" + std::to_string(i + 1);
+  for (uint32_t i = 0; i < kCounterCount; i++) want += std::string(" prev.") + kKeys[i] + "=" + std::to_string(i + 1);
   want += "&";
   Counters c = sample();
   TEST_ASSERT_EQUAL_STRING(want.c_str(), bootLine("panic", "v0.1.0-3-gabc", &c).c_str());
@@ -30,7 +30,7 @@ void test_boot_line() {
 
 void test_stat_line() {
   std::string want = "%TLLOG stat up=600";
-  for (int i = 0; i < 17; i++) {
+  for (uint32_t i = 0; i < kCounterCount; i++) {
     want += std::string(" ") + kKeys[i] + "=" + std::to_string(i + 1);
   }
   want += " heap=200000&";

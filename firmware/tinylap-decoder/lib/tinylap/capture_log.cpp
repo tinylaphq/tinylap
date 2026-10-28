@@ -37,6 +37,7 @@ std::string formatBatch(int64_t startUs, const Level* raw, size_t n, const Frame
     case Reject::Short: s += " short"; break;
     case Reject::Burst: s += " burst"; break;
     case Reject::Long: s += " long"; break;
+    case Reject::Parity: s += " parity"; break;
     case Reject::None: break;
   }
   return s;
