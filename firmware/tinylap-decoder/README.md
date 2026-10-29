@@ -1,6 +1,6 @@
 # TinyLap decoder firmware
 
-Firmware for a decoder you build yourself: an ESP32 with infrared receivers at the finish line, reading the transponders in the cars. Over USB it speaks ZRound plus TinyLap's four `%TL…` commands, as `docs/timing.md` describes, so the timing app's bridge can pair it and forward its passings. Wi-Fi delivery comes later.
+Firmware for a decoder you build yourself: an ESP32 with infrared receivers at the finish line, reading the transponders in the cars. Over USB it speaks ZRound plus TinyLap's `%TL…` commands, as `docs/timing.md` describes, so the timing app's bridge can pair it and forward its passings. Wi-Fi delivery comes later.
 
 The design is in `docs/superpowers/specs/2026-10-26-decoder-firmware-design.md`.
 
@@ -15,6 +15,7 @@ The design is in `docs/superpowers/specs/2026-10-26-decoder-firmware-design.md`.
 | Mounting | A gantry over the track, about 30 cm up | The receivers look down through 3D-printed funnels, which narrow their view to a strip at the line. The transponders point up at them from the cars. |
 | Wiring | All four receivers' outputs in parallel on **GPIO 4** | The pin is an input without the internal pull-up; the receivers' own output stages pull it high. Any receiver that sees a burst pulls the line low. |
 | Power and data | The board's USB socket | One cable for power and the serial link to the bridge. |
+| Reset | No button reachable | Only an upload (through RTS) or a power cycle restarts it. Opening the port in Chrome does not. |
 
 ### The transponders
 
@@ -22,33 +23,12 @@ One per car, an ATtiny45 with an IR LED. Its hardware, settings and flashing are
 
 ### The IR frame
 
-Measured with the capture build: one test transponder, 1 µs resolution on GPIO 4. Times are lengths of the receiver's output: a burst is the time it is low (carrier arriving), a pause the time it is high.
+The frame is defined once, in `firmware/lib/tinylap-ir`, for this decoder and the transponder program; the transponder design (`docs/superpowers/specs/2026-10-28-transponder-firmware-design.md`, §3) explains it. In short: equal 15-cycle bursts, the bit in the time from one burst's start to the next, 7 id bits least significant first, an even-parity bit and a stop burst, then a random gap of 12–28 ms.
 
-| Part | Burst (µs) | Pause after it (µs) |
-| --- | --- | --- |
-| Start | 820 (790–870) | 375 (320–400) |
-| 7 data bursts, least significant first | short 130–220 = 0, long 380–410 = 1 | about 275 |
-| Gap | – | 10–16 ms, evenly spread |
-
-- The bit is in the burst's length, not in the time between bursts. There is no stop burst: the 7th data burst ends the frame. A frame lasts 4.6 ms, so a transponder sends about 76 frames a second.
-- A long burst is 1: the test transponder reads 0011000, id 12 (`0C`).
-- The id is 0–127, with no check bit.
-- To ZRound and the app the id is the transponder code, in upper-case hex: car 42 is `%L2A,<hex ms>&`. Label each transponder with its hex code, since that is what the app shows.
-
-**The frames mostly arrive broken.** The short bursts are 5–8 carrier cycles, below the receiver's minimum of 10. The receiver also stretches or shrinks bursts by up to about 100 µs depending on signal strength, so the 275 µs pauses vanish and bursts merge. The four receivers sharing one pin may smear them further.
-
-| Position | Frames arriving whole |
-| --- | --- |
-| Hand-held, about 5 cm | 20–45% |
-| Hand-held, about 20 cm | 19% |
-| Hand-held, about 30 cm | 0% |
-| Under the gantry at car height, about 25 cm | 0–4% |
-
-With the transponder off for two minutes the receivers picked up nothing, apart from a single stray burst about every 45 minutes.
-
-The fix is a new transponder program with longer bursts and pauses, the bit in the time between bursts and a parity bit. The design is in `docs/superpowers/specs/2026-10-28-transponder-firmware-design.md`. The decoder reads only that format, defined in `firmware/lib/tinylap-ir`; a frame whose parity fails is dropped. `kLimits` in `lib/tinylap/frames.cpp` holds its windows (design §5.2).
-
-The receiving code that was on the board before this firmware printed text at 115200 baud and spoke no ZRound.
+- The decoder reads only this format. A frame whose parity fails is dropped and counted as `rej.parity`; `kLimits` in `lib/tinylap/frames.cpp` holds the timing windows.
+- Transponders still running the original program (bit in the burst's length, no parity) are not read at all. Their capture is in the transponder design, §1.1.
+- The id is 0–127. To ZRound and the app it is the transponder code, in upper-case hex: car 42 is `%L2A,<hex ms>&`. Label each transponder with its hex code, since that is what the app shows.
+- With no transponder in view the receivers pick up almost nothing: a stray burst about every 45 minutes.
 
 ## Build and flash
 
@@ -68,6 +48,8 @@ pio device monitor -e esp32dev --port /dev/cu.usbserial-XXXX     # 19200 baud
 ```
 
 For the capture build, upload with `-e capture` and open the monitor with `-e capture`, which sets 921600 baud.
+
+After an upload, the first `%TLLOG boot` line says `reason=poweron`: the ESP32 reports a reset through its EN pin, which the upload uses, as a power-on.
 
 Name the port every time: other devices (a monitor, a phone) show up as serial ports too. Only one program can hold the port, so close the monitor before an upload.
 

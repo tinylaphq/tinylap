@@ -4,7 +4,7 @@ Builds on the decoder spec, `2026-10-26-decoder-firmware-design.md`, whose §8 l
 
 ## 1. Why
 
-A capture of the raw receiver output (`tinylap-decoder/README.md`, "The IR frame") shows that the transponders as programmed today can't be timed reliably:
+A capture of the raw receiver output (the decoder's `capture` build: one transponder, 1 µs resolution on GPIO 4) shows that the transponders' original program can't be timed reliably:
 
 - The bit is carried in a burst's length, and the short bursts are 130–220 µs, 5–8 carrier cycles. The TSOP38238 needs at least 10.
 - The receiver shifts a burst's end by up to ±5 cycles (±132 µs, datasheet: `tpi − 5/f0 < tpo < tpi + 5/f0`), so the 275 µs pauses vanish and bursts merge.
@@ -12,6 +12,27 @@ A capture of the raw receiver output (`tinylap-decoder/README.md`, "The IR frame
 - There is no check bit, so a misread frame can't be told from a real id.
 
 This meets the decoder spec's §8 "misses" criterion, so the transponders get a new program.
+
+### 1.1 The original frame, as captured
+
+Times are lengths of the receiver's output: a burst is the time it is low (carrier arriving), a pause the time it is high.
+
+| Part | Burst (µs) | Pause after it (µs) |
+| --- | --- | --- |
+| Start | 820 (790–870) | 375 (320–400) |
+| 7 data bursts, least significant first | short 130–220 = 0, long 380–410 = 1 | about 275 |
+| Gap | – | 10–16 ms, evenly spread |
+
+There is no stop burst: the 7th data burst ends the frame. A frame lasts 4.6 ms, about 76 frames a second. The id is 0–127 with no check bit; the test transponder reads 0011000, id 12.
+
+| Position | Frames arriving whole |
+| --- | --- |
+| Hand-held, about 5 cm | 20–45% |
+| Hand-held, about 20 cm | 19% |
+| Hand-held, about 30 cm | 0% |
+| Under the gantry at car height, about 25 cm | 0–4% |
+
+With the transponder off for two minutes the receivers picked up nothing, apart from a single stray burst about every 45 minutes.
 
 ## 2. Goals and non-goals
 
