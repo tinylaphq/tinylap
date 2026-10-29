@@ -50,7 +50,7 @@ const plain = (options = {}) => zroundModel({ cars: 0, bootMs: 0, ackMs: 5, acks
 const count = (writes, text) => writes.filter((w) => w.text === text).length;
 function posting() {
   const posts = [];
-  return { posts, post: async (decoder, batch) => { posts.push({ decoder, ...batch }); return { through: Math.max(...batch.passings.map((p) => p.t)) }; } };
+  return { posts, post: async (decoder, batch) => { posts.push({ decoder, ...batch }); return { through: batch.passings.length ? Math.max(...batch.passings.map((p) => p.t)) : null }; } };
 }
 function bridgeOn(rig, options = {}) {
   const { posts, post } = posting();
@@ -64,8 +64,8 @@ const sent = (posts) => posts.flatMap((p) => p.passings.map((x) => ({ decoder: p
 test('the defaults are the spec\'s', () => {
   const b = new Bridge({ port: fakeSerialPort(silent()), outbox: memoryOutbox(), post: async () => ({ through: null }) });
   assert.deepEqual(
-    [b.openDelayMs, b.synMs, b.handshakeMs, b.spacingMs, b.helloMs, b.helloEveryMs, b.startMs, b.listenSynMs, b.listenMs, b.flushWaitMs, b.retryMs, b.replyMs],
-    [0, 500, 6000, 300, 2500, 700, 6000, 2000, 60_000, 10_000, 5000, 3000],
+    [b.openDelayMs, b.synMs, b.handshakeMs, b.spacingMs, b.helloMs, b.helloEveryMs, b.startMs, b.listenSynMs, b.listenMs, b.flushWaitMs, b.retryMs, b.replyMs, b.logMaxWaitMs],
+    [0, 500, 6000, 300, 2500, 700, 6000, 2000, 60_000, 10_000, 5000, 3000, 10_000],
   );
 });
 
@@ -599,6 +599,146 @@ test('at most 500 passings are held: the oldest go first', async () => {
   const ts = sent(posts).map((p) => p.t).sort((a, b) => a - b);
   assert.equal(ts[0], 1000 + 6 * 2000, 'the first six are dropped');
   assert.equal(ts.at(-1), 1000 + 505 * 2000);
+  await bridge.close();
+});
+
+// %TLLOG lines: holding, dropping, and the boot rule (spec §2.2).
+
+const log = (line) => `%TLLOG ${line}&`;
+const logged = (posts) => posts.filter((p) => p.logs).map((p) => ({ decoder: p.decoder, boot: p.boot, logs: p.logs }));
+
+test('lines are held in connecting and stamped by the next %TLID', async (t) => {
+  const rig = modelPort(silent());
+  const { bridge, posts } = bridgeOn(rig, { logMaxWaitMs: 50, helloMs: 2000 });
+  t.after(() => bridge.close());
+  await bridge.start();
+  assert.equal(bridge.state, 'connecting');
+  rig.say(log('stat up=1'));
+  await wait(30);
+  assert.deepEqual(posts, []);
+  rig.say('%TLID dec_1 b00tb00t&');
+  await until(() => posts.length === 1);
+  assert.deepEqual(posts, [{ decoder: 'dec_1', boot: 'b00tb00t', passings: [], logs: ['stat up=1'] }]);
+  await bridge.close();
+});
+
+test('lines are dropped while unpaired, for a plain ZRound decoder, on #decide and on a late %TLID', async (t) => {
+  const options = { logMaxWaitMs: 30 };
+  // Unpaired, then paired.
+  const unpaired = modelPort(tinylapModel({ cars: 0 }));
+  const a = bridgeOn(unpaired, options);
+  t.after(() => a.bridge.close());
+  await a.bridge.start();
+  await until(() => a.bridge.state === 'unpaired');
+  unpaired.say(log('stat up=1'));
+  await wait(20);
+  await a.bridge.pair('dec_1', 't'.repeat(43));
+  await until(() => a.bridge.state === 'ready');
+  await wait(100);
+  assert.deepEqual(logged(a.posts), [], 'unpaired');
+  await a.bridge.close();
+  // Held before the kind is known, then the kind is decided as plain ZRound; then a line in ready.
+  const decided = modelPort(plain({ clockEveryMs: 1e9 }));
+  const b = bridgeOn(decided, options);
+  t.after(() => b.bridge.close());
+  await b.bridge.start();
+  decided.say(log('stat up=1'));
+  await until(() => b.bridge.state === 'choose');
+  await b.bridge.assign('dec_9');
+  decided.say(log('stat up=2'));
+  decided.say(commands.lap('0A', 1000));
+  await until(() => sent(b.posts).length === 1);
+  await wait(100);
+  assert.deepEqual(logged(b.posts), [], 'on #decide and for a plain decoder');
+  await b.bridge.close();
+  // A line in choose, then a late %TLID.
+  const late = modelPort(plain({ clockEveryMs: 1e9 }));
+  const c = bridgeOn(late, options);
+  t.after(() => c.bridge.close());
+  await c.bridge.start();
+  await until(() => c.bridge.state === 'choose');
+  late.say(log('stat up=1'));
+  late.say('%TLID dec_1 b00tb00t&');
+  await until(() => c.bridge.kind === 'tinylap' && c.bridge.state === 'ready');
+  await wait(100);
+  assert.deepEqual(logged(c.posts), [], 'on a late %TLID');
+  await c.bridge.close();
+});
+
+test('at most 256 lines are held, the oldest dropped first', async (t) => {
+  const rig = modelPort(silent());
+  const { bridge, posts } = bridgeOn(rig, { logMaxWaitMs: 50, helloMs: 2000 });
+  t.after(() => bridge.close());
+  await bridge.start();
+  const lines = Array.from({ length: 300 }, (_, i) => `stat n=${i}`);
+  for (const line of lines) rig.say(log(line));
+  rig.say('%TLID dec_1 b00tb00t&');
+  await until(() => posts.flatMap((p) => p.logs).length >= 256);
+  await wait(100);
+  assert.deepEqual(posts.flatMap((p) => p.logs), lines.slice(44));
+  assert.ok(posts.every((p) => p.logs.length <= 64));
+  await bridge.close();
+});
+
+test('a boot line straight after its boot-changing %TLID starts no hello()', async (t) => {
+  const rig = modelPort(tinylapModel({ cars: 0, decoder: 'dec_1' }));
+  const { bridge, posts, states } = bridgeOn(rig, { logMaxWaitMs: 30 });
+  t.after(() => bridge.close());
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  rig.say(commands.clock(5000));
+  const hellos = count(rig.writes, commands.hello);
+  const before = states.length;
+  rig.say('%TLID dec_1 b00tb00t&');
+  rig.say(log('boot reason=x'));
+  await until(() => posts.length === 1);
+  assert.equal(count(rig.writes, commands.hello), hellos);
+  assert.ok(!states.slice(before).includes('connecting'));
+  assert.deepEqual(logged(posts), [{ decoder: 'dec_1', boot: 'b00tb00t', logs: ['boot reason=x'] }]);
+  await bridge.close();
+});
+
+test('a boot line after anything else calls hello(), and the passings after it wait for the new boot', async (t) => {
+  for (const line of ['boot reason=x', 'boot reason=x fw=a"b']) {
+    const model = tinylapModel({ cars: 0, decoder: 'dec_1' });
+    const rig = modelPort(model);
+    const { bridge, posts } = bridgeOn(rig, { logMaxWaitMs: 30 });
+    t.after(() => bridge.close());
+    await bridge.start();
+    await until(() => bridge.state === 'ready');
+    const old = bridge.boot;
+    rig.say(commands.clock(5000));
+    const hellos = count(rig.writes, commands.hello);
+    model.sim.reply({ type: 'reset' }, 9000); // the reset's own %TLID got lost
+    rig.say(log(line));
+    rig.say(commands.lap('0A', 500));
+    await until(() => sent(posts).length === 1);
+    assert.equal(count(rig.writes, commands.hello), hellos + 1, line);
+    assert.notEqual(model.sim.boot, old);
+    assert.deepEqual(sent(posts), [{ decoder: 'dec_1', boot: model.sim.boot, transponder: '0A', t: 500 }], line);
+    if (line === 'boot reason=x') {
+      await until(() => logged(posts).length > 0);
+      assert.deepEqual(logged(posts).flatMap((p) => p.logs), [line]);
+      assert.ok(logged(posts).every((p) => p.boot === model.sim.boot), 'the line itself waits for the new boot');
+    }
+    await bridge.close();
+  }
+});
+
+test('a boot line parseLog rejects still triggers the rule', async (t) => {
+  const model = tinylapModel({ cars: 0, decoder: 'dec_1' });
+  const rig = modelPort(model);
+  const { bridge, posts } = bridgeOn(rig, { logMaxWaitMs: 30 });
+  t.after(() => bridge.close());
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  rig.say(commands.clock(5000));
+  const hellos = count(rig.writes, commands.hello);
+  rig.say(log('boot reason=x fw=a"b'));
+  await until(() => count(rig.writes, commands.hello) === hellos + 1);
+  await until(() => bridge.state === 'ready');
+  await wait(100);
+  assert.deepEqual(logged(posts), [], 'a line parseLog rejects is not sent');
   await bridge.close();
 });
 

@@ -4,7 +4,8 @@
 
 // The ZRound reader (decoders spec §2.3): text messages, TinyLap's %TL…
 // included, as session events. A clock, a lap or an ack says the device
-// speaks ZRound ("alive"); %TLID says it is a TinyLap decoder ("identity").
+// speaks ZRound ("alive"); %TLID says it is a TinyLap decoder ("identity");
+// %TLLOG is one of its log lines ("log").
 import { ZROUND_BAUD, createReader } from '@tinylap/timing';
 
 /** @import { DecoderEvent, ZroundMessage } from '@tinylap/timing/types' */
@@ -16,6 +17,8 @@ function eventsOf(m) {
     case 'clock': return [{ type: 'alive' }, { type: 'clock', t: m.t }];
     case 'lap': return [{ type: 'alive' }, { type: 'passing', transponder: m.transponder, t: m.t }];
     case 'hello': return [{ type: 'identity', decoder: m.decoder, boot: m.boot }];
+    // A %TLLOG is in the decoder's protocol, as a clock is (spec §2.1); a line starting "boot " marks a boot (§2.2).
+    case 'log': return [{ type: 'alive' }, { type: 'log', line: m.line, boot: m.line.startsWith('boot ') }];
     case 'reset': return [{ type: 'reset' }];
     case 'ok': return [{ type: 'ok' }];
     case 'error': return [{ type: 'error', text: m.text }];

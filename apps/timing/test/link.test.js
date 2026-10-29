@@ -175,6 +175,14 @@ test('bytes that aren\'t UTF-8, or a % with no real message, never make a ZRound
   assert.deepEqual(zroundProtocol().push(enc('%%x&')), [{ type: 'noise', detail: 'x' }], '%%x&');
 });
 
+test('a %TLLOG yields alive, then log, with boot set by the prefix', () => {
+  assert.deepEqual(zroundProtocol().push(enc('%TLLOG boot reason=x&%TLLOG stat up=1&')), [
+    { type: 'alive' }, { type: 'log', line: 'boot reason=x', boot: true },
+    { type: 'alive' }, { type: 'log', line: 'stat up=1', boot: false },
+  ]);
+  assert.deepEqual(zroundProtocol().push(enc('%TLLOG boot fw=a"b&')), [{ type: 'noise', detail: 'TLLOG boot fw=a"b' }], 'a line parseLog rejects is noise');
+});
+
 test('the Robitronic reader yields alive only for a good frame, and counts the bad ones', () => {
   const robitronic = robitronicProtocol();
   const bad = frames.heartbeat(10);

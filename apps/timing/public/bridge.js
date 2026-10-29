@@ -15,8 +15,11 @@
 //   decoder that doesn't stream gets %I&, its race start.
 // - Passings wait in memory until the identity is known, then in an outbox
 //   until the server holds them. Laps are computed locally for the preview.
+// - A TinyLap decoder's %TLLOG lines are stamped as passings are, and kept in
+//   memory: they go with the next batch of passings for their boot, or alone
+//   after logMaxWaitMs (spec §2.2, §2.4, §2.6).
 // - Decoder events, timers and assign() run on one chain, in order.
-import { MAX_BATCH, MIN_LAP_MS, commands, frames, nextLap, passingKey, randomBoot } from '@tinylap/timing';
+import { MAX_BATCH, MAX_LOG_BYTES, MAX_LOG_LINES, MIN_LAP_MS, commands, frames, nextLap, passingKey, randomBoot } from '@tinylap/timing';
 import { serialTransport } from './link/serial.js';
 import { zroundProtocol } from './link/zround.js';
 
@@ -29,8 +32,12 @@ const STARTS = 3;
 /** The EasyLap start fallback, at most STARTS times, this far apart (spec §2.4). */
 const ROBITRONIC_START_EVERY_MS = 500;
 const BROWSER_ASSIGNED = new Set(['zround', 'easylap']);
+/** At most this many %TLLOG lines are held and queued together, oldest dropped first (spec §2.4). */
+const LOGS_MAX = 256;
 
 /** @typedef {{ boot: string | null, transponder: string, t: number, hits?: number, strength?: number }} Held */
+/** A %TLLOG line without "TLLOG " and "&"; decoder and boot are null while it is held. @typedef {{ decoder: string | null, boot: string | null, line: string }} LogEntry */
+/** @typedef {{ boot: string, passings: { transponder: string, t: number }[], logs?: string[] }} Batch */
 
 export class Bridge extends EventTarget {
   #replies = [];
@@ -60,12 +67,20 @@ export class Bridge extends EventTarget {
   #held = [];
   /** Keys of the passings this connection stamped with a browser-assigned id. */
   #stamped = new Set();
+  /** %TLLOG lines: held (no decoder yet) or stamped and queued to send (spec §2.2, §2.6). @type {LogEntry[]} */
+  #logs = [];
+  /** The last protocol message was a %TLID that changed the boot (spec §2.2). */
+  #bootChanged = false;
+  /** The logs-only flush, logMaxWaitMs after the first line queued (spec §2.4). @type {ReturnType<typeof setTimeout> | null} */
+  #logTimer = null;
+  /** A logs-only flush was asked for while one was in flight. */
+  #againAlone = false;
   /** @type {any} */ transport;
   /** @type {any} */ protocol;
   /** @type {any} */ device;
   /** @type {any} */ port;
   /** @type {ReturnType<typeof import('./outbox.js').memoryOutbox>} */ outbox;
-  /** @type {(decoderId: string, batch: any) => Promise<{ through: number | null }>} */ post;
+  /** @type {(decoderId: string, batch: Batch) => Promise<{ through: number | null }>} */ post;
   /** @type {number} */ openDelayMs;
   /** @type {number} */ synMs;
   /** @type {number} */ handshakeMs;
@@ -78,18 +93,21 @@ export class Bridge extends EventTarget {
   /** @type {number} */ flushWaitMs;
   /** @type {number} */ retryMs;
   /** @type {number} */ replyMs;
+  /** @type {number} */ logMaxWaitMs;
 
   /**
    * @param {{ link?: { transport: any, protocol: any } | null, port?: any, outbox: ReturnType<typeof import('./outbox.js').memoryOutbox>,
-   *   post: (decoderId: string, batch: { boot: string, passings: { transponder: string, t: number }[] }) => Promise<{ through: number | null }>,
+   *   post: (decoderId: string, batch: Batch) => Promise<{ through: number | null }>,
    *   openDelayMs?: number, synMs?: number, handshakeMs?: number, spacingMs?: number, helloMs?: number, helloEveryMs?: number,
-   *   startMs?: number, listenSynMs?: number, listenMs?: number, flushWaitMs?: number, retryMs?: number, replyMs?: number }} options
+   *   startMs?: number, listenSynMs?: number, listenMs?: number, flushWaitMs?: number, retryMs?: number, replyMs?: number,
+   *   logMaxWaitMs?: number }} options
    */
   constructor({ link = null, port = null, outbox, post, openDelayMs = 0, synMs = 500, handshakeMs = 6000, spacingMs = 300, helloMs = 2500,
-    helloEveryMs = 700, startMs = 6000, listenSynMs = 2000, listenMs = 60_000, flushWaitMs = 10_000, retryMs = 5000, replyMs = 3000 }) {
+    helloEveryMs = 700, startMs = 6000, listenSynMs = 2000, listenMs = 60_000, flushWaitMs = 10_000, retryMs = 5000, replyMs = 3000,
+    logMaxWaitMs = 10_000 }) {
     super();
     const { transport, protocol } = link ?? { transport: serialTransport(port), protocol: zroundProtocol() };
-    Object.assign(this, { transport, protocol, port, outbox, post, openDelayMs, synMs, handshakeMs, spacingMs, helloMs, helloEveryMs, startMs, listenSynMs, listenMs, flushWaitMs, retryMs, replyMs });
+    Object.assign(this, { transport, protocol, port, outbox, post, openDelayMs, synMs, handshakeMs, spacingMs, helloMs, helloEveryMs, startMs, listenSynMs, listenMs, flushWaitMs, retryMs, replyMs, logMaxWaitMs });
     this.device = transport.device;
     this.state = 'idle';
     /** @type {'tinylap' | 'zround' | 'easylap' | null} */
@@ -264,6 +282,9 @@ export class Bridge extends EventTarget {
   async #handle(event) {
     // close() drops the queue: what was waiting on the chain does nothing (spec §2.4).
     if (this.#closed) return undefined;
+    // Whether the message before this one was a boot-changing %TLID (spec §2.2). alive is an event, not a message.
+    const afterBootChange = this.#bootChanged;
+    if (event.type !== 'alive') this.#bootChanged = event.type === 'identity' && event.boot !== this.boot;
     switch (event.type) {
       case 'alive': return this.#alive();
       case 'identity': return this.#identity(event);
@@ -272,8 +293,11 @@ export class Bridge extends EventTarget {
         if (this.kind !== 'tinylap' && this.boot) this.#newBoot();
         return undefined;
       case 'passing': return this.#onPassing(event);
+      case 'log': return this.#onLog(event, afterBootChange);
       case 'noise':
         if (event.detail === 'checksum') this.dispatchEvent(new Event('noise'));
+        // A boot line parseLog rejects still marks a boot, so a malformed fw= can't switch the rule off.
+        if (event.detail.startsWith('TLLOG boot ')) return this.#bootLine(afterBootChange);
         return undefined;
       case 'ok':
       case 'error':
@@ -311,6 +335,7 @@ export class Bridge extends EventTarget {
   /** @param {'zround' | 'easylap'} kind */
   #decide(kind) {
     this.kind = kind;
+    this.#dropHeldLines();
     this.#newBoot();
     this.#set('choose');
   }
@@ -354,8 +379,11 @@ export class Bridge extends EventTarget {
     this.#set(decoder ? 'ready' : 'unpaired');
     if (!decoder) {
       this.#held = [];
+      this.#dropHeldLines();
       return;
     }
+    for (const entry of this.#logs) if (entry.decoder === null) Object.assign(entry, { decoder, boot });
+    this.#armLogTimer();
     await this.#stampHeld();
     void this.flush();
   }
@@ -373,6 +401,7 @@ export class Bridge extends EventTarget {
     await this.outbox.remove(mine);
     this.#stamped.clear();
     this.#held = [];
+    this.#dropHeldLines();
     this.dispatchEvent(new Event('identity-changed'));
   }
 
@@ -405,6 +434,58 @@ export class Bridge extends EventTarget {
     this.#held.push(held);
     if (this.#held.length > HELD_MAX) this.#held.shift();
     return undefined;
+  }
+
+  /**
+   * A %TLLOG line (spec §2.2): queued in ready, held until the next %TLID while the kind or the boot isn't known, and
+   * dropped while unpaired or for a decoder whose boots are the browser's.
+   * @param {{ line: string, boot: boolean }} log @param {boolean} afterBootChange
+   */
+  async #onLog({ line, boot }, afterBootChange) {
+    if (boot) await this.#bootLine(afterBootChange);
+    if (this.#closed || this.state === 'unpaired' || BROWSER_ASSIGNED.has(this.kind)) return;
+    const ready = this.state === 'ready';
+    this.#logs.push({ decoder: ready ? this.decoder : null, boot: ready ? this.boot : null, line });
+    if (this.#logs.length > LOGS_MAX) this.#logs.shift();
+    this.#armLogTimer();
+  }
+
+  /**
+   * The firmware writes a boot line straight after the %TLID that starts the boot. One after anything else means that
+   * %TLID was lost: ask again, so what follows waits for the new boot (spec §2.2). @param {boolean} afterBootChange
+   */
+  async #bootLine(afterBootChange) {
+    if (this.kind === 'tinylap' && this.state === 'ready' && !afterBootChange) await this.hello();
+  }
+
+  #dropHeldLines() {
+    this.#logs = this.#logs.filter((entry) => entry.decoder !== null);
+  }
+
+  /** The first stamped line with no timer running starts one; lines after it don't restart it (spec §2.4). */
+  #armLogTimer() {
+    if (this.#logTimer !== null || !this.#logs.some((entry) => entry.decoder !== null)) return;
+    const mine = this.#later(this.logMaxWaitMs, () => {
+      // A timer cancelled after it fired, or replaced, does nothing.
+      if (this.#logTimer !== mine) return;
+      this.#logTimer = null;
+      // Not awaited: this runs on the chain, and a POST there would stall every decoder event behind it.
+      void this.flush({ alone: true });
+    });
+    this.#logTimer = mine;
+  }
+
+  #cancelLogTimer() {
+    if (this.#logTimer === null) return;
+    clearTimeout(this.#logTimer);
+    this.#timers.delete(this.#logTimer);
+    this.#logTimer = null;
+  }
+
+  /** @param {LogEntry[]} sent */
+  #forgetLines(sent) {
+    const done = new Set(sent);
+    this.#logs = this.#logs.filter((entry) => !done.has(entry));
   }
 
   /** A browser-made boot (spec §2.4, rules 1–4). A passing held before any boot takes the first one (F1). */
@@ -478,33 +559,47 @@ export class Bridge extends EventTarget {
     await this.hello();
   }
 
-  /** Sends the outbox; retries later when the server can't be reached. */
-  flush() {
+  /**
+   * Sends the outbox, with the stamped %TLLOG lines; retries later when the server can't be reached.
+   * `alone` (the log timer's flush) also sends lines without passings (spec §2.4).
+   */
+  flush({ alone = false } = {}) {
     if (this.#closed) return Promise.resolve();
     if (this.#flushing) {
       this.#again = true;
+      this.#againAlone ||= alone;
       return this.#flushing;
     }
     clearTimeout(this.#retryTimer);
+    const lines = this.#logs.filter((entry) => entry.decoder !== null);
     this.#flushing = (async () => {
+      // Whether lines left after a logs-only flush may go again on the timer: not after a 401 or a 413, say.
+      let rearm = alone;
       try {
         // A batch taken or refused for good: either way the server answered, and the outbox changed.
-        const { refusal, dropped, blocked } = await sendOutbox(this.outbox, this.post, () => {
+        const { refusal, dropped, blocked, sentLines } = await sendOutbox(this.outbox, this.post, () => {
           this.#setOnline(true);
           this.dispatchEvent(new Event('outbox'));
-        });
+        }, { lines, alone });
+        this.#forgetLines(sentLines);
         this.blocked = blocked;
         if (refusal) Object.assign(this, { lastError: refusal, dropped });
       } catch (error) {
+        this.#forgetLines(/** @type {any} */ (error)?.sentLines ?? []);
+        rearm &&= keepsLines(/** @type {any} */ (error)?.status);
         this.#setOnline(false, error);
         if (!this.#closed) this.#retryTimer = setTimeout(() => void this.flush(), this.retryMs);
       } finally {
         this.#flushing = null;
         this.dispatchEvent(new Event('outbox'));
       }
+      if (!this.#logs.some((entry) => entry.decoder !== null)) this.#cancelLogTimer();
+      else if (rearm) this.#armLogTimer();
       if (this.#again) {
+        const again = { alone: this.#againAlone };
         this.#again = false;
-        await this.flush();
+        this.#againAlone = false;
+        await this.flush(again);
       }
     })();
     return this.#flushing;
@@ -514,7 +609,9 @@ export class Bridge extends EventTarget {
     this.#closed = true;
     clearTimeout(this.#retryTimer);
     this.#stopTimers();
+    this.#logTimer = null;
     this.#held = [];
+    this.#logs = [];
     await this.transport.close();
   }
 }
@@ -522,6 +619,9 @@ export class Bridge extends EventTarget {
 /** The answers that mean these passings will never be taken: no such decoder (it was removed,
  * or never paired), or a batch the server can't read. */
 const FINAL = new Set([404, 422]);
+/** The answers that keep the %TLLOG lines a batch carried for the next flush: a 429, a 5xx or the network (spec §2.6). @param {number | undefined} status */
+const keepsLines = (status) => status === undefined || status === 429 || status >= 500;
+const utf8 = new TextEncoder();
 
 /**
  * Sends an outbox one decoder and boot at a time (spec §5), and drops the passings it sent, up to
@@ -531,28 +631,64 @@ const FINAL = new Set([404, 422]);
  * - a 401, signed out: every batch would fail the same way, so it throws and keeps everything;
  * - a 413, 429, 5xx or network error throws too, keeping the rest for a retry.
  * It returns the last refusal and how many passings were dropped, and the last 403 and how many
- * passings it holds back. A thrown error carries `dropped`, `refusal` and `blocked` from before it.
+ * passings it holds back. A thrown error carries `dropped`, `refusal`, `blocked` and `sentLines` from before it.
+ *
+ * %TLLOG lines (spec §2.6) ride along: each group carries up to MAX_LOG_LINES (MAX_LOG_BYTES) of its own
+ * decoder and boot, in queue order. Only when no group is left, and `alone` is set, do the rest go in
+ * logs-only batches; `alone` also limits the groups to the decoders that have lines. A logs-only answer is
+ * never reported: no onSent, refusal, drop, block or throw. `sentLines` holds the lines this flush is done
+ * with: sent, or dropped by their answer (only a 429, a 5xx or the network keeps them).
  * @param {ReturnType<typeof import('./outbox.js').memoryOutbox>} outbox
- * @param {(decoderId: string, batch: { boot: string, passings: { transponder: string, t: number }[] }) => Promise<{ through: number | null }>} post
- * @param {() => void} [onSent] called after each batch the server answered with a 2xx, 403, 404 or 422
- * @returns {Promise<{ refusal: any, dropped: number, forbidden: any, blocked: number }>}
+ * @param {(decoderId: string, batch: Batch) => Promise<{ through: number | null }>} post
+ * @param {() => void} [onSent] called after each batch of passings the server answered with a 2xx, 403, 404 or 422
+ * @param {{ lines?: LogEntry[], alone?: boolean }} [logs]
+ * @returns {Promise<{ refusal: any, dropped: number, forbidden: any, blocked: number, sentLines: LogEntry[] }>}
  */
-export async function sendOutbox(outbox, post, onSent = () => {}) {
+export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], alone = false } = {}) {
   let refusal = null;
   let dropped = 0;
   let forbidden = null;
   let blocked = 0;
   const skipped = new Set();
+  /** @type {LogEntry[]} */
+  const sentLines = [];
+  const done = new Set();
+  /** @param {LogEntry[]} entries */
+  const finish = (entries) => {
+    for (const entry of entries) done.add(entry);
+    sentLines.push(...entries);
+  };
+  /** The next lines of one decoder and boot, in queue order. @param {string} decoder @param {string} boot */
+  const take = (decoder, boot) => {
+    const taken = [];
+    let bytes = 0;
+    for (const entry of lines) {
+      if (taken.length === MAX_LOG_LINES) break;
+      if (entry.decoder !== decoder || entry.boot !== boot || done.has(entry)) continue;
+      bytes += utf8.encode(entry.line).length;
+      if (bytes > MAX_LOG_BYTES) break;
+      taken.push(entry);
+    }
+    return taken;
+  };
+  const withLines = new Set(lines.map((entry) => entry.decoder));
+  let ranOut = false;
   for (;;) {
-    const items = (await outbox.list()).filter((p) => !skipped.has(p.decoder));
-    if (items.length === 0) break;
+    const items = (await outbox.list()).filter((p) => !skipped.has(p.decoder) && (!alone || withLines.has(p.decoder)));
+    if (items.length === 0) {
+      ranOut = true;
+      break;
+    }
     const [first] = items;
     const group = items.filter((p) => p.decoder === first.decoder && p.boot === first.boot).sort((a, b) => a.t - b.t).slice(0, MAX_BATCH);
+    const carried = take(first.decoder, first.boot);
+    const passings = group.map(({ transponder, t }) => ({ transponder, t }));
     let through;
     try {
-      ({ through } = await post(first.decoder, { boot: first.boot, passings: group.map(({ transponder, t }) => ({ transponder, t })) }));
+      ({ through } = await post(first.decoder, carried.length ? { boot: first.boot, passings, logs: carried.map((entry) => entry.line) } : { boot: first.boot, passings }));
     } catch (error) {
       const status = /** @type {any} */ (error)?.status;
+      if (!keepsLines(status)) finish(carried);
       if (status === 403) {
         skipped.add(first.decoder);
         blocked += items.filter((p) => p.decoder === first.decoder).length;
@@ -561,7 +697,7 @@ export async function sendOutbox(outbox, post, onSent = () => {}) {
         continue;
       }
       if (!FINAL.has(status)) {
-        if (error && typeof error === 'object') Object.assign(error, { dropped, refusal, blocked });
+        if (error && typeof error === 'object') Object.assign(error, { dropped, refusal, blocked, sentLines });
         throw error;
       }
       await outbox.remove(group);
@@ -570,11 +706,42 @@ export async function sendOutbox(outbox, post, onSent = () => {}) {
       onSent();
       continue;
     }
+    finish(carried);
     // Only what this batch carried: a passing of the same boot that wasn't sent stays, whatever `through` says.
     await outbox.remove(group.filter((p) => through !== null && p.t <= through));
     onSent();
     // The server stores what it is sent, so `through` covers the group; if not, stop rather than loop.
     if (through === null || through < group.at(-1).t) break;
   }
-  return { refusal, dropped, forbidden, blocked };
+  if (ranOut && alone) await sendLinesAlone(post, lines, skipped, take, finish, done);
+  return { refusal, dropped, forbidden, blocked, sentLines };
+}
+
+/**
+ * The lines no group carried, in logs-only batches per decoder and boot (spec §2.4). A decoder a 403 refused gets
+ * none: its lines are dropped. A 429, a 5xx or the network stops, keeping the rest for the next flush.
+ * @param {(decoderId: string, batch: Batch) => Promise<{ through: number | null }>} post
+ * @param {LogEntry[]} lines @param {Set<string>} skipped
+ * @param {(decoder: string, boot: string) => LogEntry[]} take @param {(entries: LogEntry[]) => void} finish @param {Set<LogEntry>} done
+ */
+async function sendLinesAlone(post, lines, skipped, take, finish, done) {
+  for (;;) {
+    const next = lines.find((entry) => !done.has(entry));
+    if (!next) return;
+    const decoder = /** @type {string} */ (next.decoder);
+    if (skipped.has(decoder)) {
+      finish(lines.filter((entry) => entry.decoder === decoder && !done.has(entry)));
+      continue;
+    }
+    const boot = /** @type {string} */ (next.boot);
+    const carried = take(decoder, boot);
+    try {
+      await post(decoder, { boot, passings: [], logs: carried.map((entry) => entry.line) });
+    } catch (error) {
+      const status = /** @type {any} */ (error)?.status;
+      if (keepsLines(status)) return;
+      if (status === 403) skipped.add(decoder);
+    }
+    finish(carried);
+  }
 }
