@@ -4,6 +4,7 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { commands } from '@tinylap/timing';
 import { startTiming } from '../server/helpers.js';
 import { openBrowser, pageAs } from './browser.js';
 
@@ -11,12 +12,19 @@ let app;
 let browser;
 let member;
 let personal;
+/** A second member for the Wi-Fi tests: new decoders are limited per member per hour. */
+let wren;
+let wrens;
+/** The server's log lines. */
+const logged = [];
 
 before(async () => {
-  app = await startTiming();
+  app = await startTiming({ log: (line) => logged.push(line) });
   browser = await openBrowser();
   member = await app.login(await app.signUp('Ana'));
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
+  wren = await app.login(await app.signUp('Wren'));
+  wrens = (await (await app.api(wren, 'GET', '/auth/me')).json()).workspaces[0].id;
 });
 after(async () => {
   await browser?.close();
@@ -42,6 +50,12 @@ test('connect, pair and forward with the simulated decoder', async (t) => {
   await page.locator('[data-bridge-preview] li').first().waitFor({ timeout: 20_000 });
   assert.equal(app.store.decoders(personal)[0].name, 'Gate');
   assert.ok(app.engine.snapshot(personal).crossings.length > 0);
+  // The decoder's own lines reach the server's log: a pass line with each passing, and a stat line every 10 s.
+  const kinds = () => new Set(logged.filter((line) => line.startsWith('{')).map((line) => JSON.parse(line)).filter((x) => x.type === 'decoder-log').map((x) => x.kind));
+  for (const end = Date.now() + 20_000; !(kinds().has('pass') && kinds().has('stat'));) {
+    assert.ok(Date.now() < end, `decoder-log kinds after 20 s: ${[...kinds()]}`);
+    await page.waitForTimeout(100);
+  }
   assert.deepEqual(errors, []);
 });
 
@@ -66,10 +80,10 @@ test('without Web Serial or WebHID, the notice stays and no button is offered', 
 });
 
 /** Opens the bridge with the simulated decoder, up to the pairing form. */
-async function toPairing(t, { viewport, init } = {}) {
-  const who = await pageAs(browser, app, member, viewport ? { viewport } : {});
+async function toPairing(t, { viewport, init, arg, as = member } = {}) {
+  const who = await pageAs(browser, app, as, viewport ? { viewport } : {});
   t.after(() => who.context.close());
-  if (init) await who.page.addInitScript(init);
+  if (init) await who.page.addInitScript(init, arg);
   simulating(t, 'tinylap,fast');
   await who.page.goto('/personal/bridge');
   await who.page.getByRole('button', { name: 'Connect decoder' }).click();
@@ -137,6 +151,105 @@ test('a bad name shows the server error as an alert and a blank name is refused 
   await page.getByRole('alert').filter({ hasText: /1 to 60 characters|control/ }).waitFor();
   assert.equal(await page.getByLabel('Decoder name').isEditable(), true);
   assert.equal(app.store.decoders(personal).length, before);
+});
+
+/** Records each line written to the cable in window.__sent; a %TLWIFI line is replaced with `wifi`, when given. */
+const RECORD = (wifi) => {
+  const Original = window.WritableStream;
+  Object.assign(window, { __sent: [] });
+  window.WritableStream = class extends Original {
+    constructor(sink, ...rest) {
+      super(sink && { ...sink, write: (chunk, c) => {
+        let line = new TextDecoder().decode(chunk);
+        if (wifi && line.startsWith('%TLWIFI ')) line = wifi;
+        /** @type {any} */ (window).__sent.push(line);
+        return sink.write(new TextEncoder().encode(line), c);
+      } }, ...rest);
+    }
+  };
+};
+const sent = (page) => page.evaluate(() => /** @type {any} */ (window).__sent);
+/** The field's message from constraint validation, once it is `text`. */
+const message = async (page, label, text) => {
+  const field = page.getByLabel(label, { exact: true });
+  for (const end = Date.now() + 5000; (await field.evaluate((el) => /** @type {HTMLInputElement} */ (el).validationMessage)) !== text;) {
+    assert.ok(Date.now() < end, `${label}: ${await field.evaluate((el) => /** @type {HTMLInputElement} */ (el).validationMessage)}`);
+    await page.waitForTimeout(50);
+  }
+};
+const NAME_BYTES = (n) => `A Wi-Fi name is at most 32 bytes. This one is ${n}: letters like é take 2, emoji 4.`;
+const PASSWORD = 'A Wi-Fi password is 8 to 63 bytes, or 64 hex digits.';
+
+/** Fills the pair form and presses Pair. */
+async function pairWith(page, { name, ssid = '', password = '' }) {
+  await page.getByLabel('Decoder name').fill(name);
+  await page.getByLabel('Wi-Fi name (optional)').fill(ssid);
+  await page.getByLabel('Wi-Fi password', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Pair' }).click();
+}
+
+test('a Wi-Fi name of 17 é is reported in bytes, before anything is created or sent', async (t) => {
+  const before = app.store.decoders(wrens).length;
+  const { page, errors } = await toPairing(t, { init: RECORD, as: wren });
+  await pairWith(page, { name: 'Accents', ssid: 'é'.repeat(17), password: 'secret12' });
+  await message(page, 'Wi-Fi name (optional)', NAME_BYTES(34));
+  assert.equal(await page.getByRole('button', { name: 'Pair' }).isEnabled(), true);
+  await page.waitForTimeout(300);
+  assert.equal(app.store.decoders(wrens).length, before);
+  assert.ok(!(await sent(page)).some((line) => line.startsWith('%TLPAIR')));
+  assert.deepEqual(errors, []);
+});
+
+test('a pasted 33-character name is reported, not truncated', async (t) => {
+  const { page } = await toPairing(t, { as: wren });
+  await pairWith(page, { name: 'Long', ssid: 'a'.repeat(33) });
+  await message(page, 'Wi-Fi name (optional)', NAME_BYTES(33));
+  assert.equal(await page.getByLabel('Wi-Fi name (optional)').inputValue(), 'a'.repeat(33));
+});
+
+test('a 7-character password and 64 characters not all hex are reported', async (t) => {
+  const { page } = await toPairing(t, { as: wren });
+  await pairWith(page, { name: 'Short', ssid: 'Office', password: 'abcdefg' });
+  await message(page, 'Wi-Fi password', `${PASSWORD} This one is 7 bytes.`);
+  await page.getByLabel('Wi-Fi password', { exact: true }).fill(`${'a'.repeat(63)}g`);
+  await page.getByRole('button', { name: 'Pair' }).click();
+  await message(page, 'Wi-Fi password', `${PASSWORD} This one is 64 characters, but not all hex digits.`);
+});
+
+test('a password with no Wi-Fi name pairs; 64 hex digits and an empty password pair', async (t) => {
+  for (const [name, ssid, password] of [['NoWifi', '', 'abc'], ['HexKey', 'Office', `${'0123456789abcdef'.repeat(3)}0123456789ABCDEF`], ['Open', 'Office', '']]) {
+    const { page } = await toPairing(t, { init: RECORD, as: wren });
+    await pairWith(page, { name, ssid, password });
+    await page.getByText(`Forwarding from ${name}`, { exact: true }).first().waitFor();
+    assert.equal((await sent(page)).some((line) => line.startsWith('%TLWIFI')), ssid !== '', name);
+  }
+});
+
+test('editing the field clears the message', async (t) => {
+  const { page } = await toPairing(t, { as: wren });
+  await pairWith(page, { name: 'Edit', ssid: 'Office', password: 'abcdefg' });
+  await message(page, 'Wi-Fi password', `${PASSWORD} This one is 7 bytes.`);
+  await page.getByLabel('Wi-Fi password', { exact: true }).press('h');
+  await message(page, 'Wi-Fi password', '');
+});
+
+test('clearing the Wi-Fi name clears the password\'s message', async (t) => {
+  const { page } = await toPairing(t, { as: wren });
+  await pairWith(page, { name: 'Cleared', ssid: 'Office', password: 'abcdefg' });
+  await message(page, 'Wi-Fi password', `${PASSWORD} This one is 7 bytes.`);
+  await page.getByLabel('Wi-Fi name (optional)').fill('');
+  await message(page, 'Wi-Fi password', '');
+  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByText('Forwarding from Cleared', { exact: true }).first().waitFor();
+});
+
+test('a refusal after pairing says the decoder is paired', async (t) => {
+  // The decoder gets a 4-byte password, which the check in the page would have stopped.
+  const { page } = await toPairing(t, { init: RECORD, arg: commands.wifi('Office', 'pass'), as: wren });
+  await pairWith(page, { name: 'Refused', ssid: 'Office', password: 'secret12' });
+  await page.getByRole('alert').filter({ hasText: 'The decoder is paired, but it refused the Wi-Fi settings: Wi-Fi password length.' }).waitFor({ timeout: 10_000 });
+  await page.getByText('Forwarding from Refused', { exact: true }).first().waitFor();
+  assert.equal(await page.getByLabel('Decoder name').isEditable(), true);
 });
 
 test('status lines on the bridge read as sentences, not in capitals', async (t) => {

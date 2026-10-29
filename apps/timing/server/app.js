@@ -80,14 +80,14 @@ async function dispatch(request, routes, serveStatic) {
 }
 
 /** Per-minute and per-hour budgets (spec §9). */
-const LIMITS = { ingest: 600, tap: 120, pair: 10 };
+const LIMITS = { ingest: 600, logs: 600, tap: 120, pair: 10 };
 /** When an open member stream checks its viewer's access again after an outage or error (#39). */
 const ACCESS_CHECK_MS = 15_000;
 
 /**
  * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string,
  *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
- *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, tap?: number, pair?: number }, accessCheckMs?: number, noticeToken?: string,
+ *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, logs?: number, tap?: number, pair?: number }, accessCheckMs?: number, noticeToken?: string,
  *   streams?: import('./member-streams.js').MemberStreams }} options
  */
 export function createHandler(options) {
@@ -107,11 +107,14 @@ export function createHandler(options) {
     clientIpHeader: options.clientIpHeader?.toLowerCase() || null,
     fetch: options.fetch ?? globalThis.fetch,
     now,
+    log,
     noticeDigest: options.noticeToken ? noticeDigest(options.noticeToken) : null,
     streams: options.streams ?? createMemberStreams({ retryMs: options.accessCheckMs ?? ACCESS_CHECK_MS }),
     limiters: {
       // Batches per decoder per minute; a race of 8 cars is a few passings a second.
       ingest: rateLimiter({ limit: limits.ingest, windowMs: 60_000, now }),
+      // Decoder log lines per decoder per minute.
+      logs: rateLimiter({ limit: limits.logs, windowMs: 60_000, now }),
       // Taps per member per minute.
       tap: rateLimiter({ limit: limits.tap, windowMs: 60_000, now }),
       // New decoders per member per hour.

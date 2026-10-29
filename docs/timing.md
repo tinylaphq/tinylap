@@ -29,12 +29,44 @@ TinyLap's own commands, which ZRound never sends (fields separated by one space)
 | PC → decoder | `%TLPAIR <decoder id> <token>&` | store the id and the 43-character token; answer `%TLOK&` |
 | PC → decoder | `%TLWIFI <base64url ssid> <base64url password>&` | store Wi-Fi; answer `%TLOK&` |
 | decoder → PC | `%TLOK&`, `%TLERR <text>&` | done, or why not |
+| decoder → PC | `%TLLOG <kind> <key=value>…&` | the decoder's own diagnostics; see Diagnostics |
 
 A TinyLap decoder sends `%TLID` on its own whenever its boot changes (power-up, a reset, `%I&`), so a connected bridge never stamps passings with an old boot. If a `%T…&` clock comes in lower than the one before, the bridge sends `%TLHELLO&` again until the decoder answers, in case that `%TLID` got lost.
+
+### Diagnostics
+
+`%TLLOG` lines are for logs, not for the app: every field is `key=value`, values hold no space, `%` or `&`, times are upper-case hex ms on the boot's clock (as in `%L`), counts are decimal. ZRound software ignores them, as it does `%TLID`. Four kinds:
+
+- `boot`: after every `%TLID` that starts a boot. `reason=` (`poweron`, `reset`, `brownout`, `panic`, `wdt`, `sw`, `ext`, `other`), `fw=` the build, and after a crash the last counters as `prev.<key>=`.
+- `stat`: every 10 s. `up=` seconds since power-up, the counters (`batches`, `frames`, `rej.start`, `rej.bit`, `rej.stop`, `rej.short`, `rej.burst`, `rej.long`, `rej.parity`, `overflow`, `ringlow`, `qdrop`, `pass`, `single`, `quiet`, `minlap`, `rxdrop`, `suppressed`) and `heap=`. Counters run from power-up and never reset.
+- `pass`: a crossing that made a passing. `id=`, `t=` (its stamp), `first=`, `last=`, `frames=`.
+- `event`: a crossing that made none, or an overflow, at most 20 per 10 s (the rest only count in `suppressed=`). `what=single`, `quiet` or `minlap` with `id=` and `t=`; `what=overflow` with `t=`.
+
+The line rules, the same in the bridge and on the server (`parseLog`):
+
+- The kind is 1 to 16 lower-case letters.
+- A key is a lower-case letter, then up to 31 lower-case letters, digits or dots.
+- A value is 0 to 32 printable ASCII characters, none of `%`, `&`, `=`, `"` or `\`.
+- A line has at most 48 fields, no key twice, and at most 512 bytes from `%` to `&`.
+- A line that breaks a rule is not a log line.
+
+Values stay strings: the server does not know what a key means, so a new counter needs no change there.
+
+The bridge forwards each log line to the server with the next batch of passings for its boot, as the `logs` of the ingest body (see below). With no passings to send, the first queued line starts a timer of 10 s, and then a batch of logs alone goes. The bridge holds at most 256 lines and drops the oldest first. It forwards only lines that parse; it never forwards what it wrote to the decoder. It does not forward the lines of a decoder it makes the boots for, or of an unpaired one.
+
+The server writes one JSON line to its log for each log line, and stores none:
+
+    {"type":"decoder-log","decoder":"dec_1","boot":"x7Qm2LbV0aE","via":"serial","kind":"pass","fields":{"id":"1F","t":"1E0A","first":"1DE2","last":"1E32","frames":"8"}}
+
+`via` is `serial` for the bridge and `net` for a decoder with its token. `fields` keeps the line's order. A line with the key `token`, `password`, `psk` or `ssid` is skipped. So is a line that does not parse, and any line past 600 per decoder per minute. When a batch had skipped lines, one more line follows with the counts only: `{"type":"decoder-log-skipped","decoder":…,"boot":…,"unreadable":…,"limited":…,"denied":…}`.
+
+A `boot` line follows its `%TLID` directly. The bridge relies on it: a `boot` line after anything else means that `%TLID` was lost, so the bridge sends `%TLHELLO&` again.
 
 ### The handshake
 
 The bridge opens the port, waits 1.5 s (opening it resets Arduino-based decoders), and sends `%C&` every 500 ms until something in ZRound comes back, for up to 6 s. With no answer by then it is listening: it sends `%C&`, then `%TLHELLO&`, every 2 s, until 60 s after opening. Once something in ZRound comes back, it sends `%TLHELLO&`, 300 ms after its last write, up to three times 700 ms apart. A `%TLID` makes it a TinyLap decoder for the rest of the connection. Every command is a multiple of 3 bytes, so firmware that reads 3 bytes at a time (RiCino) still sees each one whole.
+
+After a read error that leaves the port a stream to read (a break, framing, parity or overrun error), the bridge reads on, and drops the message the error cut. An error after which the port has no stream to read (a lost device, or another fatal error) ends the connection, whatever its name, and so does the 21st error in a row with no data between them: the bridge reads past 20.
 
 ### Plain ZRound decoders
 
@@ -87,8 +119,10 @@ Start the timing server with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` 
 
     { "boot": "x7Qm2LbV0aE", "passings": [{ "transponder": "4A1F", "t": 81234 }] }
 
-At most 500 passings per batch, all of one boot. The answer is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds. Keep every passing in an outbox until a batch that carried it is answered with a `through` that covers it; drop only the passings you sent, since a passing of the same boot you never sent can lie below `through` too (the cable and Wi-Fi copies race). Resending is always safe. `401` means the token is wrong or the decoder was unpaired: keep the outbox and stop sending until it is paired again. `429` comes with `Retry-After`.
+A batch may also carry `"logs": ["pass id=1F t=1E0A first=1DE2 last=1E32 frames=8"]`: decoder log lines, each the text after `%TLLOG ` and before `&`. `passings` may then be empty; a body with neither is refused. At most 500 passings and 64 log lines per batch, the lines together at most 32 KiB and each at most 510 bytes. All of one boot. The answer is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds. Keep every passing in an outbox until a batch that carried it is answered with a `through` that covers it; drop only the passings you sent, since a passing of the same boot you never sent can lie below `through` too (the cable and Wi-Fi copies race). Resending is always safe. `401` means the token is wrong or the decoder was unpaired: keep the outbox and stop sending until it is paired again. `429` comes with `Retry-After`.
 
 From the bridge, the same route takes the member's session instead of a token, from the app's own pages. There `401` means signed out and `403` means no access to the decoder's club (or a request from another site): keep those passings, since a new sign-in or another member can send them, and go on with the other decoders after a `403`. `404` means the decoder was removed or never paired, and `422` a batch the server cannot read: drop those passings, they will never be taken.
+
+The server writes the log lines to its log and stores none. A bad line is skipped, not refused, so a log line never costs a passing; a `422` for `logs` comes only when it is not an array of strings or breaks the limits above. A batch of logs alone stores nothing, but it counts as the decoder being in use.
 
 The whole API is described at `/openapi.json` and `/api` on any timing server.

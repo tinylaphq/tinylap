@@ -42,6 +42,16 @@ test('the TinyLap model answers as today\'s simulated decoder', () => {
   assert.equal(text(model.write(enc('%TLHELLO&'), 0)), `%TLID - ${model.sim.boot}&`);
 });
 
+test('the TinyLap model resets on open, or runs on for uptimeMs', () => {
+  const reset = tinylapModel({ cars: 0 });
+  assert.equal(text(reset.start(0)), `%TLID - ${reset.sim.boot}&%TLLOG boot reason=poweron fw=sim&`);
+  assert.equal(text(reset.tick(1000)), '%T3E8&');
+  const running = tinylapModel({ resetOnOpen: false });
+  assert.deepEqual(running.start(0), []);
+  assert.deepEqual(running.tick(999), []);
+  assert.deepEqual(running.tick(1000).map((c) => text([c])), ['%TEE48&'], 'the boot\'s next whole second, and no crossing of the 60 s before');
+});
+
 test('the ZRound model reads like RiCino: only the last 3-byte chunk of a burst counts', () => {
   const together = zroundModel({ cars: 0, bootMs: 0, ackMs: 10, acks: 2 });
   together.write(enc('%C&%TLHELLO&'), 0);
@@ -96,7 +106,7 @@ const waitFor = async (condition, deadlineMs = 2000) => {
 };
 
 test('the fake serial port streams what its model sends and hands it what is written', async () => {
-  const port = fakeSerialPort(tinylapModel({ cars: 0 }), { tickMs: 5 });
+  const port = fakeSerialPort({ ...tinylapModel({ cars: 0, resetOnOpen: false }), tick: () => [] }, { tickMs: 5 });
   await port.open();
   const reader = port.readable.getReader();
   const writer = port.writable.getWriter();

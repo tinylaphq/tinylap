@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { commands, createReader, createSimulator } from '@tinylap/timing';
-import { Bridge, sendOutbox } from '../public/bridge.js';
+import { Bridge, WifiRefusedError, WifiUnconfirmedError, sendOutbox } from '../public/bridge.js';
 import { memoryOutbox } from '../public/outbox.js';
 
 /** A serial port whose other end is `sim` (or silence). */
@@ -36,6 +36,12 @@ const until = async (fn) => {
   throw new Error('timed out');
 };
 
+/** A post that answers `through` for the passings it got (null for none), and records each batch, logs included. */
+function posting() {
+  const posts = [];
+  return { posts, post: async (decoder, batch) => { posts.push({ decoder, ...batch }); return { through: batch.passings.length ? Math.max(...batch.passings.map((x) => x.t)) : null }; } };
+}
+
 test('an unpaired decoder is paired, then forwards passings', async () => {
   const sim = createSimulator({ cars: [] });
   const { port, send } = fakePort(sim);
@@ -44,7 +50,7 @@ test('an unpaired decoder is paired, then forwards passings', async () => {
   const bridge = new Bridge({ port, outbox, post: async (decoder, batch) => { posts.push({ decoder, batch }); return { through: Math.max(...batch.passings.map((x) => x.t)) }; } });
   await bridge.start();
   await until(() => bridge.state === 'unpaired');
-  await bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret' });
+  await bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' });
   await until(() => bridge.state === 'ready');
   assert.equal(sim.decoder, 'dec_1');
   assert.equal(bridge.decoder, 'dec_1');
@@ -136,7 +142,7 @@ test('signed out, too large, rate limited, a 5xx or the network: the passings wa
     assert.equal(await outbox.count(), 1, failure.message);
     await outbox.remove([p(1000)]);
   }
-  assert.deepEqual(await sendOutbox(outbox, async () => ({ through: null })), { refusal: null, dropped: 0, forbidden: null, blocked: 0 });
+  assert.deepEqual(await sendOutbox(outbox, async () => ({ through: null })), { refusal: null, dropped: 0, forbidden: null, blocked: 0, sentLines: [] });
 });
 
 test('a decoder of a club without access waits, and does not hold up the others', async () => {
@@ -248,6 +254,35 @@ test('a reply that came too late does not answer the next request', async () => 
   await bridge.close();
 });
 
+test('a decoder that refuses Wi-Fi after %TLOK& for the pairing ends ready, and pair rejects with the refusal', async () => {
+  // The simulated decoder answers %TLOK& to %TLPAIR, and %TLERR Wi-Fi password length& to a 7-byte password.
+  const sim = createSimulator({ cars: [] });
+  const { port } = fakePort(sim);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }) });
+  await bridge.start();
+  await until(() => bridge.state === 'unpaired');
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'short12' }),
+    (e) => e instanceof WifiRefusedError && e.name === 'WifiRefusedError' && e.reason === 'Wi-Fi password length');
+  await until(() => bridge.state === 'ready');
+  assert.equal(bridge.decoder, 'dec_1');
+  await bridge.close();
+});
+
+test('a Wi-Fi timeout after %TLOK& ends ready, and pair rejects with WifiUnconfirmedError', async () => {
+  // A decoder that never answers %TLWIFI.
+  const sim = createSimulator({ cars: [] });
+  const silent = { reply: (message, now) => (message.type === 'wifi' ? [] : sim.reply(message, now)) };
+  const { port } = fakePort(silent);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }), replyMs: 50 });
+  await bridge.start();
+  await until(() => bridge.state === 'unpaired');
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' }),
+    (e) => e instanceof WifiUnconfirmedError && e.name === 'WifiUnconfirmedError');
+  await until(() => bridge.state === 'ready');
+  assert.equal(bridge.decoder, 'dec_1');
+  await bridge.close();
+});
+
 test('sending drops only the passings a batch carried, up to `through`', async () => {
   const outbox = memoryOutbox();
   const p = (t) => ({ decoder: 'd1', boot: 'b1', transponder: '0A', t });
@@ -281,4 +316,307 @@ test('a closed bridge sends nothing more, and arms no retry', async () => {
   assert.equal(calls, 1, 'no retry after close');
   await bridge.flush();
   assert.equal(calls, 1, 'no flush after close');
+});
+
+// %TLLOG lines (spec §2.4, §2.6).
+
+const log = (line) => `%TLLOG ${line}&`;
+const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+/** A paired TinyLap decoder, ready. `post` defaults to posting()'s. */
+async function ready(t, options = {}) {
+  const sim = createSimulator({ cars: [], decoder: 'dec_1' });
+  const { port, send, end } = fakePort(sim);
+  const { posts, post } = posting();
+  const outbox = memoryOutbox();
+  const bridge = new Bridge({ port, outbox, post, retryMs: 10_000, ...options });
+  // Closed even when an assertion fails, so its timers can't keep the test process alive.
+  t.after(() => bridge.close());
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  return { sim, send, end, posts, outbox, bridge };
+}
+
+test('lines go with the next batch of passings for their boot', async (t) => {
+  const { sim, send, posts, outbox, bridge } = await ready(t, { logMaxWaitMs: 100 });
+  send(log('stat up=1'));
+  send(commands.lap('0A', 1000));
+  await until(async () => posts.length === 1 && (await outbox.count()) === 0);
+  await wait(200);
+  assert.deepEqual(posts, [{ decoder: 'dec_1', boot: sim.boot, passings: [{ transponder: '0A', t: 1000 }], logs: ['stat up=1'] }]);
+  await bridge.close();
+});
+
+test('a pass line rides on the next passing\'s batch, not a post of its own', async (t) => {
+  const { send, posts, bridge } = await ready(t, { logMaxWaitMs: 100 });
+  send(commands.lap('0A', 1000));
+  await until(() => posts.length === 1);
+  send(log('pass id=0A t=3E8'));
+  send(commands.lap('0A', 9000));
+  await until(() => posts.length === 2);
+  await wait(200);
+  assert.equal(posts.length, 2);
+  assert.ok(posts.every((x) => x.passings.length > 0));
+  assert.equal(posts[0].logs, undefined, 'no logs key without lines');
+  assert.deepEqual(posts[1].logs, ['pass id=0A t=3E8']);
+  await bridge.close();
+});
+
+test('with no passings, one logs-only batch after logMaxWaitMs; a second line does not restart the timer', async (t) => {
+  const logMaxWaitMs = 300;
+  const { posts, post } = posting();
+  let postedAt = null;
+  const { sim, send, bridge } = await ready(t, { logMaxWaitMs, post: async (decoder, batch) => {
+    postedAt ??= performance.now();
+    return post(decoder, batch);
+  } });
+  send(log('stat up=1'));
+  await wait(200);
+  const second = performance.now();
+  send(log('stat up=2'));
+  await until(() => posts.length === 1);
+  // A timer restarted by the second line could fire no sooner than logMaxWaitMs after it; the first line's fires about
+  // 100 ms after it, and only sooner if the wait above ran late.
+  assert.ok(postedAt - second < logMaxWaitMs - 10, 'the timer was not restarted by the second line');
+  assert.deepEqual(posts, [{ decoder: 'dec_1', boot: sim.boot, passings: [], logs: ['stat up=1', 'stat up=2'] }]);
+  await wait(logMaxWaitMs + 50);
+  assert.equal(posts.length, 1);
+  await bridge.close();
+});
+
+test('a passing stamped while a flush runs goes with the rerun, though the log timer asked for a flush too', async (t) => {
+  const inner = memoryOutbox();
+  // The flush's last list() is held, so the second passing is stamped after it: only the rerun can post it.
+  let listGate = null;
+  let listing = false;
+  const outbox = { ...inner, list: async () => {
+    const items = await inner.list();
+    if (listGate) {
+      listing = true;
+      await listGate;
+    }
+    return items;
+  } };
+  let releasePost;
+  const postGate = new Promise((done) => { releasePost = done; });
+  const { posts, post } = posting();
+  const { send, bridge } = await ready(t, { outbox, logMaxWaitMs: 30, post: async (decoder, batch) => {
+    await postGate;
+    return post(decoder, batch);
+  } });
+  const seen = [];
+  bridge.addEventListener('passing', (event) => seen.push(event.detail.t));
+  send(log('stat up=1'));
+  send(commands.lap('0A', 1000));
+  await until(() => seen.length === 1);
+  // The log timer fires while the passing's post, which carries the line, is held.
+  await wait(80);
+  let releaseList;
+  listGate = new Promise((done) => { releaseList = done; });
+  releasePost();
+  await until(() => listing);
+  send(commands.lap('0A', 9000));
+  await until(async () => seen.length === 2 && (await inner.count()) === 1);
+  listGate = null;
+  releaseList();
+  await until(() => posts.some((x) => x.passings.some((p) => p.t === 9000)));
+  assert.deepEqual(posts.map((x) => x.passings.map((p) => p.t)), [[1000], [9000]]);
+  assert.deepEqual(posts[0].logs, ['stat up=1']);
+  await bridge.close();
+});
+
+test('at most 64 lines per batch', async (t) => {
+  const { send, posts, bridge } = await ready(t, { logMaxWaitMs: 50 });
+  const lines = Array.from({ length: 70 }, (_, i) => `stat n=${i}`);
+  for (const line of lines) send(log(line));
+  await until(() => posts.length === 2);
+  assert.deepEqual(posts.map((x) => x.logs.length), [64, 6]);
+  assert.deepEqual(posts.flatMap((x) => x.logs), lines);
+  await bridge.close();
+});
+
+test('lines of an earlier boot go logs-only, not with the new boot', async (t) => {
+  const { sim, send, posts, bridge } = await ready(t, { logMaxWaitMs: 100 });
+  const first = sim.boot;
+  send(log('stat up=1'));
+  send('%TLID dec_1 b00tb00t&');
+  send(commands.lap('0A', 1000));
+  await until(() => posts.length === 2);
+  assert.deepEqual(posts, [
+    { decoder: 'dec_1', boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] },
+    { decoder: 'dec_1', boot: first, passings: [], logs: ['stat up=1'] },
+  ]);
+  await bridge.close();
+});
+
+test('lines are dropped on 401, 403, 404, 413 and 422, and kept on 429, 5xx and network errors', async () => {
+  const line = { decoder: 'd1', boot: 'b1', line: 'stat up=1' };
+  for (const [make, kept] of [[() => failing(401), false], [() => failing(403), false], [() => failing(404), false], [() => failing(413), false],
+    [() => failing(422), false], [() => failing(429), true], [() => failing(500), true], [() => failing(503), true], [() => new Error('offline'), true]]) {
+    for (const alone of [false, true]) {
+      const outbox = memoryOutbox();
+      if (!alone) await outbox.add(p(1000));
+      const carried = [];
+      const failure = make();
+      const result = await sendOutbox(outbox, async (_decoder, batch) => { carried.push(batch); throw failure; }, () => {}, { lines: [line], alone })
+        .catch((error) => error);
+      const label = `${failure.message}, ${alone ? 'logs-only' : 'with passings'}`;
+      assert.deepEqual(carried[0].logs, ['stat up=1'], label);
+      assert.deepEqual(result.sentLines, kept ? [] : [line], label);
+      if (alone) assert.notEqual(result, failure, `a logs-only answer never throws: ${label}`);
+    }
+  }
+});
+
+test('a thrown error\'s sentLines are not sent again', async (t) => {
+  let down = () => true;
+  const taken = [];
+  const { send, outbox, bridge } = await ready(t, { post: async (decoder, batch) => {
+    if (down(batch.boot)) throw failing(500);
+    taken.push(batch.logs);
+    return { through: Math.max(...batch.passings.map((x) => x.t)) };
+  } });
+  send(log('stat a=1'));
+  send(commands.lap('0A', 1000));
+  await until(() => bridge.online === false);
+  send('%TLID dec_1 b00tb00t&');
+  send(log('stat b=1'));
+  send(commands.lap('0A', 2000));
+  await until(async () => (await outbox.count()) === 2);
+  down = (boot) => boot === 'b00tb00t';
+  await bridge.flush();
+  assert.deepEqual(taken, [['stat a=1']]);
+  down = () => false;
+  await bridge.flush();
+  assert.deepEqual(taken, [['stat a=1'], ['stat b=1']], 'the first group\'s line went once');
+  await bridge.close();
+});
+
+test('a logs-only 422 or 5xx sets no refusal, dropped, blocked or lastError, and leaves online alone', async (t) => {
+  for (const status of [422, 500]) {
+    let posted = 0;
+    const { send, bridge } = await ready(t, { logMaxWaitMs: 30, post: async () => { posted += 1; throw failing(status); } });
+    let changes = 0;
+    bridge.addEventListener('online', () => { changes += 1; });
+    send(log('stat up=1'));
+    await until(() => posted >= 1);
+    await wait(20);
+    assert.deepEqual([bridge.lastError, bridge.dropped, bridge.blocked, bridge.online, changes], [null, 0, 0, true, 0], String(status));
+    await bridge.close();
+  }
+});
+
+test('a logs-only answer with through null drops the lines', async (t) => {
+  const { send, posts, bridge } = await ready(t, { logMaxWaitMs: 30 });
+  send(log('stat up=1'));
+  await until(() => posts.length === 1);
+  await wait(150);
+  assert.equal(posts.length, 1, 'the line is not posted again');
+  await bridge.close();
+});
+
+test('after close(), nothing is sent and no timer is left', async (t) => {
+  const { send, posts, bridge } = await ready(t, { logMaxWaitMs: 50 });
+  send(log('stat up=1'));
+  await wait(10);
+  await bridge.close();
+  await wait(150);
+  await bridge.flush();
+  await bridge.flush({ alone: true });
+  assert.equal(posts.length, 0);
+});
+
+test('a logs-only post that hangs does not hold up the chain of decoder events', async (t) => {
+  let release;
+  const gate = new Promise((done) => { release = done; });
+  const { posts, post } = posting();
+  let hanging = 0;
+  const { send, outbox, bridge } = await ready(t, { logMaxWaitMs: 30, post: async (decoder, batch) => {
+    if (batch.passings.length === 0) {
+      hanging += 1;
+      await gate;
+    }
+    return post(decoder, batch);
+  } });
+  const seen = [];
+  bridge.addEventListener('passing', (event) => seen.push(event.detail.t));
+  send(log('stat up=1'));
+  await until(() => hanging === 1);
+  send(commands.lap('0A', 1000));
+  await until(() => seen.length === 1);
+  assert.equal(await outbox.count(), 1, 'stamped while the logs-only post hangs');
+  release();
+  await until(() => posts.some((x) => x.passings.length === 1));
+  await bridge.close();
+});
+
+test('after a 403 the timer re-posts nothing', async (t) => {
+  const posts = [];
+  const { send, bridge } = await ready(t, { logMaxWaitMs: 50, post: async (decoder, batch) => { posts.push(batch); throw failing(403, 'no access'); } });
+  send(log('stat up=1'));
+  send(commands.lap('0A', 1000));
+  await until(() => posts.length === 1);
+  await wait(200);
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].logs, ['stat up=1']);
+  assert.equal(bridge.blocked, 1);
+  await bridge.close();
+});
+
+test('a logs-only 401 stops and drops the remaining lines', async () => {
+  const lines = Array.from({ length: 70 }, (_, i) => ({ decoder: 'd1', boot: 'b1', line: `stat n=${i}` }));
+  let posted = 0;
+  const result = await sendOutbox(memoryOutbox(), async () => { posted += 1; throw failing(401); }, () => {}, { lines, alone: true });
+  assert.equal(posted, 1);
+  assert.equal(result.sentLines.length, 70);
+  assert.equal(result.refusal, null);
+});
+
+test('after a 403 the timer does not re-post the refused passings for lines under another boot', async (t) => {
+  const posts = [];
+  const { send, bridge } = await ready(t, { logMaxWaitMs: 50, post: async (decoder, batch) => { posts.push(batch); throw failing(403, 'no access'); } });
+  send(log('stat a=1'));
+  send('%TLID dec_1 b00tb00t&');
+  send(log('stat b=1'));
+  send(commands.lap('0A', 1000));
+  await until(() => posts.length === 1);
+  await wait(200);
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].logs, ['stat b=1']);
+  await bridge.close();
+});
+
+test('a logs-only flush leaves a pending retry of another decoder\'s passings in place', async (t) => {
+  const outbox = memoryOutbox();
+  await outbox.add({ decoder: 'dec_a', boot: 'b00tb00t', transponder: '0A', t: 1000 });
+  let down = true;
+  const { posts, post } = posting();
+  const { send, bridge } = await ready(t, { outbox, retryMs: 150, logMaxWaitMs: 30, post: async (decoder, batch) => {
+    if (decoder === 'dec_a' && down) throw failing(503);
+    return post(decoder, batch);
+  } });
+  await until(() => bridge.online === false);
+  send(log('stat up=1'));
+  await until(() => posts.some((x) => x.logs));
+  down = false;
+  await until(() => posts.some((x) => x.decoder === 'dec_a'));
+  assert.equal(await outbox.count(), 0);
+  await bridge.close();
+});
+
+test('stamped lines go out after the port is lost, with the next flush of passings', async (t) => {
+  let down = true;
+  const { posts, post } = posting();
+  const { sim, send, end, bridge } = await ready(t, { post: async (decoder, batch) => {
+    if (down) throw failing(503);
+    return post(decoder, batch);
+  } });
+  send(log('stat up=1'));
+  send(commands.lap('0A', 1000));
+  await until(() => bridge.online === false);
+  end();
+  await until(() => bridge.state === 'disconnected');
+  down = false;
+  await bridge.flush();
+  assert.deepEqual(posts, [{ decoder: 'dec_1', boot: sim.boot, passings: [{ transponder: '0A', t: 1000 }], logs: ['stat up=1'] }]);
+  await bridge.close();
 });

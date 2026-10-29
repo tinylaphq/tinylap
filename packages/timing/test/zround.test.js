@@ -4,7 +4,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { commands, createReader, parseMessage } from '../index.js';
+import { readFileSync } from 'node:fs';
+import { commands, createReader, parseLog, parseMessage, wifiError } from '../index.js';
 
 test('ZRound messages', () => {
   assert.deepEqual(parseMessage('C'), { type: 'startup' });
@@ -28,6 +29,9 @@ test('TinyLap extension messages', () => {
   const token = 'a'.repeat(43);
   assert.deepEqual(parseMessage(`TLPAIR dec_1 ${token}`), { type: 'pair', decoder: 'dec_1', token });
   assert.deepEqual(parseMessage('TLPAIR dec_1 short'), { type: 'unknown', raw: 'TLPAIR dec_1 short' });
+  // A %TLLOG with no kind, or with two spaces before it, is not a log line.
+  assert.deepEqual(parseMessage('TLLOG'), { type: 'unknown', raw: 'TLLOG' });
+  assert.deepEqual(parseMessage('TLLOG  x'), { type: 'unknown', raw: 'TLLOG  x' });
 });
 
 test('commands round-trip, Wi-Fi credentials included', () => {
@@ -66,4 +70,70 @@ test('a cut-off message resyncs at the last % before the &', () => {
   const reader = createReader();
   assert.deepEqual(reader.push('%L01,2%A&'), [{ type: 'ack' }]);
   assert.deepEqual(reader.push('%L01,2%TLID dec bootid12&'), [{ type: 'hello', decoder: 'dec', boot: 'bootid12' }]);
+});
+
+test('reset drops the pending text', () => {
+  const reader = createReader();
+  assert.deepEqual(reader.push('%L2A,1F'), []);
+  reader.reset();
+  assert.deepEqual(reader.push('00&%T2000&'), [{ type: 'clock', t: 0x2000 }]);
+});
+
+// Shared with the decoder firmware's tests, so the two protocol codes cannot drift.
+const vectors = JSON.parse(readFileSync(new URL('./zround-vectors.json', import.meta.url), 'utf8'));
+
+test('vectors: messages to the decoder', () => {
+  for (const { body, message } of vectors.toDecoder) {
+    const parsed = parseMessage(body);
+    if (message.type === 'unknown') assert.equal(parsed.type, 'unknown', body);
+    else assert.deepEqual(parsed, message, body);
+  }
+});
+
+test('vectors: lines from the decoder', () => {
+  for (const { call, line } of vectors.fromDecoder) {
+    const [name, ...args] = Array.isArray(call) ? call : [call];
+    if (name === 'transponder') continue;
+    const command = commands[name];
+    assert.equal(typeof command === 'function' ? command(...args) : command, line, name);
+  }
+});
+
+test('vectors: streams', () => {
+  for (const { chunks, messages } of vectors.streams) {
+    const reader = createReader();
+    assert.deepEqual(chunks.flatMap((chunk) => reader.push(chunk)), messages);
+  }
+});
+
+test('vectors: log lines', () => {
+  for (const { line, log } of vectors.logLines) {
+    const body = line.slice(1, -1);
+    const rest = body.slice('TLLOG '.length);
+    if (log) {
+      assert.deepEqual(parseMessage(body), { type: 'log', line: rest }, line);
+      assert.deepEqual(parseLog(rest), log, line);
+    } else {
+      assert.equal(parseMessage(body).type, 'unknown', line);
+      assert.equal(parseLog(rest), null, line);
+    }
+  }
+});
+
+test('vectors: Wi-Fi lengths', () => {
+  for (const { ssid, password, reply } of vectors.wifi) {
+    const m = parseMessage(`TLWIFI ${ssid} ${password}`);
+    assert.equal(m.type, 'wifi');
+    const error = wifiError(m.ssid, m.password);
+    assert.equal(error ? commands.error(error) : commands.ok, reply, `${m.ssid} / ${m.password}`);
+  }
+});
+
+test('log lines are ASCII only', () => {
+  assert.equal(parseLog('boot fw=vé'), null);
+  assert.equal(parseLog('stat up=1  heap=2'), null, 'two spaces');
+  assert.equal(parseLog('stat up=1 '), null, 'a trailing space');
+  assert.equal(parseLog(`stat ${Array.from({ length: 49 }, (_, i) => `k${i}=1`).join(' ')}`), null, '49 fields');
+  assert.notEqual(parseLog(`stat ${Array.from({ length: 48 }, (_, i) => `k${i}=1`).join(' ')}`), null, '48 fields');
+  assert.deepEqual(parseLog('stat up='), { kind: 'stat', fields: [['up', '']] });
 });
