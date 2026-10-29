@@ -14,9 +14,14 @@ let office;
 let gate;
 let spare;
 let ana;
+const logged = [];
 
 before(async () => {
-  app = await startTiming({ clock, limits: { ingest: 5 } });
+  app = await startTiming({
+    clock,
+    limits: { ingest: 5, logs: 4, pair: 50 },
+    log: (line) => logged.push({ line, through: line.startsWith('{') ? app.store.through(JSON.parse(line).decoder, JSON.parse(line).boot) : null }),
+  });
   const [owner, zed] = await Promise.all(['Ana', 'Zed'].map((n) => app.signUp(n)));
   office = app.club(owner, 'Office');
   app.club(zed, 'Elsewhere');
@@ -35,6 +40,9 @@ const asDecoder = (decoder, token, body = batch, headers = {}) => fetch(`${app.b
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...headers },
   body: JSON.stringify(body),
 });
+const decoderLogs = () => logged.filter((l) => l.line.startsWith('{')).map((l) => ({ ...JSON.parse(l.line), through: l.through }));
+const bare = (l) => { const copy = { ...l }; delete copy.through; return copy; };
+const pairDecoder = async (name) => (await app.api(member, 'POST', `/workspaces/${office.id}/decoders`, { name })).json();
 const problemOf = async (res, status, name) => {
   assert.equal(res.status, status);
   assert.equal((await res.json()).type, `${app.base}/problems/${name}`);
@@ -89,6 +97,104 @@ test('ingest is rate limited per decoder', async () => {
   const res = await asDecoder(spare.id, spare.token);
   await problemOf(res, 429, 'rate-limited');
   assert.ok(Number(res.headers.get('retry-after')) > 0);
+});
+
+const withLogs = (logs, passings = [{ transponder: '0A', t: 1000 }]) => ({ boot: 'b00tb00t', passings, logs });
+
+test('each log line is one JSON line, after the passings, with no workspace', async () => {
+  const d = await pairDecoder('Log1');
+  logged.length = 0;
+  const res = await asDecoder(d.id, d.token, withLogs(['pass id=1F t=1E0A first=1DE2 last=1E32 frames=8']));
+  assert.equal(res.status, 200);
+  const [entry, ...rest] = decoderLogs();
+  assert.equal(rest.length, 0);
+  const { through, ...line } = entry;
+  assert.deepEqual(line, {
+    type: 'decoder-log', decoder: d.id, boot: 'b00tb00t', via: 'net', kind: 'pass',
+    fields: { id: '1F', t: '1E0A', first: '1DE2', last: '1E32', frames: '8' },
+  });
+  assert.deepEqual(Object.keys(line.fields), ['id', 't', 'first', 'last', 'frames']);
+  assert.ok(!logged.some((l) => l.line.includes(office.id)), 'no workspace id');
+  assert.equal(through, 1000);
+});
+
+test('through the bridge the lines say via serial', async () => {
+  const d = await pairDecoder('Log2');
+  logged.length = 0;
+  const res = await app.api(member, 'POST', `/decoders/${d.id}/passings`, withLogs(['stat up=1']));
+  assert.equal(res.status, 200);
+  assert.deepEqual(decoderLogs().map((l) => [l.via, l.kind]), [['serial', 'stat']]);
+});
+
+test('a bad line is skipped and counted, and the passings are still stored', async () => {
+  const d = await pairDecoder('Log3');
+  logged.length = 0;
+  const res = await asDecoder(d.id, d.token, withLogs(['stat up=1', 'BAD', 'stat x="y"']));
+  assert.deepEqual(await res.json(), { stored: 1, duplicates: 0, through: 1000 });
+  const lines = decoderLogs().map(bare);
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0].type, 'decoder-log');
+  assert.deepEqual(lines[1], { type: 'decoder-log-skipped', decoder: d.id, boot: 'b00tb00t', unreadable: 2, limited: 0, denied: 0 });
+});
+
+test('a line with a secret-looking key is skipped as denied', async () => {
+  const d = await pairDecoder('Log4');
+  logged.length = 0;
+  const res = await asDecoder(d.id, d.token, withLogs(['stat token=SECRETVALUE', 'stat password=SECRETVALUE', 'stat psk=SECRETVALUE', 'stat ssid=SECRETVALUE']));
+  assert.equal(res.status, 200);
+  const lines = decoderLogs();
+  assert.deepEqual(lines.map(bare), [{ type: 'decoder-log-skipped', decoder: d.id, boot: 'b00tb00t', unreadable: 0, limited: 0, denied: 4 }]);
+  assert.ok(!logged.some((l) => l.line.includes('SECRETVALUE')));
+});
+
+test('past 4 lines a minute the rest are skipped as limited', async (t) => {
+  const d = await pairDecoder('Log5');
+  const before = clock.now;
+  t.after(() => { clock.now = before; });
+  logged.length = 0;
+  await asDecoder(d.id, d.token, withLogs(['stat a=1', 'stat a=2', 'stat a=3', 'stat a=4', 'stat a=5', 'stat a=6']));
+  let lines = decoderLogs();
+  assert.equal(lines.filter((l) => l.type === 'decoder-log').length, 4);
+  assert.deepEqual(lines.at(-1), { type: 'decoder-log-skipped', decoder: d.id, boot: 'b00tb00t', unreadable: 0, limited: 2, denied: 0, through: 1000 });
+  clock.now += 60_000;
+  logged.length = 0;
+  await asDecoder(d.id, d.token, withLogs(['stat a=7']));
+  lines = decoderLogs();
+  assert.deepEqual(lines.map((l) => l.type), ['decoder-log']);
+});
+
+test('a logs-only batch answers through and updates last_seen_at', async (t) => {
+  const d = await pairDecoder('Log6');
+  const before = clock.now;
+  t.after(() => { clock.now = before; });
+  await asDecoder(d.id, d.token, withLogs([]));
+  clock.now += 1000;
+  const res = await asDecoder(d.id, d.token, { boot: 'b00tb00t', passings: [], logs: ['stat up=1'] });
+  assert.deepEqual(await res.json(), { stored: 0, duplicates: 0, through: 1000 });
+  assert.equal(app.store.decoders(office.id).find((x) => x.id === d.id).lastSeenAt, clock.now);
+});
+
+test('a logs-only batch of a new boot answers through null', async () => {
+  const d = await pairDecoder('Log7');
+  const res = await asDecoder(d.id, d.token, { boot: 'n3wb00t0', passings: [], logs: ['stat up=1'] });
+  assert.deepEqual(await res.json(), { stored: 0, duplicates: 0, through: null });
+});
+
+test('no log line on a 401, a 403 or a 404', async () => {
+  const body = withLogs(['stat up=1']);
+  logged.length = 0;
+  await problemOf(await asDecoder(gate.id, 'x'.repeat(43), body), 401, 'unauthorized');
+  await problemOf(await app.api(stranger, 'POST', `/decoders/${gate.id}/passings`, body), 403, 'forbidden');
+  await problemOf(await app.api(member, 'POST', '/decoders/nope/passings', body), 404, 'not-found');
+  assert.deepEqual(decoderLogs(), []);
+});
+
+test('a body the bridge never sends is a 422 and logs nothing', async () => {
+  const d = await pairDecoder('Log8');
+  logged.length = 0;
+  await problemOf(await asDecoder(d.id, d.token, withLogs(Array.from({ length: 65 }, () => 'stat up=1'))), 422, 'invalid-request');
+  await problemOf(await asDecoder(d.id, d.token, withLogs([`stat k=${'a'.repeat(504)}`])), 422, 'invalid-request');
+  assert.deepEqual(decoderLogs(), []);
 });
 
 test('tap entry times a driver by hand', async () => {

@@ -6,13 +6,43 @@
 // bridge tab posts the same passings with a member's session, from the
 // cable. The engine keeps one copy. Tap entry is a passing by hand.
 import { can } from '@tinylap/auth';
-import { readBatch } from '@tinylap/timing';
+import { parseLog, readBatch } from '@tinylap/timing';
 import { NO_STORE, workspaceRoute } from './access.js';
 import { withSession } from './auth.js';
 import { rateLimited, readJson } from './body.js';
 import * as ops from './operations.js';
 import { json, opProblem, problem } from './responses.js';
 import { tokenHash } from './setup.js';
+
+// A key that would only be there by mistake: the firmware never logs these.
+const DENIED_KEYS = new Set(['token', 'password', 'psk', 'ssid']);
+
+/**
+ * One JSON line per readable log line, then one line with the counts of those skipped (spec §2.5).
+ * @param {any} request
+ * @param {{ decoder: string, boot: string, via: 'net' | 'serial', lines: string[] }} entry
+ */
+function writeDecoderLogs(request, { decoder, boot, via, lines }) {
+  if (!request.log) return;
+  let unreadable = 0;
+  let limited = 0;
+  let denied = 0;
+  for (const text of lines) {
+    const parsed = parseLog(text);
+    if (!parsed) {
+      unreadable++;
+    } else if (parsed.fields.some(([key]) => DENIED_KEYS.has(key))) {
+      denied++;
+    } else if (request.limiters.logs.take(decoder)) {
+      limited++;
+    } else {
+      request.log(JSON.stringify({ type: 'decoder-log', decoder, boot, via, kind: parsed.kind, fields: Object.fromEntries(parsed.fields) }));
+    }
+  }
+  if (unreadable || limited || denied) {
+    request.log(JSON.stringify({ type: 'decoder-log-skipped', decoder, boot, unreadable, limited, denied }));
+  }
+}
 
 const BEARER = /^Bearer ([A-Za-z0-9_-]{43})$/;
 
@@ -53,7 +83,9 @@ const postPassings = withSession(async (request, match) => {
   if (error) return error;
   const result = readBatch(body);
   if (!('batch' in result)) return problem(request, 'invalid-request', result.error);
-  return json(200, request.engine.ingest({ workspaceId: decoder.workspaceId, decoder: decoderId, via, batch: result.batch }), NO_STORE);
+  const answer = request.engine.ingest({ workspaceId: decoder.workspaceId, decoder: decoderId, via, batch: result.batch });
+  writeDecoderLogs(request, { decoder: decoderId, boot: result.batch.boot, via, lines: result.batch.logs });
+  return json(200, answer, NO_STORE);
 });
 
 async function postTap(request) {
