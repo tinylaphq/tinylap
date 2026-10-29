@@ -1,9 +1,14 @@
 #include <unity.h>
 #include <string.h>
+#include <ArduinoJson.h>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include "diag.h"
 
 using namespace tinylap;
+
+static JsonDocument vectors;
 
 void setUp() {}
 void tearDown() {}
@@ -98,8 +103,51 @@ void test_no_bad_characters() {
   TEST_ASSERT_EQUAL_STRING("%TLLOG boot reason=a_b fw=v1__x_y&", s.c_str());
 }
 
+// Runs first: the tests after it read the vectors it loads.
+void test_vectors_load() {
+  std::ifstream file(VECTORS_PATH);
+  TEST_ASSERT_TRUE_MESSAGE(file.is_open(), "cannot open " VECTORS_PATH);
+  std::stringstream text;
+  text << file.rdbuf();
+  DeserializationError err = deserializeJson(vectors, text.str());
+  TEST_ASSERT_FALSE_MESSAGE(err, err.c_str());
+}
+
+// Every line this suite asserts or builds is a shared vector that parses as a log.
+static void expectVector(const std::string& line) {
+  for (JsonObjectConst v : vectors["logLines"].as<JsonArrayConst>()) {
+    if (line == v["line"].as<std::string>()) {
+      TEST_ASSERT_FALSE_MESSAGE(v["log"].isNull(), line.c_str());
+      return;
+    }
+  }
+  TEST_FAIL_MESSAGE(("no vector for: " + line).c_str());
+}
+
+void test_lines_are_vectors() {
+  Counters c = sample();
+  expectVector(bootLine("poweron", "v0.1.0-3-gabc", nullptr));
+  expectVector(bootLine("panic", "v0.1.0-3-gabc", &c));
+  expectVector(statLine(c, 600, 200000));
+  Counters full;
+  memset(&full, 0xFF, sizeof full);
+  expectVector(statLine(full, UINT32_MAX, UINT32_MAX));
+  expectVector(bootLine("brownout", std::string(kFwMax, 'x').c_str(), &full));
+  CrossingEnd e{0x2A, Outcome::Passed, 8000, 8104, 8052, 9};
+  expectVector(passLine(e));
+  e = CrossingEnd{0x2A, Outcome::Single, 8000, 8000, 8000, 1};
+  expectVector(eventLine(e));
+  e.outcome = Outcome::Quiet;
+  expectVector(eventLine(e));
+  e.outcome = Outcome::MinLap;
+  expectVector(eventLine(e));
+  expectVector(overflowLine(0x10));
+  expectVector(bootLine("a b", "v1 %x&y", nullptr));
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_vectors_load);
   RUN_TEST(test_boot_line);
   RUN_TEST(test_stat_line);
   RUN_TEST(test_lines_fit);
@@ -108,5 +156,6 @@ int main() {
   RUN_TEST(test_event_limit);
   RUN_TEST(test_saved_round_trip);
   RUN_TEST(test_no_bad_characters);
+  RUN_TEST(test_lines_are_vectors);
   return UNITY_END();
 }

@@ -1,9 +1,14 @@
 #include <unity.h>
+#include <ArduinoJson.h>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include "session.h"
 
 using namespace tinylap;
+
+static JsonDocument vectors;
 
 void setUp() {}
 void tearDown() {}
@@ -181,6 +186,24 @@ static void test_wifi_bounds() {
   expectReply(a, wifi("net", "password"), "%TLERR store&");
 }
 
+// Runs first: the tests after it read the vectors it loads.
+static void test_vectors_load() {
+  std::ifstream file(VECTORS_PATH);
+  TEST_ASSERT_TRUE_MESSAGE(file.is_open(), "cannot open " VECTORS_PATH);
+  std::stringstream text;
+  text << file.rdbuf();
+  DeserializationError err = deserializeJson(vectors, text.str());
+  TEST_ASSERT_FALSE_MESSAGE(err, err.c_str());
+}
+
+static void test_wifi_vectors() {
+  Rig a; a.start();
+  for (JsonObjectConst v : vectors["wifi"].as<JsonArrayConst>()) {
+    std::string msg = "%TLWIFI " + v["ssid"].as<std::string>() + " " + v["password"].as<std::string>() + "&";
+    expectReply(a, msg, v["reply"].as<const char*>());
+  }
+}
+
 static void test_wifi_bytes_reach_the_store_exactly() {
   Rig a; a.start();
   const std::string ssid("a\0b\xC3\xA9", 5);
@@ -236,6 +259,7 @@ static void test_passing_line() {
 
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_vectors_load);
   RUN_TEST(test_begin_unpaired_and_paired);
   RUN_TEST(test_bad_stored_id_is_unpaired);
   RUN_TEST(test_startup_acks);
@@ -243,6 +267,7 @@ int main() {
   RUN_TEST(test_reset_new_boot);
   RUN_TEST(test_pair);
   RUN_TEST(test_wifi_bounds);
+  RUN_TEST(test_wifi_vectors);
   RUN_TEST(test_wifi_bytes_reach_the_store_exactly);
   RUN_TEST(test_longest_pairing_round_trips);
   RUN_TEST(test_stop_and_unknown_are_silent);
