@@ -58,6 +58,8 @@ export function createTrack({ cars, jitterMs = 150, random = Math.random, noise 
 const STAT_COUNTERS = ['batches', 'frames', 'rej.start', 'rej.bit', 'rej.stop', 'rej.short', 'rej.burst', 'rej.long', 'rej.parity',
   'overflow', 'ringlow', 'qdrop', 'pass', 'single', 'quiet', 'minlap', 'rxdrop', 'suppressed'];
 const STAT_EVERY_MS = 10_000;
+const FRAMES_PER_PASSING = 8;
+const RING_BYTES = 8192;
 const hex = (/** @type {number} */ n) => n.toString(16).toUpperCase();
 
 /**
@@ -93,8 +95,16 @@ export function createSimulator({ cars, jitterMs = 150, random = Math.random, de
   };
   /** The passings up to `now`, on the boot's clock. @param {number} now */
   const crossings = (now) => track.advance(now - bootStart).map((c) => ({ transponder: cars[c.id].transponder, t: c.t }));
+  // As the board counts them: each passing's 8 frames, each frame its own batch, and an RMT ring
+  // buffer (8 KiB) that never filled. The rejection and drop counters stay at 0.
+  const counter = (/** @type {string} */ key) => {
+    if (key === 'pass') return passings;
+    if (key === 'batches' || key === 'frames') return passings * FRAMES_PER_PASSING;
+    if (key === 'ringlow') return RING_BYTES;
+    return 0;
+  };
   const stat = (/** @type {number} */ up) =>
-    `%TLLOG stat up=${up} ${STAT_COUNTERS.map((key) => `${key}=${key === 'pass' ? passings : 0}`).join(' ')} heap=200000&`;
+    `%TLLOG stat up=${up} ${STAT_COUNTERS.map((key) => `${key}=${counter(key)}`).join(' ')} heap=200000&`;
 
   return {
     get boot() {
@@ -121,7 +131,7 @@ export function createSimulator({ cars, jitterMs = 150, random = Math.random, de
       for (const { transponder, t } of crossings(now)) {
         due.push({ at: bootStart + t, order: 0, lines: () => {
           passings += 1;
-          return [commands.lap(transponder, t), `%TLLOG pass id=${transponder} t=${hex(t)} first=${hex(Math.max(t - 40, 0))} last=${hex(t + 40)} frames=8&`];
+          return [commands.lap(transponder, t), `%TLLOG pass id=${transponder} t=${hex(t)} first=${hex(Math.max(t - 40, 0))} last=${hex(t + 40)} frames=${FRAMES_PER_PASSING}&`];
         } });
       }
       for (; bootStart + nextSecond <= now; nextSecond += 1000) {
