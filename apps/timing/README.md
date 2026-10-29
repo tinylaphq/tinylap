@@ -16,6 +16,8 @@ Timing always needs sign-in. Run accounts, the planner and timing side by side. 
 
 Open http://localhost:8100 and sign in. Without hardware: Setup → "Pair over Wi-Fi only", then `node tools/decoder-sim.js net --url http://localhost:8100 --decoder <id> --token <token>`, or the bridge with a simulated decoder: start the server with `TINYLAP_SIMULATE=tinylap,fast` (or `zround,fast`, `easylap,fast`) and open http://localhost:8100/personal/bridge.
 
+With a real decoder on USB, `pnpm --filter @tinylap/timing-app bench` is quicker: accounts and timing in one process, in memory, and Chrome signed in on the Bridge page. Click Connect and pick the decoder's port; the server's log, `decoder-log` lines included, goes to stdout.
+
 Tests: `pnpm --filter @tinylap/timing-app test`; in Chrome, `pnpm --filter @tinylap/timing-app test:browser`.
 
 ## First deploy (maintainer)
@@ -27,6 +29,6 @@ Tests: `pnpm --filter @tinylap/timing-app test`; in Chrome, `pnpm --filter @tiny
 5. Sign in at https://tinylap-timing.fly.dev and check the board loads.
 6. Let CI deploy from now on: `gh variable set TIMING_DEPLOY_ENABLED --body true`.
 
-Membership notices (optional): generate `openssl rand -base64 32`, set it on timing with `fly secrets set --app tinylap-timing TINYLAP_NOTICE_TOKEN=<token>`, and add `"noticeUri": "https://tinylap-timing.fly.dev/notices/membership", "noticeToken": "<token>"` to timing's entry in `TINYLAP_CLIENTS`. Without `TINYLAP_NOTICE_TOKEN` the route answers 404.
+Membership notices (optional): generate `openssl rand -base64 32`, set it on timing with `fly secrets set --app tinylap-timing TINYLAP_NOTICE_TOKEN=<token>`, and add `"noticeUri": "https://tinylap-timing.fly.dev/notices/membership", "noticeToken": "<token>"` to timing's entry in `TINYLAP_CLIENTS`. The route (`POST /notices/membership`, `docs/identity.md`) answers 204, 401 for a wrong or missing bearer, 422 for a bad body, and 404 while `TINYLAP_NOTICE_TOKEN` is unset. A notice ends nothing by itself: timing re-reads the users' claims and ends only the open streams they no longer allow.
 
 Key rotation and backups work as for the planner (`apps/accounts/README.md`): `TINYLAP_TOKEN_KEYS` takes the new key first and the old ones after it; Fly snapshots the volume daily.

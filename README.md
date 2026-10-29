@@ -5,18 +5,18 @@ racing, built as plain ES modules on a shared design layer.
 
 - **TinyLap Planner** (`apps/track-planner`): design Kyosho Mini-Z Grand Prix Circuit 30 tracks and
   cost them against the pieces you own.
-- **TinyLap Timing** (`apps/timing`): lap timing for a club's track, live on every screen, from a decoder on USB or Wi-Fi.
+- **TinyLap Timing** (`apps/timing`): lap timing for a club's track, live on every screen, from a decoder on USB or Wi-Fi. Decoders: [docs/timing.md](docs/timing.md).
+- **TinyLap Accounts** (`apps/accounts`): sign-in with passkeys, and workspaces for clubs. Optional for the planner, required for timing.
+- **Decoder and transponder firmware** (`firmware/`): a decoder you build yourself on an ESP32, and the program for the ATtiny45 transponders in the cars. See [firmware/tinylap-decoder](firmware/tinylap-decoder/README.md) and [firmware/tinylap-transponder](firmware/tinylap-transponder/README.md).
 
     pnpm install
-    pnpm test                                    # every package
+    pnpm check                                   # tests, lint and types in every package
     pnpm --filter @tinylap/track-planner dev     # then open http://localhost:8000
 
-The planner lives in `apps/track-planner/`.
-
-ES modules cannot be imported over `file://`, so the app must be served.
+ES modules cannot be imported over `file://`, so the apps must be served.
 Downloaded track files are standalone and open directly in a browser.
 
-Design: `docs/superpowers/specs/2026-09-09-circuit30-track-planner-design.md`
+The designs are in `docs/superpowers/specs/`, one dated file per piece of work.
 
 ## Self-hosting TinyLap Planner
 
@@ -41,7 +41,7 @@ docker run -p 8080:8080 -v tinylap-data:/data -e TINYLAP_PUBLIC_URL=https://plan
 
 The API is described at `/openapi.json` and `/api`. See [docs/identity.md](docs/identity.md) for snapshots, tracks and shapes. For development, `pnpm dev` serves the source on `http://localhost:8000` with an in-memory database.
 
-Sign-in is off in development unless `TINYLAP_ISSUER` is set. To try it, run `accounts` and the planner side by side: `TINYLAP_CLIENTS='[{"clientId":"planner-dev","clientSecret":"dev","redirectUris":["http://localhost:8000/auth/callback"],"postLogoutRedirectUris":["http://localhost:8000/"],"resource":"http://localhost:8000"}]' TINYLAP_FEED_TOKENS=dev pnpm --filter @tinylap/accounts dev` (on `http://localhost:4100`), then `TINYLAP_ISSUER=http://localhost:4100 TINYLAP_CLIENT_ID=planner-dev TINYLAP_CLIENT_SECRET=dev TINYLAP_FEED_TOKEN=dev TINYLAP_TOKEN_KEYS=dev:$(openssl rand -base64 32) pnpm dev`, and open `http://localhost:8000`. The session cookie is `Secure` even here; browsers accept that on `http://localhost`.
+Sign-in is off in development unless `TINYLAP_ISSUER` is set. To try it, run accounts, the planner and timing side by side as in [apps/timing/README.md](apps/timing/README.md) (Development).
 
 ## Self-hosting TinyLap Accounts
 
@@ -55,18 +55,9 @@ docker run -p 4100:4100 -v tinylap-accounts:/data \
   -e TINYLAP_FEED_TOKENS=<random> tinylap-accounts
 ```
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `TINYLAP_ISSUER` | required | Public `https` origin of `accounts`, no path |
-| `BETTER_AUTH_SECRET` | required | At least 32 characters; encrypts the signing keys and signs cookies |
-| `TINYLAP_CLIENTS` | `[]` | JSON array of clients: `clientId`, `clientSecret`, `redirectUris`, `postLogoutRedirectUris`, `resource` (the app's origin) |
-| `TINYLAP_FEED_TOKENS` | none | Comma-separated bearer tokens for the deletions feed, one per app |
-| `TINYLAP_DB` | `/data/accounts.sqlite` | SQLite file |
-| `PORT` | `4100` | Port to listen on |
-| `TINYLAP_CLIENT_IP_HEADER` | none | Header carrying the client IP behind a proxy, for rate limits |
-| `TINYLAP_DEV` | off | Local development only: http issuer, loopback redirects |
+Its variables, secrets, key rotation and backups: [apps/accounts/README.md](apps/accounts/README.md).
 
-Then give the planner `TINYLAP_ISSUER`, `TINYLAP_CLIENT_ID`, `TINYLAP_CLIENT_SECRET` (the same as in `TINYLAP_CLIENTS`), `TINYLAP_TOKEN_KEYS`, `TINYLAP_FEED_TOKEN` and `TINYLAP_PUBLIC_URL`, as in the planner table above. Secrets, key rotation and backups: [apps/accounts/README.md](apps/accounts/README.md).
+Then give the planner `TINYLAP_ISSUER`, `TINYLAP_CLIENT_ID`, `TINYLAP_CLIENT_SECRET` (the same as in `TINYLAP_CLIENTS`), `TINYLAP_TOKEN_KEYS`, `TINYLAP_FEED_TOKEN` and `TINYLAP_PUBLIC_URL`, as in the planner table above.
 
 ### Another OIDC provider
 
@@ -95,10 +86,10 @@ docker run -p 8080:8080 -v tinylap-timing:/data -e TINYLAP_PUBLIC_URL=https://ti
 | `TINYLAP_PLANNER_URL` | required | The planner tracks are imported from; timing fetches nothing else |
 | `TINYLAP_CLIENT_IP_HEADER` | none | Header carrying the client IP behind a proxy |
 
-It refuses to start unless all required variables are set. Decoders: [docs/timing.md](docs/timing.md).
+It refuses to start unless all required variables are set. Development: [apps/timing/README.md](apps/timing/README.md). Decoders: [docs/timing.md](docs/timing.md).
 
 ## License
 
 TinyLap is free software and stays that way. Apps and tools are
-AGPL-3.0-or-later, the shared packages (`packages/`) are MPL-2.0, and docs are
-CC-BY-SA-4.0. See `LICENSES/`, `CONTRIBUTING.md` and `TRADEMARKS.md`.
+AGPL-3.0-or-later, the shared packages (`packages/`) and the firmware
+(`firmware/`) are MPL-2.0, and docs are CC-BY-SA-4.0. See `LICENSES/`, `CONTRIBUTING.md` and `TRADEMARKS.md`.

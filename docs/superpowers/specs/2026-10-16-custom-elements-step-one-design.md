@@ -1,6 +1,6 @@
 # Custom elements, step one: frames and copy
 
-Status: revision 3, after a review and a re-review. Follows AGENTS.md "Web platform first" (PR #22).
+It follows AGENTS.md "Web platform first".
 
 ## 1. Goal
 

@@ -1,6 +1,6 @@
 # Custom elements, step three: tap and bridge
 
-Status: implemented on `feat/tap-bridge-elements`, after a review and a re-review (scratchpad `review-tap-spec.md`: I1–I7, M1–M8, B1–B5, m1–m6), the product owner's rulings, and a review of the branch (scratchpad `review-step3-branch.md`, findings 1–7, folded in below). It follows the step-one spec (`2026-10-16-custom-elements-step-one-design.md`), the step-two spec (`2026-10-18-custom-elements-step-two-board.md`) and AGENTS.md "Web platform first". Paths are relative to `apps/timing/` unless they say otherwise.
+It follows the step-one spec (`2026-10-16-custom-elements-step-one-design.md`), the step-two spec (`2026-10-18-custom-elements-step-two-board.md`) and AGENTS.md "Web platform first". Paths are relative to `apps/timing/` unless they say otherwise.
 
 Product owner rulings recorded here:
 - **Why this step.** Users gain little from it. It is for consistency and testability, and tap comes first.

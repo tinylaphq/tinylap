@@ -7,6 +7,9 @@
     pnpm check                                   # tests, lint, types in every package
     pnpm --filter @tinylap/track-planner dev     # http://localhost:8000
 
+The firmware in `firmware/` builds with [PlatformIO](https://platformio.org/)
+Core; each project's README says how to build, test and flash it.
+
 ## Sign your commits (DCO)
 
 Every commit must carry a `Signed-off-by:` line, which `git commit -s` adds.
@@ -23,8 +26,8 @@ checks it. Releases and changelogs are generated from these messages.
 
 ## Ground rules
 
-- **Use the platform.** No bundlers, no transpilers, no framework. Code is plain
-  ES modules that run in the browser as written. Dependencies must ship plain ES
+- **Use the platform.** No bundlers, no transpilers, no framework. Web code is
+  plain ES modules that run in the browser as written. Dependencies must ship plain ES
   modules.
 - **Types are JSDoc**, checked by `tsc --checkJs`. Shared types live in `.d.ts` files.
 - **Apps must not load modules lazily** (`import()`): an open tab would request
@@ -39,7 +42,7 @@ checks it. Releases and changelogs are generated from these messages.
 | Folder | License |
 | --- | --- |
 | `apps/`, `tools/` | AGPL-3.0-or-later |
-| `packages/` | MPL-2.0 |
+| `packages/`, `firmware/` | MPL-2.0 |
 | docs, Markdown | CC-BY-SA-4.0 |
 
 New files need an SPDX header (`reuse annotate`); `reuse lint` runs in CI.

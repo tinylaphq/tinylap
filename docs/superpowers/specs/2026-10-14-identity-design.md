@@ -2,8 +2,6 @@
 
 Date: 2026-10-14
 Extends: `docs/superpowers/specs/2026-10-14-planner-server-design.md`
-Status: proof-of-concept phase (see §13)
-
 ## 1. Purpose
 
 One TinyLap login for the whole suite: the track planner, the timing app,
