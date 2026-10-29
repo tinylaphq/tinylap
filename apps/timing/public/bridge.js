@@ -91,6 +91,8 @@ export class Bridge extends EventTarget {
   #logTimer = null;
   /** A logs-only flush was asked for while one was in flight. */
   #againAlone = false;
+  /** A normal flush was asked for while one was in flight: the rerun is a normal one, so no passing waits for the log timer. */
+  #againFull = false;
   /** @type {any} */ transport;
   /** @type {any} */ protocol;
   /** @type {any} */ device;
@@ -594,7 +596,8 @@ export class Bridge extends EventTarget {
     if (this.#closed) return Promise.resolve();
     if (this.#flushing) {
       this.#again = true;
-      this.#againAlone ||= alone;
+      if (alone) this.#againAlone = true;
+      else this.#againFull = true;
       return this.#flushing;
     }
     // A logs-only flush posts only the decoders with lines, so it leaves a pending retry of the others' passings alone.
@@ -625,10 +628,14 @@ export class Bridge extends EventTarget {
       if (!this.#logs.some((entry) => entry.decoder !== null)) this.#cancelLogTimer();
       else if (rearm) this.#armLogTimer();
       if (this.#again) {
-        const again = { alone: this.#againAlone };
+        const full = this.#againFull;
+        const alone = this.#againAlone;
         this.#again = false;
         this.#againAlone = false;
-        await this.flush(again);
+        this.#againFull = false;
+        await this.flush({ alone: !full });
+        // The log timer's flush was merged into a normal one: the lines it didn't carry go on the timer again.
+        if (full && alone) this.#armLogTimer();
       }
     })();
     return this.#flushing;
@@ -747,7 +754,9 @@ export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], 
   // The lines no group carried, in logs-only batches per decoder and boot (spec §2.4). A decoder a 403 refused gets
   // none: its lines are dropped. A 429, a 5xx or the network stops, keeping the rest for the next flush; a 401
   // stops and drops the rest, as every batch would fail the same way.
-  for (let next; ranOut && alone && (next = lines.find((entry) => !done.has(entry)));) {
+  while (ranOut && alone) {
+    const next = lines.find((entry) => !done.has(entry));
+    if (!next) break;
     const decoder = /** @type {string} */ (next.decoder);
     if (skipped.has(decoder)) {
       finish(lines.filter((entry) => entry.decoder === decoder && !done.has(entry)));

@@ -362,16 +362,65 @@ test('a pass line rides on the next passing\'s batch, not a post of its own', as
 });
 
 test('with no passings, one logs-only batch after logMaxWaitMs; a second line does not restart the timer', async (t) => {
-  const { sim, send, posts, bridge } = await ready(t, { logMaxWaitMs: 100 });
-  const from = performance.now();
+  const logMaxWaitMs = 300;
+  const { posts, post } = posting();
+  let postedAt = null;
+  const { sim, send, bridge } = await ready(t, { logMaxWaitMs, post: async (decoder, batch) => {
+    postedAt ??= performance.now();
+    return post(decoder, batch);
+  } });
   send(log('stat up=1'));
-  await wait(60);
+  await wait(200);
+  const second = performance.now();
   send(log('stat up=2'));
   await until(() => posts.length === 1);
-  assert.ok(performance.now() - from < 150, 'the timer was not restarted by the second line');
+  // A timer restarted by the second line could fire no sooner than logMaxWaitMs after it; the first line's fires about
+  // 100 ms after it, and only sooner if the wait above ran late.
+  assert.ok(postedAt - second < logMaxWaitMs - 10, 'the timer was not restarted by the second line');
   assert.deepEqual(posts, [{ decoder: 'dec_1', boot: sim.boot, passings: [], logs: ['stat up=1', 'stat up=2'] }]);
-  await wait(150);
+  await wait(logMaxWaitMs + 50);
   assert.equal(posts.length, 1);
+  await bridge.close();
+});
+
+test('a passing stamped while a flush runs goes with the rerun, though the log timer asked for a flush too', async (t) => {
+  const inner = memoryOutbox();
+  // The flush's last list() is held, so the second passing is stamped after it: only the rerun can post it.
+  let listGate = null;
+  let listing = false;
+  const outbox = { ...inner, list: async () => {
+    const items = await inner.list();
+    if (listGate) {
+      listing = true;
+      await listGate;
+    }
+    return items;
+  } };
+  let releasePost;
+  const postGate = new Promise((done) => { releasePost = done; });
+  const { posts, post } = posting();
+  const { send, bridge } = await ready(t, { outbox, logMaxWaitMs: 30, post: async (decoder, batch) => {
+    await postGate;
+    return post(decoder, batch);
+  } });
+  const seen = [];
+  bridge.addEventListener('passing', (event) => seen.push(event.detail.t));
+  send(log('stat up=1'));
+  send(commands.lap('0A', 1000));
+  await until(() => seen.length === 1);
+  // The log timer fires while the passing's post, which carries the line, is held.
+  await wait(80);
+  let releaseList;
+  listGate = new Promise((done) => { releaseList = done; });
+  releasePost();
+  await until(() => listing);
+  send(commands.lap('0A', 9000));
+  await until(async () => seen.length === 2 && (await inner.count()) === 1);
+  listGate = null;
+  releaseList();
+  await until(() => posts.some((x) => x.passings.some((p) => p.t === 9000)));
+  assert.deepEqual(posts.map((x) => x.passings.map((p) => p.t)), [[1000], [9000]]);
+  assert.deepEqual(posts[0].logs, ['stat up=1']);
   await bridge.close();
 });
 
