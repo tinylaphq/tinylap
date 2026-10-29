@@ -66,7 +66,7 @@ A `boot` line follows its `%TLID` directly. The bridge relies on it: a `boot` li
 
 The bridge opens the port, waits 1.5 s (opening it resets Arduino-based decoders), and sends `%C&` every 500 ms until something in ZRound comes back, for up to 6 s. With no answer by then it is listening: it sends `%C&`, then `%TLHELLO&`, every 2 s, until 60 s after opening. Once something in ZRound comes back, it sends `%TLHELLO&`, 300 ms after its last write, up to three times 700 ms apart. A `%TLID` makes it a TinyLap decoder for the rest of the connection. Every command is a multiple of 3 bytes, so firmware that reads 3 bytes at a time (RiCino) still sees each one whole.
 
-After a break, framing, parity or overrun error on the port, the bridge reads on, and drops the message the error cut. Any other error, a lost device, or 20 errors in a row with no data between them, ends the connection.
+After a read error that leaves the port a stream to read (a break, framing, parity or overrun error), the bridge reads on, and drops the message the error cut. An error after which the port has no stream to read (a lost device, or another fatal error) ends the connection, whatever its name, and so does the 21st error in a row with no data between them: the bridge reads past 20.
 
 ### Plain ZRound decoders
 
