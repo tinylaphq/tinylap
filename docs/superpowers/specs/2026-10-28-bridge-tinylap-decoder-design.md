@@ -541,13 +541,13 @@ The `/api` page shows only a request body's media type (`pages.js`), so it picks
 
 ## 9. Open guesses
 
-All of these are for the board session (decoder spec §11, checklist items 1 and 2), and none of them blocks the implementation:
+These were for the board session (decoder spec §11, checklist items 1 and 2). None of them blocks the implementation.
 
-1. The board resets when the port opens, so `resetOnOpen` defaults to `true` (§4).
-2. How many framing errors a reset's ROM output causes, which sets the 20-errors-in-a-row guard (§3.2).
-3. A non-fatal read error leaves `port.writable` alone (§3.1).
-4. What `setSignals` would have to be, and how the bridge would know the board (§6).
-5. On an unplug, whether Chrome sets `port.readable` to null before the `NetworkError` rejection arrives. If it does so after, the bridge reads on for up to 20 errors before it ends. That is bounded, but the tests don't model it (§3.2).
+1. **Answered: the board does not reset when Chrome opens the port.** Its uptime runs on across a connect. Uploading resets it (through RTS), and so does a replug, but a replug happens with the port closed. `resetOnOpen` still defaults to `true` (§4), which models Arduino boards that reset on open, not this one.
+2. **Open:** how many framing errors a reset's ROM output causes, which sets the 20-errors-in-a-row guard (§3.2). With no reset on open, only a crash or a power dip resets the board while it is connected, and it has no reset button to try it with.
+3. **Open:** whether a non-fatal read error leaves `port.writable` alone (§3.1). It needs the reset from guess 2.
+4. **Not needed:** `setSignals` (§6). Nothing resets the board on open, so the bridge has nothing to hold back.
+5. **Answered: an unplug ends the connection at once.** The page shows "Decoder disconnected." without delay, so the bridge does not read on through errors (§3.2). "Connect again" after the replug pairs up with the new boot, and its log lines carry on.
 
 ## 10. Decisions
 
