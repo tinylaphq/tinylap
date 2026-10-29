@@ -570,7 +570,8 @@ export class Bridge extends EventTarget {
       this.#againAlone ||= alone;
       return this.#flushing;
     }
-    clearTimeout(this.#retryTimer);
+    // A logs-only flush posts only the decoders with lines, so it leaves a pending retry of the others' passings alone.
+    if (!alone) clearTimeout(this.#retryTimer);
     const lines = this.#logs.filter((entry) => entry.decoder !== null);
     this.#flushing = (async () => {
       // Whether lines left after a logs-only flush may go again on the timer: not after a 401 or a 413, say.
@@ -588,6 +589,7 @@ export class Bridge extends EventTarget {
         this.#forgetLines(/** @type {any} */ (error)?.sentLines ?? []);
         rearm &&= keepsLines(/** @type {any} */ (error)?.status);
         this.#setOnline(false, error);
+        clearTimeout(this.#retryTimer);
         if (!this.#closed) this.#retryTimer = setTimeout(() => void this.flush(), this.retryMs);
       } finally {
         this.#flushing = null;
@@ -690,6 +692,8 @@ export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], 
       const status = /** @type {any} */ (error)?.status;
       if (!keepsLines(status)) finish(carried);
       if (status === 403) {
+        // A refused decoder's other lines go too, so no timer posts its passings again for them.
+        finish(lines.filter((entry) => entry.decoder === first.decoder && !done.has(entry)));
         skipped.add(first.decoder);
         blocked += items.filter((p) => p.decoder === first.decoder).length;
         forbidden = error;
@@ -713,21 +717,10 @@ export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], 
     // The server stores what it is sent, so `through` covers the group; if not, stop rather than loop.
     if (through === null || through < group.at(-1).t) break;
   }
-  if (ranOut && alone) await sendLinesAlone(post, lines, skipped, take, finish, done);
-  return { refusal, dropped, forbidden, blocked, sentLines };
-}
-
-/**
- * The lines no group carried, in logs-only batches per decoder and boot (spec §2.4). A decoder a 403 refused gets
- * none: its lines are dropped. A 429, a 5xx or the network stops, keeping the rest for the next flush.
- * @param {(decoderId: string, batch: Batch) => Promise<{ through: number | null }>} post
- * @param {LogEntry[]} lines @param {Set<string>} skipped
- * @param {(decoder: string, boot: string) => LogEntry[]} take @param {(entries: LogEntry[]) => void} finish @param {Set<LogEntry>} done
- */
-async function sendLinesAlone(post, lines, skipped, take, finish, done) {
-  for (;;) {
-    const next = lines.find((entry) => !done.has(entry));
-    if (!next) return;
+  // The lines no group carried, in logs-only batches per decoder and boot (spec §2.4). A decoder a 403 refused gets
+  // none: its lines are dropped. A 429, a 5xx or the network stops, keeping the rest for the next flush; a 401
+  // stops and drops the rest, as every batch would fail the same way.
+  for (let next; ranOut && alone && (next = lines.find((entry) => !done.has(entry)));) {
     const decoder = /** @type {string} */ (next.decoder);
     if (skipped.has(decoder)) {
       finish(lines.filter((entry) => entry.decoder === decoder && !done.has(entry)));
@@ -739,9 +732,14 @@ async function sendLinesAlone(post, lines, skipped, take, finish, done) {
       await post(decoder, { boot, passings: [], logs: carried.map((entry) => entry.line) });
     } catch (error) {
       const status = /** @type {any} */ (error)?.status;
-      if (keepsLines(status)) return;
+      if (keepsLines(status)) break;
+      if (status === 401) {
+        finish(lines.filter((entry) => !done.has(entry)));
+        break;
+      }
       if (status === 403) skipped.add(decoder);
     }
     finish(carried);
   }
+  return { refusal, dropped, forbidden, blocked, sentLines };
 }

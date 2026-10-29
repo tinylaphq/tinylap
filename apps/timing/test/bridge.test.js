@@ -447,7 +447,7 @@ test('after close(), nothing is sent and no timer is left', async (t) => {
   assert.equal(posts.length, 0);
 });
 
-test('a logs-only post that never answers does not hold up the next passing', async (t) => {
+test('a logs-only post that hangs does not hold up the chain of decoder events', async (t) => {
   let release;
   const gate = new Promise((done) => { release = done; });
   const { posts, post } = posting();
@@ -481,6 +481,47 @@ test('after a 403 the timer re-posts nothing', async (t) => {
   assert.equal(posts.length, 1);
   assert.deepEqual(posts[0].logs, ['stat up=1']);
   assert.equal(bridge.blocked, 1);
+  await bridge.close();
+});
+
+test('a logs-only 401 stops and drops the remaining lines', async () => {
+  const lines = Array.from({ length: 70 }, (_, i) => ({ decoder: 'd1', boot: 'b1', line: `stat n=${i}` }));
+  let posted = 0;
+  const result = await sendOutbox(memoryOutbox(), async () => { posted += 1; throw failing(401); }, () => {}, { lines, alone: true });
+  assert.equal(posted, 1);
+  assert.equal(result.sentLines.length, 70);
+  assert.equal(result.refusal, null);
+});
+
+test('after a 403 the timer does not re-post the refused passings for lines under another boot', async (t) => {
+  const posts = [];
+  const { send, bridge } = await ready(t, { logMaxWaitMs: 50, post: async (decoder, batch) => { posts.push(batch); throw failing(403, 'no access'); } });
+  send(log('stat a=1'));
+  send('%TLID dec_1 b00tb00t&');
+  send(log('stat b=1'));
+  send(commands.lap('0A', 1000));
+  await until(() => posts.length === 1);
+  await wait(200);
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].logs, ['stat b=1']);
+  await bridge.close();
+});
+
+test('a logs-only flush leaves a pending retry of another decoder\'s passings in place', async (t) => {
+  const outbox = memoryOutbox();
+  await outbox.add({ decoder: 'dec_a', boot: 'b00tb00t', transponder: '0A', t: 1000 });
+  let down = true;
+  const { posts, post } = posting();
+  const { send, bridge } = await ready(t, { outbox, retryMs: 150, logMaxWaitMs: 30, post: async (decoder, batch) => {
+    if (decoder === 'dec_a' && down) throw failing(503);
+    return post(decoder, batch);
+  } });
+  await until(() => bridge.online === false);
+  send(log('stat up=1'));
+  await until(() => posts.some((x) => x.logs));
+  down = false;
+  await until(() => posts.some((x) => x.decoder === 'dec_a'));
+  assert.equal(await outbox.count(), 0);
   await bridge.close();
 });
 
