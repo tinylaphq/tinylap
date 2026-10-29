@@ -1,6 +1,6 @@
 # Member streams end at once: sign-out, and membership notices from accounts
 
-Status: reviewed by the owner (issue #45). It follows #39 / PR #44, which made open member streams recheck access every 15 s, and the identity spec (`2026-10-14-identity-design.md`, §3 "How apps learn about workspaces", §7). Paths are relative to the repository root.
+It follows #39 / PR #44, which made open member streams recheck access every 15 s, and the identity spec (`2026-10-14-identity-design.md`, §3 "How apps learn about workspaces", §7). Paths are relative to the repository root.
 
 Product owner decisions recorded here (binding):
 - **Removal reaches timing as a push notice from accounts** (owner, 2026-10-22), not as a shorter token lifetime and not as a polled feed.

@@ -1,6 +1,6 @@
 # Custom elements, step two: the board
 
-Status: draft 4, after a review and a measured re-review (the scripts are in the session scratchpad, `board-measure/`). It follows the step-one spec (`2026-10-16-custom-elements-step-one-design.md`, §1) and AGENTS.md "Web platform first".
+It follows the step-one spec (`2026-10-16-custom-elements-step-one-design.md`, §1) and AGENTS.md "Web platform first".
 
 Product owner rulings recorded here:
 - "last lap N min ago" on the board;

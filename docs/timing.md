@@ -8,7 +8,7 @@ This is what a decoder needs to talk to TinyLap Timing. The design is in `docs/s
 
 The four together are the passing's key. Send the same passing over USB and over Wi-Fi and the server keeps one.
 
-## Over USB: ZRound, plus four TinyLap commands
+## Over USB: ZRound, plus TinyLap's commands
 
 19200 baud, 8N1. The decoder speaks the ZRound Free LapCounter protocol (zround.com wiki, CC BY-SA), so it also works with ZRound:
 
@@ -64,7 +64,7 @@ A `boot` line follows its `%TLID` directly. The bridge relies on it: a `boot` li
 
 ### The handshake
 
-The bridge opens the port, waits 1.5 s (opening it resets Arduino-based decoders), and sends `%C&` every 500 ms until something in ZRound comes back, for up to 6 s. With no answer by then it is listening: it sends `%C&`, then `%TLHELLO&`, every 2 s, until 60 s after opening. Once something in ZRound comes back, it sends `%TLHELLO&`, 300 ms after its last write, up to three times 700 ms apart. A `%TLID` makes it a TinyLap decoder for the rest of the connection. Every command is a multiple of 3 bytes, so firmware that reads 3 bytes at a time (RiCino) still sees each one whole.
+The bridge opens the port, waits 1.5 s (opening it resets many Arduino-based decoders; the TinyLap decoder on an ESP32 does not reset), and sends `%C&` every 500 ms until something in ZRound comes back, for up to 6 s. With no answer by then it is listening: it sends `%C&`, then `%TLHELLO&`, every 2 s, until 60 s after opening. Once something in ZRound comes back, it sends `%TLHELLO&`, 300 ms after its last write, up to three times 700 ms apart. A `%TLID` makes it a TinyLap decoder for the rest of the connection. Every command is a multiple of 3 bytes, so firmware that reads 3 bytes at a time (RiCino) still sees each one whole.
 
 After a read error that leaves the port a stream to read (a break, framing, parity or overrun error), the bridge reads on, and drops the message the error cut. An error after which the port has no stream to read (a lost device, or another fatal error) ends the connection, whatever its name, and so does the 21st error in a row with no data between them: the bridge reads past 20.
 
@@ -96,21 +96,6 @@ Until a capture from a real device confirms the checksum and the id bytes, this 
 
 On Linux, WebHID needs a udev rule that lets your user open the device's hidraw node, and Web Serial needs the `dialout` group.
 
-## Membership notices
-
-Timing takes membership notices from accounts at `POST /notices/membership`,
-so a removed member's open streams end at once rather than with their next
-token. Set `TINYLAP_NOTICE_TOKEN` on timing and the same value as `noticeToken`
-(with `noticeUri`: `https://<timing>/notices/membership`) in timing's entry
-in accounts' `TINYLAP_CLIENTS`; see `docs/identity.md`. The route answers 204,
-401 for a wrong or missing bearer, 422 for a bad body, and 404 while
-`TINYLAP_NOTICE_TOKEN` is unset. A notice ends nothing by itself: timing
-re-reads the users' claims and ends only the streams they no longer allow.
-
-## Without hardware
-
-Start the timing server with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production.
-
 ## Over Wi-Fi: the ingest API
 
     POST /decoders/<decoder id>/passings
@@ -119,10 +104,21 @@ Start the timing server with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` 
 
     { "boot": "x7Qm2LbV0aE", "passings": [{ "transponder": "4A1F", "t": 81234 }] }
 
-A batch may also carry `"logs": ["pass id=1F t=1E0A first=1DE2 last=1E32 frames=8"]`: decoder log lines, each the text after `%TLLOG ` and before `&`. `passings` may then be empty; a body with neither is refused. At most 500 passings and 64 log lines per batch, the lines together at most 32 KiB and each at most 510 bytes. All of one boot. The answer is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds. Keep every passing in an outbox until a batch that carried it is answered with a `through` that covers it; drop only the passings you sent, since a passing of the same boot you never sent can lie below `through` too (the cable and Wi-Fi copies race). Resending is always safe. `401` means the token is wrong or the decoder was unpaired: keep the outbox and stop sending until it is paired again. `429` comes with `Retry-After`.
+A batch may also carry `"logs": ["pass id=1F t=1E0A first=1DE2 last=1E32 frames=8"]`: decoder log lines, each the text after `%TLLOG ` and before `&`. `passings` may then be empty; a body with neither is refused.
+
+- **Limits:** at most 500 passings and 64 log lines per batch, the lines together at most 32 KiB and each at most 510 bytes. All of one boot.
+- **The answer** is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds.
+- **The outbox:** keep every passing until a batch that carried it is answered with a `through` that covers it. Drop only the passings you sent, since a passing of the same boot you never sent can lie below `through` too (the cable and Wi-Fi copies race). Resending is always safe.
+- **`401`** means the token is wrong or the decoder was unpaired: keep the outbox and stop sending until it is paired again. **`429`** comes with `Retry-After`.
 
 From the bridge, the same route takes the member's session instead of a token, from the app's own pages. There `401` means signed out and `403` means no access to the decoder's club (or a request from another site): keep those passings, since a new sign-in or another member can send them, and go on with the other decoders after a `403`. `404` means the decoder was removed or never paired, and `422` a batch the server cannot read: drop those passings, they will never be taken.
 
 The server writes the log lines to its log and stores none. A bad line is skipped, not refused, so a log line never costs a passing; a `422` for `logs` comes only when it is not an array of strings or breaks the limits above. A batch of logs alone stores nothing, but it counts as the decoder being in use.
 
 The whole API is described at `/openapi.json` and `/api` on any timing server.
+
+## Without hardware
+
+Start the timing server (`apps/timing/README.md`, Development) with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production. `tools/decoder-sim.js` plays a decoder on Wi-Fi, or on a serial pty.
+
+To try a real decoder on the bench, `pnpm --filter @tinylap/timing-app bench` starts accounts and timing in one process, in memory, and opens Chrome signed in on the Bridge page; the server's log, `decoder-log` lines included, goes to stdout.

@@ -1,6 +1,6 @@
 # Decoder firmware: a TinyLap decoder on an ESP32, step one
 
-Status: approved by the owner (2026-10-26), after the spec review (scratchpad `review-fw-spec.md`, findings 1–20); §6.1 (diagnostics) added on the owner's request the same day. It implements the decoder side of `docs/timing.md` ("Over USB: ZRound, plus four TinyLap commands"), with the simulated TinyLap decoder (`packages/timing/simulator.js` `createSimulator`, `apps/timing/public/sim/models/tinylap.js`) as the reference behaviour, and the bridge (`apps/timing/public/bridge.js`) as the other end. The hardware is in `firmware/tinylap-decoder/README.md`. Paths are relative to `firmware/tinylap-decoder/` unless they start with `docs/`, `packages/`, `apps/` or `tools/`.
+It implements the decoder side of `docs/timing.md` ("Over USB: ZRound, plus TinyLap's commands"), with the simulated TinyLap decoder (`packages/timing/simulator.js` `createSimulator`, `apps/timing/public/sim/models/tinylap.js`) as the reference behaviour, and the bridge (`apps/timing/public/bridge.js`) as the other end. The hardware is in `firmware/tinylap-decoder/README.md`. Paths are relative to `firmware/tinylap-decoder/` unless they start with `docs/`, `packages/`, `apps/` or `tools/`.
 
 Owner decisions recorded here (binding):
 - **The hardware is the owner's kit:** an ESP32-WROOM-32E, four TSOP38238 receivers in parallel on GPIO 4, and ATtiny45 + TSAL6200 transponders that are already programmed (README).
