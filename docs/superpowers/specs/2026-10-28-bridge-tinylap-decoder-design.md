@@ -391,7 +391,7 @@ Both would then fail on the network, which is worse than the problem being fixed
 **What the member reads:**
 - Wi-Fi name: "A Wi-Fi name is at most 32 bytes. This one is 34: letters like é take 2, emoji 4."
 - Wi-Fi password: "A Wi-Fi password is 8 to 63 bytes, or 64 hex digits. This one is 66 bytes."
-- A 64-byte password that isn't all hex: "This one is 64 characters, but not all hex digits."
+- A 64-character password that isn't all hex: "This one is 64 characters, but not all hex digits."
 
 **When the decoder still refuses**, after the pairing was stored (a store failure, or the check and the firmware disagreeing):
 - `Bridge.pair` calls `hello()` once `%TLPAIR` is answered, whatever `%TLWIFI` answers. The bridge then reaches `ready`, and a paired board never leaves it in `unpaired`.
@@ -547,6 +547,7 @@ All of these are for the board session (decoder spec §11, checklist items 1 and
 2. How many framing errors a reset's ROM output causes, which sets the 20-errors-in-a-row guard (§3.2).
 3. A non-fatal read error leaves `port.writable` alone (§3.1).
 4. What `setSignals` would have to be, and how the bridge would know the board (§6).
+5. On an unplug, whether Chrome sets `port.readable` to null before the `NetworkError` rejection arrives. If it does so after, the bridge reads on for up to 20 errors before it ends. That is bounded, but the tests don't model it (§3.2).
 
 ## 10. Decisions
 
