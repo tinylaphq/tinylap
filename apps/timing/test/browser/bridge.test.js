@@ -11,9 +11,11 @@ let app;
 let browser;
 let member;
 let personal;
+/** The server's log lines. */
+const logged = [];
 
 before(async () => {
-  app = await startTiming();
+  app = await startTiming({ log: (line) => logged.push(line) });
   browser = await openBrowser();
   member = await app.login(await app.signUp('Ana'));
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
@@ -42,6 +44,12 @@ test('connect, pair and forward with the simulated decoder', async (t) => {
   await page.locator('[data-bridge-preview] li').first().waitFor({ timeout: 20_000 });
   assert.equal(app.store.decoders(personal)[0].name, 'Gate');
   assert.ok(app.engine.snapshot(personal).crossings.length > 0);
+  // The decoder's own lines reach the server's log: a pass line with each passing, and a stat line every 10 s.
+  const kinds = () => new Set(logged.filter((line) => line.startsWith('{')).map((line) => JSON.parse(line)).filter((x) => x.type === 'decoder-log').map((x) => x.kind));
+  for (const end = Date.now() + 20_000; !(kinds().has('pass') && kinds().has('stat'));) {
+    assert.ok(Date.now() < end, `decoder-log kinds after 20 s: ${[...kinds()]}`);
+    await page.waitForTimeout(100);
+  }
   assert.deepEqual(errors, []);
 });
 

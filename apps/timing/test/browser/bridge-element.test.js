@@ -32,20 +32,39 @@ const simulating = (t, value) => {
 };
 
 /**
- * Counts ports in the page: a port counts as opened on its first write (the
- * hello), and as closed once its readable's cancel ran. Only the simulated
- * port (sim/serial-port.js, which install.js puts in place of navigator.serial)
- * makes these streams with a JS sink or source.
+ * Counts ports in the page: a port counts as opened when its open() is called
+ * (a board that resets on open writes nothing before pairing), and as closed
+ * once its readable's cancel ran. install.js puts the simulated port
+ * (sim/serial-port.js) in place of navigator.serial by assigning requestPort,
+ * which the setter below wraps; only that port makes these streams with a JS
+ * sink or source.
  */
 const COUNT = () => {
   Object.assign(window, { __opened: 0, __cancelled: 0, __cancelledAt: null, __writes: [] });
   const W = window.WritableStream;
   const R = window.ReadableStream;
+  const serial = navigator.serial ?? new EventTarget();
+  if (!navigator.serial) Object.defineProperty(navigator, 'serial', { configurable: true, value: serial });
+  const counted = new WeakSet();
+  let requestPort;
+  Object.defineProperty(serial, 'requestPort', {
+    configurable: true,
+    get: () => requestPort,
+    set: (real) => {
+      requestPort = async (...args) => {
+        const port = await real(...args);
+        if (!counted.has(port)) {
+          counted.add(port);
+          const open = port.open.bind(port);
+          port.open = (...options) => { window.__opened += 1; return open(...options); };
+        }
+        return port;
+      };
+    },
+  });
   window.WritableStream = class extends W {
     constructor(sink, ...rest) {
-      let opened = false;
       super(sink && { ...sink, write: (chunk, c) => {
-        if (!opened) { opened = true; window.__opened += 1; }
         window.__writes.push(performance.now());
         return sink.write(chunk, c);
       } }, ...rest);
@@ -246,12 +265,12 @@ test('E3b: a removal during the start writes nothing and closes the port it open
   // Shows that nothing is written, nor shown, after the removal.
   await page.waitForTimeout(500);
   const state = await page.evaluate(`({
-    opened: window.__opened,
+    writes: window.__writes.length,
     cancelled: window.__cancelled,
     atRemoval: window.__atRemoval,
     now: (${shownIn})(window.__el),
   })`);
-  assert.equal(state.opened, 0, 'no write at all: nothing is written after close');
+  assert.equal(state.writes, 0, 'no write at all');
   assert.equal(state.cancelled, 1, 'the port it opened is closed');
   assert.deepEqual(state.atRemoval, ['connecting']);
   assert.deepEqual(state.now, ['connecting'], 'nothing changed after the removal');

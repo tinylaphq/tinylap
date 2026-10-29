@@ -11,7 +11,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { MAX_BATCH, commands, createReader, createSimulator } from '@tinylap/timing';
+import { MAX_BATCH, createReader, createSimulator } from '@tinylap/timing';
 
 /** @param {number} n */
 export const carsOf = (n) => Array.from({ length: n }, (_, i) => ({ transponder: (0x10 + i).toString(16).toUpperCase(), lapMs: 7500 + i * 400 }));
@@ -60,10 +60,11 @@ export function runSerial({ input, output, sim, clock }) {
   const onData = (chunk) => {
     for (const message of reader.push(String(chunk))) for (const line of sim.reply(message, clock())) output.write(line);
   };
+  for (const line of sim.start(clock())) output.write(line);
   input.on('data', onData);
   return {
     tick() {
-      for (const p of sim.advance(clock())) output.write(commands.lap(p.transponder, p.t));
+      for (const line of sim.tick(clock())) output.write(line);
     },
     stop() {
       input.off('data', onData);

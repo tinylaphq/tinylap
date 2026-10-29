@@ -70,7 +70,8 @@ test('the defaults are the spec\'s', () => {
 });
 
 test('the TinyLap handshake: %C& first, %TLHELLO& once, spaced after the answer, and never choose, listening or %I&', async () => {
-  const rig = modelPort(tinylapModel({ cars: 0 }));
+  // No reset at open: a %TLID before the first write would skip %C&.
+  const rig = modelPort(tinylapModel({ cars: 0, resetOnOpen: false }));
   const { bridge, states } = bridgeOn(rig);
   await bridge.start();
   await until(() => bridge.state === 'unpaired');
@@ -84,6 +85,79 @@ test('the TinyLap handshake: %C& first, %TLHELLO& once, spaced after the answer,
   assert.equal(bridge.kind, 'tinylap');
   assert.ok(!states.includes('choose') && !states.includes('listening'));
   await bridge.close();
+});
+
+test('a %TLID before %C&: the bridge never sends %C&, ends unpaired, then pairs', async (t) => {
+  // The board resets on open and says who it is during the open delay, as with the real 1.5 s.
+  const model = tinylapModel({ cars: 0 });
+  const rig = modelPort(model);
+  const { bridge, states } = bridgeOn(rig, { openDelayMs: 50 });
+  t.after(() => bridge.close());
+  await bridge.start();
+  await until(() => bridge.state === 'unpaired');
+  await wait(200);
+  assert.equal(count(rig.writes, commands.startup), 0, 'no %C&');
+  assert.equal(bridge.kind, 'tinylap');
+  assert.ok(!states.includes('choose') && !states.includes('listening'));
+  await bridge.pair('dec_1', 't'.repeat(43));
+  await until(() => bridge.state === 'ready');
+  assert.equal(model.sim.decoder, 'dec_1');
+  assert.equal(bridge.boot, model.sim.boot);
+  await bridge.close();
+});
+
+/**
+ * A paired TinyLap decoder with one fast car, ready and forwarding; `reboot(lines)` resets it at the port's
+ * current time and says those of its reset lines that `lines` keeps.
+ */
+async function rebooting(t) {
+  const model = tinylapModel({ cars: 1, lapMs: 400, random: () => 0, decoder: 'dec_1' });
+  let now = 0;
+  const rig = modelPort({ ...model, tick: (n) => { now = n; return model.tick(n); } });
+  const { bridge, posts, states } = bridgeOn(rig);
+  t.after(() => bridge.close());
+  await bridge.start();
+  await until(() => bridge.state === 'ready' && sent(posts).length >= 2);
+  const old = model.sim.boot;
+  const reboot = (keep) => {
+    const at = now;
+    for (const line of model.sim.reply({ type: 'reset' }, at).filter(keep)) rig.say(line);
+    return { at, wall: performance.now() };
+  };
+  return { model, rig, bridge, posts, states, old, reboot };
+}
+
+/** The passings after a reboot at `at` on the old boot's clock (`wall` on this one) carry the new boot, and none the old. */
+async function forwardsTheNewBoot({ model, posts, old }, { at, wall }) {
+  await until(() => sent(posts).filter((p) => p.boot === model.sim.boot).length >= 2, 6000);
+  const all = sent(posts);
+  const since = performance.now() - wall;
+  assert.notEqual(model.sim.boot, old);
+  assert.ok(all.every((p) => p.boot === old || p.boot === model.sim.boot));
+  assert.ok(all.filter((p) => p.boot === old).every((p) => p.t <= at), 'nothing after the reboot carries the old boot');
+  assert.ok(all.filter((p) => p.boot === model.sim.boot).every((p) => p.t <= since + 50), 'stamped on the new boot\'s clock, from zero');
+}
+
+test('a reboot with the port open: the passings after it carry the new boot, none the old, and no hello() loop starts', async (t) => {
+  const rig = await rebooting(t);
+  const hellos = count(rig.rig.writes, commands.hello);
+  const before = rig.states.length;
+  const at = rig.reboot(() => true);
+  await forwardsTheNewBoot(rig, at);
+  assert.equal(count(rig.rig.writes, commands.hello), hellos, 'the %TLID said it all: no hello, and the clock from zero is no clock back');
+  assert.ok(!rig.states.slice(before).includes('connecting'));
+  await rig.bridge.close();
+});
+
+test('the same reboot with its %TLID dropped: the boot line asks again', async (t) => {
+  const rig = await rebooting(t);
+  const hellos = count(rig.rig.writes, commands.hello);
+  const at = rig.reboot((line) => !line.startsWith('%TLID'));
+  // Well before the new boot's first %T (1 s), so the boot line asked, not a clock back.
+  await until(() => count(rig.rig.writes, commands.hello) > hellos, 500);
+  await until(() => rig.bridge.state === 'ready' && rig.bridge.boot === rig.model.sim.boot);
+  await forwardsTheNewBoot(rig, at);
+  await rig.bridge.close();
 });
 
 test('open delay and retry: a decoder that boots for 50 ms gets its %C& after the delay, or on a retry', async () => {
@@ -280,7 +354,7 @@ test('one chain: a live passing during assign lands after the held ones', async 
 });
 
 test('once TinyLap, always TinyLap: a lost re-hello repeats until answered, and its passings wait for the new boot', async () => {
-  const model = tinylapModel({ cars: 0, decoder: 'dec_1' });
+  const model = { ...tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }), tick: () => [] };
   let swallow = 0;
   const rig = modelPort(model, { drop: (text) => text === commands.hello && swallow-- > 0 });
   const { bridge, posts, states } = bridgeOn(rig);
@@ -492,7 +566,7 @@ test('an unplug during the handshake ends disconnected: no write after it, no ti
 });
 
 test('hello() keeps one retry: repeated clock-backs and pairings do not stack helloMs loops', async () => {
-  const model = tinylapModel({ cars: 0, decoder: 'dec_1' });
+  const model = { ...tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }), tick: () => [] };
   let swallow = false;
   const rig = modelPort(model, { drop: (text) => swallow && text === commands.hello });
   const { bridge } = bridgeOn(rig);
@@ -514,7 +588,7 @@ test('hello() keeps one retry: repeated clock-backs and pairings do not stack he
 });
 
 test('hello(): a retry timer that fired behind a newer hello() does nothing, so no second loop starts', async () => {
-  const rig = modelPort(tinylapModel({ cars: 0, decoder: 'dec_1' }), { drop: (text) => text === commands.hello });
+  const rig = modelPort({ ...tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }), tick: () => [] }, { drop: (text) => text === commands.hello });
   const { bridge } = bridgeOn(rig);
   rig.say('%TLID dec_1 b00tb00t&');
   await bridge.start();
@@ -699,7 +773,8 @@ test('at most 256 lines are held, the oldest dropped first', async (t) => {
 });
 
 test('a boot line straight after its boot-changing %TLID starts no hello()', async (t) => {
-  const rig = modelPort(tinylapModel({ cars: 0, decoder: 'dec_1' }));
+  // No power-up lines at open: the test builds its own line sequence.
+  const rig = modelPort(tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }));
   const { bridge, posts, states } = bridgeOn(rig, { logMaxWaitMs: 30 });
   t.after(() => bridge.close());
   await bridge.start();
@@ -744,7 +819,8 @@ test('a boot line after anything else calls hello(), and the passings after it w
 });
 
 test('a boot line parseLog rejects still triggers the rule', async (t) => {
-  const model = tinylapModel({ cars: 0, decoder: 'dec_1' });
+  // No power-up lines at open: the test builds its own line sequence.
+  const model = tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false });
   const rig = modelPort(model);
   const { bridge, posts } = bridgeOn(rig, { logMaxWaitMs: 30 });
   t.after(() => bridge.close());

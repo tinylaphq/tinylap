@@ -50,7 +50,7 @@ test('an unpaired decoder is paired, then forwards passings', async () => {
   const bridge = new Bridge({ port, outbox, post: async (decoder, batch) => { posts.push({ decoder, batch }); return { through: Math.max(...batch.passings.map((x) => x.t)) }; } });
   await bridge.start();
   await until(() => bridge.state === 'unpaired');
-  await bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret' });
+  await bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' });
   await until(() => bridge.state === 'ready');
   assert.equal(sim.decoder, 'dec_1');
   assert.equal(bridge.decoder, 'dec_1');

@@ -32,6 +32,8 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
     },
     writable: new WritableStream({ write(chunk) { send(model.write(chunk, clock())); } }),
     async open() {
+      // The model's `now` starts again at every open. Every caller makes a fresh port per pick, so a
+      // re-open of the same port object, which would send the model's clock back, doesn't happen.
       openedAt = performance.now();
       send(model.start(0));
       timer = setInterval(() => send(model.tick(clock())), tickMs);
