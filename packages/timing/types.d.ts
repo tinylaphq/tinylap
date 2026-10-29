@@ -15,6 +15,7 @@ export interface Passing {
 export interface Batch {
   boot: string;
   passings: { transponder: string; t: number }[];
+  logs: string[];
 }
 
 /** The decoder-time position of a passing, for lap arithmetic. */
@@ -89,6 +90,7 @@ export type ZroundMessage =
   | { type: 'clock'; t: number }
   | { type: 'lap'; transponder: string; t: number }
   | { type: 'hello-request' }
+  | { type: 'log'; line: string }
   | { type: 'hello'; decoder: string | null; boot: string }
   | { type: 'pair'; decoder: string; token: string }
   | { type: 'wifi'; ssid: string; password: string }
@@ -113,4 +115,5 @@ export type DecoderEvent =
   | { type: 'passing'; transponder: string; t: number; hits?: number; strength?: number }
   | { type: 'ok' }
   | { type: 'error'; text: string }
+  | { type: 'log'; line: string; boot: boolean }
   | { type: 'noise'; detail: string };

@@ -230,5 +230,662 @@
         }
       ]
     }
+  ],
+  "logLines": [
+    {
+      "line": "%TLLOG boot reason=poweron fw=v0.1.0-3-gabc&",
+      "log": {
+        "kind": "boot",
+        "fields": [
+          [
+            "reason",
+            "poweron"
+          ],
+          [
+            "fw",
+            "v0.1.0-3-gabc"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG boot reason=panic fw=v0.1.0-3-gabc prev.batches=1 prev.frames=2 prev.rej.start=3 prev.rej.bit=4 prev.rej.stop=5 prev.rej.short=6 prev.rej.burst=7 prev.rej.long=8 prev.rej.parity=9 prev.overflow=10 prev.ringlow=11 prev.qdrop=12 prev.pass=13 prev.single=14 prev.quiet=15 prev.minlap=16 prev.rxdrop=17 prev.suppressed=18&",
+      "log": {
+        "kind": "boot",
+        "fields": [
+          [
+            "reason",
+            "panic"
+          ],
+          [
+            "fw",
+            "v0.1.0-3-gabc"
+          ],
+          [
+            "prev.batches",
+            "1"
+          ],
+          [
+            "prev.frames",
+            "2"
+          ],
+          [
+            "prev.rej.start",
+            "3"
+          ],
+          [
+            "prev.rej.bit",
+            "4"
+          ],
+          [
+            "prev.rej.stop",
+            "5"
+          ],
+          [
+            "prev.rej.short",
+            "6"
+          ],
+          [
+            "prev.rej.burst",
+            "7"
+          ],
+          [
+            "prev.rej.long",
+            "8"
+          ],
+          [
+            "prev.rej.parity",
+            "9"
+          ],
+          [
+            "prev.overflow",
+            "10"
+          ],
+          [
+            "prev.ringlow",
+            "11"
+          ],
+          [
+            "prev.qdrop",
+            "12"
+          ],
+          [
+            "prev.pass",
+            "13"
+          ],
+          [
+            "prev.single",
+            "14"
+          ],
+          [
+            "prev.quiet",
+            "15"
+          ],
+          [
+            "prev.minlap",
+            "16"
+          ],
+          [
+            "prev.rxdrop",
+            "17"
+          ],
+          [
+            "prev.suppressed",
+            "18"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG stat up=600 batches=1 frames=2 rej.start=3 rej.bit=4 rej.stop=5 rej.short=6 rej.burst=7 rej.long=8 rej.parity=9 overflow=10 ringlow=11 qdrop=12 pass=13 single=14 quiet=15 minlap=16 rxdrop=17 suppressed=18 heap=200000&",
+      "log": {
+        "kind": "stat",
+        "fields": [
+          [
+            "up",
+            "600"
+          ],
+          [
+            "batches",
+            "1"
+          ],
+          [
+            "frames",
+            "2"
+          ],
+          [
+            "rej.start",
+            "3"
+          ],
+          [
+            "rej.bit",
+            "4"
+          ],
+          [
+            "rej.stop",
+            "5"
+          ],
+          [
+            "rej.short",
+            "6"
+          ],
+          [
+            "rej.burst",
+            "7"
+          ],
+          [
+            "rej.long",
+            "8"
+          ],
+          [
+            "rej.parity",
+            "9"
+          ],
+          [
+            "overflow",
+            "10"
+          ],
+          [
+            "ringlow",
+            "11"
+          ],
+          [
+            "qdrop",
+            "12"
+          ],
+          [
+            "pass",
+            "13"
+          ],
+          [
+            "single",
+            "14"
+          ],
+          [
+            "quiet",
+            "15"
+          ],
+          [
+            "minlap",
+            "16"
+          ],
+          [
+            "rxdrop",
+            "17"
+          ],
+          [
+            "suppressed",
+            "18"
+          ],
+          [
+            "heap",
+            "200000"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG stat up=4294967295 batches=4294967295 frames=4294967295 rej.start=4294967295 rej.bit=4294967295 rej.stop=4294967295 rej.short=4294967295 rej.burst=4294967295 rej.long=4294967295 rej.parity=4294967295 overflow=4294967295 ringlow=4294967295 qdrop=4294967295 pass=4294967295 single=4294967295 quiet=4294967295 minlap=4294967295 rxdrop=4294967295 suppressed=4294967295 heap=4294967295&",
+      "log": {
+        "kind": "stat",
+        "fields": [
+          [
+            "up",
+            "4294967295"
+          ],
+          [
+            "batches",
+            "4294967295"
+          ],
+          [
+            "frames",
+            "4294967295"
+          ],
+          [
+            "rej.start",
+            "4294967295"
+          ],
+          [
+            "rej.bit",
+            "4294967295"
+          ],
+          [
+            "rej.stop",
+            "4294967295"
+          ],
+          [
+            "rej.short",
+            "4294967295"
+          ],
+          [
+            "rej.burst",
+            "4294967295"
+          ],
+          [
+            "rej.long",
+            "4294967295"
+          ],
+          [
+            "rej.parity",
+            "4294967295"
+          ],
+          [
+            "overflow",
+            "4294967295"
+          ],
+          [
+            "ringlow",
+            "4294967295"
+          ],
+          [
+            "qdrop",
+            "4294967295"
+          ],
+          [
+            "pass",
+            "4294967295"
+          ],
+          [
+            "single",
+            "4294967295"
+          ],
+          [
+            "quiet",
+            "4294967295"
+          ],
+          [
+            "minlap",
+            "4294967295"
+          ],
+          [
+            "rxdrop",
+            "4294967295"
+          ],
+          [
+            "suppressed",
+            "4294967295"
+          ],
+          [
+            "heap",
+            "4294967295"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG boot reason=brownout fw=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx prev.batches=4294967295 prev.frames=4294967295 prev.rej.start=4294967295 prev.rej.bit=4294967295 prev.rej.stop=4294967295 prev.rej.short=4294967295 prev.rej.burst=4294967295 prev.rej.long=4294967295 prev.rej.parity=4294967295 prev.overflow=4294967295 prev.ringlow=4294967295 prev.qdrop=4294967295 prev.pass=4294967295 prev.single=4294967295 prev.quiet=4294967295 prev.minlap=4294967295 prev.rxdrop=4294967295 prev.suppressed=4294967295&",
+      "log": {
+        "kind": "boot",
+        "fields": [
+          [
+            "reason",
+            "brownout"
+          ],
+          [
+            "fw",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "prev.batches",
+            "4294967295"
+          ],
+          [
+            "prev.frames",
+            "4294967295"
+          ],
+          [
+            "prev.rej.start",
+            "4294967295"
+          ],
+          [
+            "prev.rej.bit",
+            "4294967295"
+          ],
+          [
+            "prev.rej.stop",
+            "4294967295"
+          ],
+          [
+            "prev.rej.short",
+            "4294967295"
+          ],
+          [
+            "prev.rej.burst",
+            "4294967295"
+          ],
+          [
+            "prev.rej.long",
+            "4294967295"
+          ],
+          [
+            "prev.rej.parity",
+            "4294967295"
+          ],
+          [
+            "prev.overflow",
+            "4294967295"
+          ],
+          [
+            "prev.ringlow",
+            "4294967295"
+          ],
+          [
+            "prev.qdrop",
+            "4294967295"
+          ],
+          [
+            "prev.pass",
+            "4294967295"
+          ],
+          [
+            "prev.single",
+            "4294967295"
+          ],
+          [
+            "prev.quiet",
+            "4294967295"
+          ],
+          [
+            "prev.minlap",
+            "4294967295"
+          ],
+          [
+            "prev.rxdrop",
+            "4294967295"
+          ],
+          [
+            "prev.suppressed",
+            "4294967295"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG pass id=2A t=1F74 first=1F40 last=1FA8 frames=9&",
+      "log": {
+        "kind": "pass",
+        "fields": [
+          [
+            "id",
+            "2A"
+          ],
+          [
+            "t",
+            "1F74"
+          ],
+          [
+            "first",
+            "1F40"
+          ],
+          [
+            "last",
+            "1FA8"
+          ],
+          [
+            "frames",
+            "9"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG event what=single id=2A t=1F40&",
+      "log": {
+        "kind": "event",
+        "fields": [
+          [
+            "what",
+            "single"
+          ],
+          [
+            "id",
+            "2A"
+          ],
+          [
+            "t",
+            "1F40"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG event what=quiet id=2A t=1F40&",
+      "log": {
+        "kind": "event",
+        "fields": [
+          [
+            "what",
+            "quiet"
+          ],
+          [
+            "id",
+            "2A"
+          ],
+          [
+            "t",
+            "1F40"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG event what=minlap id=2A t=1F40&",
+      "log": {
+        "kind": "event",
+        "fields": [
+          [
+            "what",
+            "minlap"
+          ],
+          [
+            "id",
+            "2A"
+          ],
+          [
+            "t",
+            "1F40"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG event what=overflow t=10&",
+      "log": {
+        "kind": "event",
+        "fields": [
+          [
+            "what",
+            "overflow"
+          ],
+          [
+            "t",
+            "10"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG boot reason=a_b fw=v1__x_y&",
+      "log": {
+        "kind": "boot",
+        "fields": [
+          [
+            "reason",
+            "a_b"
+          ],
+          [
+            "fw",
+            "v1__x_y"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG stat aa=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ab=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ac=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ad=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ae=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx af=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ag=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ah=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ai=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx aj=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ak=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx al=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx am=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx b=xxxxxxxxxxxxxxxxxxxxxxxxxxxxx&",
+      "log": {
+        "kind": "stat",
+        "fields": [
+          [
+            "aa",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "ab",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "ac",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "ad",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "ae",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "af",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "ag",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "ah",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "ai",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "aj",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "ak",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "al",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "am",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "b",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG boot fw=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&",
+      "log": {
+        "kind": "boot",
+        "fields": [
+          [
+            "fw",
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ]
+        ]
+      }
+    },
+    {
+      "line": "%TLLOG boot reason=power on&",
+      "log": null
+    },
+    {
+      "line": "%TLLOG boot fw=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&",
+      "log": null
+    },
+    {
+      "line": "%TLLOG boot fw=\"x&",
+      "log": null
+    },
+    {
+      "line": "%TLLOG boot reason=a reason=b&",
+      "log": null
+    },
+    {
+      "line": "%TLLOG BOOT reason=x&",
+      "log": null
+    },
+    {
+      "line": "%TLLOG stat aa=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ab=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ac=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ad=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ae=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx af=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ag=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ah=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ai=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx aj=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ak=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx al=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx am=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx b=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&",
+      "log": null
+    }
+  ],
+  "wifi": [
+    {
+      "ssid": "",
+      "password": "cGFzc3dvcmQ",
+      "reply": "%TLERR Wi-Fi name too long&"
+    },
+    {
+      "ssid": "c3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nz",
+      "password": "cGFzc3dvcmQ",
+      "reply": "%TLERR Wi-Fi name too long&"
+    },
+    {
+      "ssid": "bmV0",
+      "password": "cHBwcHBwcA",
+      "reply": "%TLERR Wi-Fi password length&"
+    },
+    {
+      "ssid": "bmV0",
+      "password": "Z2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZw",
+      "reply": "%TLERR Wi-Fi password length&"
+    },
+    {
+      "ssid": "bmV0",
+      "password": "",
+      "reply": "%TLOK&"
+    },
+    {
+      "ssid": "bmV0",
+      "password": "cHBwcHBwcHA",
+      "reply": "%TLOK&"
+    },
+    {
+      "ssid": "bmV0",
+      "password": "cHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBw",
+      "reply": "%TLOK&"
+    },
+    {
+      "ssid": "c3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3M",
+      "password": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ",
+      "reply": "%TLOK&"
+    },
+    {
+      "ssid": "bmV0",
+      "password": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUEwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+      "reply": "%TLOK&"
+    },
+    {
+      "ssid": "w6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6k",
+      "password": "",
+      "reply": "%TLOK&"
+    },
+    {
+      "ssid": "w6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6lh",
+      "password": "",
+      "reply": "%TLERR Wi-Fi name too long&"
+    },
+    {
+      "ssid": "bmV0",
+      "password": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhZw",
+      "reply": "%TLERR Wi-Fi password length&"
+    },
+    {
+      "ssid": "bmV0",
+      "password": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZg",
+      "reply": "%TLOK&"
+    }
   ]
 }
