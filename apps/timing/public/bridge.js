@@ -39,6 +39,22 @@ const LOGS_MAX = 256;
 /** A %TLLOG line without "TLLOG " and "&"; decoder and boot are null while it is held. @typedef {{ decoder: string | null, boot: string | null, line: string }} LogEntry */
 /** @typedef {{ boot: string, passings: { transponder: string, t: number }[], logs?: string[] }} Batch */
 
+/** The decoder stored the pairing but refused the Wi-Fi settings; `reason` is its %TLERR text. */
+export class WifiRefusedError extends Error {
+  name = 'WifiRefusedError';
+  /** @param {string} reason */
+  constructor(reason) {
+    super(`The decoder said: ${reason}`);
+    this.reason = reason;
+  }
+}
+
+/** The decoder stored the pairing but didn't answer the Wi-Fi settings. */
+export class WifiUnconfirmedError extends Error {
+  name = 'WifiUnconfirmedError';
+  constructor() { super("The decoder didn't answer."); }
+}
+
 export class Bridge extends EventTarget {
   #replies = [];
   /** @type {Set<ReturnType<typeof setTimeout>>} */
@@ -538,7 +554,7 @@ export class Bridge extends EventTarget {
       const answer = (message) => {
         clearTimeout(timer);
         if (message.type === 'ok') resolve(message);
-        else reject(new Error(`The decoder said: ${message.text}`));
+        else reject(Object.assign(new Error(`The decoder said: ${message.text}`), { reason: message.text }));
       };
       // A request that timed out leaves the queue, so later replies match later requests.
       const timer = setTimeout(() => {
@@ -550,18 +566,24 @@ export class Bridge extends EventTarget {
     });
   }
 
-  /** Stores the decoder's id and token on the board (and Wi-Fi, if given), then asks again who it is. */
+  /**
+   * Stores the decoder's id and token on the board (and Wi-Fi, if given), then asks again who it is.
+   * Once the pairing is stored, the bridge asks whatever the Wi-Fi answer, so a paired board ends ready;
+   * then it rejects with WifiRefusedError or WifiUnconfirmedError if the Wi-Fi settings weren't taken (spec §5.2).
+   */
   async pair(decoderId, token, wifi = null) {
     if (BROWSER_ASSIGNED.has(this.kind)) throw new Error("This decoder can't be paired over the cable.");
     let reply = this.#reply();
     await this.#write(encode(commands.pair(decoderId, token)));
     await reply;
+    let failure = null;
     if (wifi) {
       reply = this.#reply();
       await this.#write(encode(commands.wifi(wifi.ssid, wifi.password)));
-      await reply;
+      failure = await reply.then(() => null, (caught) => (typeof caught.reason === 'string' ? new WifiRefusedError(caught.reason) : new WifiUnconfirmedError()));
     }
     await this.hello();
+    if (failure) throw failure;
   }
 
   /**

@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { commands, createReader, createSimulator } from '@tinylap/timing';
-import { Bridge, sendOutbox } from '../public/bridge.js';
+import { Bridge, WifiRefusedError, WifiUnconfirmedError, sendOutbox } from '../public/bridge.js';
 import { memoryOutbox } from '../public/outbox.js';
 
 /** A serial port whose other end is `sim` (or silence). */
@@ -251,6 +251,35 @@ test('a reply that came too late does not answer the next request', async () => 
   const second = bridge.pair('dec_1', 't'.repeat(43));
   send(commands.ok);
   await second;
+  await bridge.close();
+});
+
+test('a decoder that refuses Wi-Fi after %TLOK& for the pairing ends ready, and pair rejects with the refusal', async () => {
+  // The simulated decoder answers %TLOK& to %TLPAIR, and %TLERR Wi-Fi password length& to a 7-byte password.
+  const sim = createSimulator({ cars: [] });
+  const { port } = fakePort(sim);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }) });
+  await bridge.start();
+  await until(() => bridge.state === 'unpaired');
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'short12' }),
+    (e) => e instanceof WifiRefusedError && e.name === 'WifiRefusedError' && e.reason === 'Wi-Fi password length');
+  await until(() => bridge.state === 'ready');
+  assert.equal(bridge.decoder, 'dec_1');
+  await bridge.close();
+});
+
+test('a Wi-Fi timeout after %TLOK& ends ready, and pair rejects with WifiUnconfirmedError', async () => {
+  // A decoder that never answers %TLWIFI.
+  const sim = createSimulator({ cars: [] });
+  const silent = { reply: (message, now) => (message.type === 'wifi' ? [] : sim.reply(message, now)) };
+  const { port } = fakePort(silent);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }), replyMs: 50 });
+  await bridge.start();
+  await until(() => bridge.state === 'unpaired');
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' }),
+    (e) => e instanceof WifiUnconfirmedError && e.name === 'WifiUnconfirmedError');
+  await until(() => bridge.state === 'ready');
+  assert.equal(bridge.decoder, 'dec_1');
   await bridge.close();
 });
 

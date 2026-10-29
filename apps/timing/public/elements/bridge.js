@@ -21,7 +21,8 @@
 //   every connect; the browser remembers only which decoder a device was,
 //   and offers that one to confirm.
 // The Bridge class itself (serial, outbox, retries) is ../bridge.js.
-import { Bridge, sendOutbox } from '../bridge.js';
+import { wifiError } from '@tinylap/timing';
+import { Bridge, WifiRefusedError, WifiUnconfirmedError, sendOutbox } from '../bridge.js';
 import { formatLap } from '../format.js';
 import { EASYLAP_FILTER, hidTransport } from '../link/hid.js';
 import { robitronicProtocol } from '../link/robitronic.js';
@@ -189,6 +190,7 @@ class TlBridge extends HTMLElement {
     this.show(run, 'connect');
     this.addEventListener('click', this);
     this.addEventListener('submit', this);
+    this.addEventListener('input', this);
     addEventListener('beforeunload', this);
     void this.sendEarlier(run).catch(() => {});
   }
@@ -199,6 +201,7 @@ class TlBridge extends HTMLElement {
     if (!run) return;
     this.removeEventListener('click', this);
     this.removeEventListener('submit', this);
+    this.removeEventListener('input', this);
     removeEventListener('beforeunload', this);
     const bridge = run.bridge;
     run.bridge = null;
@@ -247,7 +250,13 @@ class TlBridge extends HTMLElement {
     }
     const run = this.run;
     if (!run) return;
-    if (event.type === 'click') {
+    if (event.type === 'input') {
+      // Any edit in the pair form may settle the Wi-Fi check (clearing the name drops the password's): Pair checks again.
+      const form = event.target instanceof Element ? event.target.closest('[data-bridge-pair]') : null;
+      if (form instanceof HTMLFormElement && this.contains(form)) {
+        for (const name of ['ssid', 'password']) /** @type {HTMLInputElement} */ (form.elements.namedItem(name)).setCustomValidity('');
+      }
+    } else if (event.type === 'click') {
       const button = event.target instanceof Element ? event.target.closest('[data-bridge-connect]') : null;
       if (button && this.contains(button)) {
         this.connect(run, /** @type {any} */ (button).dataset.bridgeConnect || 'serial').then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
@@ -593,6 +602,21 @@ class TlBridge extends HTMLElement {
     /** @type {HTMLInputElement} */ (/** @type {HTMLFormElement} */ (this.$(run, '[data-bridge-pair]')).elements.namedItem('name')).readOnly = false;
   }
 
+  /**
+   * Which Wi-Fi field the decoder would refuse, and why, in bytes as it counts them; or null.
+   * @param {string} ssid @param {string} password @returns {{ field: 'ssid' | 'password', text: string } | null}
+   */
+  wifiProblem(ssid, password) {
+    const error = wifiError(ssid, password);
+    const bytes = (text) => new TextEncoder().encode(text).length;
+    if (error === 'Wi-Fi name too long') return { field: 'ssid', text: `A Wi-Fi name is at most 32 bytes. This one is ${bytes(ssid)}: letters like é take 2, emoji 4.` };
+    if (error === 'Wi-Fi password length') {
+      const why = password.length === 64 ? 'This one is 64 characters, but not all hex digits.' : `This one is ${bytes(password)} bytes.`;
+      return { field: 'password', text: `A Wi-Fi password is 8 to 63 bytes, or 64 hex digits. ${why}` };
+    }
+    return null;
+  }
+
   /** @param {Run} run @param {HTMLFormElement} pairForm */
   async pair(run, pairForm) {
     const nameField = /** @type {HTMLInputElement} */ (pairForm.elements.namedItem('name'));
@@ -600,6 +624,16 @@ class TlBridge extends HTMLElement {
     const form = new FormData(pairForm);
     const name = String(form.get('name') ?? '').trim();
     if (!run.made && !name) return this.fail(run, new Error('A decoder name is 1 to 60 characters.'));
+    const ssid = String(form.get('ssid') ?? '').trim();
+    const password = String(form.get('password') ?? '');
+    // The decoder's own checks, before anything is created or sent (spec §5.2); the browser shows the text.
+    const wrong = ssid ? this.wifiProblem(ssid, password) : null;
+    if (wrong) {
+      const field = /** @type {HTMLInputElement} */ (pairForm.elements.namedItem(wrong.field));
+      field.setCustomValidity(wrong.text);
+      field.reportValidity();
+      return undefined;
+    }
     submit.disabled = true;
     // While a connect replaces the bridge there is none: the pairing fails as for an unplugged decoder.
     const current = () => {
@@ -614,12 +648,22 @@ class TlBridge extends HTMLElement {
         run.names.set(run.made.id, run.made.name);
         nameField.readOnly = true;
       }
-      const ssid = String(form.get('ssid') ?? '').trim();
-      await current().pair(run.made.id, run.made.token, ssid ? { ssid, password: String(form.get('password') ?? '') } : null);
+      await current().pair(run.made.id, run.made.token, ssid ? { ssid, password } : null);
       run.made = null;
       nameField.readOnly = false;
       if (run === this.run) this.ok(run);
     } catch (caught) {
+      if (caught instanceof WifiRefusedError || caught instanceof WifiUnconfirmedError) {
+        // The pairing is stored and the bridge is ready: only the Wi-Fi settings didn't take.
+        run.made = null;
+        nameField.readOnly = false;
+        if (run === this.run) {
+          this.fail(run, new Error(caught instanceof WifiRefusedError
+            ? `The decoder is paired, but it refused the Wi-Fi settings: ${caught.reason}.`
+            : "The decoder is paired, but it didn't confirm the Wi-Fi settings. Its passings still reach TinyLap over this cable."));
+        }
+        return;
+      }
       if (run === this.run) this.fail(run, run.made ? new Error(`${caught.message} The decoder "${run.made.name ?? name}" is created; press Pair again to send it to the device. The name stays as it is.`) : caught);
     } finally {
       // After a move the new run shares this button; its reset enabled it, and its own pairing may hold it.
