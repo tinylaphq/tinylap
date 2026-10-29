@@ -28,12 +28,17 @@ function eventsOf(m) {
 }
 
 export function zroundProtocol() {
-  const lines = createReader();
-  const text = new TextDecoder();
+  let lines = createReader();
+  let text = new TextDecoder();
   return {
     kind: /** @type {const} */ ('zround'),
     baudRate: ZROUND_BAUD,
     /** @param {Uint8Array} bytes */
     push: (bytes) => lines.push(text.decode(bytes, { stream: true })).flatMap(eventsOf),
+    /** Bytes were lost (spec §3.3): drop the pending text and any half UTF-8 character. */
+    reset() {
+      lines = createReader();
+      text = new TextDecoder();
+    },
   };
 }

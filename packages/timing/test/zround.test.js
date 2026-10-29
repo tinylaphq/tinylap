@@ -69,6 +69,13 @@ test('a cut-off message resyncs at the last % before the &', () => {
   assert.deepEqual(reader.push('%L01,2%TLID dec bootid12&'), [{ type: 'hello', decoder: 'dec', boot: 'bootid12' }]);
 });
 
+test('reset drops the pending text', () => {
+  const reader = createReader();
+  assert.deepEqual(reader.push('%L2A,1F'), []);
+  reader.reset();
+  assert.deepEqual(reader.push('00&%T2000&'), [{ type: 'clock', t: 0x2000 }]);
+});
+
 // Shared with the decoder firmware's tests, so the two protocol codes cannot drift.
 const vectors = JSON.parse(readFileSync(new URL('./zround-vectors.json', import.meta.url), 'utf8'));
 

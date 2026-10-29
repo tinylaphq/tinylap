@@ -13,6 +13,8 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
   let timer = null;
   let openedAt = performance.now();
   const clock = () => Math.round(performance.now() - openedAt);
+  const stream = () => new ReadableStream({ start(c) { controller = c; }, cancel() { clearInterval(timer); } });
+  let readable = stream();
   /** @param {Uint8Array[]} chunks */
   const send = (chunks) => {
     for (const chunk of chunks) {
@@ -24,7 +26,10 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
     }
   };
   return {
-    readable: new ReadableStream({ start(c) { controller = c; }, cancel() { clearInterval(timer); } }),
+    /** The current stream: a non-fatal error replaces it, as Web Serial does. */
+    get readable() {
+      return readable;
+    },
     writable: new WritableStream({ write(chunk) { send(model.write(chunk, clock())); } }),
     async open() {
       openedAt = performance.now();
@@ -37,6 +42,19 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
     getInfo: () => model.info,
     /** Bytes from the device's side, for tests. @param {Uint8Array} bytes */
     send: (bytes) => send([bytes]),
+    /**
+     * A non-fatal read error, such as a FramingError: the current stream errors and a new one takes its
+     * place. A spread copy of the port keeps the first stream, so this is for unit tests only.
+     * @param {string} name
+     */
+    glitch(name) {
+      try {
+        controller.error(new DOMException('', name));
+      } catch {
+        // Already closed.
+      }
+      readable = stream();
+    },
     unplug() {
       clearInterval(timer);
       try {

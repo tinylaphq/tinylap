@@ -253,6 +253,11 @@ export class Bridge extends EventTarget {
     let broken = false;
     try {
       for await (const bytes of this.transport.bytes()) {
+        // A non-fatal read error lost bytes here: the reader joins nothing across the gap (spec §3.3).
+        if (bytes === null) {
+          this.protocol.reset?.();
+          continue;
+        }
         let events;
         try {
           events = this.protocol.push(bytes);

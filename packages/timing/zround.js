@@ -150,6 +150,10 @@ export function createReader() {
       if (pending.length > MAX_PENDING) pending = '';
       return out;
     },
+    /** A gap in the stream: the text before it is never joined to the text after it. */
+    reset() {
+      pending = '';
+    },
   };
 }
 

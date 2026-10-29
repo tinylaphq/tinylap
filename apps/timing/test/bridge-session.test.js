@@ -429,6 +429,24 @@ test('a protocol reader that throws ends the session: disconnected, no unhandled
   await bridge.close();
 });
 
+test('a non-fatal error mid-line in a TinyLap session leaves it ready, and the next passing is forwarded', async (t) => {
+  const rig = modelPort(tinylapModel({ cars: 0, decoder: 'dec_1' }));
+  const { bridge, posts } = bridgeOn(rig);
+  t.after(() => bridge.close());
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  rig.say('%L2A,1F');
+  await wait(20);
+  rig.port.glitch('FramingError');
+  rig.say('00&%T2000&');
+  rig.say(commands.lap('0B', 0x2100));
+  await until(() => sent(posts).length >= 1);
+  await wait(50);
+  assert.deepEqual(sent(posts).map((p) => [p.transponder, p.t]), [['0B', 0x2100]], 'no 2A spliced across the gap');
+  assert.equal(bridge.state, 'ready');
+  await bridge.close();
+});
+
 /** A transport that counts the writes that reach it, and the session over it. */
 function counting(rig, options = {}) {
   const transport = serialTransport(rig.port);
