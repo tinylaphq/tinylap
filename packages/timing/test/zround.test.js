@@ -29,6 +29,9 @@ test('TinyLap extension messages', () => {
   const token = 'a'.repeat(43);
   assert.deepEqual(parseMessage(`TLPAIR dec_1 ${token}`), { type: 'pair', decoder: 'dec_1', token });
   assert.deepEqual(parseMessage('TLPAIR dec_1 short'), { type: 'unknown', raw: 'TLPAIR dec_1 short' });
+  // A %TLLOG with no kind, or with two spaces before it, is not a log line.
+  assert.deepEqual(parseMessage('TLLOG'), { type: 'unknown', raw: 'TLLOG' });
+  assert.deepEqual(parseMessage('TLLOG  x'), { type: 'unknown', raw: 'TLLOG  x' });
 });
 
 test('commands round-trip, Wi-Fi credentials included', () => {

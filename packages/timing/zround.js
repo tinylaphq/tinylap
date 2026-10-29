@@ -22,6 +22,8 @@ export const LOG_LINE_BYTES = 512;
 const MAX_LOG_FIELDS = 48;
 const LOG_KIND = /^[a-z]{1,16}$/;
 const LOG_KEY = /^[a-z][a-z0-9.]{0,31}$/;
+/** What a %TLLOG line holds besides parseLog's text: "%TLLOG " before it and "&" after it. */
+const LOG_FRAME_BYTES = '%TLLOG &'.length;
 const LOG_VALUE = /^[!#$'-<>-[\]-~]{0,32}$/;
 
 /** The decoder's Wi-Fi limits, in UTF-8 bytes. */
@@ -47,7 +49,7 @@ function decode(value) {
  * @returns {{ kind: string, fields: [string, string][] } | null}
  */
 export function parseLog(text) {
-  if (text.length + 8 > LOG_LINE_BYTES) return null;
+  if (text.length + LOG_FRAME_BYTES > LOG_LINE_BYTES) return null;
   const [kind, ...parts] = text.split(' ');
   if (!LOG_KIND.test(kind) || parts.length > MAX_LOG_FIELDS) return null;
   /** @type {[string, string][]} */
@@ -72,6 +74,7 @@ export function parseLog(text) {
  */
 export function wifiError(ssid, password) {
   const name = new TextEncoder().encode(ssid).length;
+  // An empty name gets 'Wi-Fi name too long' too: the firmware has one message for 0 bytes and for over 32.
   if (name < WIFI_NAME_BYTES.min || name > WIFI_NAME_BYTES.max) return 'Wi-Fi name too long';
   const bytes = new TextEncoder().encode(password).length;
   if (bytes === 0 || (bytes >= WIFI_PASSWORD_BYTES.min && bytes <= WIFI_PASSWORD_BYTES.max) || HEX_KEY.test(password)) return null;
