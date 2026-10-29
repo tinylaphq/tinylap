@@ -504,7 +504,8 @@ test('a protocol reader that throws ends the session: disconnected, no unhandled
 });
 
 test('a non-fatal error mid-line in a TinyLap session leaves it ready, and the next passing is forwarded', async (t) => {
-  const rig = modelPort(tinylapModel({ cars: 0, decoder: 'dec_1' }));
+  // No power-up lines at open and no %T of its own: the test builds its own line sequence.
+  const rig = modelPort({ ...tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }), tick: () => [] });
   const { bridge, posts } = bridgeOn(rig);
   t.after(() => bridge.close());
   await bridge.start();
@@ -773,8 +774,8 @@ test('at most 256 lines are held, the oldest dropped first', async (t) => {
 });
 
 test('a boot line straight after its boot-changing %TLID starts no hello()', async (t) => {
-  // No power-up lines at open: the test builds its own line sequence.
-  const rig = modelPort(tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }));
+  // No power-up lines at open and no %T of its own: the test builds its own line sequence.
+  const rig = modelPort({ ...tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }), tick: () => [] });
   const { bridge, posts, states } = bridgeOn(rig, { logMaxWaitMs: 30 });
   t.after(() => bridge.close());
   await bridge.start();
@@ -793,7 +794,8 @@ test('a boot line straight after its boot-changing %TLID starts no hello()', asy
 
 test('a boot line after anything else calls hello(), and the passings after it wait for the new boot', async (t) => {
   for (const line of ['boot reason=x', 'boot reason=x fw=a"b']) {
-    const model = tinylapModel({ cars: 0, decoder: 'dec_1' });
+    // No power-up lines at open and no %T of its own: the test builds its own line sequence.
+    const model = { ...tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }), tick: () => [] };
     const rig = modelPort(model);
     const { bridge, posts } = bridgeOn(rig, { logMaxWaitMs: 30 });
     t.after(() => bridge.close());
@@ -819,8 +821,8 @@ test('a boot line after anything else calls hello(), and the passings after it w
 });
 
 test('a boot line parseLog rejects still triggers the rule', async (t) => {
-  // No power-up lines at open: the test builds its own line sequence.
-  const model = tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false });
+  // No power-up lines at open and no %T of its own: the test builds its own line sequence.
+  const model = { ...tinylapModel({ cars: 0, decoder: 'dec_1', resetOnOpen: false }), tick: () => [] };
   const rig = modelPort(model);
   const { bridge, posts } = bridgeOn(rig, { logMaxWaitMs: 30 });
   t.after(() => bridge.close());
