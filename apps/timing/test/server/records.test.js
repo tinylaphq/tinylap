@@ -6,13 +6,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RECORD_FRESH_MS, RECORD_SHOW_MS } from '../../server/engine.js';
 import { BOOT, T0, W, rig } from './rig.js';
+import { useTrack } from './helpers.js';
 
-const TRACK = { id: 'trk', shape: 'c30:1:x', name: 'Office', snapshotKey: 'k'.repeat(22), layout: '{}' };
 
 /** A rig on track `trk`, clockwise, with practice running. */
 function onTrack() {
   const r = rig();
-  r.store.setTrack(W, TRACK, 'cw');
+  useTrack(r.store, W, 'Office', 'cw', 'trk');
   r.startPractice();
   return r;
 }
@@ -144,7 +144,7 @@ test('an unassigned car sets no record until assigned, then silently', () => {
 test('the record is per track and direction', () => {
   const r = onTrack();
   laps(r.pass, '0A', 1000, 8000);
-  r.store.setTrack(W, TRACK, 'ccw');
+  useTrack(r.store, W, 'Office', 'ccw', 'trk');
   r.engine.endPractice(W);
   assert.equal(r.engine.snapshot(W).record, null);
   assert.deepEqual(r.engine.snapshot(W).bests, []);
@@ -168,7 +168,7 @@ test('records are per workspace', () => {
   const r = onTrack();
   laps(r.pass, '0A', 1000, 8000);
   const ws2 = 'ws-2';
-  r.store.setTrack(ws2, TRACK, 'cw');
+  useTrack(r.store, ws2, 'Office', 'cw', 'trk');
   r.store.addDriver(ws2, { id: 'cy', name: 'Cy', colour: '#2dff9b' });
   r.store.assignTransponder(ws2, '0A', 'cy', 0);
   r.engine.start(ws2, { kind: 'practice' });
@@ -277,11 +277,11 @@ test('the record state shows only under its own track and direction, and again w
   laps(r.pass, '0A', 1000, 8000);
   const at = laps(r.pass, '0B', 10_000, 7900);
   r.clock.now = T0 + at + 5000;
-  r.store.setTrack(W, TRACK, 'ccw');
+  useTrack(r.store, W, 'Office', 'ccw', 'trk');
   r.engine.endPractice(W);
   r.engine.tick();
   assert.equal(r.engine.snapshot(W).recordNew, null, 'not under the anticlockwise header');
-  r.store.setTrack(W, TRACK, 'cw');
+  useTrack(r.store, W, 'Office', 'cw', 'trk');
   r.engine.endPractice(W);
   assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
   assert.deepEqual(recordLaps(r.events), [7900]);
@@ -322,7 +322,7 @@ test('a record set in a race after the track changed shows only under its own tr
   r.clock.now = T0 + 20_000;
   r.engine.start(W, { kind: 'race', roster: ['ana', 'ben'], durationMs: 60_000, replace: true });
   r.pass(21_000, '0B');
-  r.store.setTrack(W, TRACK, 'ccw'); // the race keeps the track it started with
+  useTrack(r.store, W, 'Office', 'ccw', 'trk'); // the race keeps the track it started with
   r.engine.endPractice(W);
   r.pass(28_900, '0B'); // 7900: a record of trk clockwise
   assert.deepEqual(history(r.store), [['ben', 7900], ['ana', 8000]]);

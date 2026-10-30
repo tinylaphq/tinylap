@@ -8,7 +8,7 @@ import { get as httpGet } from 'node:http';
 import { createEngine } from '../../server/engine.js';
 import { createHub } from '../../server/live.js';
 import { openStore } from '../../server/store.js';
-import { startServer, startTiming } from './helpers.js';
+import { startServer, startTiming, useTrack } from './helpers.js';
 
 const clock = { now: 1_000_000_000_000 };
 let app;
@@ -49,7 +49,7 @@ test('an empty board shows a member how to get the track ready', async () => {
   const body = await res.text();
   assert.match(body, /<h1 class="board-title">No session yet<\/h1>/);
   assert.match(body, /aria-labelledby="board-steps-title"/);
-  assert.match(body, new RegExp(`<a href="${base}/setup#track">Set the track</a>`));
+  assert.match(body, /<li class="board-step is-done"><h3>Choose the track<\/h3><p>Track, anticlockwise<\/p><\/li>/, 'a new club starts on its "Track"');
   assert.match(body, /<noscript><meta http-equiv="refresh" content="10"><\/noscript>/);
   assert.match(body, new RegExp(`<div id="board-live"[^>]* data-events="${base}/board/events"`));
   assert.match(body, /<script type="module" src="\/public\/board.js"><\/script>/);
@@ -61,7 +61,7 @@ test('an empty board shows a member how to get the track ready', async () => {
 
 test('laps, a personal best and an unknown car', async () => {
   // Personal bests are per track: set one, and start practice on it.
-  app.store.setTrack(office.id, { id: 't1', shape: 'c30:1:x', name: 'Office loop', snapshotKey: 'k'.repeat(22), layout: '{}' }, 'ccw');
+  useTrack(app.store, office.id, 'Office loop', 'ccw', 't1');
   clock.now = 1_000_000_000_000 + 1000;
   app.engine.start(office.id, { kind: 'practice', replace: true });
   await app.form(member, `${base}/drivers`, { name: '<i>Ana</i>' });
@@ -212,7 +212,7 @@ test('a stopped practice driver shows when they last crossed the line, but not w
   const lastAt = clock.now;
   clock.now = lastAt + 180_000;
   let body = await (await get(member, `/clubs/${practiceClub.id}/board`)).text();
-  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+">Cleo</span><tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
+  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+">Cleo</span>(?:<span class="crown"[^>]*>👑</span>)?<tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
 
   passIn(practiceClub.id, 396_000, '21');
   passIn(practiceClub.id, 404_000, '21');
@@ -254,13 +254,13 @@ test('no note on a finished row, nor in the results', async () => {
   clock.now += 180_000;
   let body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
   assert.match(body, /data-state="finishing"/);
-  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<\/td>\s*<td class="board-driver"><span [^>]+>Abe<\/span><\/td>/);
+  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<\/td>\s*<td class="board-driver"><span [^>]+>Abe<\/span>(?:<span class="crown"[^>]*>👑<\/span>)?<\/td>/);
   assert.match(body, />Bea<\/span><tl-relative-time class="board-ago"[^>]*>last lap <time [^>]+>3 min ago<\/time>/);
 
   app.engine.abort(finishClub.id, session.id);
   body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
   const results = body.slice(body.indexOf('<section class="board-results"'), body.indexOf('</section>', body.indexOf('<section class="board-results"')));
-  assert.match(results, /<td class="board-driver"><span [^>]+>Abe<\/span><\/td>/);
+  assert.match(results, /<td class="board-driver"><span [^>]+>Abe<\/span>(?:<span class="crown"[^>]*>👑<\/span>)?<\/td>/);
   assert.doesNotMatch(results, /tl-relative-time/);
 });
 
@@ -291,7 +291,7 @@ const NOTICE = /No session is running/;
 test('the track header, the idle board, the notice, marks, the crown and the record state', async () => {
   const club = recordsClub;
   const path = `/clubs/${club.id}`;
-  app.store.setTrack(club.id, { id: 't9', shape: 'c30:1:x', name: 'Ring', snapshotKey: 'r'.repeat(22), layout: '{}' }, 'cw');
+  useTrack(app.store, club.id, 'Ring', 'cw', 't9');
   await driverIn(club, 'Haris', '61');
   await driverIn(club, 'Mia', '62');
   await app.form(member, `${path}/watch-link`, {});

@@ -21,13 +21,156 @@ function crossing(store, fields) {
   return store.addCrossing({ workspaceId: W, sessionId: 's1', decoder: 'd1', boot: 'b00tb00t', transponder: '0A', t: 0, driverId: null, at: 0, lapMs: null, counts: false, ref: true, via: 'net', flag: null, ...fields });
 }
 
-test('a workspace is created on first use with ccw and no track', () => {
+const LAYOUT = { plannerId: 'p1', shape: 'c30:1:x', snapshotKey: 'k'.repeat(22), layout: '{}' };
+const BY = { userId: 'u1', name: 'Ana Admin', at: 1000 };
+
+test('a new club has "Track", current, counter-clockwise, without a layout', () => {
   const store = openStore(':memory:');
   assert.equal(store.workspace(W), null);
-  assert.deepEqual(store.ensureWorkspace(W), { id: W, trackId: null, direction: 'ccw', watchToken: null });
-  store.setTrack(W, { id: 't1', shape: 'c30:1:x', name: 'Office', snapshotKey: 'k'.repeat(22), layout: '{}' }, 'cw');
-  assert.deepEqual(store.workspace(W), { id: W, trackId: 't1', direction: 'cw', watchToken: null });
-  assert.deepEqual(store.track(W, 't1'), { id: 't1', shape: 'c30:1:x', name: 'Office', snapshotKey: 'k'.repeat(22) });
+  const ws = store.ensureWorkspace(W);
+  const track = store.track(W, ws.trackId);
+  assert.deepEqual([track.name, track.layout, ws.direction], ['Track', null, 'ccw']);
+  assert.equal(store.tracks(W, { archived: false }).length, 1);
+  assert.deepEqual(store.ensureWorkspace(W), ws, 'only the first use creates it');
+  assert.equal(store.tracks(W, { archived: false }).length, 1);
+});
+
+test('the watchers token, set first, still gives a new club its "Track"', () => {
+  const store = openStore(':memory:');
+  store.setWatchToken(W, 'tok');
+  assert.deepEqual(store.tracks(W, { archived: false }).map((t) => t.name), ['Track']);
+});
+
+test('names are unique among active tracks, case-insensitively', () => {
+  const store = openStore(':memory:');
+  store.ensureWorkspace(W);
+  assert.equal(store.addTrack(W, { id: 'office', name: 'Office' }), 'added');
+  assert.equal(store.addTrack(W, { id: 'office2', name: 'office' }), 'name-in-use');
+  assert.equal(store.renameTrack(W, 'office', 'TRACK'), 'name-in-use');
+  assert.equal(store.renameTrack(W, 'office', 'Office loop'), 'renamed');
+  assert.equal(store.renameTrack(W, 'nope', 'Hall'), 'missing');
+  assert.equal(store.setArchived(W, 'office', 5), 'done');
+  assert.equal(store.addTrack(W, { id: 'office2', name: 'office loop' }), 'added');
+  assert.deepEqual(store.tracks(W, { archived: false }).map((t) => t.name), ['office loop', 'Track']);
+  assert.deepEqual(store.tracks(W, { archived: true }).map((t) => [t.name, t.archivedAt]), [['Office loop', 5]]);
+  assert.equal(store.track(W, 'nope'), null);
+  assert.equal(store.track('other', 'office'), null, 'a track belongs to its club');
+});
+
+test('restoring into a name clash is refused', () => {
+  const store = openStore(':memory:');
+  store.ensureWorkspace(W);
+  store.addTrack(W, { id: 'a', name: 'Office' });
+  store.setArchived(W, 'a', 5);
+  store.addTrack(W, { id: 'b', name: 'OFFICE' });
+  assert.equal(store.setArchived(W, 'a', null), 'name-in-use');
+  assert.equal(store.track(W, 'a').archivedAt, 5);
+  store.renameTrack(W, 'b', 'Hall');
+  assert.equal(store.setArchived(W, 'a', null), 'done');
+  assert.equal(store.track(W, 'a').archivedAt, null);
+  assert.equal(store.setArchived(W, 'nope', 5), 'missing');
+});
+
+test('the current track cannot be archived; only an archived track can be deleted', () => {
+  const store = openStore(':memory:');
+  const ws = store.ensureWorkspace(W);
+  assert.equal(store.setArchived(W, ws.trackId, 5), 'current');
+  assert.equal(store.track(W, ws.trackId).archivedAt, null);
+  assert.equal(store.deleteTrack(W, ws.trackId), 'not-archived');
+  store.addTrack(W, { id: 'hall', name: 'Hall' });
+  assert.equal(store.deleteTrack(W, 'hall'), 'not-archived');
+  assert.equal(store.deleteTrack(W, 'nope'), 'missing');
+  store.setArchived(W, 'hall', 5);
+  assert.equal(store.setCurrentTrack(W, 'hall', 'cw'), 'archived');
+  assert.equal(store.setCurrentTrack(W, 'nope', 'cw'), 'missing');
+  store.setArchived(W, 'hall', null);
+  assert.equal(store.setCurrentTrack(W, 'hall', 'cw'), 'done');
+  assert.deepEqual([store.workspace(W).trackId, store.workspace(W).direction], ['hall', 'cw']);
+  assert.equal(store.setArchived(W, ws.trackId, 5), 'done', 'once another track is current');
+  assert.equal(store.deleteTrack(W, ws.trackId), 'deleted');
+  assert.equal(store.track(W, ws.trackId), null);
+});
+
+test('deleting a track removes its layouts and records, not its sessions', () => {
+  const store = openStore(':memory:');
+  store.ensureWorkspace(W);
+  store.addTrack(W, { id: 't1', name: 'Office' });
+  store.addTrack(W, { id: 't2', name: 'Hall' });
+  store.attachLayout(W, 't1', LAYOUT, BY);
+  store.attachLayout(W, 't2', LAYOUT, BY);
+  practice(store);
+  practice(store, 's2', { trackId: 't2' });
+  crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
+  crossing(store, { sessionId: 's2', driverId: 'ana', lapMs: 7000, counts: true, at: 20 });
+  store.rebuildRecords(W, 't1', 'ccw');
+  store.rebuildRecords(W, 't2', 'ccw');
+  assert.equal(store.sessionCount(W, 't1'), 1);
+  store.setArchived(W, 't1', 5);
+  assert.equal(store.deleteTrack(W, 't1'), 'deleted');
+  assert.equal(store.track(W, 't1'), null);
+  assert.deepEqual(store.layouts(W, 't1'), []);
+  assert.equal(store.currentRecord(W, 't1', 'ccw'), null);
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ana']), []);
+  assert.equal(store.session('s1').trackId, 't1', 'the session stays, and finds no track');
+  assert.equal(store.sessionCount(W, 't1'), 1);
+  assert.equal(store.currentRecord(W, 't2', 'ccw').lapMs, 7000, 'other tracks keep theirs');
+  assert.equal(store.layouts(W, 't2').length, 1);
+});
+
+test('the same layout again adds nothing; a new snapshot adds an entry', () => {
+  const store = openStore(':memory:');
+  store.ensureWorkspace(W);
+  store.addTrack(W, { id: 't1', name: 'Office' });
+  assert.equal(store.attachLayout(W, 't1', LAYOUT, BY), 'added');
+  assert.equal(store.attachLayout(W, 't1', LAYOUT, { ...BY, at: 2000 }), 'same');
+  assert.equal(store.attachLayout(W, 't1', { ...LAYOUT, snapshotKey: 'n'.repeat(22) }, { ...BY, at: 3000 }), 'added');
+  assert.deepEqual(store.layouts(W, 't1').map((l) => [l.attachedAt, l.snapshotKey]), [[3000, 'n'.repeat(22)], [1000, 'k'.repeat(22)]]);
+  assert.deepEqual(store.track(W, 't1').layout, { attachedAt: 3000, plannerId: 'p1', shape: 'c30:1:x', snapshotKey: 'n'.repeat(22), layout: '{}', by: 'Ana Admin' });
+  assert.deepEqual(store.tracks(W, { archived: false }).find((t) => t.id === 't1').layout, store.track(W, 't1').layout);
+});
+
+test('layoutAt finds the layout current at a time', () => {
+  const store = openStore(':memory:');
+  store.ensureWorkspace(W);
+  store.addTrack(W, { id: 't1', name: 'Office' });
+  store.attachLayout(W, 't1', LAYOUT, { ...BY, at: 100 });
+  store.attachLayout(W, 't1', { ...LAYOUT, plannerId: 'p2' }, { ...BY, at: 200 });
+  assert.equal(store.layoutAt(W, 't1', 99), null);
+  assert.equal(store.layoutAt(W, 't1', 101).plannerId, 'p1');
+  assert.equal(store.layoutAt(W, 't1', 200).plannerId, 'p2');
+});
+
+test('forgetting a member keeps the date and drops the name', () => {
+  const store = openStore(':memory:');
+  store.ensureWorkspace(W);
+  store.addTrack(W, { id: 't1', name: 'Office' });
+  store.attachLayout(W, 't1', LAYOUT, BY);
+  store.attachLayout(W, 't1', { ...LAYOUT, plannerId: 'p2' }, { userId: 'u2', name: 'Ben', at: 2000 });
+  store.forgetUser('u1');
+  assert.deepEqual(store.layouts(W, 't1').map((l) => [l.attachedAt, l.by]), [[2000, 'Ben'], [1000, null]]);
+});
+
+test('purging a club removes its tracks and layouts', () => {
+  const store = openStore(':memory:');
+  store.ensureWorkspace(W);
+  store.addTrack(W, { id: 't1', name: 'Office' });
+  store.attachLayout(W, 't1', LAYOUT, BY);
+  store.deleteWorkspaceData(W);
+  assert.deepEqual(store.tracks(W, { archived: false }), []);
+  assert.deepEqual(store.layouts(W, 't1'), []);
+});
+
+test('the board reads a track and its newest layout through their keys, not by scanning', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  openStore(path).close();
+  const db = new DatabaseSync(path);
+  const plan = (sql) => db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all().map((r) => String(r.detail)).join(' | ');
+  const withLayout = `SELECT t.id, l.layout FROM track t LEFT JOIN track_layout l ON l.workspace_id = t.workspace_id AND l.track_id = t.id
+    AND l.attached_at = (SELECT MAX(attached_at) FROM track_layout WHERE workspace_id = t.workspace_id AND track_id = t.id)`;
+  for (const sql of [`${withLayout} WHERE t.workspace_id = 'w' AND t.id = 't'`, `${withLayout} WHERE t.workspace_id = 'w' AND (t.archived_at IS NOT NULL) = 0`]) {
+    assert.doesNotMatch(plan(sql), /\bSCAN\b/, sql);
+  }
+  db.close();
 });
 
 test('a passing is stored once, and through is the highest t of its boot', () => {

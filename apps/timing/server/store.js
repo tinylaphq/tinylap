@@ -5,6 +5,7 @@
 // SQLite (spec §3, Data). Every row belongs to a workspace, so the deletions
 // feed removes a deleted one completely. Passings are stored once per key
 // (spec §4); crossings are what the engine made of them, and can be rebuilt.
+import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 const SCHEMA = `
@@ -15,11 +16,17 @@ CREATE TABLE IF NOT EXISTS bff_session (
 CREATE INDEX IF NOT EXISTS bff_session_user ON bff_session (user_id);
 CREATE TABLE IF NOT EXISTS feed_cursor (feed TEXT PRIMARY KEY, seq INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS workspace (
-  id TEXT PRIMARY KEY, track_id TEXT, direction TEXT NOT NULL DEFAULT 'ccw', watch_token TEXT UNIQUE
+  id TEXT PRIMARY KEY, track_id TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'ccw', watch_token TEXT UNIQUE
 );
 CREATE TABLE IF NOT EXISTS track (
-  workspace_id TEXT NOT NULL, id TEXT NOT NULL, shape TEXT NOT NULL, name TEXT NOT NULL,
-  snapshot_key TEXT NOT NULL, layout TEXT NOT NULL, PRIMARY KEY (workspace_id, id)
+  workspace_id TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, archived_at INTEGER,
+  PRIMARY KEY (workspace_id, id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS track_name ON track (workspace_id, name COLLATE NOCASE) WHERE archived_at IS NULL;
+CREATE TABLE IF NOT EXISTS track_layout (
+  workspace_id TEXT NOT NULL, track_id TEXT NOT NULL, attached_at INTEGER NOT NULL, planner_id TEXT NOT NULL,
+  shape TEXT NOT NULL, snapshot_key TEXT NOT NULL, layout TEXT NOT NULL, attached_by_user TEXT, attached_by_name TEXT,
+  PRIMARY KEY (workspace_id, track_id, attached_at)
 );
 CREATE TABLE IF NOT EXISTS driver (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, name TEXT NOT NULL, colour TEXT NOT NULL
@@ -127,6 +134,25 @@ const sessionOf = (r) => ({
   roster: r.roster === null ? null : JSON.parse(String(r.roster)), state: String(r.state), createdAt: Number(r.created_at),
   opensAt: num(r.opens_at), closesAt: num(r.closes_at), endedAt: num(r.ended_at), durationMs: num(r.duration_ms),
 });
+const layoutOf = (r) => ({
+  attachedAt: Number(r.attached_at), plannerId: String(r.planner_id), shape: String(r.shape), snapshotKey: String(r.snapshot_key),
+  layout: String(r.layout), by: str(r.attached_by_name),
+});
+// A track row joined with its newest layout entry (columns prefixed l_), or none.
+const trackOf = (r) => ({
+  id: String(r.id), name: String(r.name), archivedAt: num(r.archived_at),
+  layout: r.l_attached_at === null ? null : layoutOf({
+    attached_at: r.l_attached_at, planner_id: r.l_planner_id, shape: r.l_shape, snapshot_key: r.l_snapshot_key, layout: r.l_layout, attached_by_name: r.l_attached_by_name,
+  }),
+});
+const TRACK_WITH_LAYOUT = `SELECT t.id, t.name, t.archived_at, l.attached_at AS l_attached_at, l.planner_id AS l_planner_id, l.shape AS l_shape,
+    l.snapshot_key AS l_snapshot_key, l.layout AS l_layout, l.attached_by_name AS l_attached_by_name
+  FROM track t LEFT JOIN track_layout l ON l.workspace_id = t.workspace_id AND l.track_id = t.id
+    AND l.attached_at = (SELECT MAX(attached_at) FROM track_layout WHERE workspace_id = t.workspace_id AND track_id = t.id)`;
+/** SQLite's code for a broken UNIQUE constraint: a track name already in use. */
+const UNIQUE = 2067;
+const nameInUse = (error) => error?.errcode === UNIQUE;
+
 const recordOf = (r) => ({ driverId: String(r.driver_id), lapMs: Number(r.lap_ms), at: Number(r.at), sessionId: String(r.session_id), seq: Number(r.crossing_seq) });
 const crossingOf = (r) => ({
   seq: Number(r.seq), sessionId: String(r.session_id), decoder: String(r.decoder_id), boot: String(r.boot), transponder: String(r.transponder),
@@ -142,12 +168,23 @@ export function openStore(path) {
 
   const s = {
     selectWorkspace: q('SELECT * FROM workspace WHERE id = ?'),
-    insertWorkspace: q('INSERT INTO workspace (id) VALUES (?) ON CONFLICT DO NOTHING'),
+    insertWorkspace: q('INSERT INTO workspace (id, track_id) VALUES (?, ?)'),
     setTrackOf: q('UPDATE workspace SET track_id = ?, direction = ? WHERE id = ?'),
-    upsertTrack: q(`INSERT INTO track (workspace_id, id, shape, name, snapshot_key, layout) VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT (workspace_id, id) DO UPDATE SET shape = excluded.shape, name = excluded.name,
-        snapshot_key = excluded.snapshot_key, layout = excluded.layout`),
-    selectTrack: q('SELECT id, shape, name, snapshot_key FROM track WHERE workspace_id = ? AND id = ?'),
+    selectTrack: q(`${TRACK_WITH_LAYOUT} WHERE t.workspace_id = ? AND t.id = ?`),
+    selectTracks: q(`${TRACK_WITH_LAYOUT} WHERE t.workspace_id = ? AND (t.archived_at IS NOT NULL) = ? ORDER BY t.name COLLATE NOCASE, t.id`),
+    addTrack: q('INSERT INTO track (workspace_id, id, name) VALUES (?, ?, ?)'),
+    renameTrack: q('UPDATE track SET name = ? WHERE workspace_id = ? AND id = ?'),
+    setArchived: q('UPDATE track SET archived_at = ? WHERE workspace_id = ? AND id = ?'),
+    deleteTrack: q('DELETE FROM track WHERE workspace_id = ? AND id = ?'),
+    deleteTrackLayouts: q('DELETE FROM track_layout WHERE workspace_id = ? AND track_id = ?'),
+    deleteTrackRecords: q('DELETE FROM track_record WHERE workspace_id = ? AND track_id = ?'),
+    deleteTrackBests: q('DELETE FROM personal_best WHERE workspace_id = ? AND track_id = ?'),
+    layouts: q('SELECT * FROM track_layout WHERE workspace_id = ? AND track_id = ? ORDER BY attached_at DESC'),
+    layoutAt: q('SELECT * FROM track_layout WHERE workspace_id = ? AND track_id = ? AND attached_at <= ? ORDER BY attached_at DESC LIMIT 1'),
+    addLayout: q(`INSERT INTO track_layout (workspace_id, track_id, attached_at, planner_id, shape, snapshot_key, layout, attached_by_user, attached_by_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    forgetLayoutsBy: q('UPDATE track_layout SET attached_by_user = NULL, attached_by_name = NULL WHERE attached_by_user = ?'),
+    sessionCount: q('SELECT COUNT(*) AS n FROM session WHERE workspace_id = ? AND track_id = ?'),
     setWatch: q('UPDATE workspace SET watch_token = ? WHERE id = ?'),
     byWatch: q('SELECT id FROM workspace WHERE watch_token = ?'),
     drivers: q('SELECT id, name, colour FROM driver WHERE workspace_id = ? ORDER BY name COLLATE NOCASE, id'),
@@ -214,7 +251,7 @@ export function openStore(path) {
     selectCursor: q('SELECT seq FROM feed_cursor WHERE feed = ?'),
     upsertCursor: q('INSERT INTO feed_cursor (feed, seq) VALUES (?, ?) ON CONFLICT (feed) DO UPDATE SET seq = excluded.seq'),
   };
-  const purge = ['workspace WHERE id', 'track WHERE workspace_id', 'driver WHERE workspace_id', 'transponder WHERE workspace_id',
+  const purge = ['workspace WHERE id', 'track WHERE workspace_id', 'track_layout WHERE workspace_id', 'driver WHERE workspace_id', 'transponder WHERE workspace_id',
     'decoder WHERE workspace_id', 'passing WHERE workspace_id', 'session WHERE workspace_id', 'crossing WHERE workspace_id',
     'track_record WHERE workspace_id', 'personal_best WHERE workspace_id']
     .map((t) => q(`DELETE FROM ${t} = ?`));
@@ -267,6 +304,21 @@ export function openStore(path) {
     const row = s.selectWorkspace.get(id);
     return row ? workspaceOf(row) : null;
   };
+  /** A club is created on first use with its one track, "Track", current and counter-clockwise (named tracks spec §3.2). */
+  function ensureWorkspace(id) {
+    const found = workspace(id);
+    if (found) return found;
+    transaction(() => {
+      const trackId = randomUUID();
+      s.insertWorkspace.run(id, trackId);
+      s.addTrack.run(id, trackId, 'Track');
+    });
+    return workspace(id);
+  }
+  const track = (ws, id) => {
+    const row = s.selectTrack.get(ws, id);
+    return row ? trackOf(row) : null;
+  };
   const session = (id) => {
     const row = s.session.get(id);
     return row ? sessionOf(row) : null;
@@ -287,29 +339,90 @@ export function openStore(path) {
         for (const statement of purge) statement.run(workspaceId);
       });
     },
-    // Timing keeps no user names: drivers are records, not accounts.
-    forgetUser() {},
+    // The only user names timing keeps are on layout entries (named tracks spec §3.4): they keep their date, not who.
+    forgetUser(userId) {
+      s.forgetLayoutsBy.run(userId);
+    },
 
     workspace,
-    ensureWorkspace(id) {
-      s.insertWorkspace.run(id);
-      return workspace(id);
-    },
-    setTrack(workspaceId, { id, shape, name, snapshotKey, layout }, direction) {
-      transaction(() => {
-        s.insertWorkspace.run(workspaceId);
-        s.upsertTrack.run(workspaceId, id, shape, name, snapshotKey, layout);
-        s.setTrackOf.run(id, direction, workspaceId);
-      });
-    },
-    track(workspaceId, trackId) {
-      const r = s.selectTrack.get(workspaceId, trackId);
-      return r ? { id: String(r.id), shape: String(r.shape), name: String(r.name), snapshotKey: String(r.snapshot_key) } : null;
-    },
+    ensureWorkspace,
     setWatchToken(workspaceId, token) {
-      s.insertWorkspace.run(workspaceId);
+      ensureWorkspace(workspaceId);
       s.setWatch.run(token, workspaceId);
     },
+    track,
+    /** A club's active or archived tracks, by name, each with its newest layout. */
+    tracks: (ws, { archived }) => s.selectTracks.all(ws, archived ? 1 : 0).map(trackOf),
+    addTrack(ws, { id, name }) {
+      try {
+        s.addTrack.run(ws, id, name);
+        return 'added';
+      } catch (error) {
+        if (nameInUse(error)) return 'name-in-use';
+        throw error;
+      }
+    },
+    renameTrack(ws, id, name) {
+      try {
+        return s.renameTrack.run(name, ws, id).changes === 1 ? 'renamed' : 'missing';
+      } catch (error) {
+        if (nameInUse(error)) return 'name-in-use';
+        throw error;
+      }
+    },
+    /** Archives a track at `at`, or restores it with null. The current track stays active; a restored one needs its name free. */
+    setArchived(ws, id, at) {
+      if (!s.selectTrack.get(ws, id)) return 'missing';
+      if (at !== null && workspace(ws)?.trackId === id) return 'current';
+      try {
+        s.setArchived.run(at, ws, id);
+        return 'done';
+      } catch (error) {
+        if (nameInUse(error)) return 'name-in-use';
+        throw error;
+      }
+    },
+    /** Deletes an archived track with its layouts, records and bests; its sessions stay and find no track. */
+    deleteTrack(ws, id) {
+      return transaction(() => {
+        const found = track(ws, id);
+        if (!found) return 'missing';
+        if (found.archivedAt === null) return 'not-archived';
+        s.deleteTrackLayouts.run(ws, id);
+        s.deleteTrackRecords.run(ws, id);
+        s.deleteTrackBests.run(ws, id);
+        s.deleteTrack.run(ws, id);
+        return 'deleted';
+      });
+    },
+    setCurrentTrack(ws, id, direction) {
+      const found = track(ws, id);
+      if (!found) return 'missing';
+      if (found.archivedAt !== null) return 'archived';
+      s.setTrackOf.run(id, direction, ws);
+      return 'done';
+    },
+    /**
+     * Adds a layout entry, unless the newest one is this snapshot of the same planner track. Entries are keyed by time,
+     * so one attached within the same millisecond as the newest goes a millisecond after it.
+     */
+    attachLayout(ws, trackId, { plannerId, shape, snapshotKey, layout }, { userId, name, at }) {
+      return transaction(() => {
+        const newest = s.layoutAt.get(ws, trackId, Number.MAX_SAFE_INTEGER);
+        if (newest && String(newest.planner_id) === plannerId && String(newest.snapshot_key) === snapshotKey) return 'same';
+        const attachedAt = newest ? Math.max(at, Number(newest.attached_at) + 1) : at;
+        s.addLayout.run(ws, trackId, attachedAt, plannerId, shape, snapshotKey, layout, userId, name);
+        return 'added';
+      });
+    },
+    /** A track's layouts, newest first. */
+    layouts: (ws, trackId) => s.layouts.all(ws, trackId).map(layoutOf),
+    /** The layout a lap at `at` was driven on: the newest entry attached up to then. */
+    layoutAt(ws, trackId, at) {
+      const r = s.layoutAt.get(ws, trackId, at);
+      return r ? layoutOf(r) : null;
+    },
+    sessionCount: (ws, trackId) => Number(s.sessionCount.get(ws, trackId)?.n ?? 0),
     workspaceByWatchToken(token) {
       return str(s.byWatch.get(token)?.id);
     },

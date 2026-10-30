@@ -116,10 +116,20 @@ export async function setTrack(request, { link, name: rawName, direction }) {
     return fail(TRACK_PROBLEMS[caught.code], caught.message, 'link');
   }
   const ws = request.workspaceId;
-  request.store.setTrack(ws, { ...track, name }, direction);
+  // Until tracks are managed on their own, as before: the track keyed by the planner's id, else the active one of this
+  // name, gets the name and the layout, or one is added under the planner's id; it becomes current.
+  const store = request.store;
+  const found = store.track(ws, track.id) ?? store.tracks(ws, { archived: false }).find((t) => t.name.toLowerCase() === name.toLowerCase());
+  const id = found?.id ?? track.id;
+  if (!found) store.addTrack(ws, { id, name });
+  else if (found.name !== name) store.renameTrack(ws, id, name);
+  if (found?.archivedAt) store.setArchived(ws, id, null);
+  store.attachLayout(ws, id, { plannerId: track.id, shape: track.shape, snapshotKey: track.snapshotKey, layout: track.layout },
+    { userId: request.userId ?? null, name: request.displayName ?? null, at: request.now() });
+  store.setCurrentTrack(ws, id, direction);
   request.engine.endPractice(ws);
-  request.hub.publish(ws, 'track', { track: { id: track.id, name }, direction, bests: request.engine.bestsOf(ws) });
-  return { value: { id: track.id, name, direction, snapshotKey: track.snapshotKey } };
+  request.hub.publish(ws, 'track', { track: { id, name }, direction, bests: request.engine.bestsOf(ws) });
+  return { value: { id, name, direction, snapshotKey: track.snapshotKey } };
 }
 
 export function pairDecoder(request, { name: rawName }) {

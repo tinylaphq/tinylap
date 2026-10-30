@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createHandler } from '../../server/app.js';
 import { openStore } from '../../server/store.js';
 import { createHub } from '../../server/live.js';
@@ -17,6 +17,22 @@ import { testSession } from '../../../accounts/test/helpers.js';
 import { createClub, createInvite, createPersonalWorkspace, redeemInvite, setRole } from '../../../accounts/server/workspaces.js';
 
 export const appDir = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+
+/**
+ * Makes the club's active track called `name` current in `direction`, adding it with a layout (and the id given, if any)
+ * when there is none. @returns {string} the track's id
+ */
+export function useTrack(store, ws, name, direction, id = randomUUID()) {
+  store.ensureWorkspace(ws);
+  const found = store.tracks(ws, { archived: false }).find((t) => t.name === name);
+  const trackId = found?.id ?? id;
+  if (!found) {
+    store.addTrack(ws, { id: trackId, name });
+    store.attachLayout(ws, trackId, { plannerId: `p-${trackId}`, shape: 'c30:1:x', snapshotKey: 'k'.repeat(22), layout: '{}' }, { userId: null, name: null, at: 0 });
+  }
+  store.setCurrentTrack(ws, trackId, direction);
+  return trackId;
+}
 
 /** Starts the handler on a random port, without log-in. */
 export async function startServer(options = {}) {

@@ -4,11 +4,10 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTiming } from './helpers.js';
+import { startTiming, useTrack } from './helpers.js';
 
 const T0 = 1_000_000_000_000; // 2001-09-09T01:46:40Z
 const clock = { now: T0 };
-const TRACK = { id: 't1', shape: 'c30:1:x', name: 'Office loop', snapshotKey: 'k'.repeat(22), layout: '{}' };
 let app;
 let member;
 let office;
@@ -327,7 +326,7 @@ test('starting a race while a practice runs names the practice', async () => {
 test('history: newest first, with kind, length, drivers and the best lap with its marks; 20 a page', async () => {
   const ws = history.id;
   const hbase = `/clubs/${ws}`;
-  app.store.setTrack(ws, TRACK, 'cw');
+  useTrack(app.store, ws, 'Office loop', 'cw', 't1');
   // 20 more practices, a minute apart, then one with laps: 22 in all, the first from the test before.
   for (let i = 0; i < 20; i += 1) {
     clock.now = T0 + (20 + i) * 60_000;
@@ -405,7 +404,7 @@ test('the tab shows the five latest track records, /records all of them, newest 
   const ws = records.id;
   const rbase = `/clubs/${ws}`;
   await driversIn(ws, { Ana: '10' });
-  app.store.setTrack(ws, TRACK, 'cw');
+  useTrack(app.store, ws, 'Office loop', 'cw', 't1');
   clock.now = T0;
   const { session } = app.engine.start(ws, { kind: 'practice' });
   let t = 1000;
