@@ -137,7 +137,6 @@ const crossingOf = (r) => ({
 /** @param {string} path A file path, or ':memory:'. */
 export function openStore(path) {
   const db = new DatabaseSync(path);
-  const hadRecords = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'track_record'").get() !== undefined;
   db.exec(SCHEMA);
   const q = (sql) => db.prepare(sql);
 
@@ -256,9 +255,11 @@ export function openStore(path) {
       for (const b of best.values()) s.offerPersonalBest.run(ws, trackId, direction, b.driverId, b.lapMs, b.at, b.seq);
     });
   }
-  if (!hadRecords) {
+  // Records and bests are filled from the existing laps once; the marker commits with the fill, so a fill cut short runs again.
+  if (!s.selectCursor.get('records-filled')) {
     transaction(() => {
       for (const r of s.trackDirections.all()) rebuildRecords(String(r.workspace_id), String(r.track_id), String(r.direction));
+      s.upsertCursor.run('records-filled', 1);
     });
   }
 

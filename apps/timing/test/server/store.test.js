@@ -102,13 +102,34 @@ test('a database from before records gets them filled from its laps on open', ()
   crossing(store, { sessionId: 'cw', driverId: 'ana', lapMs: 6000, counts: true, at: 30 });
   store.close();
   const db = new DatabaseSync(path);
-  db.exec('DROP TABLE track_record; DROP TABLE personal_best;');
+  db.exec("DROP TABLE track_record; DROP TABLE personal_best; DELETE FROM feed_cursor WHERE feed = 'records-filled';");
   db.close();
   const reopened = openStore(path);
   assert.deepEqual(reopened.recordHistory(W, 't1', 'ccw').map((r) => [r.driverId, r.lapMs]), [['ben', 7000], ['ana', 8000]]);
   assert.deepEqual(reopened.recordHistory(W, 't1', 'cw').map((r) => [r.driverId, r.lapMs]), [['ana', 6000]]);
   assert.deepEqual(reopened.personalBests(W, 't1', 'ccw', ['ana', 'ben']).map((b) => [b.driverId, b.bestMs]), [['ben', 7000], ['ana', 8000]]);
   reopened.close();
+});
+
+test('a fill of records cut short is done again on the next open, and only until it is done', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  const store = openStore(path);
+  practice(store);
+  crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
+  store.close();
+  // The tables were created, but the fill never committed.
+  let db = new DatabaseSync(path);
+  db.exec("DELETE FROM feed_cursor WHERE feed = 'records-filled'");
+  db.close();
+  const reopened = openStore(path);
+  assert.deepEqual(reopened.recordHistory(W, 't1', 'ccw').map((r) => [r.driverId, r.lapMs]), [['ana', 8000]]);
+  reopened.close();
+  db = new DatabaseSync(path);
+  db.exec('DELETE FROM track_record');
+  db.close();
+  const again = openStore(path);
+  assert.deepEqual(again.recordHistory(W, 't1', 'ccw'), [], 'filled once, not on every open');
+  again.close();
 });
 
 test('running sessions, of any kind', () => {
