@@ -54,7 +54,7 @@ function counterpart(next, focused) {
 /** Swaps `next` in for `current`, keeping focus and an unchanged live line (so it isn't announced again). */
 function swap(current, next) {
   const focused = current.contains(document.activeElement) ? document.activeElement : null;
-  for (const selector of ['.board-unknown', '.board-on-track']) {
+  for (const selector of ['.board-unknown', '.board-on-track', '.board-quiet']) {
     const was = current.querySelector(selector);
     const now = next.querySelector(selector);
     if (was && now && was.textContent === now.textContent) now.replaceWith(was);

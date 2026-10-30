@@ -79,6 +79,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-track.is-record .board-track-name, .board-track.is-record .board-track-name strong,
 .board-track.is-record .board-track-by, .board-track.is-record .board-track-by .driver,
 .board-track.is-record .direction-icon { color: inherit; }
+/* The accent arrowhead is too faint on the record colour (about 1.6:1): it takes the ink there. */
+.board-track.is-record .direction-icon path:last-child { stroke: currentColor; }
 .board-track.is-record .board-track-record { display: grid; justify-items: end; gap: var(--p-space-xs); }
 .board-track-new { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
 .board-track-new .board-track-label { font-size: 1.4em; letter-spacing: -0.01em; }

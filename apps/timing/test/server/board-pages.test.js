@@ -314,6 +314,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.doesNotMatch(body, /class="eyebrow"|No session yet|Last laps|status-warning/);
   }
   assert.match(s.board, /Ready when your cars are/);
+  assert.match(s.board, new RegExp(`<a class="btn btn-primary" href="${path}/bridge">Connect the decoder</a>\\s*<a href="${path}/setup#drivers">Add drivers</a>`), 'with drivers, the decoder is next');
   assert.doesNotMatch(s.board, START);
   for (const body of [s.big, s.watch]) {
     assert.doesNotMatch(body, /Ready when your cars are|setup#drivers/);
@@ -328,7 +329,8 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   assert.match(s.board, /<div class="board-hero-go">\s*<p class="board-on-track" role="status">Car 61 is on the track<\/p>\s*<form method="post"/);
   assert.match(s.board, new RegExp(`<form method="post" action="${path}/sessions" class="start-practice">\\s*<input type="hidden" name="kind" value="practice">`));
   assert.equal(s.board.match(new RegExp(START, 'g')).length, 1);
-  assert.match(s.board, new RegExp(`<p class="board-quiet board-unknown" role="status">1 car has no driver yet\\. <a href="${path}/setup#transponders">Assign it</a></p>`));
+  assert.match(s.board, new RegExp(`<p class="board-quiet" role="status">1 car has no driver yet\\. <a href="${path}/setup#transponders">Assign it</a></p>`));
+  assert.doesNotMatch(s.board, /board-unknown/, 'a quiet line, not the warning');
   assert.match(s.board, /No record yet/);
   assert.doesNotMatch(s.board, /status-warning|Ready when your cars are/);
   for (const body of [s.big, s.watch]) {
@@ -400,7 +402,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.equal(body.match(/class="crown"/g).length, 2, 'beside the holder in the record and in the last session');
   }
   assert.match(s.board, new RegExp(`<a href="${path}/sessions/${session.id}">All laps</a>`));
-  assert.doesNotMatch(s.watch, /All laps/);
+  for (const body of [s.big, s.watch]) assert.doesNotMatch(body, /All laps/);
   assert.match(s.board, START);
   assert.match(s.board, new RegExp(`Or a <a href="${path}/sessions#start-title">qualifying or race</a>\\.`));
   for (const body of [s.big, s.watch]) assert.doesNotMatch(body, START);

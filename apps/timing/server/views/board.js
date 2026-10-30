@@ -159,7 +159,7 @@ function go(request, snap) {
   const base = request.space.base;
   const n = snap.unknown.length;
   const quiet = n
-    ? html`<p class="board-quiet board-unknown" role="status">${n === 1 ? '1 car has' : `${n} cars have`} no driver yet. <a href="${base}/setup#transponders">${n === 1 ? 'Assign it' : 'Assign them'}</a></p>`
+    ? html`<p class="board-quiet" role="status">${n === 1 ? '1 car has' : `${n} cars have`} no driver yet. <a href="${base}/setup#transponders">${n === 1 ? 'Assign it' : 'Assign them'}</a></p>`
     : html`<p class="board-quiet">Or a <a href="${base}/sessions#start-title">qualifying or race</a>.</p>`;
   return html`<div class="board-hero-go">
     ${idleNotice(snap.idle)}
@@ -177,8 +177,8 @@ function fastest(snap) {
 </section>`;
 }
 
-/** The last session's top three, with their marks, when it ended, and a link to its page for members. */
-function lastSession(request, snap, watcher) {
+/** The last session's top three, with their marks, when it ended, and a link to its page on a member's own screen. */
+function lastSession(request, snap, link) {
   const r = snap.lastResults;
   if (!r) return null;
   const m = markers(snap, r.session, r.standings);
@@ -186,19 +186,22 @@ function lastSession(request, snap, watcher) {
   return html`<section class="board-last" aria-labelledby="board-last-title">
   <h2 class="h3" id="board-last-title">Last session</h2>
   ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}</span><span class="num">${m.best(row)}</span></li>`)}</ol>`}
-  <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'time'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${watcher ? null : html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>`}</p>
+  <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'time'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${link ? html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>` : null}</p>
 </section>`;
 }
 
-/** A club that has never driven a lap: one card instead of an empty board. */
-function firstRun(request) {
+/** A club that has never driven a lap: one card instead of an empty board; its button the next thing to do. */
+function firstRun(request, snap) {
   const base = request.space.base;
+  const drivers = html`<a${snap.drivers.length ? null : html` class="btn btn-primary"`} href="${base}/setup#drivers">Add drivers</a>`;
+  const decoder = html`<a${snap.drivers.length ? html` class="btn btn-primary"` : null} href="${base}/bridge">Connect the decoder</a>`;
   return html`<section class="board-first" aria-labelledby="board-first-title">
   <h1 id="board-first-title">Ready when your cars are</h1>
   <p>Add your drivers, then connect the decoder. The first lap sets the track record.</p>
   <p class="board-first-links">
-    <a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>
-    <a href="${base}/bridge">Connect the decoder</a>
+    ${snap.drivers.length ? html`${decoder}
+    ${drivers}` : html`${drivers}
+    ${decoder}`}
     <a href="${base}/tap">Tap laps by hand</a>
   </p>
 </section>`;
@@ -208,8 +211,8 @@ function firstRun(request) {
 function idleBoard(request, snap, { watcher, big }) {
   // The display (?big) and the watchers never get a member line or a button (records spec §5.3).
   const members = !watcher && !big;
-  if (members && !snap.driven && !snap.idle) return firstRun(request);
-  const lists = [fastest(snap), lastSession(request, snap, watcher)].filter(Boolean);
+  if (members && !snap.driven && !snap.idle) return firstRun(request, snap);
+  const lists = [fastest(snap), lastSession(request, snap, members)].filter(Boolean);
   return html`${hero(request, snap, members)}
 ${lists.length ? html`<div class="board-idle">${lists}</div>` : null}`;
 }
