@@ -14,23 +14,20 @@
 // - pagehide closes the stream, so a hidden or cached board holds no
 //   connection; pageshow from the back/forward cache reopens it, showing
 //   "Reconnecting…" until it opens.
-// - The bell: the switch its `sound` attribute names is revealed, and
+// - The bell: the icon switch its `sound` attribute names is revealed, and
 //   localStorage['tinylap-sound'] remembers whether sound is wanted. Browsers
 //   start audio only after a gesture, so the AudioContext is made on the
 //   switch's click, or on the first click or key after a reload that
 //   remembered sound on. The switch shows pressed only while the context
-//   runs; wanted but not running, it shows its "Tap to turn sound on" state
-//   (data-state="wanted"). A swap that brings a data-record-new this page has
-//   not seen rings it; the first render never does.
-// - The notification: the switch its `notify` attribute names is revealed
-//   where the browser has Notification, and localStorage['tinylap-notify']
-//   remembers whether it is wanted. Turning it on asks for permission from the
-//   click. It shows pressed only while wanted and granted, and blocked
-//   (data-state="blocked", disabled) once the browser denies it. The same
-//   swap that rings shows "New track record" with the header's text; its tag
-//   makes several open boards show one. A browser that refuses to construct
-//   one (Android Chrome) shows nothing. The permission is read again when
-//   the page shows, since it can be revoked meanwhile.
+//   runs; wanted but not running, it shows its waiting state
+//   (data-state="wanted") and swaps its title for the server's
+//   data-title-wanted ("Tap to turn sound on"). A swap that brings a
+//   data-record-new this page has not seen rings it; the first render never does.
+// - The notification: the same swap shows "New track record" with the
+//   header's text, while the tl-notify-setting its `notify` attribute names
+//   (in the account menu) is on; its tag makes several open boards show one.
+//   A browser that refuses to construct one (Android Chrome) shows nothing.
+//   Without that setting (the big board, the watch link) it never notifies.
 // Without EventSource there is no stream; without JavaScript the page
 // reloads every ten seconds (<noscript> refresh).
 
@@ -40,7 +37,6 @@ const STATES = { live: 'Live', reconnecting: 'Reconnecting…', off: 'Disconnect
 // Once the stream gives up, reload: the server then answers the board, sign-in or the gone page.
 const RELOAD_MS = 10_000;
 const SOUND_KEY = 'tinylap-sound';
-const NOTIFY_KEY = 'tinylap-notify';
 // What Safari and iOS accept as a gesture that unlocks audio.
 const GESTURES = ['click', 'touchend', 'keydown'];
 
@@ -75,17 +71,12 @@ class TlBoard extends HTMLElement {
   audio = null;
   /** Whether sound is wanted, as remembered or last chosen. */
   wanted = false;
-  /** @type {HTMLButtonElement | null} */
-  notify = null;
-  /** Whether notifications are wanted, as remembered or last chosen. */
-  notifyWanted = false;
   /** The newest data-record-new this page has shown. @type {string | null} */
   seen = null;
 
   connectedCallback() {
     this.seen = this.recordSeq();
     this.initSound();
-    this.initNotify();
     if (!('EventSource' in window)) return;
     addEventListener('pagehide', this);
     addEventListener('pageshow', this);
@@ -94,8 +85,6 @@ class TlBoard extends HTMLElement {
 
   disconnectedCallback() {
     this.sound?.removeEventListener('click', this);
-    this.notify?.removeEventListener('click', this);
-    removeEventListener('visibilitychange', this);
     this.lock();
     this.audio?.close().catch(() => {});
     this.audio = null;
@@ -136,6 +125,8 @@ class TlBoard extends HTMLElement {
     this.sound?.setAttribute('aria-pressed', String(on));
     if (this.wanted && !on) this.sound?.setAttribute('data-state', 'wanted');
     else this.sound?.removeAttribute('data-state');
+    const title = this.sound?.getAttribute(this.wanted && !on ? 'data-title-wanted' : 'data-title');
+    if (title) this.sound?.setAttribute('title', title);
   }
 
   /** On a gesture, while sound is wanted: makes the context and resumes it; once it runs, the gestures are no longer needed. */
@@ -149,39 +140,10 @@ class TlBoard extends HTMLElement {
     }, () => {});
   }
 
-  /** Reveals the notification switch where the browser can notify. */
-  initNotify() {
-    const notify = document.getElementById(this.getAttribute('notify') ?? '');
-    if (!(notify instanceof HTMLButtonElement) || !('Notification' in window)) return;
-    this.notify = notify;
-    try { this.notifyWanted = localStorage.getItem(NOTIFY_KEY) === 'on'; } catch { /* storage blocked: it starts off */ }
-    this.showNotify();
-    notify.hidden = false;
-    notify.addEventListener('click', this);
-    addEventListener('visibilitychange', this); // it bubbles from document
-  }
-
-  /** Notifications can show: wanted, and granted. */
+  /** Notifications can show: the setting the `notify` attribute names is on. */
   get notifyOn() {
-    return this.notifyWanted && Notification.permission === 'granted';
-  }
-
-  /** Pressed only while it can notify; denied, it says blocked and can't be pressed. */
-  showNotify() {
-    if (!this.notify) return;
-    const blocked = Notification.permission === 'denied';
-    this.notify.setAttribute('aria-pressed', String(this.notifyOn));
-    this.notify.disabled = blocked;
-    if (blocked) this.notify.setAttribute('data-state', 'blocked');
-    else this.notify.removeAttribute('data-state');
-  }
-
-  /** Pressed turns it off; otherwise on, asking for permission from the click. */
-  toggleNotify() {
-    this.notifyWanted = !this.notifyOn;
-    try { localStorage.setItem(NOTIFY_KEY, this.notifyWanted ? 'on' : 'off'); } catch { /* storage blocked: the choice lasts this page */ }
-    this.showNotify();
-    if (this.notifyWanted && Notification.permission !== 'granted') Notification.requestPermission().then(() => this.showNotify(), () => {});
+    const setting = /** @type {HTMLElement & { on?: boolean } | null} */ (document.getElementById(this.getAttribute('notify') ?? ''));
+    return setting?.on === true;
   }
 
   /** Shows the record on the board as a notification: its time and holder, then what it beat. @param {string} seq */
@@ -227,10 +189,6 @@ class TlBoard extends HTMLElement {
   handleEvent(event) {
     switch (event.type) {
       case 'click': // the switch's own click toggles; any click is a gesture
-        if (event.currentTarget === this.notify) {
-          this.toggleNotify();
-          break;
-        }
         if (event.currentTarget === this.sound) {
           // Pressed turns it off; off or waiting for a tap turns it on.
           this.wanted = !this.soundOn;
@@ -269,9 +227,6 @@ class TlBoard extends HTMLElement {
         if (fresh && this.notifyOn) this.notifyRecord(seq);
         break;
       }
-      case 'visibilitychange':
-        if (document.visibilityState === 'visible') this.showNotify();
-        break;
       case 'pagehide':
         this.close();
         break;

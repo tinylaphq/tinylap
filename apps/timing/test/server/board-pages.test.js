@@ -193,19 +193,44 @@ async function driverIn(club, name, transponder) {
 
 test('the board is a tl-board, and its clock a tl-countdown', async () => {
   const body = await (await get(member, `${base}/board`)).text();
-  assert.match(body, /<tl-board status="live-status" sound="sound-switch" notify="notify-switch">\s*<div id="board-live"/);
-  assert.match(body, /<button type="button" class="btn btn-sm btn-outline" id="sound-switch" aria-pressed="false" hidden><span class="sound-on">Sound on<\/span><span class="sound-wanted">Tap to turn sound on<\/span><\/button>/);
+  assert.match(body, /<tl-board status="live-status" sound="sound-switch" notify="notify-setting">\s*<div id="board-live"/);
   // A practice's label is the server's alone ("Started 14:32"); a race's follows the clock.
   assert.match(body, /<tl-countdown class="board-clock"><span class="stat-label board-clock-label">Started <tl-local-time format="time">/);
 });
 
-test('the board, the big board and the watch link have the Notify me switch, hidden until tl-board reveals it', async () => {
-  const button = /<button type="button" class="btn btn-sm btn-outline" id="sound-switch"[^]*?<\/button>\s*<button type="button" class="btn btn-sm btn-outline" id="notify-switch" aria-pressed="false" hidden><span class="notify-on">Notify me<\/span><span class="notify-blocked">Notifications blocked<\/span><\/button>/;
+test('the board, the big board and the watch link have the Sound icon switch, drawn by the server and hidden until tl-board reveals it', async () => {
   const token = await watchToken();
   for (const path of [`${base}/board`, `${base}/board?big`, `/watch/${token}`]) {
     const body = await (await get(member, path)).text();
-    assert.match(body, /<tl-board status="live-status" sound="sound-switch" notify="notify-switch">/, path);
-    assert.match(body, button, path);
+    const [button] = body.match(/<button[^>]* id="sound-switch"[^]*?<\/button>/) ?? [];
+    assert.ok(button, path);
+    assert.match(button, /^<button type="button" class="btn btn-sm btn-outline btn-icon" id="sound-switch" aria-label="Sound" aria-pressed="false" title="Sound" data-title="Sound" data-title-wanted="Tap to turn sound on" hidden>/, path);
+    // One icon with every state's parts; CSS shows the ones aria-pressed and data-state call for.
+    assert.match(button, /<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">/, path);
+    for (const part of ['sound-speaker', 'sound-waves', 'sound-strike']) assert.match(button, new RegExp(`<path class="${part}" d="[^"]+"/>`), path);
+    assert.doesNotMatch(button, /Sound on|<span/, path);
+    assert.doesNotMatch(body, /notify-switch|Notify me/, path);
+  }
+});
+
+const SETTING = /<tl-notify-setting class="nav-account-setting" id="notify-setting" hidden>\s*<button type="button" class="nav-account-item" aria-pressed="false">Notifications<span class="nav-account-state" aria-hidden="true">: <span class="notify-off">Off<\/span><span class="notify-on">On<\/span><\/span><\/button>\s*<p class="nav-account-blocked">Notifications blocked by the browser<span class="nav-account-hint">Allow them in this site's settings in the address bar, then reload.<\/span><\/p>\s*<\/tl-notify-setting>/;
+const SETTING_SCRIPT = '<script type="module" src="/public/elements/notify-setting.js"></script>';
+
+test('a member’s account menu has the Notifications setting on every page, hidden until tl-notify-setting reveals it', async () => {
+  for (const path of [`${base}/board`, `${base}/setup`, `${base}/sessions`]) {
+    const body = await (await get(member, path)).text();
+    const [menu] = body.match(/<div class="nav-account-menu navbar-menu-panel">[^]*?<\/div>/) ?? [];
+    assert.match(menu, SETTING, path);
+    assert.ok(menu.indexOf('notify-setting') < menu.indexOf('>Account</a>'), `${path}: before Account`);
+    assert.ok(body.includes(SETTING_SCRIPT), path);
+  }
+});
+
+test('the big board, the watch link and a signed-out page have no Notifications setting', async () => {
+  const token = await watchToken();
+  for (const [who, path] of [[member, `${base}/board?big`], [member, `/watch/${token}`], [null, `/watch/${token}`]]) {
+    const body = await (await get(who, path)).text();
+    assert.doesNotMatch(body, /tl-notify-setting|notify-setting\.js|Notifications/, path);
   }
 });
 

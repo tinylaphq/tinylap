@@ -115,6 +115,22 @@ test('Tab past the last item closes it; an in-page button closes it first', asyn
   assert.equal(await page.evaluate(() => /** @type {any} */ (window).openWhenClicked), false, 'closed before the app’s handler ran');
 });
 
+test('a setting that toggles in place (a button with aria-pressed) leaves it open, to show the new state', async (t) => {
+  const { page } = await board(t);
+  await page.evaluate(() => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.textContent = 'Setting';
+    item.setAttribute('aria-pressed', 'false');
+    item.addEventListener('click', () => item.setAttribute('aria-pressed', String(item.getAttribute('aria-pressed') !== 'true')));
+    document.querySelector('.nav-account-menu')?.prepend(item);
+  });
+  await summary(page).click();
+  await page.locator('.nav-account-menu').getByRole('button', { name: 'Setting' }).click();
+  assert.equal(await isOpen(page), true);
+  assert.equal(await page.locator('.nav-account-menu').getByRole('button', { name: 'Setting' }).getAttribute('aria-pressed'), 'true');
+});
+
 test('leaving the page closes it, so Back never shows it open', async (t) => {
   const { page } = await board(t);
   await summary(page).click();
