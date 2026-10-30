@@ -101,7 +101,7 @@ test('the switch is revealed by tl-board and toggles aria-pressed', async () => 
   } finally { await context.close(); }
 });
 
-test('the icon: struck through and outline when off, with waves and the pressed fill when on, the amber lamp while it waits for a tap', async () => {
+test('the icon: struck through and outline when off, with waves and the pressed fill when on, still struck with the amber lamp while it waits for a tap', async () => {
   const { context, page, errors } = await boardPage();
   try {
     const sound = page.locator('#sound-switch');
@@ -118,8 +118,23 @@ test('the icon: struck through and outline when off, with waves and the pressed 
     assert.equal(await sound.getAttribute('title'), 'Sound');
     await page.reload();
     await page.locator(WANTED).waitFor();
-    assert.deepEqual(await parts(page), ['sound-speaker']);
+    assert.deepEqual(await parts(page), ['sound-speaker', 'sound-strike'], 'silent until the tap, so still struck');
     assert.notEqual(await lamp(), 'none', 'the amber lamp');
+    assert.equal(await sound.evaluate((b) => getComputedStyle(b, '::after').animationIterationCount), '3', 'it blinks three times, then stays lit');
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('with reduced motion the waiting lamp is lit and does not blink', async () => {
+  const { context, page, errors } = await boardPage();
+  try {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const sound = page.locator('#sound-switch');
+    await sound.click();
+    await page.locator('#sound-switch[aria-pressed="true"]').waitFor();
+    await page.reload();
+    await page.locator(WANTED).waitFor();
+    assert.deepEqual(await sound.evaluate((b) => { const s = getComputedStyle(b, '::after'); return [s.animationName, s.opacity]; }), ['none', '1']);
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });

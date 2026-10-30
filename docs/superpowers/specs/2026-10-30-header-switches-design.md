@@ -14,8 +14,10 @@ the browser notification of the sessions-and-records design (2026-10-29), whose
   - off (`aria-pressed="false"`): the speaker in outline, struck through;
   - on (`aria-pressed="true"`): the speaker filled, with its waves, on the
     pressed button's light fill;
-  - on but waiting for a gesture (`data-state="wanted"`): the speaker, the
-    amber border, and the amber lamp the live status uses, at the corner.
+  - on but waiting for a gesture (`data-state="wanted"`): the speaker still
+    struck through, since nothing plays yet, the amber border, and the amber
+    lamp the live status uses, at the corner. The lamp blinks three times and
+    then stays lit; with reduced motion it doesn't blink.
 - The server renders both titles: `data-title` ("Sound") and
   `data-title-wanted` ("Tap to turn sound on"). `tl-board` only switches
   attributes, copying the one that fits into `title`.
