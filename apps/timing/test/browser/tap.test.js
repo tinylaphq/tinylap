@@ -93,7 +93,7 @@ test('rapid taps: a stale answer does not overwrite the latest', async (t) => {
   await settled;
   // Two frames: the stale answer's script has run by then.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  assert.match(await page.getByRole('status').innerText(), /Ana: 7\.000/);
+  assert.match(await page.getByRole('status').textContent(), /Ana: 7\.000/, 'the name and the time are their own spans');
   assert.equal(await page.getByRole('alert').count(), 0);
 });
 
