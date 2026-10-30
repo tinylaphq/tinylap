@@ -71,7 +71,7 @@ Anti-goals (a failure even if it works):
 - **The record** of a workspace's track and direction is the fastest lap that: counts in its session, was timed by a decoder (`via` is not `tap`), has a driver, and was driven on that track (`session.track_id`) in that direction. Any session kind counts. This is the personal-best query without the driver grouping; personal bests keep their definition.
 - **A record falls** when a lap is strictly faster than the record. A tie doesn't take it.
 - **The first lap on a track** sets the first record without a celebration: there was nothing to beat. *My call.*
-- **Derived, not stored.** The record and its history come from the laps: the history is the running minimum of those laps in time order. A later change to the laps (assigning a transponder, which recounts) can change the record; that change shows, but rings no bell. A deleted driver's record stays, held by "former driver". *My call: no records table, as personal bests have none.*
+- **Stored as a projection of the laps.** The laps stay the truth; the record history (the running minimum of those laps in time order) and each driver's personal best are kept in their own tables (§6), written with the lap that changes them, so reading them never costs more as a club's history grows. A later change to the laps (assigning a transponder, which recounts) rebuilds them for that track and direction; the change shows, but rings no bell. A deleted driver's record stays, held by "former driver".
 
 ### 4.2 Marks
 
@@ -121,7 +121,11 @@ A session's page, `…/sessions/<id>`: its final table (as the board showed it w
 
 - `session`: no new columns. `kind` gains nothing; a practice's `opens_at` is its start, `ended_at` its end (§3.1).
 - `passing`: unchanged; loose ones are deleted (§3.2). A passing is loose when no `crossing` has its decoder, boot, transponder and `t`.
-- Records: queries over `crossing` joined with `session` (§4.1). An index on `crossing (workspace_id, lap_ms)` or on the join keys if the query needs it.
+- **One server serves many clubs, each with any number of drivers, in one database**, and the database calls are synchronous: a slow query in one club holds up every club. So nothing a board reads on each update may grow with a club's history or its number of drivers, and every index starts with `workspace_id`.
+- `track_record`: one row per lap that set a record, per workspace, track and direction (driver, lap time, `at`, session, crossing). The current record is the latest row; the record history is the table.
+- `personal_best`: one row per workspace, track, direction and driver (lap time, `at`, crossing). A tie keeps the earlier lap. The board reads only the drivers it shows.
+- Both are written in the transaction that adds the lap. A late lap that changes the history before its latest row rebuilds the history for that track and direction. Anything that recounts laps (assigning a transponder) rebuilds both for the tracks and directions it touched. A rebuild reads only that track and direction's laps, through an index on `session (workspace_id, track_id, direction)`.
+- The tables always equal what a rebuild from the laps produces; a test holds them to it. They are filled from the existing laps when they are first created, and removed with the workspace.
 - Existing data: a running automatic practice at deploy becomes an ordinary practice and ends by the idle rule. Past sessions are history as they are.
 
 ## 7. Left to the builder
@@ -130,7 +134,6 @@ A session's page, `…/sessions/<id>`: its final table (as the board showed it w
 - The bell's sound.
 - How the idle end and the loose-passing cleanup are scheduled.
 - The live-stream event names and payloads, within `live.js`'s member and watcher split.
-- How the record queries are built and indexed.
 
 ## 8. Decisions
 
@@ -138,7 +141,7 @@ A session's page, `…/sessions/<id>`: its final table (as the board showed it w
 2. **Starting a session ends the running one**, after a confirmation page.
 3. **Practice starts clean**: laps from the first crossing after the start.
 4. **Passings without a session** make no laps, prompt members to start a practice, and are deleted after a day; transponder codes stay.
-5. **The track record** belongs to the workspace's track and direction; decoder laps of any session count, tapped laps never; it is derived from the laps.
+5. **The track record** belongs to the workspace's track and direction; decoder laps of any session count, tapped laps never; it and personal bests are stored as a projection of the laps, rebuilt from them when laps are recounted, so no board read grows with a club's history.
 6. **Marks**: TR and PB after the time, the session's best as a highlighted row, a crown for the holder.
 7. **A new record** shows on every screen and rings the bell where sound is on; the notice matters more than the sound.
 8. **The Sessions tab** replaces Race: start, end, history, record history. Each session has its own page.
