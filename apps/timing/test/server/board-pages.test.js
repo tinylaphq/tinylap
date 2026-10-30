@@ -225,7 +225,8 @@ const SETTING_SCRIPT = '<script type="module" src="/public/elements/notify-setti
 test('a member’s account menu has the Notifications setting on every page, hidden until tl-notify-setting reveals it', async () => {
   for (const path of [`${base}/board`, `${base}/setup`, `${base}/sessions`]) {
     const body = await (await get(member, path)).text();
-    const [menu] = body.match(/<div class="nav-account-menu navbar-menu-panel">[^]*?<\/div>/) ?? [];
+    // The panel holds groups of its own (the clubs, the settings): up to the menu's end.
+    const [menu] = body.match(/<div class="nav-account-menu navbar-menu-panel">[^]*?<\/details>/) ?? [];
     assert.match(menu, SETTING, path);
     assert.ok(menu.indexOf('notify-setting') > menu.indexOf('>Account</a>'), `${path}: after Account`);
     assert.ok(menu.indexOf('notify-setting') < menu.indexOf('Sign out'), `${path}: before Sign out`);

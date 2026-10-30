@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // The navbar's account control, the same in every TinyLap app: the signed-in
-// name opens a menu (your clubs where the app has them, its own items, Account,
-// the app's settings in a group of their own, Sign out), and a signed-out visitor gets Sign in. A <details> works without
+// name opens a menu (your clubs where the app has them, in a group of their
+// own; its own items and Account, under a rule when clubs are above them; the
+// app's settings in a group of their own; Sign out), and a signed-out visitor
+// gets Sign in. A <details> works without
 // script; tl-menu (elements/menu.js) adds Escape and closing from outside.
 // No ids of its own (only the ones a caller gives its items), so two menus
 // never collide; apps find the parts by class
@@ -26,17 +28,22 @@ import { escapeHtml as e, safeHref as url } from './escape.js';
  */
 export function accountMenu({ name, accountUrl, signOutAction = '/auth/logout', clubs = null, items = [], settings = '' }) {
   const clubList = clubs?.length ? `
-      <p class="navbar-menu-label" aria-hidden="true">Your clubs</p>
-      <ul aria-label="Your clubs">
-${clubs.map((c) => `        <li><a href="${url(c.href)}"${c.current ? ' aria-current="true"' : ''}>${e(c.name)}</a></li>`).join('\n')}
-      </ul>` : '';
+      <div class="navbar-menu-group">
+        <p class="navbar-menu-label" aria-hidden="true">Your clubs</p>
+        <ul aria-label="Your clubs">
+${clubs.map((c) => `          <li><a href="${url(c.href)}"${c.current ? ' aria-current="true"' : ''}>${e(c.name)}</a></li>`).join('\n')}
+        </ul>
+      </div>` : '';
   const extra = items.map((i) => `
       <button type="button" class="nav-account-item" id="${e(i.id)}"${i.hidden ? ' hidden' : ''}>${e(i.label)}</button>`).join('');
+  const own = `${extra}
+      <a class="nav-account-link" href="${url(accountUrl)}">Account</a>`;
   return `<tl-menu class="nav-account">
   <details class="navbar-menu" name="tl-account">
     <summary><span class="visually-hidden">Account: </span><span class="nav-account-name">${e(name)}</span></summary>
-    <div class="nav-account-menu navbar-menu-panel">${clubList}${extra}
-      <a class="nav-account-link" href="${url(accountUrl)}">Account</a>${settings ? `
+    <div class="nav-account-menu navbar-menu-panel">${clubList}${clubList ? `
+      <div class="navbar-menu-group">${own}
+      </div>` : own}${settings ? `
       ${settings}` : ''}
       <form method="post" action="${url(signOutAction)}">
         <button type="submit" class="nav-account-signout">Sign out</button>

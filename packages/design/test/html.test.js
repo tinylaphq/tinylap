@@ -49,7 +49,9 @@ test('the account menu: tl-menu, one named details, the name after a hidden "Acc
 test('your clubs: absent for none, else a named list with Personal first and the current one marked', () => {
   for (const clubs of [null, []]) assert.doesNotMatch(accountMenu({ name: 'Ana', accountUrl: '/', clubs }), /Your clubs/);
   const out = accountMenu({ name: 'Ana', accountUrl: '/', clubs: [{ href: '/personal/board', name: 'Personal' }, { href: '/clubs/1/board', name: 'Office & Co', current: true }] });
-  assert.match(out, /<p class="navbar-menu-label" aria-hidden="true">Your clubs<\/p>\s*<ul aria-label="Your clubs">\s*<li><a href="\/personal\/board">Personal<\/a><\/li>\s*<li><a href="\/clubs\/1\/board" aria-current="true">Office &amp; Co<\/a><\/li>\s*<\/ul>/);
+  assert.match(out, /<div class="navbar-menu-group">\s*<p class="navbar-menu-label" aria-hidden="true">Your clubs<\/p>\s*<ul aria-label="Your clubs">\s*<li><a href="\/personal\/board">Personal<\/a><\/li>\s*<li><a href="\/clubs\/1\/board" aria-current="true">Office &amp; Co<\/a><\/li>\s*<\/ul>\s*<\/div>/, 'the clubs in a group of their own');
+  assert.match(out, /<\/div>\s*<div class="navbar-menu-group">\s*<a class="nav-account-link" href="\/">Account<\/a>\s*<\/div>/, 'Account under a rule, apart from the clubs');
+  assert.doesNotMatch(accountMenu({ name: 'Ana', accountUrl: '/' }), /navbar-menu-group/, 'without clubs, no groups: the menu as before');
 });
 
 test('extra items are buttons with the caller’s id, hidden when asked; a custom sign-out action', () => {
