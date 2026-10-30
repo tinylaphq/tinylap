@@ -21,6 +21,8 @@ let browser;
 let member;
 let personal;
 let ticker;
+/** A club with no session running, for the notices. */
+let quiet;
 /** One club per B6 viewport, made before the login so the login carries them. */
 const clubs = [];
 // Short names alone, where a note is the widest thing in the Driver column, and with a long one.
@@ -34,6 +36,7 @@ before(async () => {
   browser = await openBrowser();
   const user = await app.signUp('Ana');
   for (const v of VIEWPORTS.keys()) clubs.push(app.club(user, `Layout ${v + 1}`));
+  quiet = app.club(user, 'Quiet');
   member = await app.login(user);
   await app.form(member, '/personal/drivers', { name: 'Ana' });
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
@@ -279,4 +282,21 @@ test('tl-local-time shows the time in the viewer\'s zone, and the UTC text witho
   assert.deepEqual(await read({ timezoneId: 'Europe/Berlin' }), ['14:32', '12 Oct', '12 Oct, 14:32']);
   assert.deepEqual(await read({ timezoneId: 'Pacific/Auckland' }), ['01:32', '13 Oct', '13 Oct, 01:32']);
   assert.deepEqual(await read({ timezoneId: 'Europe/Berlin', javaScriptEnabled: false }), ['12:32', '12 Oct', '12 Oct, 12:32']);
+});
+
+test('every notice on the board and the Sessions tab has palace\'s full warning look: colour, border and hard shadow', async (t) => {
+  cross(quiet.id, '21', [1000]);
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  const look = (selector) => page.locator(selector).evaluate((el) => {
+    const s = getComputedStyle(el);
+    return [s.backgroundColor, s.borderTopWidth, s.borderTopStyle, s.borderTopColor, s.boxShadow, s.textTransform];
+  });
+  const full = ['rgb(255, 204, 0)', '2px', 'solid', 'rgb(10, 10, 10)', 'rgb(10, 10, 10) 4px 4px 0px 0px', 'none'];
+  await page.goto(`/clubs/${quiet.id}/board`);
+  assert.deepEqual(await look('.idle-notice'), full);
+  assert.deepEqual(await look('.board-unknown'), full);
+  await page.goto(`/clubs/${quiet.id}/sessions`);
+  assert.deepEqual(await look('.idle-notice'), full);
+  assert.deepEqual(errors, []);
 });

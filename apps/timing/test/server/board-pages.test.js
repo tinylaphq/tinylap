@@ -75,7 +75,7 @@ test('laps, a personal best and an unknown car', async () => {
   assert.match(body, /&lt;i&gt;Ana&lt;\/i&gt;/);
   assert.doesNotMatch(body, /<i>Ana<\/i>/);
   assert.match(body, /<td class="num">8\.000<span class="marks"><abbr class="mark mark-tr"/);
-  assert.match(body, new RegExp(`Unknown car: 4711\\. <a href="${base}/setup#transponders">Assign in Setup</a>`));
+  assert.match(body, new RegExp(`<p class="status status-warning flag board-unknown" role="status">Unknown car: 4711\\. <a href="${base}/setup#transponders">Assign in Setup</a>`));
   assert.match(body, /<time class="board-clock-time" data-clock data-kind="practice" data-state="running" data-opens="\d+" data-closes="" data-now="\d+">0:09<\/time>/);
 });
 
@@ -319,7 +319,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   // A car with no session: the notice for members, on the normal board only, and one Start button.
   passIn(club.id, 5_000_000, '61');
   s = await screens();
-  assert.match(s.board, /<div class="status status-warning idle-notice" role="status">\s*<p>A car crossed the line \(61, Haris\)\. No session is running\.<\/p>/);
+  assert.match(s.board, /<div class="status status-warning flag idle-notice" role="status">\s*<p>A car crossed the line \(61, Haris\)\. No session is running\.<\/p>/);
   assert.equal(s.board.match(new RegExp(START, 'g')).length, 1);
   for (const body of [s.big, s.watch]) {
     assert.doesNotMatch(body, NOTICE);

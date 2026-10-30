@@ -52,8 +52,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   max-width: 1400px;
   margin-inline: auto;
 }
-.board-track, .board-head, .board-unknown, .board > .idle-notice { grid-column: 1 / -1; }
-.board-unknown, .board > .idle-notice { margin: 0; }
+.board-track, .board-head, .board > .flag { grid-column: 1 / -1; }
+.board > .flag { margin: 0; }
 /* The track and its record (records spec §5.1): a quiet strip, its edge in the
  * record colour. When a record falls it fills with that colour and stands out
  * like the clock (§4.3); that is the board's one moment of colour. */
@@ -139,10 +139,6 @@ tl-bridge { display: block; }
 .board-laps li { display: flex; gap: var(--p-space-sm); align-items: baseline; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-border-light); }
 .board-laps .num { margin-left: auto; }
 .board-laps .tag { font-size: 10px; padding: 1px 6px; }
-
-/* palace's .status upper-cases its text; the notice reads as prose. */
-.board-unknown { font-weight: 600; }
-.board-unknown a { color: inherit; border-bottom-color: currentColor; }
 
 /* The wall screen (?big, spec 6.1): every part follows .board's font size, which
    follows the smaller of the screen's width and height; only the way out stays fixed. */
@@ -420,9 +416,15 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .crown { margin-left: var(--p-space-xs); }
 .board-table tr.is-best td { background: var(--tl-session-best); }
 
-/* "A car crossed the line…": prose with its button, not palace's upper-cased label. */
-.idle-notice { display: flex; flex-wrap: wrap; gap: var(--p-space-sm) var(--p-space-md); align-items: center; justify-content: space-between; text-transform: none; letter-spacing: 0; }
-.idle-notice p { margin: 0; font-weight: 600; }
+/* A notice on the board and the Sessions tab ("A car crossed the line…", "Unknown cars…"):
+ * palace's warning status in full, with the hard offset shadow its cards and the board's
+ * table have, read as prose. palace's own .status has no shadow; that belongs upstream
+ * in palace-ui, and then the box-shadow here goes. */
+.flag { box-shadow: var(--p-shadow-lg) var(--p-text); font-weight: 600; text-transform: none; letter-spacing: 0; }
+.flag p { margin: 0; }
+.flag a { color: inherit; border-bottom-color: currentColor; }
+/* "A car crossed the line…" with its button beside it. */
+.idle-notice { display: flex; flex-wrap: wrap; gap: var(--p-space-sm) var(--p-space-md); align-items: center; justify-content: space-between; }
 
 /* The Sessions tab, a session's page and the records: wider than a form page, for their tables. */
 .sessions-screen { max-width: 960px; }

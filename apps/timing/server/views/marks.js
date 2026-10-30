@@ -53,7 +53,7 @@ export function startPracticeForm(request, { from } = {}) {
 export function idleNotice(request, idle, drivers) {
   if (!idle) return null;
   const name = idle.driverId ? drivers.find((d) => d.id === idle.driverId)?.name : null;
-  return html`<div class="status status-warning idle-notice" role="status">
+  return html`<div class="status status-warning flag idle-notice" role="status">
   <p>A car crossed the line (${idle.transponder}${name ? `, ${name}` : ''}). No session is running.</p>
   ${startPracticeForm(request)}
 </div>`;
