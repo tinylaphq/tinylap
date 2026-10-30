@@ -31,6 +31,9 @@ tl-frame { display: block; }
  * the content and keeps the navbar in place. Not for reduced motion. */
 @view-transition { navigation: auto; }
 .navbar { view-transition-name: navbar; }
+/* The name makes the navbar a stacking context; positioned above the page,
+ * so its menus open over the page's own positioned content. */
+.navbar { position: relative; z-index: 10; }
 @media (prefers-reduced-motion: reduce) {
   @view-transition { navigation: none; }
 }

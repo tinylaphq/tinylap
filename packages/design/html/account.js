@@ -19,9 +19,11 @@ import { escapeHtml as e, safeHref as url } from './escape.js';
  *   name: string, accountUrl: string, signOutAction?: string,
  *   clubs?: { href: string, name: string, current?: boolean }[] | null,
  *   items?: { id: string, label: string, hidden?: boolean }[],
- * }} menu  clubs: personal first, as the caller lists them
+ *   settings?: string,
+ * }} menu  clubs: personal first, as the caller lists them; settings: the
+ *   app's own markup after its items (a setting with its state), trusted as given
  */
-export function accountMenu({ name, accountUrl, signOutAction = '/auth/logout', clubs = null, items = [] }) {
+export function accountMenu({ name, accountUrl, signOutAction = '/auth/logout', clubs = null, items = [], settings = '' }) {
   const clubList = clubs?.length ? `
       <p class="navbar-menu-label" aria-hidden="true">Your clubs</p>
       <ul aria-label="Your clubs">
@@ -32,7 +34,8 @@ ${clubs.map((c) => `        <li><a href="${url(c.href)}"${c.current ? ' aria-cur
   return `<tl-menu class="nav-account">
   <details class="navbar-menu" name="tl-account">
     <summary><span class="visually-hidden">Account: </span><span class="nav-account-name">${e(name)}</span></summary>
-    <div class="nav-account-menu navbar-menu-panel">${clubList}${extra}
+    <div class="nav-account-menu navbar-menu-panel">${clubList}${extra}${settings ? `
+      ${settings}` : ''}
       <a class="nav-account-link" href="${url(accountUrl)}">Account</a>
       <form method="post" action="${url(signOutAction)}">
         <button type="submit" class="nav-account-signout">Sign out</button>
