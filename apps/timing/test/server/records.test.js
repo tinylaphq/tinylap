@@ -287,3 +287,19 @@ test('a record lap is celebrated only if it arrives less than a minute after it 
     assert.deepEqual(recordLaps(r.events), celebrated ? [7900] : [], `${delay} ms late`);
   }
 });
+
+test('a record set in a race after the track changed shows only under its own track', () => {
+  const r = onTrack();
+  laps(r.pass, '0A', 1000, 8000);
+  r.clock.now = T0 + 20_000;
+  r.engine.start(W, { kind: 'race', roster: ['ana', 'ben'], durationMs: 60_000, replace: true });
+  r.pass(21_000, '0B');
+  r.store.setTrack(W, TRACK, 'ccw'); // the race keeps the track it started with
+  r.engine.endPractice(W);
+  r.pass(28_900, '0B'); // 7900: a record of trk clockwise
+  assert.deepEqual(history(r.store), [['ben', 7900], ['ana', 8000]]);
+  assert.deepEqual(recordLaps(r.events), [7900]);
+  const snap = r.engine.snapshot(W);
+  assert.equal(snap.direction, 'ccw');
+  assert.equal(snap.recordNew, null, 'not under the anticlockwise header');
+});
