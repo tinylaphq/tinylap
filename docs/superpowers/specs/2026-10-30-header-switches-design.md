@@ -40,8 +40,11 @@ the browser notification of the sessions-and-records design (2026-10-29), whose
   - a click turns it on, calling `Notification.requestPermission()` from that
     click unless already granted, or off;
   - it is On only while wanted and granted; once the browser denies it, it
-    shows `data-state="blocked"`, and the button gives way to the text;
-  - it reads the permission again on `visibilitychange`;
+    shows `data-state="blocked"`, and the button gives way to the text. Denied
+    from the click, focus moves to that text (`tabindex="-1"`), so it is read
+    out and stays in the open menu;
+  - it reads the permission and the remembered choice again on
+    `visibilitychange`, and the choice on `storage`, so open tabs agree;
   - its `on` property tells whether notifications can show.
 - `tl-board` keeps the trigger: a swap that brings a `data-record-new` it has
   not seen. It asks the setting its `notify` attribute names (by id) whether

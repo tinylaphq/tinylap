@@ -27,7 +27,7 @@ const SOUND_ICON = '<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="tru
 // them again. Both states are here; CSS shows the one data-state calls for.
 const NOTIFY_SETTING = `<tl-notify-setting class="nav-account-setting" id="notify-setting" hidden>
         <button type="button" class="nav-account-item" aria-pressed="false">Notifications<span class="nav-account-state" aria-hidden="true">: <span class="notify-off">Off</span><span class="notify-on">On</span></span></button>
-        <p class="nav-account-blocked">Notifications blocked by the browser<span class="nav-account-hint">Allow them in this site's settings in the address bar, then reload.</span></p>
+        <p class="nav-account-blocked" tabindex="-1">Notifications blocked by the browser<span class="nav-account-hint">Allow them in this site's settings in the address bar, then reload.</span></p>
       </tl-notify-setting>`;
 
 /** The shared account menu (@tinylap/design), with your clubs: personal first, then the clubs; on all but the big board, the Notifications setting. */

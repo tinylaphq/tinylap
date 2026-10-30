@@ -213,7 +213,7 @@ test('the board, the big board and the watch link have the Sound icon switch, dr
   }
 });
 
-const SETTING = /<tl-notify-setting class="nav-account-setting" id="notify-setting" hidden>\s*<button type="button" class="nav-account-item" aria-pressed="false">Notifications<span class="nav-account-state" aria-hidden="true">: <span class="notify-off">Off<\/span><span class="notify-on">On<\/span><\/span><\/button>\s*<p class="nav-account-blocked">Notifications blocked by the browser<span class="nav-account-hint">Allow them in this site's settings in the address bar, then reload.<\/span><\/p>\s*<\/tl-notify-setting>/;
+const SETTING = /<tl-notify-setting class="nav-account-setting" id="notify-setting" hidden>\s*<button type="button" class="nav-account-item" aria-pressed="false">Notifications<span class="nav-account-state" aria-hidden="true">: <span class="notify-off">Off<\/span><span class="notify-on">On<\/span><\/span><\/button>\s*<p class="nav-account-blocked" tabindex="-1">Notifications blocked by the browser<span class="nav-account-hint">Allow them in this site's settings in the address bar, then reload.<\/span><\/p>\s*<\/tl-notify-setting>/;
 const SETTING_SCRIPT = '<script type="module" src="/public/elements/notify-setting.js"></script>';
 
 test('a member’s account menu has the Notifications setting on every page, hidden until tl-notify-setting reveals it', async () => {

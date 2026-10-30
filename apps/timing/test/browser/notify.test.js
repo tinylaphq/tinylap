@@ -241,6 +241,8 @@ test('denied, the menu says the browser blocks them and how to allow them; nothi
     const blocked = page.locator('.nav-account-blocked');
     assert.equal(await blocked.isVisible(), true);
     assert.equal(await page.locator('#notify-setting button').isVisible(), false, 'no button that does nothing');
+    assert.equal(await isOpen(page), true, 'the menu stays open');
+    await page.waitForFunction(() => document.activeElement?.matches('.nav-account-menu .nav-account-blocked'));
     assert.equal((await blocked.innerText()).replace(/\s+/g, ' ').trim(), "Notifications blocked by the browser Allow them in this site's settings in the address bar, then reload.");
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
@@ -329,5 +331,25 @@ test('a permission revoked while the page was hidden shows Off when it shows aga
       document.dispatchEvent(new Event('visibilitychange', { bubbles: true }));
     });
     assert.equal(await page.evaluate(() => window.detached.hasAttribute('data-state')), false, 'not updated once removed');
+  } finally { await context.close(); }
+});
+
+test('tabs agree: a choice made in another tab, or found when the page shows again, is followed', async () => {
+  const { context, page, notes } = await boardPage('/personal/board', { permission: 'granted' });
+  try {
+    await page.locator('#notify-setting button[aria-pressed="false"]').waitFor({ state: 'attached' });
+    const other = await context.newPage();
+    await other.addInitScript(() => { window.Notification = class { static permission = 'granted'; static requestPermission() { return Promise.resolve('granted'); } }; });
+    await other.goto('/personal/setup');
+    await turnOn(other);
+    await page.locator('#notify-setting button[aria-pressed="true"]').waitFor({ state: 'attached' }); // the storage event
+    const seq = newRecord();
+    await page.locator(`[data-record-new="${seq}"]`).waitFor();
+    assert.deepEqual((await notes()).map((n) => n.tag), [`tinylap-record-${seq}`]);
+    await page.evaluate(() => {
+      localStorage.setItem('tinylap-notify', 'off'); // no storage event in its own tab
+      document.dispatchEvent(new Event('visibilitychange', { bubbles: true }));
+    });
+    await page.locator('#notify-setting button[aria-pressed="false"]').waitFor({ state: 'attached' });
   } finally { await context.close(); }
 });
