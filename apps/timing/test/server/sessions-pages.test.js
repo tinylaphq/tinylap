@@ -87,7 +87,7 @@ test('start a race from the form, confirm before replacing it, then abort it aft
   assert.match(ask, /A race is running \(3 min, 2 drivers\)\. Starting this race ends it\./);
   assert.doesNotMatch(ask, /tl-countdown/, 'the answer to a POST never reloads');
   const fields = [...ask.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(fields, [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0'], ['replace', '1']]);
+  assert.deepEqual(fields, [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0'], ['replace', session.id]]);
   assert.match(ask, new RegExp(`<form method="post" action="${base}/sessions"`));
   assert.match(ask, /<button type="submit" class="btn btn-danger">Start<\/button>/);
   assert.equal(app.store.runningSession(office.id).id, session.id, 'asking ends nothing');
@@ -112,12 +112,64 @@ test('confirming ends the running session and starts the new one', async () => {
   const [a] = app.store.drivers(office.id);
   await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
   const practice = app.store.runningSession(office.id);
-  const started = await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['roster', a.id], ['duration', '5'], ['countdown', '10'], ['replace', '1']]);
+  const started = await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['roster', a.id], ['duration', '5'], ['countdown', '10'], ['replace', practice.id]]);
   assert.equal(started.status, 303);
   assert.equal(app.store.session(practice.id).state, 'done');
   const running = app.store.runningSession(office.id);
   assert.equal(running.kind, 'qualifying');
   await app.form(member, `${base}/sessions/${running.id}/abort`, {});
+});
+
+test('a confirmation ends only the session it named', async () => {
+  const [a] = app.store.drivers(office.id);
+  const race = [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0']];
+  await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
+  const named = app.store.runningSession(office.id);
+  // Meanwhile someone else replaced it with a qualifying, a minute ago.
+  clock.now += 60_000;
+  app.engine.start(office.id, { kind: 'qualifying', roster: [a.id], durationMs: 300_000, replace: true });
+  const now = app.store.runningSession(office.id);
+  clock.now += 60_000;
+  const stale = await app.form(member, `${base}/sessions`, [...race, ['replace', named.id]]);
+  assert.equal(stale.status, 200);
+  const ask = await stale.text();
+  assert.match(ask, /A qualifying is running \(1 min, 1 driver\)\. Starting this race ends it\./);
+  assert.match(ask, new RegExp(`<input type="hidden" name="replace" value="${now.id}">`));
+  assert.match(ask, new RegExp(`<input type="hidden" name="roster" value="${a.id}">`), 'the fields are kept');
+  assert.equal(app.store.runningSession(office.id).id, now.id, 'nothing ended');
+
+  // Sent twice: the first ends the qualifying it named, the second finds the race the first started.
+  const first = await app.form(member, `${base}/sessions`, [...race, ['replace', now.id]]);
+  assert.equal(first.status, 303);
+  const started = app.store.runningSession(office.id);
+  assert.equal(started.kind, 'race');
+  const again = await app.form(member, `${base}/sessions`, [...race, ['replace', now.id]]);
+  assert.equal(again.status, 303);
+  assert.equal(again.headers.get('location'), `${base}/board`);
+  assert.equal(app.store.runningSession(office.id).id, started.id, 'one session, the first one');
+
+  // Once nothing runs, the confirmation just starts.
+  app.engine.abort(office.id, started.id);
+  const late = await app.form(member, `${base}/sessions`, [...race, ['replace', started.id]]);
+  assert.equal(late.status, 303);
+  const fresh = app.store.runningSession(office.id);
+  assert.notEqual(fresh.id, started.id);
+  assert.equal(fresh.kind, 'race');
+  app.engine.abort(office.id, fresh.id);
+});
+
+test('a practice\'s confirmation carries only its kind and the session it ends', async () => {
+  const [a] = app.store.drivers(office.id);
+  await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['roster', a.id], ['duration', '5']]);
+  const running = app.store.runningSession(office.id);
+  clock.now += 60_000;
+  const res = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['roster', a.id], ['duration', '9']]);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /Starting this practice ends it\./);
+  const fields = [...body.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(fields, [['kind', 'practice'], ['replace', running.id]]);
+  app.engine.abort(office.id, running.id);
 });
 
 test('a blank countdown means the default', async () => {
@@ -228,8 +280,9 @@ test('starting a race while a practice runs names the practice', async () => {
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.match(body, /A practice is running \(12 min, 3 drivers\)\. Starting this race ends it\./);
-  assert.match(body, /<input type="hidden" name="replace" value="1">/);
-  app.engine.end(ws, app.store.runningSession(ws).id);
+  const running = app.store.runningSession(ws);
+  assert.match(body, new RegExp(`<input type="hidden" name="replace" value="${running.id}">`));
+  app.engine.end(ws, running.id);
 });
 
 test('history: newest first, with kind, length, drivers and the best lap with its marks; 20 a page', async () => {
@@ -261,13 +314,14 @@ test('history: newest first, with kind, length, drivers and the best lap with it
   assert.match(newest, /<td class="num">18 s<\/td>/, 'from its start to its last passing');
   assert.match(newest, /<td class="num">2<\/td>/);
   assert.match(newest, /Ana<\/span><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span>/);
-  assert.match(newest, /7\.000<span class="marks"><abbr class="mark mark-tr" title="Track record">TR<\/abbr><\/span>/);
+  assert.match(newest, /7\.000<span class="marks"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><span class="visually-hidden">Track record<\/span><\/span>/);
   assert.match(rows[1], /<td class="num">0 s<\/td>/);
   assert.match(rows[1], /<td class="num">0<\/td>/);
   const twentieth = app.store.listSessions(ws, 21)[19];
-  assert.match(body, new RegExp(`<a[^>]* href="${hbase}/sessions\\?before=${twentieth.createdAt}#history"[^>]*>Older sessions</a>`));
+  const cursor = `${twentieth.createdAt}.${twentieth.id}`;
+  assert.match(body, new RegExp(`<a[^>]* href="${hbase}/sessions\\?before=${cursor}#history"[^>]*>Older sessions</a>`));
 
-  const older = await (await get(`${hbase}/sessions?before=${twentieth.createdAt}`)).text();
+  const older = await (await get(`${hbase}/sessions?before=${cursor}`)).text();
   const olderRows = [...older.matchAll(/<tr class="history-row[^"]*">/g)];
   assert.equal(olderRows.length, 2);
   assert.doesNotMatch(older, /Older sessions/);
@@ -289,9 +343,9 @@ test('a session page: the final table with marks and crown, then every lap', asy
   assert.equal(rows.length, 2);
   assert.equal(rows[0][1], ' class="is-best"', 'the session’s best lap is one row');
   assert.match(rows[0][0], /Ana<\/span><span class="crown"/);
-  assert.match(rows[0][0], /7\.000<span class="marks"><abbr class="mark mark-tr" title="Track record">TR<\/abbr><\/span>/);
+  assert.match(rows[0][0], /7\.000<span class="marks"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><span class="visually-hidden">Track record<\/span><\/span>/);
   assert.equal(rows[1][1], undefined);
-  assert.match(rows[1][0], /7\.500<span class="marks"><abbr class="mark mark-pb" title="Personal best">PB<\/abbr><\/span>/);
+  assert.match(rows[1][0], /7\.500<span class="marks"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB<\/abbr><span class="visually-hidden">Personal best<\/span><\/span>/);
   assert.doesNotMatch(rows[1][0], /crown/);
   const laps = /<section[^>]*aria-labelledby="laps-title"[\s\S]*?<\/section>/.exec(body)[0];
   const times = [...laps.matchAll(/<td class="num">(\d+\.\d{3})/g)].map((m) => m[1]);

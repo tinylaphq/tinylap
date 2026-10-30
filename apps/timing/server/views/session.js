@@ -40,13 +40,13 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
 
   const table = standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<div class="board-scroll"><table class="board-table">
   <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
-  <tbody>${standings.map((row) => html`<tr${best && best.driverId === row.driverId ? html` class="is-best"` : null}>
+  <tbody>${standings.map((row) => { const isBest = best?.driverId === row.driverId; return html`<tr${isBest ? html` class="is-best"` : null}>
     <td class="pos">${row.position}</td>
     <td class="board-driver">${chip(drivers, row.driverId)}${crown(record?.driverId === row.driverId)}</td>
     <td class="num">${row.laps}</td>
-    <td class="num">${formatLap(row.bestMs)}${markOf(bestOf(row))}</td>
+    <td class="num">${formatLap(row.bestMs)}${markOf(bestOf(row))}${isBest ? html`<span class="visually-hidden">Session best</span>` : null}</td>
     ${race ? html`<td class="num">${formatLap(row.elapsedMs)}</td>` : null}
-  </tr>`)}</tbody>
+  </tr>`; })}</tbody>
 </table></div>`;
 
   const lapLists = order.map((id) => html`<div class="card-static session-laps">

@@ -19,6 +19,10 @@ const NO_RACE = { message: 'There is no running qualifying or race here.' };
 const NO_PRACTICE = { message: 'There is no running practice here.' };
 const PAGE = 20;
 const LATEST_RECORDS = 5;
+/** A confirmation sent twice: the session running is the one its first send started, if of its kind and this new. */
+const DOUBLE_SUBMIT_MS = 10_000;
+/** The history's page cursor, "<createdAt>.<id>" of the last row shown. */
+const CURSOR = /^([0-9]{1,15})\.([A-Za-z0-9-]{1,64})$/;
 
 /** The workspace's track, if set, with its direction. */
 function trackOf(request) {
@@ -29,7 +33,7 @@ function trackOf(request) {
 /**
  * Ended sessions, newest first, a page at a time, each with its driver count and
  * best lap. Each reads only its own laps; records and bests only for the drivers shown.
- * @param {any} request @param {number | null} before
+ * @param {any} request @param {{ createdAt: number, id: string } | null} before
  */
 function historyOf(request, before) {
   const { store, workspaceId: ws } = request;
@@ -51,7 +55,8 @@ function historyOf(request, before) {
       row.best = { ...best, isRecord: best.seq === record?.seq, isPb: bests.some((b) => b.seq === best.seq), isHolder: best.driverId === record?.driverId };
     }
   }
-  return { rows, older: ended.length > PAGE ? sessions[PAGE - 1].createdAt : null, newer: before !== null };
+  const last = sessions[PAGE - 1];
+  return { rows, older: ended.length > PAGE ? `${last.createdAt}.${last.id}` : null, newer: before !== null };
 }
 
 /** The record history of the current track and direction; `limit` -1 for all of it. */
@@ -67,8 +72,8 @@ function recordsOf(request, limit) {
  */
 function renderTab(request, status, { error = null, values = null } = {}) {
   const ws = request.workspaceId;
-  const raw = request.url.searchParams.get('before');
-  const before = raw && /^[0-9]{1,15}$/.test(raw) ? Number(raw) : null;
+  const cursor = CURSOR.exec(request.url.searchParams.get('before') ?? '');
+  const before = cursor ? { createdAt: Number(cursor[1]), id: cursor[2] } : null;
   return page(request, status, sessionsPage(request, {
     session: request.store.runningSession(ws),
     drivers: request.store.drivers(ws),
@@ -81,7 +86,10 @@ function renderTab(request, status, { error = null, values = null } = {}) {
   }));
 }
 
-/** Starting while a session runs: say what runs, and send the same form again with replace=1 (records spec §5.2). */
+/**
+ * Starting while a session runs: say what runs, and send the same form again with
+ * `replace` naming that session (records spec §5.2), so it ends only what it named.
+ */
 function askReplace(request, values, running) {
   const base = request.space.base;
   const minutes = Math.floor(Math.max(0, request.now() - (running.opensAt ?? running.createdAt)) / 60_000);
@@ -97,7 +105,7 @@ function askReplace(request, values, running) {
     button: 'Start',
     back: `${base}/sessions`,
     screen: 'sessions',
-    fields: [...fields, ['replace', '1']],
+    fields: [...fields, ['replace', running.id]],
   }));
 }
 
@@ -105,7 +113,6 @@ async function start(request) {
   const { form, error } = await readForm(request);
   if (error) return error;
   const values = { kind: form.get('kind') ?? '', roster: form.getAll('roster'), duration: form.get('duration') ?? '', countdown: form.get('countdown') ?? '' };
-  const replace = form.get('replace') === '1';
   const practice = values.kind === 'practice';
   // A blank box is "use the default" on a form; the operation only takes a missing value.
   // The box takes whole minutes, as its min and max say: plain digits only, not "1e1" or "0x10".
@@ -114,12 +121,20 @@ async function start(request) {
     const { error } = ops.fail('invalid-request', 'A session lasts 1 to 60 minutes.', 'duration');
     return renderTab(request, error.status, { error, values });
   }
+  // A confirmation replaces only the session it named. From here to the start nothing awaits,
+  // so what runs cannot change in between.
+  const named = form.get('replace');
+  const running = named ? request.store.runningSession(request.workspaceId) : null;
+  if (running && running.id !== named) {
+    if (running.kind === values.kind && request.now() - running.createdAt < DOUBLE_SUBMIT_MS) return seeOther(`${request.space.base}/board`);
+    return askReplace(request, values, running);
+  }
   const result = ops.startSession(request, {
     kind: values.kind,
     roster: practice ? undefined : values.roster,
     durationSeconds: minutes === undefined ? undefined : minutes * 60,
     countdownSeconds: practice || values.countdown === '' ? undefined : values.countdown,
-    replace,
+    replace: running !== null,
   });
   if (!result.error) return seeOther(`${request.space.base}/board`);
   if ('running' in result.error) return askReplace(request, values, result.error.running);

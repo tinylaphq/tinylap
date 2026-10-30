@@ -92,8 +92,8 @@ import { crown, idleNotice, marks } from '../server/views/marks.js';
 
 test('marks sit in one slot after a time, empty or not; a record lap shows TR, not PB too', () => {
   assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: false })), '<span class="marks"></span>');
-  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true })), '<span class="marks"><abbr class="mark mark-pb" title="Personal best">PB</abbr></span>');
-  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isPb: true })), '<span class="marks"><abbr class="mark mark-tr" title="Track record">TR</abbr></span>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true })), '<span class="marks"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span></span>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isPb: true })), '<span class="marks"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR</abbr><span class="visually-hidden">Track record</span></span>');
   assert.equal(String(marks({ lapMs: null, isRecord: true, isPb: true })), '<span class="marks"></span>', 'no lap, no mark');
   assert.equal(crown(false), null);
   assert.equal(String(crown(true)), '<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>');

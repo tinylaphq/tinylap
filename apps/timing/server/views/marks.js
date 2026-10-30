@@ -7,6 +7,9 @@
 // name, and the notice of a car crossing the line with no session running.
 import { html } from './html.js';
 
+/** A mark: its letters for the eye, its full name for a screen reader, which mostly skips an abbr's title. */
+const mark = (kind, letters, name) => html`<abbr class="mark mark-${kind}" title="${name}" aria-hidden="true">${letters}</abbr><span class="visually-hidden">${name}</span>`;
+
 /**
  * The marks after a lap time, in a slot of its own width whether it holds one
  * or not, so times stay aligned in their column. A record lap is its driver's
@@ -15,10 +18,10 @@ import { html } from './html.js';
  */
 export function marks({ lapMs, isRecord, isPb }) {
   const has = lapMs !== null && lapMs !== undefined;
-  const mark = !has ? null
-    : isRecord ? html`<abbr class="mark mark-tr" title="Track record">TR</abbr>`
-      : isPb ? html`<abbr class="mark mark-pb" title="Personal best">PB</abbr>` : null;
-  return html`<span class="marks">${mark}</span>`;
+  const shown = !has ? null
+    : isRecord ? mark('tr', 'TR', 'Track record')
+      : isPb ? mark('pb', 'PB', 'Personal best') : null;
+  return html`<span class="marks">${shown}</span>`;
 }
 
 /** The crown after the record holder's name, on every leaderboard of the record's track and direction. @param {boolean} isHolder */
