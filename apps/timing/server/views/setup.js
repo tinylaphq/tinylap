@@ -23,6 +23,7 @@ function trackEdit(request, m, t) {
   const open = m.errors[rename] || m.errors[attach];
   return html`<details class="track-edit"${open ? html` open` : null}>
     <summary>${t.layout ? 'Rename or change layout' : 'Rename or attach a layout'}</summary>
+    <div class="track-edit-forms">
     <form method="post" action="${base}/tracks/${t.id}" class="inline-form">
       ${textField({ id: `track-name-${t.id}`, label: `New name for ${t.name}`, labelHidden: true, name: 'name', maxlength: 60, required: true, value: m.values[rename]?.name ?? t.name, error: m.errors[rename] ?? null })}
       <button type="submit" class="btn btn-sm btn-outline">Rename</button>
@@ -31,6 +32,7 @@ function trackEdit(request, m, t) {
       ${textField({ id: `track-link-${t.id}`, label: `Planner link for ${t.name}`, labelHidden: true, name: 'link', type: 'url', required: true, placeholder: 'Planner link', value: m.values[attach]?.link ?? '', error: m.errors[attach] ?? null })}
       <button type="submit" class="btn btn-sm btn-outline">${t.layout ? 'Change layout' : 'Attach layout'}</button>
     </form>
+    </div>
   </details>`;
 }
 
@@ -46,12 +48,14 @@ function trackSection(request, m) {
   const add = m.values['add-track'] ?? {};
   const addError = m.errors['add-track'] ?? null;
   const others = m.tracks.filter((t) => t.id !== m.track.id);
+  // A refused choice that names no track falls back to the current one, not to the list's first.
+  const chosen = m.tracks.some((t) => t.id === values.id) ? values.id : m.track.id;
   return html`<tl-frame id="track"><section class="card-static stack-md" aria-labelledby="track-title">
-  <h2 class="h3" id="track-title">Track</h2>
+  <h2 id="track-title">Track</h2>
   <div class="track-now stack-sm">
     <p class="track-head">Now: <a href="${base}/tracks/${m.track.id}"><strong>${m.track.name}</strong></a>, ${DIRECTION_NAME[m.direction]}. ${layoutNote(m.track)}</p>
     <form method="post" action="${base}/track" class="inline-form">
-      ${selectField({ id: 'current-track', label: 'Current track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: values.id ?? m.track.id, error })}
+      ${selectField({ id: 'current-track', label: 'Current track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: chosen, error })}
       ${selectField({ id: 'current-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error })}
       <button type="submit" class="btn btn-primary">Save</button>
     </form>
@@ -93,13 +97,15 @@ function driversSection(request, m) {
   const base = request.space.base;
   const addError = m.errors['add-driver'] ?? null;
   return html`<tl-frame id="drivers" refreshes="transponders"><section class="card-static stack-md" aria-labelledby="drivers-title">
-  <h2 class="h3" id="drivers-title">Drivers</h2>
+  <h2 id="drivers-title">Drivers</h2>
   ${m.drivers.length ? html`<ul class="setup-list">${m.drivers.map((d) => {
     const error = m.errors[`rename:${d.id}`] ?? null;
     const kept = m.values[`rename:${d.id}`] ?? {};
+    // The swatch shows a colour it can show: a refused one would turn it black.
+    const colour = /^#[0-9a-f]{6}$/i.test(kept.colour ?? '') ? kept.colour : d.colour;
     return html`<li class="setup-row">
     <form method="post" action="${base}/drivers/${d.id}" class="inline-form driver-form">
-      ${textField({ id: `colour-${d.id}`, label: `Colour for ${d.name}`, labelHidden: true, name: 'colour', type: 'color', value: kept.colour ?? d.colour, error })}
+      ${textField({ id: `colour-${d.id}`, label: `Colour for ${d.name}`, labelHidden: true, name: 'colour', type: 'color', value: colour, error })}
       ${textField({ id: `rename-${d.id}`, label: `New name for ${d.name}`, labelHidden: true, name: 'name', maxlength: 60, required: true, value: kept.name ?? d.name, error })}
       <button type="submit" class="btn btn-sm btn-outline">Save</button>
     </form>
@@ -118,7 +124,7 @@ function transpondersSection(request, m) {
   const options = [{ value: '', label: '— none' }, ...m.drivers.map((d) => ({ value: d.id, label: d.name }))];
   const rows = [...m.transponders].sort((a, b) => Number(a.driverId !== null) - Number(b.driverId !== null) || a.code.localeCompare(b.code));
   return html`<tl-frame id="transponders"><section class="card-static stack-md" aria-labelledby="transponders-title">
-  <h2 class="h3" id="transponders-title">Transponders</h2>
+  <h2 id="transponders-title">Transponders</h2>
   ${rows.length ? html`<table class="setup-table">
     <thead><tr><th scope="col" class="num">Code</th><th scope="col">Driver</th></tr></thead>
     <tbody>${rows.map((t) => {
@@ -139,7 +145,7 @@ function decodersSection(request, m) {
   const base = request.space.base;
   const error = m.errors.pair ?? null;
   return html`<section class="card-static stack-md" id="decoders" aria-labelledby="decoders-title">
-  <h2 class="h3" id="decoders-title">Decoders</h2>
+  <h2 id="decoders-title">Decoders</h2>
   ${m.paired ? html`<div class="status status-info">
     <p>${m.paired.name} is paired. Its token is shown only this once:</p>
     ${copyable(html`<code class="token">${m.paired.token}</code>`)}
@@ -166,9 +172,9 @@ function watchersSection(request, m) {
   const base = request.space.base;
   const link = m.watchToken ? `${request.origin}/watch/${m.watchToken}` : null;
   return html`<tl-frame id="watchers"><section class="card-static stack-md" aria-labelledby="watchers-title">
-  <h2 class="h3" id="watchers-title">Watchers link</h2>
+  <h2 id="watchers-title">Watchers link</h2>
   <p>Anyone with this link sees the board, read-only, without signing in.</p>
-  ${link ? html`${textField({ id: 'watch-link', label: 'Watchers link', name: 'link', value: link, readonly: true, copy: true })}
+  ${link ? html`${textField({ id: 'watch-link', label: 'Watchers link', labelHidden: true, name: 'link', value: link, readonly: true, copy: true })}
   <p><a class="btn btn-outline" href="${base}/watch-link/new">Make a new watchers link</a></p>` : html`<form method="post" action="${base}/watch-link">
     <button type="submit" class="btn btn-primary">Make a watchers link</button>
   </form>`}

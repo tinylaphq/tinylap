@@ -22,11 +22,12 @@ const SOUND_ICON = '<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="tru
   + '<path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'
   + '<path class="sound-strike" d="M3 3l18 18"/></svg>';
 
-// The Notifications setting in a member's account menu (tl-notify-setting):
-// a toggle showing Off or On, or, once the browser blocks them, how to allow
-// them again. Both states are here; CSS shows the one data-state calls for.
-const NOTIFY_SETTING = `<tl-notify-setting class="nav-account-setting" id="notify-setting" hidden>
-        <button type="button" class="nav-account-item" aria-pressed="false">Notifications<span class="nav-account-state" aria-hidden="true">: <span class="notify-off">Off</span><span class="notify-on">On</span></span></button>
+// The Notifications setting in a member's account menu (tl-notify-setting), a
+// group of its own under a rule: palace's setting, whose switch shows on or
+// off from aria-pressed, or, once the browser blocks them, how to allow them
+// again. Both states are here; CSS shows the one data-state calls for.
+const NOTIFY_SETTING = `<tl-notify-setting class="nav-account-setting navbar-menu-group" id="notify-setting" hidden>
+        <button type="button" class="navbar-menu-setting" aria-pressed="false">Notifications</button>
         <p class="nav-account-blocked" tabindex="-1">Notifications blocked by the browser<span class="nav-account-hint">Allow them in this site's settings in the address bar, then reload.</span></p>
       </tl-notify-setting>`;
 

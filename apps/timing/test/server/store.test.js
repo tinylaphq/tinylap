@@ -311,6 +311,8 @@ test('sessions page on by createdAt, and a summary reads one session\'s counted 
   assert.deepEqual(store.listSessions(W, 2).map((s) => s.id), ['s3', 's2b']);
   // A page ends between two sessions of the same createdAt: the next starts with the other one.
   assert.deepEqual(store.listSessions(W, 2, { createdAt: 2, id: 's2b' }).map((s) => s.id), ['s2', 's1']);
+  // And back: the sessions after one, oldest first.
+  assert.deepEqual(store.listSessionsAfter(W, 2, { createdAt: 2, id: 's2' }).map((s) => s.id), ['s2b', 's3']);
   assert.deepEqual(store.sessionSummary('s1'), { drivers: 0, best: null });
   crossing(store, { t: 1, driverId: 'ana', counts: true });
   crossing(store, { t: 2, driverId: 'ana', lapMs: 8000, counts: true });

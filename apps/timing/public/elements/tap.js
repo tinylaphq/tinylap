@@ -13,6 +13,10 @@
 // - A newer tap's answer wins; the submitted tile flashes for 150 ms.
 // - Each answer cancels a fill still waiting for its frame, so an error never
 //   leaves an older result under the alert.
+// - The result names the driver and what the tap did in their own spans, so
+//   the bar can cut a long name short and still show the time.
+// - With no session running, the page loads again: the server's page then
+//   offers Start practice.
 // - A disconnect stops listening but doesn't abort a request in flight: it
 //   can't unsend a tap the server may have stored, and after a move its
 //   answer is still the latest.
@@ -33,7 +37,11 @@ class TlTap extends HTMLElement {
   /** @param {string} name */
   template(name) { return /** @type {HTMLTemplateElement | null} */ (this.querySelector(`template[data-tap="${name}"]`)); }
 
-  show(state, text, colour, signedOut = false) {
+  /**
+   * @param {string} state @param {string} text @param {string} colour @param {boolean} [signedOut]
+   * @param {string} [name] the driver's part of `text`, if any @param {string} [spoken] the sentence a screen reader reads, if not `text`
+   */
+  show(state, text, colour, signedOut = false, name = '', spoken = text) {
     cancelAnimationFrame(this.frame);
     const bar = /** @type {HTMLElement | null} */ (this.querySelector('.tap-bar'));
     const status = this.querySelector('#tap-result');
@@ -60,7 +68,14 @@ class TlTap extends HTMLElement {
     this.frame = requestAnimationFrame(() => {
       const line = /** @type {DocumentFragment} */ (result.content.cloneNode(true));
       line.querySelector('.tap-state').textContent = LABEL[state];
-      line.querySelector('.tap-text').textContent = text;
+      const sentence = line.querySelector('.tap-spoken');
+      if (sentence) sentence.textContent = spoken;
+      const nameSpan = line.querySelector('.tap-name');
+      const detail = line.querySelector('.tap-detail');
+      if (nameSpan && detail && text.startsWith(name)) {
+        nameSpan.textContent = name;
+        detail.textContent = text.slice(name.length);
+      } else line.querySelector('.tap-text').textContent = text;
       status.replaceChildren(line);
     });
   }
@@ -86,6 +101,8 @@ class TlTap extends HTMLElement {
     let state = 'error';
     let text = NO_ANSWER;
     let signedOut = false;
+    let name = '';
+    let spoken = '';
     try {
       const res = await fetch(form.action, {
         method: 'POST',
@@ -100,13 +117,19 @@ class TlTap extends HTMLElement {
       if (res.ok && typeof data?.text === 'string') {
         state = data.stored ? (data.lapMs === null ? 'started' : 'lap') : 'again';
         text = data.text;
+        name = typeof data.name === 'string' ? data.name : '';
+        spoken = typeof data.spoken === 'string' ? data.spoken : '';
+      } else if (data?.problem === 'no-session') {
+        // The page that offers Start practice, saying the tap wasn't counted; only for the latest tap.
+        if (mine === this.latest) location.assign(`${form.action}?result=no-session`);
+        return;
       } else if (typeof data?.error === 'string') {
         text = data.error;
       }
     } catch {
       // Keep the fallback text.
     }
-    if (mine === this.latest) this.show(state, text, state === 'error' ? '' : colour, signedOut);
+    if (mine === this.latest) this.show(state, text, state === 'error' ? '' : colour, signedOut, name, spoken || text);
   }
 }
 

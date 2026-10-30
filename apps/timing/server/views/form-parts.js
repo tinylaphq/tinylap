@@ -47,3 +47,14 @@ export function selectField({ label, name, options, value = '', error = null, la
 export const errorSummary = (error, fieldId = null) => (error
   ? html`<p class="status status-error" role="alert">${error.field && fieldId ? html`<a href="#${fieldId}">${error.message}</a>` : error.message}</p>`
   : null);
+
+/**
+ * The summary of a form that failed on several fields at once: one alert, each
+ * error linking to its field; a single error reads as errorSummary's.
+ * @param {{ field?: string, message: string }[]} errors @param {(field: string | undefined) => string | null | undefined} fieldIdOf
+ */
+export function errorsSummary(errors, fieldIdOf) {
+  if (errors.length <= 1) return errorSummary(errors[0], fieldIdOf(errors[0]?.field));
+  const item = (e) => { const id = fieldIdOf(e.field); return html`<li>${e.field && id ? html`<a href="#${id}">${e.message}</a>` : e.message}</li>`; };
+  return html`<div class="status status-error" role="alert"><ul class="error-list">${errors.map(item)}</ul></div>`;
+}

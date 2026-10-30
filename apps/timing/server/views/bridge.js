@@ -36,6 +36,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
   <tl-bridge>
   <div id="bridge" data-workspace="${request.workspaceId}">
     <p class="visually-hidden" role="status" data-bridge-live></p>
+    <p class="status status-error" role="alert" data-bridge-error hidden></p>
     <p class="status status-warning" data-bridge-earlier hidden></p>
     <template data-bridge-sign-in><a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}">Sign in again</a> to send them.</template>
     <section data-bridge-state="unsupported" class="card-static stack-md">
@@ -107,7 +108,6 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
       <p data-bridge-gap hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p>
       ${connect('Connect again', 'last')}
     </section>
-    <p class="status status-error" role="alert" data-bridge-error hidden></p>
   </div>
   </tl-bridge>
 </div>`,

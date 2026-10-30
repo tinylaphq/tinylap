@@ -29,7 +29,7 @@ const get = (path) => app.api(member, 'GET', path, undefined, { accept: 'text/ht
 
 test('a tile per driver, each its own form', async () => {
   const body = await (await get(`${base}/tap`)).text();
-  assert.match(body, new RegExp(`<form method="post" action="${base}/tap" class="tap-form">\\s*<input type="hidden" name="driver" value="${ana.id}">\\s*<button type="submit" class="tap-tile"[^>]*>Ana</button>`));
+  assert.match(body, new RegExp(`<form method="post" action="${base}/tap" class="tap-form">\\s*<input type="hidden" name="driver" value="${ana.id}">\\s*<button type="submit" class="tap-tile" style="--driver: [^;"]+; --word: 3">Ana</button>`));
   assert.match(body, /<script type="module" src="\/public\/elements\/tap.js"><\/script>/);
 });
 
@@ -39,7 +39,7 @@ const exact = (s) => new RegExp(s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&'));
 test('the tap page wraps its screen in tl-tap, with the three templates', async () => {
   const body = await (await get(`${base}/tap`)).text();
   assert.match(body, /<tl-tap>\s*<div class="tap-screen">/);
-  assert.match(body, exact('<template data-tap="result"><span class="tap-state"></span> <span class="tap-text"></span></template>'));
+  assert.match(body, exact('<template data-tap="result"><span class="tap-state" aria-hidden="true"></span> <span class="visually-hidden tap-spoken"></span><span class="tap-text" aria-hidden="true"><span class="tap-name"></span><span class="tap-detail"></span></span></template>'));
   assert.match(body, exact('<template data-tap="alert"><p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text"></span></p></template>'));
   const withQuery = await (await get(`${base}/tap?driver=${ana.id}&result=started`)).text();
   assert.match(withQuery, exact(`<template data-tap="signed-out"><a href="${base}/tap?driver=${ana.id}&amp;result=started">Sign in again</a> to keep tapping.</template>`));
@@ -55,15 +55,15 @@ test('a tap is a post and a redirect that says what it did', async () => {
   let res = await app.form(member, `${base}/tap`, { driver: ana.id });
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), `${base}/tap?driver=${ana.id}&result=started`);
-  assert.match(await (await get(res.headers.get('location'))).text(), /role="status"[^>]*>\s*<span class="tap-state">Started<\/span>\s*<span class="tap-text">Ana: started<\/span>/);
+  assert.match(await (await get(res.headers.get('location'))).text(), /role="status"[^>]*>\s*<span class="tap-state" aria-hidden="true">Started<\/span>\s*<span class="visually-hidden tap-spoken">Ana started\.<\/span><span class="tap-text" aria-hidden="true"><span class="tap-name">Ana<\/span><span class="tap-detail">: started<\/span><\/span>/);
   clock.now += 8412;
   res = await app.form(member, `${base}/tap`, { driver: ana.id });
   assert.equal(res.headers.get('location'), `${base}/tap?driver=${ana.id}&result=lap&ms=8412`);
-  assert.match(await (await get(res.headers.get('location'))).text(), /<span class="tap-text">Ana: 8\.412<\/span>/);
+  assert.match(await (await get(res.headers.get('location'))).text(), /<span class="visually-hidden tap-spoken">Lap for Ana: 8\.412\.<\/span><span class="tap-text" aria-hidden="true"><span class="tap-name">Ana<\/span><span class="tap-detail">: 8\.412<\/span><\/span>/, 'one sentence for a screen reader, the label and parts for the eye');
   res = await app.form(member, `${base}/tap`, { driver: ana.id });
   assert.equal(res.headers.get('location'), `${base}/tap?driver=${ana.id}&result=again`, 'the same millisecond');
   const again = await (await get(res.headers.get('location'))).text();
-  assert.match(again, /Too fast, tap again\./);
+  assert.match(again, /<span class="visually-hidden tap-spoken">Too fast, tap again\.<\/span><span class="tap-text" aria-hidden="true"><span class="tap-name"><\/span><span class="tap-detail">Too fast, tap again\.<\/span><\/span>/);
   assert.match(again, /aria-live="polite"/);
 });
 
@@ -76,7 +76,7 @@ test('a forged query shows no result line', async () => {
     assert.doesNotMatch(body, /<script>alert/, query);
   }
   const body = await (await get(`${base}/tap?driver=${ana.id}&result=started&ms=99`)).text();
-  assert.match(body, /Ana: started/);
+  assert.match(body, /<span class="tap-name">Ana<\/span><span class="tap-detail">: started<\/span>/);
   assert.doesNotMatch(body, /0\.099/, 'ms is dropped for other results');
 });
 
@@ -84,7 +84,7 @@ test('asked for JSON, the same post answers in place', async () => {
   clock.now += 9000;
   const res = await app.form(member, `${base}/tap`, { driver: ana.id }, { accept: 'application/json' });
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { stored: true, lapMs: 9000, text: 'Ana: 9.000' });
+  assert.deepEqual(await res.json(), { stored: true, lapMs: 9000, text: 'Ana: 9.000', name: 'Ana', detail: ': 9.000', spoken: 'Lap for Ana: 9.000.' });
 });
 
 test('a failed tap comes back as the page with an alert, status 422', async () => {
@@ -144,10 +144,17 @@ test('without a running session: no tiles, "No session is running." and Start pr
     const posted = await quiet.form(login, `${path}/tap`, { driver: driver.id });
     assert.equal(posted.status, 409);
     const page = await posted.text();
-    assert.match(page, /<p class="status status-error" role="alert">[\s\S]*?No session is running\. Start a practice first\./);
+    assert.match(page, /<p>That tap wasn’t counted: no session is running\.<\/p>/, 'the card says the tap was not counted, and why');
+    assert.doesNotMatch(page, /role="alert"/, 'the card says it once, beside Start practice');
     assert.match(page, /Start practice/);
     const asJson = await quiet.form(login, `${path}/tap`, { driver: driver.id }, { accept: 'application/json' });
     assert.equal(asJson.status, 409);
-    assert.match((await asJson.json()).error, /No session is running/);
+    const answer = await asJson.json();
+    assert.match(answer.error, /No session is running/);
+    assert.equal(answer.problem, 'no-session', 'so tl-tap loads the page that offers Start practice');
+    // tl-tap loads the page with ?result=no-session: the same card and words.
+    const flagged = await (await quiet.api(login, 'GET', `${path}/tap?result=no-session`, undefined, { accept: 'text/html' })).text();
+    assert.match(flagged, /<p>That tap wasn’t counted: no session is running\.<\/p>/);
+    assert.match(flagged, /Start practice/);
   } finally { await quiet.close(); }
 });

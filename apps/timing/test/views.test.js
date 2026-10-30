@@ -5,7 +5,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Html, html, safe } from '../server/views/html.js';
-import { selectField } from '../server/views/form-parts.js';
+import { copyable, selectField, textField } from '../server/views/form-parts.js';
+import { clockOf } from '../server/views/board.js';
+import { notFoundPage, startPage } from '../server/views/notice.js';
+import { chip, idleNotice, marks, marksHead, timeWidths } from '../server/views/marks.js';
+import { directionIcon } from '../server/views/direction.js';
+import { shortLength } from '../server/views/sessions.js';
 
 test('interpolations are escaped', () => {
   const name = `<b>Ana</b> & "Ben" 'C'`;
@@ -33,9 +38,6 @@ test('made markup cannot be changed afterwards', () => {
     assert.equal(String(made), '<p>x</p>');
   }
 });
-
-import { copyable, textField } from '../server/views/form-parts.js';
-import { clockOf } from '../server/views/board.js';
 
 test('fields escape their values and mark their errors', () => {
   const out = String(textField({ id: 'n', label: 'Name', name: 'name', value: '"><script>', error: { field: 'name', message: 'Too <long>' } }));
@@ -69,8 +71,6 @@ test('a copyable field wraps its input, not its label', () => {
   assert.match(out, /<label for="w">Link<\/label>\s*<tl-copy class="copy"><input type="text" id="w"[^>]*readonly>/);
 });
 
-import { notFoundPage, startPage } from '../server/views/notice.js';
-
 test('signed out, the start page has one Sign in, in its card; other pages keep the navbar one', () => {
   const signedOut = (path) => ({ session: null, url: new URL(path, 'https://timing.example') });
   const start = String(startPage(signedOut('/')));
@@ -88,22 +88,33 @@ test('selectField without a hint or data-name renders as it always has', () => {
     '<div class="field">\n  <label for="x">Direction</label>\n  <select id="x" name="direction" aria-invalid="true" aria-describedby="x-error">\n    <option value="cw" selected>Clockwise</option><option value="ccw">Counter-clockwise</option>\n  </select>\n  <p class="field-error" id="x-error">Pick one.</p>\n</div>');
 });
 
-import { crown, idleNotice, marks } from '../server/views/marks.js';
-import { directionIcon } from '../server/views/direction.js';
-
-test('marks sit in one slot after a time, empty or not; a record lap shows TR, not PB too', () => {
-  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: false })), '<span class="marks"></span>');
-  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true })), '<span class="marks"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span></span>');
-  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isPb: true })), '<span class="marks"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR</abbr><span class="visually-hidden">Track record</span></span>');
-  assert.equal(String(marks({ lapMs: null, isRecord: true, isPb: true })), '<span class="marks"></span>', 'no lap, no mark');
-  assert.equal(crown(false), null);
-  assert.equal(String(crown(true)), '<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>');
+test('a mark is a cell of its own after the time, empty or not; a record lap shows TR, not PB too', () => {
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: false })), '<td class="mark-cell"></td>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true })), '<td class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span></td>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isPb: true })), '<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR</abbr><span class="visually-hidden">Track record</span></td>');
+  assert.equal(String(marks({ lapMs: null, isRecord: true, isPb: true })), '<td class="mark-cell"></td>', 'no lap, no mark');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true }, { list: true, note: 'Session best' })), '<span class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span>Session best</span>', 'in a list, a span, with its note after');
+  assert.equal(String(marksHead), '<th scope="col" class="mark-cell"><span class="visually-hidden">Mark</span></th>');
+  const drivers = [{ id: 'c', name: 'Cyrille Featherstonehaugh', colour: '#f5a623' }];
+  assert.equal(String(chip(drivers, 'c')), '<span class="driver" style="--driver: #f5a623"><span class="driver-name" title="Cyrille Featherstonehaugh">Cyrille Featherstonehaugh</span></span>');
+  assert.equal(String(chip(drivers, 'c', { holder: true })), '<span class="driver" style="--driver: #f5a623"><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span><span class="driver-name" title="Cyrille Featherstonehaugh">Cyrille Featherstonehaugh</span></span>', 'the crown before the name, the full name in its title');
+  assert.equal(String(chip(drivers, 'gone')), '<span class="driver"><span class="driver-name" title="Former driver">Former driver</span></span>');
+  assert.equal(String(chip(drivers, null)), '<span class="driver"><span class="driver-name" title="Unknown car">Unknown car</span></span>');
 });
 
-test('a car with no session running is a live line, by its code', () => {
-  assert.equal(idleNotice(null), null);
-  assert.equal(String(idleNotice({ transponder: '23', driverId: 'h', at: 1 })), '<p class="board-on-track" role="status">Car 23 is on the track</p>');
-  assert.match(String(idleNotice({ transponder: '<b>', driverId: null, at: 1 })), /Car &lt;b&gt; is on the track/);
+test('time columns widen only for a lap of a minute or a total of ten minutes', () => {
+  assert.equal(timeWidths([8123, null, undefined, 59_999], [599_999]), '');
+  assert.equal(timeWidths([8123, 60_000]), ' has-minute-laps');
+  assert.equal(timeWidths([8123], [600_000]), ' has-long-totals');
+  assert.equal(timeWidths([60_000], [845_000]), ' has-minute-laps has-long-totals');
+});
+
+test('a car with no session running is a live line, by its driver, or by its code without one', () => {
+  const drivers = [{ id: 'h', name: 'Haris', colour: '#1e88e5' }];
+  assert.equal(idleNotice(null, drivers), null);
+  assert.equal(String(idleNotice({ transponder: '23', driverId: 'h', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span><span class="driver" style="--driver: #1e88e5"><span class="driver-name" title="Haris">Haris</span></span> is on the track</span></p>');
+  assert.equal(String(idleNotice({ transponder: '23', driverId: 'gone', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span>Car 23 is on the track</span></p>', 'a driver since deleted: the code');
+  assert.match(String(idleNotice({ transponder: '<b>', driverId: null, at: 1 }, drivers)), /Car &lt;b&gt; is on the track/);
 });
 
 test('the direction icon: an open loop with one arrowhead, named by its own title', () => {
@@ -114,4 +125,12 @@ test('the direction icon: an open loop with one arrowhead, named by its own titl
     assert.match(svg, /stroke="var\(--p-accent-1\)"/);
   }
   assert.notEqual(String(directionIcon('cw')), String(directionIcon('ccw')));
+});
+
+test('a short length rounds to whole seconds first, so 59.6 s reads "1 min", never "60 s"', () => {
+  assert.equal(shortLength(18_400), '18 s');
+  assert.equal(shortLength(59_400), '59 s');
+  assert.equal(shortLength(59_600), '1 min');
+  assert.equal(shortLength(60_000), '1 min');
+  assert.equal(shortLength(12 * 60_000 + 59_000), '12 min');
 });

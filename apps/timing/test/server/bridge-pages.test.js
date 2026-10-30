@@ -36,6 +36,7 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   assert.match(res.headers.get('content-security-policy'), new RegExp(`script-src 'self' '[^']+' 'sha256-${hash.replace(/[+/=]/g, (c) => `\\${c}`)}'`));
   assert.match(body, /<script type="module" src="\/public\/elements\/bridge.js"><\/script>/);
   assert.match(body, /<tl-bridge>\s*<div id="bridge" data-workspace=/);
+  assert.match(body, /<div id="bridge"[^>]*>\s*<p class="visually-hidden" role="status" data-bridge-live><\/p>\s*<p class="status status-error" role="alert" data-bridge-error hidden><\/p>/, 'a failure shows at the top, above the card');
 });
 
 /** `s` as a regex source that matches it exactly. */

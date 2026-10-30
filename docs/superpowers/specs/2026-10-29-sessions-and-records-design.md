@@ -80,7 +80,7 @@ After a lap time, in the Best column of every leaderboard (the board, results, a
 - **TR**: this lap is the current track record.
 - **PB**: the driver's best on this track and direction (as the board's `PB` badge today).
 - **The session's best lap**: its whole row is highlighted. Only one row can be.
-- **👑**: next to the record holder's name, on every leaderboard of that track and direction (board, results, history). It moves when the record falls.
+- **👑**: before the record holder's name, between their colour and the name, on every leaderboard of that track and direction (board, results, history). There it never sits alone on a line. It moves when the record falls.
 
 Marks sit in a fixed slot beside the time, so times stay aligned in their column.
 

@@ -11,7 +11,7 @@ import { pageRoute } from './page-access.js';
 import { page, seeOther } from './respond.js';
 import { json, retryHeaders } from './responses.js';
 import { spacePath } from './spaces.js';
-import { tapPage, tapResultText } from './views/tap.js';
+import { tapPage, tapResultParts } from './views/tap.js';
 
 const RESULTS = new Set(['started', 'lap', 'again']);
 const wantsJson = (req) => /application\/json/.test(String(req.headers.accept ?? ''));
@@ -24,7 +24,9 @@ function showTap(request) {
   // A lap needs its time, as digits; the other results carry none. Anything else is no result.
   const ms = /^\d{1,9}$/.test(q.get('ms') ?? '') ? Number(q.get('ms')) : null;
   const result = driver && RESULTS.has(kind) && (kind !== 'lap' || ms !== null) ? { result: kind, ms: kind === 'lap' ? ms : null, driver } : null;
-  return page(request, 200, tapPage(request, { drivers, result, running: !!request.store.runningSession(request.workspaceId) }));
+  // tl-tap comes here with ?result=no-session when a tap found no session.
+  const missed = kind === 'no-session';
+  return page(request, 200, tapPage(request, { drivers, result, missed, running: !!request.store.runningSession(request.workspaceId) }));
 }
 
 /** @param {{ stored: boolean, lapMs: number | null }} value */
@@ -38,13 +40,14 @@ async function postTap(request) {
   const drivers = request.store.drivers(request.workspaceId);
   if (result.error) {
     const headers = retryHeaders(result.error);
-    if (wantsJson(request.req)) return { ...json(result.error.status, { error: result.error.message }, { 'Cache-Control': 'no-store', ...headers }), credentials: true };
+    if (wantsJson(request.req)) return { ...json(result.error.status, { error: result.error.message, problem: result.error.problem }, { 'Cache-Control': 'no-store', ...headers }), credentials: true };
     return page(request, result.error.status, tapPage(request, { drivers, error: result.error, running: !!request.store.runningSession(request.workspaceId) }), { headers });
   }
   const outcome = outcomeOf(result.value);
   const driver = drivers.find((d) => d.id === driverId);
   if (wantsJson(request.req)) {
-    return { ...json(200, { ...result.value, text: tapResultText({ result: outcome, ms: result.value.lapMs }, driver) }, { 'Cache-Control': 'no-store' }), credentials: true };
+    const { name, detail, spoken } = tapResultParts({ result: outcome, ms: result.value.lapMs }, driver);
+    return { ...json(200, { ...result.value, text: name + detail, name, detail, spoken }, { 'Cache-Control': 'no-store' }), credentials: true };
   }
   const query = new URLSearchParams({ driver: driverId, result: outcome, ...(outcome === 'lap' ? { ms: String(result.value.lapMs) } : {}) });
   return seeOther(`${request.space.base}/tap?${query}`);

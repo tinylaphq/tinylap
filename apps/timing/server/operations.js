@@ -63,7 +63,7 @@ export function addDriver(request, { name: raw, colour: rawColour }) {
   const existing = request.store.drivers(request.workspaceId);
   if (existing.length >= MAX_DRIVERS) return invalid(`You can have at most ${MAX_DRIVERS} drivers here.`, 'name');
   const colour = rawColour === undefined ? COLOURS[existing.length % COLOURS.length] : colourOf(rawColour);
-  if (!colour) return invalid('A colour is #rrggbb.', 'colour');
+  if (!colour) return invalid('Choose a colour with the swatch.', 'colour');
   const driver = { id: randomUUID(), name, colour };
   request.store.addDriver(request.workspaceId, driver);
   publishDrivers(request);
@@ -77,7 +77,7 @@ export function renameDriver(request, { id, name: rawName, colour: rawColour }) 
   const name = rawName === undefined ? current.name : nameOf(rawName);
   if (!name) return invalid('Give the driver a name of 1 to 60 characters.', 'name');
   const colour = rawColour === undefined ? current.colour : colourOf(rawColour);
-  if (!colour) return invalid('A colour is #rrggbb.', 'colour');
+  if (!colour) return invalid('Choose a colour with the swatch.', 'colour');
   request.store.updateDriver(request.workspaceId, current.id, { name, colour });
   publishDrivers(request);
   return { value: { id: current.id, name, colour } };
@@ -272,18 +272,30 @@ export function rotateWatchLink(request) {
   return { value: { token } };
 }
 
+/**
+ * Every field error of a start, in the form's order, at most one a field: a
+ * form shows them all at once. Empty when the start may go ahead.
+ */
+export function startErrors(request, { kind, roster, durationSeconds, countdownSeconds, replace = undefined }) {
+  if (!KINDS.has(kind)) return [invalid('Pick a practice, a qualifying or a race.', 'kind').error];
+  if (replace !== undefined && typeof replace !== 'boolean') return [invalid('`replace` must be true or false.', 'replace').error];
+  if (kind === 'practice') return [];
+  const errors = [];
+  if (!Array.isArray(roster) || roster.length < 1 || roster.length > MAX_ROSTER) errors.push(invalid(`Pick 1 to ${MAX_ROSTER} drivers.`, 'roster'));
+  else if (new Set(roster).size !== roster.length) errors.push(invalid('A driver can be on the roster only once.', 'roster'));
+  else if (!roster.every((id) => typeof id === 'string' && request.store.driver(request.workspaceId, id))) errors.push(invalid('Pick only drivers you have set up.', 'roster'));
+  if (intIn(durationSeconds, 10, 3600, 300) === null) errors.push(invalid('A session lasts 10 seconds to an hour.', 'duration'));
+  if (intIn(countdownSeconds, 0, 30, 10) === null) errors.push(invalid('The countdown is 0 to 30 seconds.', 'countdown'));
+  return errors.map((e) => e.error);
+}
+
 export function startSession(request, { kind, roster, durationSeconds, countdownSeconds, replace = undefined }) {
-  if (!KINDS.has(kind)) return invalid('Pick a practice, a qualifying or a race.', 'kind');
-  if (replace !== undefined && typeof replace !== 'boolean') return invalid('`replace` must be true or false.', 'replace');
+  const [invalidField] = startErrors(request, { kind, roster, durationSeconds, countdownSeconds, replace });
+  if (invalidField) return { error: invalidField };
   let spec = { kind, replace: replace === true };
   if (kind !== 'practice') {
-    if (!Array.isArray(roster) || roster.length < 1 || roster.length > MAX_ROSTER) return invalid(`Pick 1 to ${MAX_ROSTER} drivers.`, 'roster');
-    if (new Set(roster).size !== roster.length) return invalid('A driver can be on the roster only once.', 'roster');
-    if (!roster.every((id) => typeof id === 'string' && request.store.driver(request.workspaceId, id))) return invalid('Pick only drivers you have set up.', 'roster');
     const duration = intIn(durationSeconds, 10, 3600, 300);
-    if (duration === null) return invalid('A session lasts 10 seconds to an hour.', 'duration');
     const countdown = intIn(countdownSeconds, 0, 30, 10);
-    if (countdown === null) return invalid('The countdown is 0 to 30 seconds.', 'countdown');
     spec = { ...spec, roster, durationMs: duration * 1000, countdownMs: kind === 'race' ? countdown * 1000 : 0 };
   }
   const result = request.engine.start(request.workspaceId, spec);

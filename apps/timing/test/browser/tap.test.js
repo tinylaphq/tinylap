@@ -11,6 +11,7 @@ const clock = { now: Date.now() };
 let app;
 let browser;
 let member;
+let ws;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -19,7 +20,8 @@ before(async () => {
   member = await app.login(user);
   await app.form(member, '/personal/drivers', { name: 'Ana' });
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
-  app.engine.start(me.workspaces[0].id, { kind: 'practice' });
+  ws = me.workspaces[0].id;
+  app.engine.start(ws, { kind: 'practice' });
 });
 after(async () => {
   await browser?.close();
@@ -37,6 +39,8 @@ test('with JavaScript, taps answer in place without a page load', async (t) => {
   clock.now += 8000;
   await page.getByRole('button', { name: 'Ana' }).click();
   await page.getByRole('status').filter({ hasText: 'Ana: 8.000' }).waitFor();
+  // A screen reader reads one sentence, not the label and the parts.
+  assert.match(await page.locator('#tap-result').ariaSnapshot(), /^- status: "?Lap for Ana: 8\.000\."?$/);
   assert.equal(loads, 0);
   assert.equal(new URL(page.url()).pathname, '/personal/tap');
   assert.deepEqual(errors, []);
@@ -93,7 +97,7 @@ test('rapid taps: a stale answer does not overwrite the latest', async (t) => {
   await settled;
   // Two frames: the stale answer's script has run by then.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  assert.match(await page.getByRole('status').innerText(), /Ana: 7\.000/);
+  assert.match(await page.getByRole('status').textContent(), /Ana: 7\.000/, 'the name and the time are their own spans');
   assert.equal(await page.getByRole('alert').count(), 0);
 });
 
@@ -112,4 +116,19 @@ test('an expired session says to sign in again, with a link back to the page', a
   await alert.filter({ hasText: 'Sign in again to keep tapping.' }).waitFor();
   assert.equal(await alert.getByRole('link', { name: 'Sign in again' }).getAttribute('href'), '/personal/tap');
   assert.equal(new URL(page.url()).pathname, '/personal/tap');
+});
+
+test('a tap with no session running loads the page that says it was not counted, and offers Start practice', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member, { viewport: { width: 390, height: 844 } });
+  t.after(() => context.close());
+  await page.goto('/personal/tap');
+  const running = app.store.runningSession(ws);
+  app.engine.end(ws, running.id);
+  t.after(() => app.engine.start(ws, { kind: 'practice' }));
+  await page.getByRole('button', { name: 'Ana' }).click();
+  await page.waitForURL('**/personal/tap?result=no-session');
+  await page.getByText('That tap wasn’t counted: no session is running.').waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Start practice' }).count(), 1);
+  // The tap's own 409 is in the console; nothing else.
+  assert.deepEqual(errors.filter((e) => !/status of 409/.test(e)), []);
 });
