@@ -10,7 +10,7 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { PARTIALS } from '../../public/bell.js';
 import { formatLap } from '../../public/format.js';
-import { startTiming } from '../server/helpers.js';
+import { startTiming, useTrack } from '../server/helpers.js';
 import { openBrowser, pageAs } from './browser.js';
 
 const EPOCH = 1_000_000_000_000;
@@ -30,7 +30,7 @@ before(async () => {
   await app.form(member, '/personal/drivers', { name: 'Ana' });
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
   app.engine.assign(personal, '10', app.store.drivers(personal)[0].id);
-  app.store.setTrack(personal, { id: 't1', shape: 'c30:1:x', name: 'Ring', snapshotKey: 'r'.repeat(22), layout: '{}' }, 'cw');
+  useTrack(app.store, personal, 'Ring', 'cw', 't1');
   clock.now = EPOCH;
   app.engine.start(personal, { kind: 'practice' });
   passIn(1000);

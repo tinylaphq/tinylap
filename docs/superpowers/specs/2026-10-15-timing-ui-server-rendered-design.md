@@ -307,7 +307,7 @@ bridge, and touches only the page it is loaded on.
   303 and its effect, 422 with the input kept, 429, same-origin refusal, the
   token-once cookie, content negotiation on `/watch/<token>`, the board
   stream sending HTML and closing on token rotation.
-- **Browser, JavaScript off** (`javaScriptEnabled: false`): set the track, add
+- **Browser, JavaScript off** (`javaScriptEnabled: false`): choose the track, add
   and rename a driver, assign a transponder, delete via the confirmation
   page, start and abort a race, tap, sign out. Back and Forward work, every
   link is a URL.

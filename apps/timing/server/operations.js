@@ -103,23 +103,149 @@ export function assignTransponder(request, { code: rawCode, driverId }) {
 /** @type {Record<string, string>} */
 export const TRACK_PROBLEMS = { invalid: 'invalid-request', 'not-a-circuit': 'not-a-circuit', unavailable: 'planner-unavailable' };
 
-export async function setTrack(request, { link, name: rawName, direction }) {
-  if (!DIRECTIONS.includes(direction)) return invalid('Pick the direction you race.', 'direction');
-  const name = rawName === undefined ? 'Track' : nameOf(rawName);
-  if (!name) return invalid('A track name is 1 to 60 characters.', 'name');
+/** A track as the API shows it: its newest layout, without the layout data. */
+function publicTrack(request, track) {
+  const { layout } = track;
+  return {
+    id: track.id,
+    name: track.name,
+    archived: track.archivedAt !== null,
+    current: request.store.workspace(request.workspaceId).trackId === track.id,
+    layout: layout && { plannerId: layout.plannerId, snapshotKey: layout.snapshotKey, attachedAt: layout.attachedAt, by: layout.by },
+  };
+}
+/** A club's active tracks, then its archived ones when asked, each by name. */
+export function listTracks(request, { archived }) {
+  const ws = request.workspaceId;
+  const tracks = [...request.store.tracks(ws, { archived: false }), ...(archived ? request.store.tracks(ws, { archived: true }) : [])];
+  return { value: tracks.map((track) => publicTrack(request, track)) };
+}
+const trackName = (value) => nameOf(value) ?? invalid('A track name is 1 to 60 characters.', 'name');
+const nameInUse = (name) => fail('conflict', `A track named ${name} is already in use. Rename one of them first.`, 'name');
+/** The board's track header, after the current track's name or direction changed. */
+function publishTrack(request) {
+  const ws = request.workspaceId;
+  const { trackId, direction } = request.store.workspace(ws);
+  const { id, name } = request.store.track(ws, trackId);
+  request.hub.publish(ws, 'track', { track: { id, name }, direction, bests: request.engine.bestsOf(ws) });
+}
+
+/** A layout from a planner share link, or the error to answer with. */
+async function layoutFrom(request, link) {
   if (typeof link !== 'string' || link.trim() === '') return invalid('Paste a share link from the planner.', 'link');
-  let track;
   try {
-    track = await fetchTrack(request.plannerUrl, link.trim(), { fetch: request.fetch });
+    const { id, shape, snapshotKey, layout } = await fetchTrack(request.plannerUrl, link.trim(), { fetch: request.fetch });
+    return { value: { plannerId: id, shape, snapshotKey, layout } };
   } catch (caught) {
     if (!(caught instanceof TrackError)) throw caught;
     return fail(TRACK_PROBLEMS[caught.code], caught.message, 'link');
   }
+}
+
+/**
+ * Adds a track, not current (spec §3.3); with a link, its layout is the track's first.
+ * @param {any} request @param {{ name: any, link?: any, by: { userId: string | null, name: string | null } }} input
+ */
+export async function addTrack(request, { name: rawName, link, by }) {
+  const name = trackName(rawName);
+  if (typeof name !== 'string') return name;
+  const layout = link === undefined ? null : await layoutFrom(request, link);
+  if (layout?.error) return layout;
   const ws = request.workspaceId;
-  request.store.setTrack(ws, { ...track, name }, direction);
-  request.engine.endPractice(ws);
-  request.hub.publish(ws, 'track', { track: { id: track.id, name }, direction, bests: request.engine.bestsOf(ws) });
-  return { value: { id: track.id, name, direction, snapshotKey: track.snapshotKey } };
+  const id = randomUUID();
+  return request.store.transaction(() => {
+    if (request.store.addTrack(ws, { id, name }) === 'name-in-use') return nameInUse(name);
+    if (layout) request.store.attachLayout(ws, id, layout.value, { ...by, at: request.now() });
+    return { value: publicTrack(request, request.store.track(ws, id)) };
+  });
+}
+
+/** @param {any} request @param {{ id: string, name: any }} input */
+export function renameTrack(request, { id, name: rawName }) {
+  const name = trackName(rawName);
+  if (typeof name !== 'string') return name;
+  const result = request.store.renameTrack(request.workspaceId, id, name);
+  if (result === 'missing') return missing('track');
+  if (result === 'name-in-use') return nameInUse(name);
+  const track = publicTrack(request, request.store.track(request.workspaceId, id));
+  if (track.current) publishTrack(request);
+  return { value: track };
+}
+
+/**
+ * Attaches a planner layout to a track (spec §3.4): the same planner track adds an entry only for a new snapshot;
+ * a different one replaces a layout only with `confirm: true`.
+ * @param {any} request @param {{ id: string, link: any, confirm?: any, by: { userId: string | null, name: string | null } }} input
+ */
+export async function attachLayout(request, { id, link, confirm, by }) {
+  const ws = request.workspaceId;
+  if (!request.store.track(ws, id)) return missing('track');
+  const layout = await layoutFrom(request, link);
+  if (layout.error) return layout;
+  // The planner was asked in between: look again, in the transaction that attaches.
+  return request.store.transaction(() => {
+    const track = request.store.track(ws, id);
+    if (!track) return missing('track');
+    if (track.layout && track.layout.plannerId !== layout.value.plannerId && confirm !== true) {
+      const { error } = fail('conflict', `${track.name} has a layout. Changing it keeps its records; confirm to change it.`, 'link');
+      return { error: { ...error, current: publicTrack(request, track).layout } };
+    }
+    const result = request.store.attachLayout(ws, id, layout.value, { ...by, at: request.now() });
+    return { value: { track: publicTrack(request, request.store.track(ws, id)), result } };
+  });
+}
+
+/** Makes a track current in a direction; a change ends a running practice, not a qualifying or race (spec §3.1). */
+export function setCurrentTrack(request, { id, direction }) {
+  if (!DIRECTIONS.includes(direction)) return invalid('Pick the direction you race.', 'direction');
+  const ws = request.workspaceId;
+  const result = request.store.transaction(() => {
+    const before = request.store.workspace(ws);
+    const track = request.store.track(ws, id);
+    if (!track) return missing('track');
+    if (track.archivedAt !== null) return fail('conflict', `${track.name} is archived. Restore it first.`);
+    request.store.setCurrentTrack(ws, id, direction);
+    if (before.trackId !== id || before.direction !== direction) request.engine.endPractice(ws);
+    return { value: { track: publicTrack(request, track), direction } };
+  });
+  if (!result.error) publishTrack(request);
+  return result;
+}
+
+/** Hides a track (spec §3.5); archiving an archived track keeps its date. The current track stays. */
+export function archiveTrack(request, { id }) {
+  const ws = request.workspaceId;
+  return request.store.transaction(() => {
+    const track = request.store.track(ws, id);
+    if (!track) return missing('track');
+    if (track.archivedAt === null && request.store.setArchived(ws, id, request.now()) === 'current') {
+      return fail('conflict', `${track.name} is the current track. Make another track current first.`);
+    }
+    return { value: publicTrack(request, request.store.track(ws, id)) };
+  });
+}
+
+/** Brings an archived track back, if no active track has its name. */
+export function restoreTrack(request, { id }) {
+  const ws = request.workspaceId;
+  return request.store.transaction(() => {
+    const track = request.store.track(ws, id);
+    if (!track) return missing('track');
+    if (track.archivedAt !== null && request.store.setArchived(ws, id, null) === 'name-in-use') return nameInUse(track.name);
+    return { value: publicTrack(request, request.store.track(ws, id)) };
+  });
+}
+
+/** Deletes an archived track with its layouts and records; its sessions stay (spec §3.5). */
+export function deleteTrack(request, { id }) {
+  const ws = request.workspaceId;
+  return request.store.transaction(() => {
+    const track = request.store.track(ws, id);
+    if (!track) return missing('track');
+    if (request.store.runningSession(ws)?.trackId === id) return fail('conflict', `${track.name} is in use by the running session.`);
+    if (request.store.deleteTrack(ws, id) === 'not-archived') return fail('conflict', `Archive ${track.name} before deleting it.`);
+    return { value: true };
+  });
 }
 
 export function pairDecoder(request, { name: rawName }) {

@@ -4,6 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { useTrack } from './helpers.js';
 import { BOOT, T0, W, rig } from './rig.js';
 
 test('passings become laps in a practice session', () => {
@@ -174,7 +175,7 @@ test('a passing older than the reference is stored and flagged, without a lap', 
 
 test('tap entry makes tap laps that never count as personal bests', () => {
   const { engine, store, clock, startPractice } = rig();
-  store.setTrack(W, { id: 't1', shape: 'c30:1:x', name: 'Office', snapshotKey: 'k'.repeat(22), layout: '{}' }, 'ccw');
+  useTrack(store, W, 'Office', 'ccw', 't1');
   clock.now = T0;
   startPractice();
   engine.tap(W, 'ben');

@@ -51,12 +51,14 @@ function counterpart(next, focused) {
   return focused?.id ? next.querySelector(`#${CSS.escape(focused.id)}`) : null;
 }
 
-/** Swaps `next` in for `current`, keeping focus and an unchanged notice (so it isn't announced again). */
+/** Swaps `next` in for `current`, keeping focus and an unchanged live line (so it isn't announced again). */
 function swap(current, next) {
   const focused = current.contains(document.activeElement) ? document.activeElement : null;
-  const was = current.querySelector('.board-unknown');
-  const now = next.querySelector('.board-unknown');
-  if (was && now && was.textContent === now.textContent) now.replaceWith(was);
+  for (const selector of ['.board-unknown', '.board-on-track', '.board-quiet']) {
+    const was = current.querySelector(selector);
+    const now = next.querySelector(selector);
+    if (was && now && was.textContent === now.textContent) now.replaceWith(was);
+  }
   current.replaceWith(next);
   const target = focused && (next.contains(focused) ? focused : counterpart(next, focused));
   if (target instanceof HTMLElement && document.activeElement !== target) target.focus({ preventScroll: true });

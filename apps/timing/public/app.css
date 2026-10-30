@@ -65,6 +65,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-track p { margin: 0; }
 .board-track-name { color: var(--p-text-secondary); }
 .board-track-name strong { color: var(--p-text); font-size: 1.15em; margin-right: var(--p-space-xs); }
+/* The direction as an open loop with one accent arrowhead (named tracks spec §4); its <title> says which. */
+.direction-icon { width: 2.5em; height: auto; vertical-align: -0.35em; color: var(--p-text); overflow: visible; }
 .board-track-record { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
 .board-track-label { font-weight: 700; }
 .board-track-time { font-weight: 700; font-size: 1.15em; }
@@ -75,7 +77,10 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   box-shadow: var(--p-shadow-lg) var(--p-text); padding-block: var(--p-space-md);
 }
 .board-track.is-record .board-track-name, .board-track.is-record .board-track-name strong,
-.board-track.is-record .board-track-by, .board-track.is-record .board-track-by .driver { color: inherit; }
+.board-track.is-record .board-track-by, .board-track.is-record .board-track-by .driver,
+.board-track.is-record .direction-icon { color: inherit; }
+/* The accent arrowhead is too faint on the record colour (about 1.6:1): it takes the ink there. */
+.board-track.is-record .direction-icon path:last-child { stroke: currentColor; }
 .board-track.is-record .board-track-record { display: grid; justify-items: end; gap: var(--p-space-xs); }
 .board-track-new { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
 .board-track-new .board-track-label { font-size: 1.4em; letter-spacing: -0.01em; }
@@ -84,10 +89,6 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-head {
   display: flex; justify-content: space-between; align-items: stretch; gap: var(--p-space-md); flex-wrap: wrap;
 }
-/* With no session running: when the last one ended, and Start practice. */
-.board-ended { margin: var(--p-space-xs) 0 0; color: var(--p-text-secondary); }
-.board-head .start-practice { align-self: center; }
-.board-ended .tag { font-size: 10px; padding: 1px 6px; vertical-align: middle; }
 .board-title { margin: 0; font-size: clamp(1.75rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -0.02em; }
 .board-clock {
   display: grid; justify-items: end; align-content: center; gap: var(--p-space-xs);
@@ -103,7 +104,6 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 /* Wide tables scroll inside the board, not the page; the padding keeps the hard shadow in view. */
 .board-scroll { overflow-x: auto; padding: 0 4px 4px 0; }
 .board-main { display: grid; gap: var(--p-space-lg); align-content: start; min-width: 0; }
-.board-results .empty { margin: 0; }
 .board-table { font-size: 1em; width: 100%; border-collapse: collapse; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
 .board-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-surface); background: var(--p-dark); }
 .board-table th, .board-table td { padding: var(--p-space-sm) var(--p-space-md); text-align: left; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
@@ -148,7 +148,7 @@ body.big .board {
   /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
   padding-top: calc(0.5rem + 44px + var(--p-space-md));
 }
-body.big .board-clock-label, body.big .board-ended { font-size: 0.6em; }
+body.big .board-clock-label { font-size: 0.6em; }
 body.big .board-track { font-size: 0.75em; }
 @media (max-width: 600px) {
   .board-track.is-record .board-track-record { justify-items: start; }
@@ -158,6 +158,8 @@ body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em
 body.big .board-table th, body.big .board-table td { padding-block: 0.6em; }
 body.big .board-feed { font-size: 0.7em; }
 body.big .board-ago { font-size: 0.6em; }
+body.big .board-hero-time { font-size: 4.5em; }
+body.big .board-hero-by, body.big .board-last-meta { font-size: 0.7em; }
 /* The way out: a dark pill at the top right, always there, big enough to hit by touch. */
 body.big .navbar { position: fixed; top: 0.5rem; right: 0.5rem; left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
 body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; }
@@ -260,22 +262,61 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .bridge-first { color: var(--p-text-muted, var(--p-text)); font-style: italic; }
 .bridge-preview li:last-child { border-bottom: 0; }
 
-/* An empty board, for members: the three things to do before the first
- * car. It is a real sequence, so it is numbered; a done step goes quiet. */
-.board-steps { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: 4px 4px 0 var(--p-text); padding: var(--p-space-lg); }
-.board-steps > h2 { margin: 0 0 var(--p-space-md); }
-.board-steps ol { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: var(--p-space-md); }
-.board-step { counter-increment: step; display: grid; grid-template-columns: 2.25rem 1fr; column-gap: var(--p-space-md); }
-.board-step::before {
-  content: counter(step); grid-row: span 3; align-self: start;
-  display: grid; place-items: center; width: 2.25rem; height: 2.25rem;
-  font: 700 1rem var(--p-font-mono); color: var(--p-surface); background: var(--p-text);
+/* The board while nobody races (named tracks spec §4): the track record is
+ * the one big thing, in the record colour's shadow; Start practice sits
+ * beside it. Below, two plain ranked lists. Nothing here is a warning. */
+.board.is-idle { grid-template-columns: minmax(0, 1fr); }
+.board-hero {
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 1fr);
+  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: 8px 8px 0 var(--tl-record);
 }
-.board-step h3 { margin: 0; font-size: 1rem; }
-.board-step p { margin: 2px 0 0; color: var(--p-text-secondary); }
-.board-step-links { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-md); }
-.board-step.is-done::before { content: '\2713'; background: var(--p-success); color: var(--p-text); }
-.board-step.is-done p { color: var(--p-text); font-weight: 600; }
+.board-hero-record { display: grid; align-content: center; gap: var(--p-space-xs); padding: var(--p-space-lg) var(--p-space-xl); min-width: 0; }
+/* A label over the time, not palace's gradient headline. */
+.board-hero-label {
+  margin: 0; font-size: 1em; font-weight: 600; letter-spacing: 0; line-height: 1.3; text-transform: none;
+  background: none; -webkit-text-fill-color: currentColor; color: var(--p-text);
+}
+.board-hero-time { margin: 0; text-align: left; font: 700 clamp(3.5rem, 11vw, 8rem) / 0.95 var(--p-font-mono); letter-spacing: -0.04em; }
+.board-hero-none { margin: var(--p-space-xs) 0; font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.board-hero-by { margin: 0; color: var(--p-text-secondary); }
+.board-hero-by .driver, .board-hero-by .num { color: var(--p-text); }
+.board-hero-go {
+  display: grid; align-content: center; gap: var(--p-space-md);
+  padding: var(--p-space-lg); border-left: var(--p-border-width) solid var(--p-text);
+}
+.board-hero-go .btn { width: 100%; font-size: 1.15em; padding-block: var(--p-space-md); }
+/* A car on the track with no session: the live lamp, in the accent, blinking like the stream's. */
+.board-on-track { display: flex; align-items: center; gap: var(--p-space-sm); margin: 0; font-weight: 600; }
+.board-on-track::before { content: ''; flex: none; width: 10px; height: 10px; background: var(--p-accent-1); animation: live-blink 1s steps(2, jump-none) infinite; }
+@media (prefers-reduced-motion: reduce) { .board-on-track::before { animation: none; } }
+.board-quiet { margin: 0; font-size: 0.875em; color: var(--p-text-secondary); }
+.board-quiet a { font-weight: 600; }
+.board-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--p-space-lg); align-items: start; margin-top: var(--p-space-sm); }
+.board-idle h2 { margin: 0 0 var(--p-space-sm); }
+.board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); }
+.board-ranks li {
+  display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; align-items: baseline; gap: var(--p-space-sm);
+  padding: var(--p-space-sm) var(--p-space-md); border-bottom: var(--p-border-thin) solid var(--p-border-light);
+}
+.board-ranks li:last-child { border-bottom: 0; }
+.board-ranks .pos { font: 700 1em var(--p-font-mono); color: var(--p-text-muted); }
+.board-ranks .num { font-weight: 600; }
+.board-last-meta { margin: var(--p-space-sm) 0 0; font-size: 0.875em; color: var(--p-text-secondary); }
+.board-last-meta .tag { font-size: 10px; padding: 1px 6px; vertical-align: middle; }
+/* A club that has never driven: one card, the first thing to do as the button. */
+.board-first { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: 8px 8px 0 var(--tl-record); padding: var(--p-space-xl); }
+.board-first h1 { margin: 0 0 var(--p-space-xs); font-size: clamp(1.75rem, 4vw, 2.5rem); line-height: 1.05; letter-spacing: -0.02em; }
+.board-first p { margin: 0 0 var(--p-space-lg); max-width: 60ch; }
+.board-first .board-first-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm) var(--p-space-lg); margin: 0; }
+.board-first-links a:not(.btn) { font-weight: 600; }
+@media (max-width: 720px) {
+  .board-hero { grid-template-columns: minmax(0, 1fr); box-shadow: var(--p-shadow-lg) var(--tl-record); }
+  .board-hero-record { padding: var(--p-space-lg); }
+  .board-hero-go { border-left: 0; border-top: var(--p-border-width) solid var(--p-text); }
+  .board-first { padding: var(--p-space-lg); box-shadow: var(--p-shadow-lg) var(--tl-record); }
+}
+/* The display and the watchers have the record alone. */
+.board-hero:not(:has(.board-hero-go)) { grid-template-columns: minmax(0, 1fr); }
 
 /* The navbar's right side: the live status, Big screen and Sign in take the
  * btn-sm box (same padding, 1px border, line height) that the shared account
@@ -384,6 +425,25 @@ body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
 .status > .copy + p { margin-top: var(--p-space-md); }
 .decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
 .decoder-info .meta { margin: 0; }
+/* The track list (named tracks spec §4). The current track is set like the
+   board's track strip, its edge in the record colour, so it reads as the
+   track the board shows. Rename and layout fold away under each track. */
+.track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border-left: 6px solid var(--tl-record); }
+.track-head { margin: 0; }
+.track-head .meta { color: var(--p-text-muted); font-size: 12px; margin-left: var(--p-space-xs); }
+.track-now .inline-form > .field { flex: 1 1 9rem; }
+.track-subhead { font-size: 12px; margin: 0; color: var(--p-text-muted); }
+.track-row { display: grid; gap: var(--p-space-xs); padding-block: var(--p-space-sm); }
+.track-row + .track-row { border-top: var(--p-border-thin) solid var(--p-border-light); }
+.track-row .button-row form, .track-archive form { margin: 0; }
+.track-edit > summary, .track-archive > summary { cursor: pointer; font-weight: 600; width: fit-content; }
+.track-edit > summary { font-size: 13px; color: var(--p-text-secondary); }
+.track-edit[open] > summary, .track-archive[open] > summary { margin-bottom: var(--p-space-sm); }
+.track-edit .inline-form + .inline-form { margin-top: var(--p-space-sm); }
+/* A field and its button stay on one line, even on a phone, as a driver's rename does. */
+.track-edit .inline-form { flex-wrap: nowrap; }
+.track-edit .inline-form > .field { flex: 1 1 0; }
+.track-archive .setup-row > .button-row { margin-left: auto; }
 @media (max-width: 520px) {
   /* Colour, name, Save and Delete stay on one row. */
   .setup-row:has(> .driver-form) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-xs); }
@@ -416,15 +476,13 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .crown { margin-left: var(--p-space-xs); }
 .board-table tr.is-best td { background: var(--tl-session-best); }
 
-/* A notice on the board and the Sessions tab ("A car crossed the line…", "Unknown cars…"):
+/* A notice on the board ("Unknown cars…" while a session runs):
  * palace's warning status in full, with the hard offset shadow its cards and the board's
  * table have, read as prose. palace's own .status has no shadow; that belongs upstream
  * in palace-ui, and then the box-shadow here goes. */
 .flag { box-shadow: var(--p-shadow-lg) var(--p-text); font-weight: 600; text-transform: none; letter-spacing: 0; }
 .flag p { margin: 0; }
 .flag a { color: inherit; border-bottom-color: currentColor; }
-/* "A car crossed the line…" with its button beside it. */
-.idle-notice { display: flex; flex-wrap: wrap; gap: var(--p-space-sm) var(--p-space-md); align-items: center; justify-content: space-between; }
 
 /* The Sessions tab, a session's page and the records: wider than a form page, for their tables. */
 .sessions-screen { max-width: 960px; }
@@ -441,6 +499,17 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .lap-table td, .lap-table th { padding-block: var(--p-space-xs); }
 .lap-table .tag { font-size: 10px; padding: 1px 6px; }
 .lap-table tr.is-not-counted .num { color: var(--p-text-muted); }
+/* A track's page: each layout drawn on the track's dark floor, the current one large. */
+.track-drawing { margin: 0; display: grid; gap: var(--p-space-xs); }
+.track-drawing-art { background: var(--tl-track-bg); padding: var(--p-space-md); display: grid; place-items: center; }
+.track-drawing-art svg { display: block; width: 100%; height: auto; max-height: 26rem; }
+.track-drawing figcaption { font-size: 13px; color: var(--p-text-secondary); }
+.track-drawing.is-current figcaption { font-weight: 600; color: var(--p-text); }
+.track-drawings { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--p-space-md); }
+.track-drawings .track-drawing-art { padding: var(--p-space-sm); }
+.track-drawings .track-drawing-art svg { max-height: 9rem; }
+.track-drawing:target .track-drawing-art { outline: 3px solid var(--tl-record); outline-offset: 2px; }
+.track-page h3 { margin: 0; }
 @media (max-width: 720px) {
   .start-grid { grid-template-columns: 1fr; }
 }

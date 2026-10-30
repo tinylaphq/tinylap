@@ -43,5 +43,5 @@ test('the workspace snapshot needs a member', async () => {
   assert.equal(res.headers.get('cache-control'), 'no-store');
   assert.equal(res.headers.get('access-control-allow-origin'), null, 'no CORS on credentials routes');
   const snapshot = await res.json();
-  assert.deepEqual([snapshot.session, snapshot.track, snapshot.direction, snapshot.standings, snapshot.unknown], [null, null, 'ccw', [], []]);
+  assert.deepEqual([snapshot.session, snapshot.track?.name, snapshot.direction, snapshot.standings, snapshot.unknown], [null, 'Track', 'ccw', [], []]);
 });

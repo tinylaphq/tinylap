@@ -8,7 +8,7 @@ import { get as httpGet } from 'node:http';
 import { createEngine } from '../../server/engine.js';
 import { createHub } from '../../server/live.js';
 import { openStore } from '../../server/store.js';
-import { startServer, startTiming } from './helpers.js';
+import { startServer, startTiming, useTrack } from './helpers.js';
 
 const clock = { now: 1_000_000_000_000 };
 let app;
@@ -19,6 +19,7 @@ let practiceClub;
 let countdownClub;
 let finishClub;
 let recordsClub;
+let topClub;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -28,6 +29,9 @@ before(async () => {
   countdownClub = app.club(user, 'Countdown');
   finishClub = app.club(user, 'Finish');
   recordsClub = app.club(user, 'Records');
+  const tess = await app.signUp('Tess');
+  topClub = app.club(tess, 'Top');
+  app.join(tess, topClub.id, user);
   member = await app.login(user);
   base = `/clubs/${office.id}`;
 });
@@ -43,13 +47,14 @@ const passIn = (ws, t, transponder = '10') => {
   app.engine.ingest({ workspaceId: ws, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings: [{ transponder, t }] } });
 };
 
-test('an empty board shows a member how to get the track ready', async () => {
+test('a club that has never driven gets one card to get ready, under its track', async () => {
   const res = await get(member, `${base}/board`);
   assert.equal(res.status, 200);
   const body = await res.text();
-  assert.match(body, /<h1 class="board-title">No session yet<\/h1>/);
-  assert.match(body, /aria-labelledby="board-steps-title"/);
-  assert.match(body, new RegExp(`<a href="${base}/setup#track">Set the track</a>`));
+  assert.match(body, /<header class="board-track">\s*<p class="board-track-name"><strong>Track<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Anticlockwise<\/title>/, 'a new club starts on its "Track"');
+  assert.match(body, /<section class="board-first" aria-labelledby="board-first-title">\s*<h1 id="board-first-title">Ready when your cars are<\/h1>/);
+  assert.match(body, new RegExp(`<a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>\\s*<a href="${base}/bridge">Connect the decoder</a>\\s*<a href="${base}/tap">Tap laps by hand</a>`));
+  assert.doesNotMatch(body, /No track set|No session yet|Last laps|board-steps|board-hero|status-warning/);
   assert.match(body, /<noscript><meta http-equiv="refresh" content="10"><\/noscript>/);
   assert.match(body, new RegExp(`<div id="board-live"[^>]* data-events="${base}/board/events"`));
   assert.match(body, /<script type="module" src="\/public\/board.js"><\/script>/);
@@ -61,7 +66,7 @@ test('an empty board shows a member how to get the track ready', async () => {
 
 test('laps, a personal best and an unknown car', async () => {
   // Personal bests are per track: set one, and start practice on it.
-  app.store.setTrack(office.id, { id: 't1', shape: 'c30:1:x', name: 'Office loop', snapshotKey: 'k'.repeat(22), layout: '{}' }, 'ccw');
+  useTrack(app.store, office.id, 'Office loop', 'ccw', 't1');
   clock.now = 1_000_000_000_000 + 1000;
   app.engine.start(office.id, { kind: 'practice', replace: true });
   await app.form(member, `${base}/drivers`, { name: '<i>Ana</i>' });
@@ -212,7 +217,7 @@ test('a stopped practice driver shows when they last crossed the line, but not w
   const lastAt = clock.now;
   clock.now = lastAt + 180_000;
   let body = await (await get(member, `/clubs/${practiceClub.id}/board`)).text();
-  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+">Cleo</span><tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
+  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+">Cleo</span><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span><tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
 
   passIn(practiceClub.id, 396_000, '21');
   passIn(practiceClub.id, 404_000, '21');
@@ -254,13 +259,13 @@ test('no note on a finished row, nor in the results', async () => {
   clock.now += 180_000;
   let body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
   assert.match(body, /data-state="finishing"/);
-  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<\/td>\s*<td class="board-driver"><span [^>]+>Abe<\/span><\/td>/);
+  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<\/td>\s*<td class="board-driver"><span [^>]+>Abe<\/span><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><\/td>/);
   assert.match(body, />Bea<\/span><tl-relative-time class="board-ago"[^>]*>last lap <time [^>]+>3 min ago<\/time>/);
 
   app.engine.abort(finishClub.id, session.id);
   body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
-  const results = body.slice(body.indexOf('<section class="board-results"'), body.indexOf('</section>', body.indexOf('<section class="board-results"')));
-  assert.match(results, /<td class="board-driver"><span [^>]+>Abe<\/span><\/td>/);
+  const results = body.slice(body.indexOf('<section class="board-last"'), body.indexOf('</section>', body.indexOf('<section class="board-last"')));
+  assert.match(results, /<span class="board-driver"><span [^>]+>Abe<\/span><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><\/span>/);
   assert.doesNotMatch(results, /tl-relative-time/);
 });
 
@@ -291,7 +296,7 @@ const NOTICE = /No session is running/;
 test('the track header, the idle board, the notice, marks, the crown and the record state', async () => {
   const club = recordsClub;
   const path = `/clubs/${club.id}`;
-  app.store.setTrack(club.id, { id: 't9', shape: 'c30:1:x', name: 'Ring', snapshotKey: 'r'.repeat(22), layout: '{}' }, 'cw');
+  useTrack(app.store, club.id, 'Ring', 'cw', 't9');
   await driverIn(club, 'Haris', '61');
   await driverIn(club, 'Mia', '62');
   await app.form(member, `${path}/watch-link`, {});
@@ -302,29 +307,42 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     watch: await (await get(null, `/watch/${token}`)).text(),
   });
 
-  // No session ever: the track, no record, the steps and Start practice for members only.
+  // Never driven: the card to get ready for members; the display and the watchers show the record's place.
   let s = await screens();
   for (const body of Object.values(s)) {
-    assert.match(body, /<header class="board-track">/);
-    assert.match(body, /Ring/);
-    assert.match(body, /clockwise/);
-    assert.match(body, /No record yet/);
-    assert.doesNotMatch(body, /class="eyebrow"/);
+    assert.match(body, /<header class="board-track">\s*<p class="board-track-name"><strong>Ring<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Clockwise<\/title>/);
+    assert.doesNotMatch(body, /class="eyebrow"|No session yet|Last laps|status-warning/);
   }
-  assert.match(s.board, /aria-labelledby="board-steps-title"/);
-  assert.match(s.board, new RegExp(`<form method="post" action="${path}/sessions" class="start-practice">\\s*<input type="hidden" name="kind" value="practice">`));
-  assert.match(s.board, START);
-  for (const body of [s.big, s.watch]) assert.doesNotMatch(body, START);
-
-  // A car with no session: the notice for members, on the normal board only, and one Start button.
-  passIn(club.id, 5_000_000, '61');
-  s = await screens();
-  assert.match(s.board, /<div class="status status-warning flag idle-notice" role="status">\s*<p>A car crossed the line \(61, Haris\)\. No session is running\.<\/p>/);
-  assert.equal(s.board.match(new RegExp(START, 'g')).length, 1);
+  assert.match(s.board, /Ready when your cars are/);
+  assert.match(s.board, new RegExp(`<a class="btn btn-primary" href="${path}/bridge">Connect the decoder</a>\\s*<a href="${path}/setup#drivers">Add drivers</a>`), 'with drivers, the decoder is next');
+  assert.doesNotMatch(s.board, START);
   for (const body of [s.big, s.watch]) {
-    assert.doesNotMatch(body, NOTICE);
+    assert.doesNotMatch(body, /Ready when your cars are|setup#drivers/);
+    assert.match(body, /<h1 class="board-hero-label">Track record<\/h1>\s*<p class="board-hero-none">No record yet<\/p>/);
     assert.doesNotMatch(body, START);
   }
+
+  // A car with no session: a live line for members over the one Start button; a car without a driver, one quiet line.
+  passIn(club.id, 5_000_000, '63');
+  passIn(club.id, 5_000_500, '61');
+  s = await screens();
+  assert.match(s.board, /<div class="board-hero-go">\s*<p class="board-on-track" role="status">Car 61 is on the track<\/p>\s*<form method="post"/);
+  assert.match(s.board, new RegExp(`<form method="post" action="${path}/sessions" class="start-practice">\\s*<input type="hidden" name="kind" value="practice">`));
+  assert.equal(s.board.match(new RegExp(START, 'g')).length, 1);
+  assert.match(s.board, new RegExp(`<p class="board-quiet" role="status">1 car has no driver yet\\. <a href="${path}/setup#transponders">Assign it</a></p>`));
+  assert.doesNotMatch(s.board, /board-unknown/, 'a quiet line, not the warning');
+  assert.match(s.board, /No record yet/);
+  assert.doesNotMatch(s.board, /status-warning|Ready when your cars are/);
+  for (const body of [s.big, s.watch]) {
+    assert.doesNotMatch(body, /is on the track|no driver yet/);
+    assert.doesNotMatch(body, START);
+  }
+  // Two cars without a driver: the line counts them. Once they have one, it offers a qualifying or race instead.
+  passIn(club.id, 5_001_000, '64');
+  assert.match(await (await get(member, `${path}/board`)).text(), new RegExp(`2 cars have no driver yet\\. <a href="${path}/setup#transponders">Assign them</a>`));
+  const mia = app.store.drivers(club.id).find((d) => d.name === 'Mia');
+  for (const code of ['63', '64']) app.engine.assign(club.id, code, mia.id);
+  assert.match(await (await get(member, `${path}/board`)).text(), new RegExp(`<p class="board-quiet">Or a <a href="${path}/sessions#start-title">qualifying or race</a>\\.</p>`));
 
   // A practice: its clock counts up under "Started 14:32"; Haris sets the first record, then beats it.
   clock.now = 1_000_000_000_000 + 5_100_000;
@@ -360,26 +378,52 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.match(body, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
   }
 
-  // Ended, and the record state over: the last session's table under "Ended", with its marks.
+  // Ended, and the record state over: the record is the big thing, then the fastest here and the last session.
   app.engine.end(club.id, session.id);
   clock.now += 60_000;
   app.engine.tick();
   s = await screens();
+  const part = (body, start) => body.slice(body.indexOf(start), body.indexOf('</section>', body.indexOf(start)));
   for (const body of Object.values(s)) {
-    assert.doesNotMatch(body, /data-record-new|is-record|New track record/);
+    assert.doesNotMatch(body, /data-record-new|is-record|New track record|No session yet|Last laps|board-title|status-warning/);
     const head = body.slice(body.indexOf('<header class="board-track'), body.indexOf('</header>', body.indexOf('<header class="board-track')));
-    assert.match(head, /Track record/);
-    assert.match(head, /7\.500/);
-    assert.match(head, /Haris/);
-    assert.match(body, /<h1 class="board-title">Practice<\/h1>/);
-    assert.match(body, /Ended <tl-local-time format="time">/);
-    assert.match(body, /<section class="board-results"/);
-    assert.match(body, /7\.500<span class="marks"><abbr class="mark mark-tr"/);
-    assert.match(body, /9\.000<span class="marks"><abbr class="mark mark-pb"/);
-    assert.equal(body.match(/class="crown"/g).length, 1);
-    assert.equal(body.match(/class="is-best"/g).length, 1);
-    assert.doesNotMatch(body, /board-steps/);
+    assert.doesNotMatch(head, /Track record|7\.500/, 'the record is below, once');
+    const hero = part(body, '<section class="board-hero"');
+    assert.match(hero, /<h1 class="board-hero-label">Track record<\/h1>\s*<p class="num board-hero-time">7\.500<\/p>/);
+    assert.match(hero, /<p class="board-hero-by"><span [^>]+>Haris<\/span><span class="crown"[^>]*>👑<\/span> set <tl-local-time format="datetime-short">[\s\S]*?, beat <span [^>]+>Haris<\/span>’s <span class="num">8\.000<\/span><\/p>/);
+    const fastest = part(body, '<section class="board-fastest"');
+    assert.match(fastest, /<h2 class="h3" id="board-fastest-title">Fastest on this track<\/h2>/);
+    assert.deepEqual([...fastest.matchAll(/>(Haris|Mia)<\/span>[\s\S]*?(\d+\.\d{3})/g)].map((m) => [m[1], m[2]]), [['Haris', '7.500'], ['Mia', '9.000']]);
+    const last = part(body, '<section class="board-last"');
+    assert.match(last, /<h2 class="h3" id="board-last-title">Last session<\/h2>/);
+    assert.match(last, /7\.500<span class="marks"><abbr class="mark mark-tr"/);
+    assert.match(last, /9\.000<span class="marks"><abbr class="mark mark-pb"/);
+    assert.match(last, /Practice, ended <tl-local-time format="datetime-short">/);
+    assert.equal(body.match(/class="crown"/g).length, 2, 'beside the holder in the record and in the last session');
   }
+  assert.match(s.board, new RegExp(`<a href="${path}/sessions/${session.id}">All laps</a>`));
+  for (const body of [s.big, s.watch]) assert.doesNotMatch(body, /All laps/);
   assert.match(s.board, START);
+  assert.match(s.board, new RegExp(`Or a <a href="${path}/sessions#start-title">qualifying or race</a>\\.`));
   for (const body of [s.big, s.watch]) assert.doesNotMatch(body, START);
+});
+
+test('the last session shows its top three finishers', async () => {
+  const club = topClub;
+  for (const [i, name] of ['Abe', 'Bea', 'Cid', 'Dot'].entries()) {
+    app.store.addDriver(club.id, { id: name, name, colour: '#2d9bff' });
+    app.engine.assign(club.id, `7${i}`, name);
+  }
+  clock.now = 1_000_000_000_000 + 8_000_000;
+  const { session } = app.engine.start(club.id, { kind: 'practice' });
+  for (const [i, lap] of [9000, 8000, 8500, 7000].entries()) {
+    passIn(club.id, 8_001_000 + i * 10, `7${i}`);
+    passIn(club.id, 8_001_000 + i * 10 + lap, `7${i}`);
+  }
+  app.engine.end(club.id, session.id);
+  const body = await (await get(member, `/clubs/${club.id}/board`)).text();
+  const last = body.slice(body.indexOf('<section class="board-last"'), body.indexOf('</section>', body.indexOf('<section class="board-last"')));
+  assert.deepEqual([...last.matchAll(/>(Abe|Bea|Cid|Dot)<\/span>/g)].map((m) => m[1]), ['Dot', 'Bea', 'Cid']);
+  const fastest = body.slice(body.indexOf('<section class="board-fastest"'), body.indexOf('</section>', body.indexOf('<section class="board-fastest"')));
+  assert.deepEqual([...fastest.matchAll(/>(Abe|Bea|Cid|Dot)<\/span>/g)].map((m) => m[1]), ['Dot', 'Bea', 'Cid', 'Abe']);
 });

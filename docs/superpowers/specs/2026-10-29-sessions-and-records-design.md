@@ -113,6 +113,8 @@ A session's page, `…/sessions/<id>`: its final table (as the board showed it w
 
 ### 5.3 No session running
 
+The idle board and the no-session notice below are superseded by `2026-10-30-named-tracks-design.md` §4.
+
 - **The board** shows the last session's final table with "Ended 17:42" above it, under the track header. Members get a **Start practice** button there. Read-only screens show the same table, without the button. With no session ever, the board shows today's "Get the track ready" steps.
 - **The big board** (`…/board?big`) is a display, even when a member opened it: no notice and no Start button, as it already shows no unknown-car notice. It does show the record state and rings the bell. *My call.*
 - **A passing with no session** shows members a notice on the board and the Sessions tab: "A car crossed the line (21, Haris). No session is running." with **Start practice**. One notice, updated with the latest car, not one per passing; it goes once a session starts. It comes over the board's live stream, members only.

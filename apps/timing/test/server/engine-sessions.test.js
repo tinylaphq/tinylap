@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEngine } from '../../server/engine.js';
+import { useTrack } from './helpers.js';
 import { T0, W, rig } from './rig.js';
 
 test('a race: countdown, start crossings, laps, time up, finish, results', () => {
@@ -113,7 +114,7 @@ test('a decoder reboot mid-race costs one lap, not the race', () => {
 
 test('the snapshot: members get setup, watchers do not', () => {
   const { engine, store, pass, startPractice } = rig();
-  store.setTrack(W, { id: 't1', shape: 'c30:1:x', name: 'Office', snapshotKey: 'k'.repeat(22), layout: '{}' }, 'cw');
+  useTrack(store, W, 'Office', 'cw', 't1');
   startPractice();
   pass(1000);
   pass(9000);

@@ -4,11 +4,10 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTiming } from './helpers.js';
+import { startTiming, useTrack } from './helpers.js';
 
 const T0 = 1_000_000_000_000; // 2001-09-09T01:46:40Z
 const clock = { now: T0 };
-const TRACK = { id: 't1', shape: 'c30:1:x', name: 'Office loop', snapshotKey: 'k'.repeat(22), layout: '{}' };
 let app;
 let member;
 let office;
@@ -16,6 +15,7 @@ let base;
 let history;
 let records;
 let idle;
+let gone;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -24,6 +24,7 @@ before(async () => {
   history = app.club(ana, 'History');
   records = app.club(ana, 'Records');
   idle = app.club(ana, 'Idle');
+  gone = app.club(ana, 'Gone');
   member = await app.login(ana);
   base = `/clubs/${office.id}`;
 });
@@ -327,7 +328,7 @@ test('starting a race while a practice runs names the practice', async () => {
 test('history: newest first, with kind, length, drivers and the best lap with its marks; 20 a page', async () => {
   const ws = history.id;
   const hbase = `/clubs/${ws}`;
-  app.store.setTrack(ws, TRACK, 'cw');
+  useTrack(app.store, ws, 'Office loop', 'cw', 't1');
   // 20 more practices, a minute apart, then one with laps: 22 in all, the first from the test before.
   for (let i = 0; i < 20; i += 1) {
     clock.now = T0 + (20 + i) * 60_000;
@@ -405,7 +406,7 @@ test('the tab shows the five latest track records, /records all of them, newest 
   const ws = records.id;
   const rbase = `/clubs/${ws}`;
   await driversIn(ws, { Ana: '10' });
-  app.store.setTrack(ws, TRACK, 'cw');
+  useTrack(app.store, ws, 'Office loop', 'cw', 't1');
   clock.now = T0;
   const { session } = app.engine.start(ws, { kind: 'practice' });
   let t = 1000;
@@ -429,13 +430,62 @@ test('the tab shows the five latest track records, /records all of them, newest 
   assert.match(page, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
 });
 
-test('a car with no session running shows the notice and Start practice on the tab', async () => {
+test('a car with no session running is a live line on the tab, over its Start practice', async () => {
   const ws = idle.id;
   await driversIn(ws, { Haris: '21' });
   pass(ws, 5000, '21');
   const body = await (await get(`/clubs/${ws}/sessions`)).text();
-  assert.match(body, /<div class="status status-warning flag idle-notice" role="status">\s*<p>A car crossed the line \(21, Haris\)\. No session is running\.<\/p>/);
-  assert.equal(body.match(/>Start practice<\/button>/g).length, 2, 'the notice has its own button');
+  assert.match(body, /<p class="board-on-track" role="status">Car 21 is on the track<\/p>/);
+  assert.doesNotMatch(body, /status-warning/);
+  assert.equal(body.match(/>Start practice<\/button>/g).length, 1);
   app.engine.start(ws, { kind: 'practice' });
-  assert.doesNotMatch(await (await get(`/clubs/${ws}/sessions`)).text(), /A car crossed the line/);
+  assert.doesNotMatch(await (await get(`/clubs/${ws}/sessions`)).text(), /is on the track/);
+});
+
+test('history rows and a session page name the track, or "a deleted track" once it is gone', async () => {
+  const ws = gone.id;
+  const home = app.store.ensureWorkspace(ws).trackId;
+  const ring = useTrack(app.store, ws, 'Old ring', 'cw');
+  clock.now = T0 + 9_000_000;
+  const old = app.engine.start(ws, { kind: 'practice' }).session;
+  app.engine.end(ws, old.id);
+  app.store.setCurrentTrack(ws, home, 'ccw');
+  clock.now = T0 + 9_100_000;
+  const kept = app.engine.start(ws, { kind: 'practice' }).session;
+  app.engine.end(ws, kept.id);
+  app.store.setArchived(ws, ring, T0);
+  assert.equal(app.store.deleteTrack(ws, ring), 'deleted');
+
+  const body = await (await get(`/clubs/${ws}/sessions`)).text();
+  assert.match(body, /<th scope="col">Track<\/th>/);
+  const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
+  assert.equal(rows.length, 2);
+  assert.match(rows[0], /<td>Track, anticlockwise<\/td>/);
+  assert.match(rows[1], /<td>a deleted track<\/td>/);
+  const page = await (await get(`/clubs/${ws}/sessions/${old.id}`)).text();
+  assert.match(page, /<div><dt>Track<\/dt><dd>a deleted track<\/dd><\/div>/);
+  assert.match(await (await get(`/clubs/${ws}/sessions/${kept.id}`)).text(), /<div><dt>Track<\/dt><dd>Track, anticlockwise<\/dd><\/div>/);
+});
+
+test('assigning a transponder after its track was deleted brings back no record, best or crown', async () => {
+  const ws = gone.id;
+  const home = app.store.ensureWorkspace(ws).trackId;
+  const ring = useTrack(app.store, ws, 'Old ring', 'cw');
+  clock.now = T0 + 9_500_000;
+  const old = app.engine.start(ws, { kind: 'practice' }).session;
+  for (const t of [9_500_000, 9_510_000, 9_520_000]) pass(ws, t, '0C');
+  app.engine.end(ws, old.id);
+  app.store.setCurrentTrack(ws, home, 'ccw');
+  app.store.setArchived(ws, ring, T0);
+  assert.equal(app.store.deleteTrack(ws, ring), 'deleted');
+
+  const { Ana } = await driversIn(ws, { Ana: '0C' });
+  assert.equal(app.store.currentRecord(ws, ring, 'cw'), null);
+  assert.deepEqual(app.store.personalBests(ws, ring, 'cw', [Ana.id]), []);
+  const body = await (await get(`/clubs/${ws}/sessions`)).text();
+  const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
+  assert.equal(rows.length, 3);
+  assert.match(rows[0], /<td>a deleted track<\/td>/);
+  assert.match(rows[0], />Ana</, 'the laps are Ana\'s now');
+  assert.doesNotMatch(rows[0], /class="crown"/);
 });

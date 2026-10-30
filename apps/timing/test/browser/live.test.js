@@ -34,7 +34,7 @@ test('the board updates live and its clock ticks', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/board');
-  await page.getByRole('heading', { name: 'No session yet' }).waitFor();
+  await page.getByRole('heading', { name: 'Ready when your cars are' }).waitFor();
   app.engine.start((await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id, { kind: 'practice' });
   clock.offset += 10_000; // a practice starts clean: the lap begins after its start
   await postPassings(app, decoder, [{ transponder: '10', t: 1000 }, { transponder: '10', t: 9000 }]);
@@ -172,4 +172,26 @@ test('the wall screen shows the lamp once the stream is not live', async (t) => 
   assert.equal(await page.locator('#live-status').isVisible(), false);
   streams.drop();
   await page.locator('#live-status[data-state="reconnecting"]').waitFor({ state: 'visible' });
+});
+
+test('with nobody racing, the quiet line and the live line are not announced again when the board is replaced', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  const personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
+  const running = app.store.runningSession(personal);
+  if (running) app.engine.end(personal, running.id);
+  await postPassings(app, decoder, [{ transponder: '77', t: 90000 }]);
+  await page.goto('/personal/board');
+  await page.locator('#live-status[data-state="live"]').waitFor();
+  await page.locator('.board-quiet', { hasText: 'no driver yet' }).waitFor();
+  await page.evaluate(() => {
+    /** @type {any} */ (document.querySelector('#board-live')).stale = true;
+    /** @type {any} */ (document.querySelector('.board-quiet')).kept = true;
+    /** @type {any} */ (document.querySelector('.board-on-track')).kept = true;
+  });
+  await postPassings(app, decoder, [{ transponder: '77', t: 91000 }]);
+  await page.waitForFunction(() => !(/** @type {any} */ (document.querySelector('#board-live'))).stale);
+  assert.equal(await page.evaluate(() => /** @type {any} */ (document.querySelector('.board-quiet')).kept), true);
+  assert.equal(await page.evaluate(() => /** @type {any} */ (document.querySelector('.board-on-track')).kept), true);
+  assert.deepEqual(errors, []);
 });

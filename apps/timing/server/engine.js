@@ -20,6 +20,8 @@ export const RECORD_SHOW_MS = 30_000;
 export const RECORD_FRESH_MS = 60_000;
 /** Offsets older than this don't count for mapping decoder time (spec §6). */
 const OFFSET_WINDOW_MS = 60_000;
+/** How many drivers the idle board's "Fastest on this track" lists. */
+const FASTEST = 10;
 const ACTIVE = new Set(['countdown', 'running', 'finishing']);
 
 /** What members see of a crossing. */
@@ -293,7 +295,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       for (const id of store.assignCrossings(workspaceId, code, driverId)) {
         rebuild(id);
         const { trackId, direction } = store.session(id);
-        if (trackId !== null) tracks.set(`${trackId} ${direction}`, { trackId, direction });
+        // A deleted track's laps stay in its sessions but set no records (named tracks spec §3.5).
+        if (trackId !== null && store.track(workspaceId, trackId)) tracks.set(`${trackId} ${direction}`, { trackId, direction });
       }
       for (const { trackId, direction } of tracks.values()) store.rebuildRecords(workspaceId, trackId, direction);
     });
@@ -309,28 +312,32 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   function snapshot(workspaceId, { watcher = false } = {}) {
     const ws = store.ensureWorkspace(workspaceId);
     const session = store.runningSession(workspaceId);
-    const track = ws.trackId ? store.track(workspaceId, ws.trackId) : null;
+    // A club always has a current track (named tracks spec §3.1).
+    const track = store.track(workspaceId, ws.trackId);
     const recent = session ? store.recentCrossings(session.id, 30) : [];
     const ended = session ? null : store.lastEnded(workspaceId);
     const rows = session ? standingsOf(session) : [];
     const endedRows = ended ? lastStandingsOf(ended) : [];
-    const record = track ? store.currentRecord(workspaceId, track.id, ws.direction) : null;
+    // The record and the one it beat, for the idle board's record (named tracks spec §4).
+    const [record, beaten] = store.recordHistory(workspaceId, track.id, ws.direction, { limit: 2 });
     // A race keeps its track when the workspace's changes: its record shows only under its own header.
     const shown = recordNews.get(workspaceId);
     const recordNew = shown?.trackId === ws.trackId && shown?.direction === ws.direction ? recordNewOf(workspaceId) : null;
     return {
       now: now(),
-      track: track && { id: track.id, name: track.name },
+      track: { id: track.id, name: track.name },
       direction: ws.direction,
       session: session && publicSession(session),
       standings: rows,
       crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),
       drivers: store.drivers(workspaceId),
-      bests: track ? store.personalBests(workspaceId, track.id, ws.direction, [...rows, ...endedRows].map((r) => r.driverId)) : [],
-      record: record && { driverId: record.driverId, lapMs: record.lapMs, at: record.at },
+      bests: store.personalBests(workspaceId, track.id, ws.direction, [...rows, ...endedRows].map((r) => r.driverId)),
+      record: record ? { driverId: record.driverId, lapMs: record.lapMs, at: record.at, beat: beaten ? { driverId: beaten.driverId, lapMs: beaten.lapMs, at: beaten.at } : null } : null,
+      // Each driver's best here, for the board when nobody is racing; through personal_best_fastest, ten rows at most.
+      fastest: session ? [] : store.fastest(workspaceId, track.id, ws.direction, FASTEST),
       recordNew,
       lastResults: ended && { session: publicSession(ended), standings: endedRows },
-      ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idleOf(workspaceId) }),
+      ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idleOf(workspaceId), driven: session !== null || store.driven(workspaceId) }),
     };
   }
 

@@ -4,7 +4,7 @@
 
 // What the board and the Sessions tab share (records spec §4.2, §5.3): the
 // marks after a lap time, the crown beside the record holder, a driver's
-// name, and the notice of a car crossing the line with no session running.
+// name, and the line that says a car is on the track with no session running.
 import { html } from './html.js';
 
 /** A mark: its letters for the eye, its full name for a screen reader, which mostly skips an abbr's title. */
@@ -46,15 +46,12 @@ export function startPracticeForm(request, { from } = {}) {
 }
 
 /**
- * "A car crossed the line (21, Haris). No session is running.", with Start
- * practice; for members only, from the snapshot's `idle`.
- * @param {any} request @param {{ transponder: string, driverId: string | null } | null} idle @param {{ id: string, name: string }[]} drivers
+ * "Car 23 is on the track": a live line, not a warning, while a car crosses
+ * with no session running (named tracks spec §4); for members only, from the
+ * snapshot's `idle`.
+ * @param {{ transponder: string, driverId: string | null } | null} idle
  */
-export function idleNotice(request, idle, drivers) {
+export function idleNotice(idle) {
   if (!idle) return null;
-  const name = idle.driverId ? drivers.find((d) => d.id === idle.driverId)?.name : null;
-  return html`<div class="status status-warning flag idle-notice" role="status">
-  <p>A car crossed the line (${idle.transponder}${name ? `, ${name}` : ''}). No session is running.</p>
-  ${startPracticeForm(request)}
-</div>`;
+  return html`<p class="board-on-track" role="status">Car ${idle.transponder} is on the track</p>`;
 }
