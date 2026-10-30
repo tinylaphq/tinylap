@@ -169,6 +169,7 @@ test('without JavaScript the board says when a stopped driver last crossed the l
   const ana = app.store.drivers(personal).find((d) => d.name === 'Ana');
   app.engine.assign(personal, '4712', ana.id);
   app.engine.start(personal, { kind: 'practice', replace: true });
+  clock.offset += 10_000; // a practice starts clean: the lap begins after its start
   const sent = await app.api(null, 'POST', `/decoders/${decoder.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '4712', t: 1000 }, { transponder: '4712', t: 9000 }] }, { authorization: `Bearer ${decoder.token}` });
   assert.equal(sent.status, 200);
   clock.offset += 180_000;

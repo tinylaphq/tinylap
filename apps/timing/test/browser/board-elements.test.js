@@ -39,6 +39,7 @@ before(async () => {
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
   app.engine.assign(personal, '10', app.store.drivers(personal)[0].id);
   app.engine.start(personal, { kind: 'practice' });
+  clock.offset += 10_000; // a practice starts clean: B1's lap begins after its start
   ticker = setInterval(() => app.engine.tick(), 100);
 });
 after(async () => {
