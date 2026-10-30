@@ -13,7 +13,7 @@ import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
 import { directionIcon } from './direction.js';
-import { chip as driverChip, crown, idleNotice, marks, marksHead, startPracticeForm, timeWidths } from './marks.js';
+import { chip as driverChip, idleNotice, marks, marksHead, startPracticeForm, timeWidths } from './marks.js';
 
 const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
 
@@ -24,7 +24,7 @@ export function clockOf(session, now) {
   return { label, ms };
 }
 
-const chip = (snap, id) => driverChip(snap.drivers, id);
+const chip = (snap, id, options) => driverChip(snap.drivers, id, options);
 
 /** A record's time, holder and date, apart by their line's gap, not by dots: "7.412  Haris  12 Oct". */
 const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by">${chip(snap, r.driverId)}</span> <span class="board-track-by">${safe(localTime(r.at, 'date'))}</span>`;
@@ -92,7 +92,8 @@ function markers(snap, session, standings) {
   }
   return {
     isBest: (row) => row === best,
-    crown: (row) => crown(record?.driverId === row.driverId),
+    /** Whether the row's driver holds the record: their name gets the crown. */
+    holder: (row) => record?.driverId === row.driverId,
     /** The mark cell after a row's best lap; in a list, a span. */
     mark: (row, list = false) => {
       const pb = pbs.get(row.driverId);
@@ -129,7 +130,7 @@ function standingsTable(snap) {
   <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${marksHead}<th scope="col" class="num col-last">Last</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
   <tbody>${snap.standings.map((row) => { const cls = [row.finished && 'is-finished', m.isBest(row) && 'is-best'].filter(Boolean).join(' '); return html`<tr${cls ? html` class="${cls}"` : null}>
     <td class="pos">${row.position}${row.finished ? html`<span class="finish" role="img" aria-label="Finished" title="Finished"></span>` : null}</td>
-    <td class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}${ago(snap, row)}</td>
+    <td class="board-driver">${chip(snap, row.driverId, { holder: m.holder(row) })}${ago(snap, row)}</td>
     <td class="num">${row.laps}</td>
     <td class="num">${formatLap(row.bestMs)}</td>
     ${m.mark(row)}
@@ -162,7 +163,7 @@ function hero(request, snap, members) {
   <div class="board-hero-record">
     <h1 class="board-hero-label">Track record</h1>
     ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
-    <p class="board-hero-by">${chip(snap, r.driverId)}${crown(true)} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? beaten(snap, r) : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
+    <p class="board-hero-by">${chip(snap, r.driverId, { holder: true })} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? beaten(snap, r) : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
   </div>
   ${members ? go(request, snap) : null}
 </section>`;
@@ -182,12 +183,17 @@ function go(request, snap) {
   </div>`;
 }
 
-/** Each driver's best on the current track and direction, fastest first. */
+/**
+ * Each driver's best on the current track and direction, fastest first. The
+ * first is the track record, marked TR as on every other list; the rest are
+ * each their driver's best, which a PB mark would only repeat.
+ */
 function fastest(snap) {
   if (!snap.fastest.length) return null;
+  const isRecord = (b) => snap.record?.driverId === b.driverId && snap.record?.lapMs === b.bestMs;
   return html`<section class="board-fastest" aria-labelledby="board-fastest-title">
   <h2 class="h3" id="board-fastest-title">Fastest on this track</h2>
-  <ol class="board-ranks">${snap.fastest.map((b, i) => html`<li><span class="pos">${i + 1}</span><span class="board-driver">${chip(snap, b.driverId)}</span><span class="num">${formatLap(b.bestMs)}</span></li>`)}</ol>
+  <ol class="board-ranks">${snap.fastest.map((b, i) => html`<li><span class="pos">${i + 1}</span><span class="board-driver">${chip(snap, b.driverId)}</span><span class="num">${formatLap(b.bestMs)}</span>${marks({ lapMs: b.bestMs, isRecord: isRecord(b), isPb: false }, { list: true })}</li>`)}</ol>
 </section>`;
 }
 
@@ -199,7 +205,7 @@ function lastSession(request, snap, link) {
   const ended = r.session.endedAt ?? r.session.createdAt;
   return html`<section class="board-last" aria-labelledby="board-last-title">
   <h2 class="h3" id="board-last-title">Last session</h2>
-  ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}</span><span class="num">${formatLap(row.bestMs)}</span>${m.mark(row, true)}</li>`)}</ol>`}
+  ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId, { holder: m.holder(row) })}</span><span class="num">${formatLap(row.bestMs)}</span>${m.mark(row, true)}</li>`)}</ol>`}
   <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'datetime-short'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${link ? html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>` : null}</p>
 </section>`;
 }

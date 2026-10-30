@@ -130,10 +130,6 @@ tl-board { display: block; }
 tl-tap { display: block; }
 /* The bridge element; #bridge inside it is unchanged, and it takes #bridge's place in the stack. */
 tl-bridge { display: block; }
-/* The driver takes what the fixed columns leave. A name breaks between its
- * words, and splits a word (never hyphenated: it is a name) only when that
- * word alone is wider than the column, rather than run under the next one. */
-.board-table .board-driver { overflow-wrap: break-word; }
 /* A quiet second line under a driver who has stopped. */
 .board-ago { display: block; color: var(--p-text-secondary); font-weight: 400; font-size: 0.75em; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .board-ago time { white-space: nowrap; }
@@ -151,6 +147,14 @@ tl-bridge { display: block; }
   content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: 0.25em;
   background: var(--driver, var(--p-text-faint)); border: var(--p-border-thin) solid var(--p-text);
 }
+/* The record holder's crown, between the colour and the name. */
+.crown { margin-right: 0.25em; }
+/* In a table or list a name keeps one line: the colour, the crown, then the
+ * name, cut with an ellipsis where the column ends. The whole name stays in
+ * the text, for screen readers, and in its title, for hover. */
+.board-driver .driver, .board-laps .driver { display: flex; align-items: baseline; min-width: 0; }
+.board-driver .driver::before, .board-driver .crown, .board-laps .driver::before { flex: none; }
+.board-driver .driver-name, .board-laps .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .board-feed { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-md); align-self: start; }
 .board-feed h2 { margin: 0 0 var(--p-space-sm); }
@@ -350,22 +354,14 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--p-space-lg); align-items: start; margin-top: var(--p-space-sm); }
 .board-idle h2 { margin: 0 0 var(--p-space-sm); }
 .board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); }
-/* Pos, driver, time and mark: the list's columns, which every row shares
- * (subgrid). Side by side, the time and mark take what their longest needs,
- * and the name the rest; the fastest list has no marks, so no mark column.
- * Stacked on a narrow screen, both lists get fixed time and mark columns, so
- * their times line up. */
-.board-ranks { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto auto; column-gap: var(--p-space-sm); }
-.board-fastest .board-ranks { grid-template-columns: 2em minmax(0, 1fr) auto; }
+/* Pos, driver, time and mark, the time and mark in columns of fixed width:
+ * both lists put their times at the same place, side by side or stacked.
+ * The fastest list's mark column holds the track record's TR. */
 .board-ranks li {
-  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline;
+  display: grid; grid-template-columns: 2em minmax(0, 1fr) 3.7em 1.8em; align-items: baseline; gap: var(--p-space-sm);
   padding: var(--p-space-sm) var(--p-space-md); border-bottom: var(--p-border-thin) solid var(--p-border-light);
 }
-.board-ranks .board-driver { overflow-wrap: break-word; }
-@media (max-width: 660px) {
-  .board-ranks, .board-fastest .board-ranks { grid-template-columns: 2em minmax(0, 1fr) 3.7em 1.8em; }
-  .has-minute-laps .board-ranks, .has-minute-laps .board-fastest .board-ranks { grid-template-columns: 2em minmax(0, 1fr) 4.9em 1.8em; }
-}
+.has-minute-laps .board-ranks li { grid-template-columns: 2em minmax(0, 1fr) 4.9em 1.8em; }
 .board-ranks li:last-child { border-bottom: 0; }
 .board-ranks .pos { font: 700 1em var(--p-font-mono); color: var(--p-text-muted); }
 .board-ranks .num { font-weight: 600; }
@@ -585,7 +581,6 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 }
 .mark-tr { background: var(--tl-record); color: var(--tl-record-ink); }
 .mark-pb { background: var(--tl-pb); color: var(--tl-pb-ink); }
-.crown { margin-left: 0.25em; }
 .board-table tr.is-best td { background: var(--tl-session-best); }
 
 /* A notice on the board ("Unknown cars…" while a session runs):
@@ -652,7 +647,9 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
  * mono, 0.6em a character, with 0.1em to spare. A lap column holds "59.999";
  * a table with a lap of a minute (MAX_LAP_MS, "1:00.000") says so in
  * .has-minute-laps and gets 4.9em. A race's total holds "9:59.999", and with
- * .has-long-totals "60:59.999", an hour and its last lap. The server sets
+ * .has-long-totals "60:59.999": a race lasts at most an hour (startErrors),
+ * and its last lap at most a minute, so a total never reaches an hour's
+ * format. The server sets
  * both classes (timeWidths in views/marks.js). The position holds "12" and
  * the finish flag; the mark's column is one mark wide. The rest are what
  * their header or content needs. */

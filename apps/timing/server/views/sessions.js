@@ -10,7 +10,7 @@ import { clockAt, formatClock, formatLap, formatLength } from '../../public/form
 import { html, safe } from './html.js';
 import { errorsSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
-import { chip, crown, idleNotice, marks, marksHead, startPracticeForm, timeWidths } from './marks.js';
+import { chip, idleNotice, marks, marksHead, startPracticeForm, timeWidths } from './marks.js';
 import { recordsTable, trackName } from './records.js';
 
 export const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
@@ -107,7 +107,7 @@ function historySection(request, { rows, older, newer }, drivers) {
     <td class="history-wide">${trackName(track, session.direction)}</td>
     <td class="num history-wide">${shortLength(drivenMs(session))}</td>
     <td class="num history-wide">${count}</td>
-    <td class="board-driver">${best ? html`${chip(drivers, best.driverId)}${crown(best.isHolder)}` : null}</td>
+    <td class="board-driver">${best ? chip(drivers, best.driverId, { holder: best.isHolder }) : null}</td>
     <td class="num">${formatLap(best?.lapMs)}</td>
     ${marks({ lapMs: best?.lapMs, isRecord: Boolean(best?.isRecord), isPb: Boolean(best?.isPb) })}
   </tr>`)}</tbody>

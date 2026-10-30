@@ -77,14 +77,12 @@ const measure = (selector) => {
     shown: [...table.querySelectorAll('thead th')].filter((th) => th.getClientRects().length && th.getBoundingClientRect().right <= box.right + 0.5).map((th) => th.textContent.trim()),
     rows: [...table.querySelectorAll('tbody tr')].map((tr) => {
       const crown = tr.querySelector('.crown');
-      const name = crown?.parentElement.querySelector('.driver');
-      // The crown's line: the name's last line, not one of its own.
+      const name = crown?.parentElement.querySelector('.driver-name');
+      // The crown's line: the name's, before it, not one of its own.
       let crownAlone = false;
       if (crown && name) {
-        const range = document.createRange();
-        range.selectNodeContents(name);
-        const last = [...range.getClientRects()].at(-1);
-        crownAlone = crown.getBoundingClientRect().top >= last.bottom - 2;
+        const first = name.getClientRects()[0];
+        crownAlone = Math.abs(crown.getBoundingClientRect().bottom - first.bottom) >= first.height / 2;
       }
       const track = tr.querySelector('.history-track');
       const tag = tr.querySelector('.history-session .tag');

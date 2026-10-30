@@ -8,7 +8,7 @@ import { localTime } from '@tinylap/design/html/local-time.js';
 import { formatLap } from '../../public/format.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
-import { chip, crown, marks, marksHead, timeWidths } from './marks.js';
+import { chip, marks, marksHead, timeWidths } from './marks.js';
 import { trackName } from './records.js';
 import { KIND } from './sessions.js';
 
@@ -45,7 +45,7 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
   <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${marksHead}${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
   <tbody>${standings.map((row) => { const isBest = best?.driverId === row.driverId; return html`<tr${isBest ? html` class="is-best"` : null}>
     <td class="pos">${row.position}</td>
-    <td class="board-driver">${chip(drivers, row.driverId)}${crown(record?.driverId === row.driverId)}</td>
+    <td class="board-driver">${chip(drivers, row.driverId, { holder: record?.driverId === row.driverId })}</td>
     <td class="num">${row.laps}</td>
     <td class="num">${formatLap(row.bestMs)}</td>
     ${markOf(bestOf(row), isBest ? html`<span class="visually-hidden">Session best</span>` : null)}

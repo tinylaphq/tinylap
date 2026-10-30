@@ -8,7 +8,7 @@ import { Html, html, safe } from '../server/views/html.js';
 import { copyable, selectField, textField } from '../server/views/form-parts.js';
 import { clockOf } from '../server/views/board.js';
 import { notFoundPage, startPage } from '../server/views/notice.js';
-import { crown, idleNotice, marks, marksHead, timeWidths } from '../server/views/marks.js';
+import { chip, idleNotice, marks, marksHead, timeWidths } from '../server/views/marks.js';
 import { directionIcon } from '../server/views/direction.js';
 import { shortLength } from '../server/views/sessions.js';
 
@@ -95,8 +95,11 @@ test('a mark is a cell of its own after the time, empty or not; a record lap sho
   assert.equal(String(marks({ lapMs: null, isRecord: true, isPb: true })), '<td class="mark-cell"></td>', 'no lap, no mark');
   assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true }, { list: true, note: 'Session best' })), '<span class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span>Session best</span>', 'in a list, a span, with its note after');
   assert.equal(String(marksHead), '<th scope="col" class="mark-cell"><span class="visually-hidden">Mark</span></th>');
-  assert.equal(crown(false), null);
-  assert.equal(String(crown(true)), '&#8288;<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>', 'glued to the name by a word joiner');
+  const drivers = [{ id: 'c', name: 'Cyrille Featherstonehaugh', colour: '#f5a623' }];
+  assert.equal(String(chip(drivers, 'c')), '<span class="driver" style="--driver: #f5a623"><span class="driver-name" title="Cyrille Featherstonehaugh">Cyrille Featherstonehaugh</span></span>');
+  assert.equal(String(chip(drivers, 'c', { holder: true })), '<span class="driver" style="--driver: #f5a623"><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span><span class="driver-name" title="Cyrille Featherstonehaugh">Cyrille Featherstonehaugh</span></span>', 'the crown before the name, the full name in its title');
+  assert.equal(String(chip(drivers, 'gone')), '<span class="driver"><span class="driver-name" title="Former driver">Former driver</span></span>');
+  assert.equal(String(chip(drivers, null)), '<span class="driver"><span class="driver-name" title="Unknown car">Unknown car</span></span>');
 });
 
 test('time columns widen only for a lap of a minute or a total of ten minutes', () => {
@@ -109,7 +112,7 @@ test('time columns widen only for a lap of a minute or a total of ten minutes', 
 test('a car with no session running is a live line, by its driver, or by its code without one', () => {
   const drivers = [{ id: 'h', name: 'Haris', colour: '#1e88e5' }];
   assert.equal(idleNotice(null, drivers), null);
-  assert.equal(String(idleNotice({ transponder: '23', driverId: 'h', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span><span class="driver" style="--driver: #1e88e5">Haris</span> is on the track</span></p>');
+  assert.equal(String(idleNotice({ transponder: '23', driverId: 'h', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span><span class="driver" style="--driver: #1e88e5"><span class="driver-name" title="Haris">Haris</span></span> is on the track</span></p>');
   assert.equal(String(idleNotice({ transponder: '23', driverId: 'gone', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span>Car 23 is on the track</span></p>', 'a driver since deleted: the code');
   assert.match(String(idleNotice({ transponder: '<b>', driverId: null, at: 1 }, drivers)), /Car &lt;b&gt; is on the track/);
 });

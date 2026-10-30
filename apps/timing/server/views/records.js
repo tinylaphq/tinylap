@@ -9,7 +9,7 @@ import { localTime } from '@tinylap/design/html/local-time.js';
 import { formatLap } from '../../public/format.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
-import { chip, crown, timeWidths } from './marks.js';
+import { chip, timeWidths } from './marks.js';
 
 export const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
 
@@ -40,7 +40,7 @@ export function recordsTable(request, { track, rows, drivers, layoutOf = null, l
   <thead><tr><th scope="col" class="num">Lap</th><th scope="col">Driver</th><th scope="col">Set</th><th scope="col" class="records-wide">Held until</th>${layoutOf ? html`<th scope="col" class="records-wide">Layout</th>` : null}</tr></thead>
   <tbody>${rows.map((r, i) => html`<tr${i === 0 ? html` class="is-current"` : null}>
     <td class="num">${formatLap(r.lapMs)}</td>
-    <td class="board-driver">${chip(drivers, r.driverId)}${crown(i === 0)}</td>
+    <td class="board-driver">${chip(drivers, r.driverId, { holder: i === 0 })}</td>
     <td><a href="${base}/sessions/${r.sessionId}">${safe(localTime(r.at, dates))}</a></td>
     <td class="records-wide">${i === 0 ? 'Now' : safe(localTime(rows[i - 1].at, dates))}</td>
     ${layoutOf ? html`<td class="records-wide">${layoutLink(layoutOf(r.at), layouts)}</td>` : null}

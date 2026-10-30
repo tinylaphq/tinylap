@@ -372,7 +372,7 @@ test('history: newest first, with kind, length, drivers and the best lap with it
   assert.match(newest, /<td class="history-wide">Office loop, clockwise<\/td>/);
   assert.match(newest, /<td class="num history-wide">18 s<\/td>/, 'from its start to its last passing');
   assert.match(newest, /<td class="num history-wide">2<\/td>/);
-  assert.match(newest, /Ana<\/span>&#8288;<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span>/);
+  assert.match(newest, /<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><span class="driver-name" title="Ana">Ana<\/span>/);
   assert.match(newest, /<td class="num">7\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><span class="visually-hidden">Track record<\/span><\/td>/);
   assert.match(body, /<th scope="col" class="num">Best<\/th><th scope="col" class="mark-cell"><span class="visually-hidden">Mark<\/span><\/th>/);
   assert.match(rows[1], /<td class="num history-wide">0 s<\/td>/);
@@ -424,7 +424,7 @@ test('a session page: the final table with marks and crown, then every lap', asy
   const rows = [...table.matchAll(/<tr( class="is-best")?>[\s\S]*?<\/tr>/g)].slice(1);
   assert.equal(rows.length, 2);
   assert.equal(rows[0][1], ' class="is-best"', 'the session’s best lap is one row');
-  assert.match(rows[0][0], /Ana<\/span>&#8288;<span class="crown"/);
+  assert.match(rows[0][0], /<span class="crown"[^>]*>👑<\/span><span class="driver-name" title="Ana">Ana</);
   assert.match(rows[0][0], /<td class="num">7\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><span class="visually-hidden">Track record<\/span><span class="visually-hidden">Session best<\/span><\/td>/);
   assert.equal(rows[1][1], undefined);
   assert.match(rows[1][0], /<td class="num">7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB<\/abbr><span class="visually-hidden">Personal best<\/span><\/td>/);
@@ -548,7 +548,7 @@ test('a car with no session running is a live line on the tab, over its Start pr
   await driversIn(ws, { Haris: '21' });
   pass(ws, 5000, '21');
   const body = await (await get(`/clubs/${ws}/sessions`)).text();
-  assert.match(body, /<p class="board-on-track" role="status"><span><span class="driver" style="--driver: [^"]+">Haris<\/span> is on the track<\/span><\/p>/, 'the car’s driver, not its code');
+  assert.match(body, /<p class="board-on-track" role="status"><span><span class="driver" style="--driver: [^"]+"><span class="driver-name" title="Haris">Haris<\/span><\/span> is on the track<\/span><\/p>/, 'the car’s driver, not its code');
   assert.doesNotMatch(body, /status-warning/);
   assert.equal(body.match(/>Start practice<\/button>/g).length, 1);
   app.engine.start(ws, { kind: 'practice' });

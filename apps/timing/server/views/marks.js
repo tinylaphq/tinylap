@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // What the board and the Sessions tab share (records spec §4.2, §5.3): the
-// marks after a lap time, the crown beside the record holder, a driver's
-// name, and the line that says a car is on the track with no session running.
+// marks after a lap time, a driver's name with the record holder's crown,
+// and the line that says a car is on the track with no session running.
 import { html } from './html.js';
 
 /** A mark: its letters for the eye, its full name for a screen reader, which mostly skips an abbr's title. */
@@ -41,21 +41,23 @@ export function timeWidths(laps, totals = []) {
 /** The marks column's header: no word on screen, its name for a screen reader. */
 export const marksHead = html`<th scope="col" class="mark-cell"><span class="visually-hidden">Mark</span></th>`;
 
-/**
- * The crown after the record holder's name, on every leaderboard of the
- * record's track and direction. A word joiner glues it to the name, so a long
- * name wraps with it rather than leaving it alone on a line.
- * @param {boolean} isHolder
- */
-export const crown = (isHolder) => (isHolder
-  ? html`&#8288;<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>`
-  : null);
+/** The crown: the record holder's, on every leaderboard of the record's track and direction. */
+const crownMark = html`<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>`;
 
-/** A driver's name with their colour, or what is left of one. @param {{ id: string, name: string, colour?: string }[]} drivers @param {string | null} id */
-export function chip(drivers, id) {
+/**
+ * A driver's name with their colour, or what is left of one. The record
+ * holder's crown comes first, between the colour and the name: there it
+ * never sits alone on a line, and the colours still line up down a column.
+ * In a table or list the name keeps one line and ends in an ellipsis when
+ * the column is too narrow (app.css); its full text stays in the page, for
+ * screen readers, and in its title, for hover.
+ * @param {{ id: string, name: string, colour?: string }[]} drivers @param {string | null} id
+ * @param {{ holder?: boolean }} [options]
+ */
+export function chip(drivers, id, { holder = false } = {}) {
   const d = drivers.find((x) => x.id === id);
-  if (!d) return html`<span class="driver">${id ? 'Former driver' : 'Unknown car'}</span>`;
-  return html`<span class="driver" style="--driver: ${d.colour}">${d.name}</span>`;
+  const name = d ? d.name : id ? 'Former driver' : 'Unknown car';
+  return html`<span class="driver"${d ? html` style="--driver: ${d.colour}"` : null}>${holder ? crownMark : null}<span class="driver-name" title="${name}">${name}</span></span>`;
 }
 
 /** Starts a practice: one button, no settings; from the Tap page, it leads back there. @param {any} request @param {{ from?: 'tap' }} [options] */

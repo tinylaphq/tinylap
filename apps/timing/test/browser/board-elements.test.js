@@ -203,7 +203,7 @@ for (const [i, { viewport, v, names }] of CASES.entries()) {
     await page.waitForTimeout(300);
     const layout = () => page.evaluate(() => ({
       lefts: [...document.querySelectorAll('.board-table thead th')].map((th) => th.getBoundingClientRect().left),
-      order: [...document.querySelectorAll('.board-table tbody .driver')].map((d) => d.textContent),
+      order: [...document.querySelectorAll('.board-table tbody .driver-name')].map((d) => d.textContent),
       visibleNotes: [...document.querySelectorAll('.board-ago')].filter((n) => !(/** @type {HTMLElement} */ (n).hidden)).length,
       fits: document.documentElement.scrollWidth <= innerWidth,
     }));

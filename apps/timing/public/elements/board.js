@@ -151,7 +151,7 @@ class TlBoard extends HTMLElement {
     const clean = (/** @type {string | null | undefined} */ value) => value?.replace(/\s+/g, ' ').trim() ?? '';
     const text = (/** @type {string} */ selector) => clean(this.querySelector(selector)?.textContent);
     const now = text('.board-track-new .board-track-time');
-    const holder = text('.board-track-new .driver');
+    const holder = text('.board-track-new .driver-name');
     // The board sets the beaten record's time, holder and date apart by a gap; plain text takes dots.
     const parts = [...(this.querySelector('.board-track-beat')?.children ?? [])].map((part) => clean(part.textContent)).filter(Boolean);
     const beat = parts.length ? `Beat ${parts.join(' · ')}` : '';
