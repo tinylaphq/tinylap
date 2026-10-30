@@ -111,6 +111,9 @@ test('deleting a track removes its layouts and records, not its sessions', () =>
   assert.deepEqual(store.layouts(W, 't1'), []);
   assert.equal(store.currentRecord(W, 't1', 'ccw'), null);
   assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ana']), []);
+  store.rebuildRecords(W, 't1', 'ccw');
+  assert.equal(store.currentRecord(W, 't1', 'ccw'), null, 'a rebuild does not bring them back');
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ana']), []);
   assert.equal(store.session('s1').trackId, 't1', 'the session stays, and finds no track');
   assert.equal(store.sessionCount(W, 't1'), 1);
   assert.equal(store.currentRecord(W, 't2', 'ccw').lapMs, 7000, 'other tracks keep theirs');
@@ -229,6 +232,7 @@ test('deleting a driver unassigns their transponders and keeps their laps', () =
 
 test('personal bests: counted, decoder-timed, per track and direction', () => {
   const store = openStore(':memory:');
+  store.addTrack(W, { id: 't1', name: 'Office' });
   practice(store);
   practice(store, 'cw', { direction: 'cw' });
   crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
@@ -244,6 +248,7 @@ test('personal bests: counted, decoder-timed, per track and direction', () => {
 test('a database from before records gets them filled from its laps on open', () => {
   const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
   const store = openStore(path);
+  store.addTrack(W, { id: 't1', name: 'Office' });
   practice(store);
   practice(store, 'cw', { direction: 'cw' });
   crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
@@ -263,6 +268,7 @@ test('a database from before records gets them filled from its laps on open', ()
 test('a fill of records cut short is done again on the next open, and only until it is done', () => {
   const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
   const store = openStore(path);
+  store.addTrack(W, { id: 't1', name: 'Office' });
   practice(store);
   crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
   store.close();
@@ -336,6 +342,7 @@ test('the watchers token finds its workspace', () => {
 
 test('deleting a workspace removes all of its rows', () => {
   const store = openStore(':memory:');
+  store.addTrack(W, { id: 't1', name: 'Office' });
   practice(store);
   store.addDriver(W, { id: 'ana', name: 'Ana', colour: '#ff2d9b' });
   store.addDecoder(W, { id: 'd1', name: 'Gate', tokenHash: 'h1', createdAt: 1 });

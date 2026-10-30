@@ -295,7 +295,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       for (const id of store.assignCrossings(workspaceId, code, driverId)) {
         rebuild(id);
         const { trackId, direction } = store.session(id);
-        if (trackId !== null) tracks.set(`${trackId} ${direction}`, { trackId, direction });
+        // A deleted track's laps stay in its sessions but set no records (named tracks spec §3.5).
+        if (trackId !== null && store.track(workspaceId, trackId)) tracks.set(`${trackId} ${direction}`, { trackId, direction });
       }
       for (const { trackId, direction } of tracks.values()) store.rebuildRecords(workspaceId, trackId, direction);
     });

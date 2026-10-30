@@ -291,8 +291,9 @@ export function openStore(path) {
     }
   }
 
-  /** Rewrites a track and direction's records and personal bests from its qualifying laps. */
+  /** Rewrites a track and direction's records and personal bests from its qualifying laps. A deleted track keeps none. */
   function rebuildRecords(ws, trackId, direction) {
+    if (!s.selectTrack.get(ws, trackId)) return;
     transaction(() => {
       s.deleteRecords.run(ws, trackId, direction);
       s.deleteBests.run(ws, trackId, direction);

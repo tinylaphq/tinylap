@@ -466,3 +466,26 @@ test('history rows and a session page name the track, or "a deleted track" once 
   assert.match(page, /<div><dt>Track<\/dt><dd>a deleted track<\/dd><\/div>/);
   assert.match(await (await get(`/clubs/${ws}/sessions/${kept.id}`)).text(), /<div><dt>Track<\/dt><dd>Track, anticlockwise<\/dd><\/div>/);
 });
+
+test('assigning a transponder after its track was deleted brings back no record, best or crown', async () => {
+  const ws = gone.id;
+  const home = app.store.ensureWorkspace(ws).trackId;
+  const ring = useTrack(app.store, ws, 'Old ring', 'cw');
+  clock.now = T0 + 9_500_000;
+  const old = app.engine.start(ws, { kind: 'practice' }).session;
+  for (const t of [9_500_000, 9_510_000, 9_520_000]) pass(ws, t, '0C');
+  app.engine.end(ws, old.id);
+  app.store.setCurrentTrack(ws, home, 'ccw');
+  app.store.setArchived(ws, ring, T0);
+  assert.equal(app.store.deleteTrack(ws, ring), 'deleted');
+
+  const { Ana } = await driversIn(ws, { Ana: '0C' });
+  assert.equal(app.store.currentRecord(ws, ring, 'cw'), null);
+  assert.deepEqual(app.store.personalBests(ws, ring, 'cw', [Ana.id]), []);
+  const body = await (await get(`/clubs/${ws}/sessions`)).text();
+  const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
+  assert.equal(rows.length, 3);
+  assert.match(rows[0], /<td>a deleted track<\/td>/);
+  assert.match(rows[0], />Ana</, 'the laps are Ana\'s now');
+  assert.doesNotMatch(rows[0], /class="crown"/);
+});
