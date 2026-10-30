@@ -11,6 +11,7 @@ Small custom elements that enhance server-rendered HTML, one per file, imported 
 - `tl-frame`: submits the forms inside it with fetch and swaps in the same frame from the page the server answers with.
 - `tl-copy`: shows a server-rendered Copy button where the browser can copy.
 - `tl-menu`: makes the `<details>` inside it a disclosure menu that closes on Escape, a press or focus outside, an in-page item, and leaving the page.
+- `tl-local-time`: rewrites the text of the `<time datetime>` inside it in the viewer's time zone (`format`: `time`, `date` or `datetime`), once on connect; the server's text is UTC.
 - `tl-relative-time`: keeps the "N min ago" text of the `<time datetime>` inside it current on server time (`now` attribute; without it, the device clock), hidden while younger than `min` ms; one shared timer, paused while the page is hidden.
 
 ## Markup
@@ -21,4 +22,5 @@ DOM-free helpers for servers, under `@tinylap/design/html/`, returning plain str
 - `account.js`: the account menu (`accountMenu`) and `signInLink`, the same in every app. Parts are found by class; the menu has no ids of its own.
 - `speculation.js`: the speculation rules every page carries, and their CSP hash.
 - `escape.js`: `escapeHtml`, and `safeHref` for every URL the helpers write.
+- `local-time.js`: `localTime(ms, format)`, the `tl-local-time` markup with its UTC text.
 - `format-ago.js`: `formatAgo(ms, now)`, "3 min ago" for a time in the past; DOM-free, used by servers and by `tl-relative-time`.
