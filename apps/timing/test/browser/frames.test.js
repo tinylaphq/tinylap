@@ -71,7 +71,7 @@ test('a bad rename swaps in the error: summary, marked field, the input kept, fo
   const id = await field.getAttribute('id');
   const url = page.url();
   await field.fill('   ');
-  await field.locator('xpath=ancestor::form').getByRole('button', { name: 'Rename' }).click();
+  await field.locator('xpath=ancestor::form').getByRole('button', { name: 'Save' }).click();
   await page.locator('#page-status [role="alert"]').waitFor();
   assert.equal(page.url(), url);
   assert.equal(await activeId(page), id);

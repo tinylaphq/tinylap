@@ -336,9 +336,21 @@ body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
 .inline-form .btn { margin: 0; }
 .inline-form > .field:has(> label:not(.visually-hidden)) ~ .btn { margin-top: calc(var(--label-line) + var(--p-space-xs)); }
 .button-row { display: flex; gap: var(--p-space-sm); flex-wrap: wrap; align-items: center; }
-.setup-row > .driver { flex: 0 0 auto; }
-/* The swatch alone names nothing; the rename field next to it carries the name. */
-.setup-row > .driver::before { width: 1.25rem; height: 1.25rem; margin: 0; display: block; }
+/* A driver's colour: a square swatch in palace's border, focused like its inputs. Its
+   field steps aside (display: contents) so an error under it takes a line of its own. */
+.driver-form > .field:has(> input[type="color"]) { display: contents; }
+.setup-row:has(> .driver-form) { align-items: start; }
+.driver-form > .field > .field-error { order: 1; flex-basis: 100%; }
+.driver-form input[type="color"] {
+  flex: 0 0 auto; width: 3rem; padding: 4px; cursor: pointer;
+  border: var(--p-border-width) solid var(--p-text); border-radius: var(--p-radius);
+  background: var(--p-surface); transition: var(--p-transition);
+}
+.driver-form input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.driver-form input[type="color"]::-webkit-color-swatch { border: var(--p-border-thin) solid var(--p-text); border-radius: 0; }
+.driver-form input[type="color"]::-moz-color-swatch { border: var(--p-border-thin) solid var(--p-text); border-radius: 0; }
+.driver-form input[type="color"]:focus-visible { outline: none; border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); transform: var(--p-lift-sm); }
+.driver-form input[type="color"][aria-invalid="true"] { border-color: var(--p-error); }
 /* A link-button in a row stands as tall as the inline form's buttons. */
 .setup-row > .btn { box-sizing: border-box; height: 3rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
 .setup-row > .inline-form { flex: 1 1 18rem; }
@@ -377,12 +389,11 @@ body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
 .decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
 .decoder-info .meta { margin: 0; }
 @media (max-width: 520px) {
-  /* The swatch stays beside the rename form; a delete link sits under it. */
-  /* Swatch, rename form and delete stay on one row. */
-  .setup-row:has(> .driver) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--p-space-xs); }
-  .setup-row > .driver + .inline-form { flex: none; min-width: 0; flex-wrap: nowrap; }
-  .setup-row > .driver + .inline-form > .field { flex: 1 1 0; }
-  .setup-row > .driver ~ .btn { padding-inline: var(--p-space-sm); }
+  /* Colour, name, Save and Delete stay on one row. */
+  .setup-row:has(> .driver-form) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-xs); }
+  .setup-row > .driver-form { flex: none; min-width: 0; gap: var(--p-space-xs); }
+  .setup-row > .driver-form > .field { flex: 1 1 0; }
+  .setup-row > .driver-form .btn, .setup-row > .driver-form ~ .btn { padding-inline: var(--p-space-sm); }
   /* A labelled field and its button stack, so the button needs no offset. */
   .inline-form:has(> .field > label:not(.visually-hidden)) { flex-direction: column; align-items: stretch; }
   .inline-form:has(> .field > label:not(.visually-hidden)) > .field { flex: 0 0 auto; }
