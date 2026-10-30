@@ -13,7 +13,7 @@ import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
 import { directionIcon } from './direction.js';
-import { chip as driverChip, crown, idleNotice, marks, marksHead, startPracticeForm } from './marks.js';
+import { chip as driverChip, crown, idleNotice, marks, marksHead, startPracticeForm, timeWidths } from './marks.js';
 
 const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
 
@@ -124,7 +124,7 @@ function standingsTable(snap) {
   for (const c of snap.crossings) if (c.lapMs !== null && c.driverId && c.counts && !last.has(c.driverId)) last.set(c.driverId, c.lapMs);
   const m = markers(snap, snap.session, snap.standings);
   if (snap.standings.length === 0) return html`<p class="empty board-empty">No laps yet.</p>`;
-  return html`<div class="board-scroll"><table class="board-table standings-table${race ? ' is-race' : ''}">
+  return html`<div class="board-scroll"><table class="board-table standings-table${race ? ' is-race' : ''}${timeWidths([...snap.standings.map((row) => row.bestMs), ...last.values()], snap.standings.map((row) => row.elapsedMs))}">
   <colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last">${race ? html`<col class="col-total">` : null}</colgroup>
   <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${marksHead}<th scope="col" class="num col-last">Last</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
   <tbody>${snap.standings.map((row) => { const cls = [row.finished && 'is-finished', m.isBest(row) && 'is-best'].filter(Boolean).join(' '); return html`<tr${cls ? html` class="${cls}"` : null}>
@@ -143,7 +143,7 @@ function feed(snap) {
   const laps = snap.crossings.filter((c) => c.lapMs !== null).slice(0, 12);
   return html`<aside class="board-feed" aria-label="Last laps">
   <h2 class="h3">Last laps</h2>
-  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps">${laps.map((c) => html`<li>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">Not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span></li>`)}</ol>`}
+  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps${timeWidths(laps.map((c) => c.lapMs))}">${laps.map((c) => html`<li>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">Not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span></li>`)}</ol>`}
 </aside>`;
 }
 
@@ -228,7 +228,7 @@ function idleBoard(request, snap, { watcher, big }) {
   if (members && !snap.driven && !snap.idle) return firstRun(request, snap);
   const lists = [fastest(snap), lastSession(request, snap, members)].filter(Boolean);
   return html`${hero(request, snap, members)}
-${lists.length ? html`<div class="board-idle">${lists}</div>` : null}`;
+${lists.length ? html`<div class="board-idle${timeWidths([...snap.fastest.map((b) => b.bestMs), ...(snap.lastResults?.standings ?? []).slice(0, 3).map((row) => row.bestMs)])}">${lists}</div>` : null}`;
 }
 
 /** Everything on the board that changes, in one element the stream replaces. */

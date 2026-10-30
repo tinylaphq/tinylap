@@ -26,6 +26,18 @@ export function marks({ lapMs, isRecord, isPb }, { note = null, list = false } =
   return list ? html`<span class="mark-cell">${shown}${note}</span>` : html`<td class="mark-cell">${shown}${note}</td>`;
 }
 
+/**
+ * Classes that widen a table's or list's time columns to the longest time it
+ * holds (app.css): a lap of a minute ("1:00.000", as long as a lap can be), a
+ * race's total of ten minutes or more ("14:05.123"). Most times are shorter,
+ * and the columns stay narrow for them. Leading space included.
+ * @param {(number | null | undefined)[]} laps @param {(number | null | undefined)[]} [totals]
+ */
+export function timeWidths(laps, totals = []) {
+  const long = (limit) => (/** @type {number | null | undefined} */ ms) => ms !== null && ms !== undefined && ms >= limit;
+  return `${laps.some(long(60_000)) ? ' has-minute-laps' : ''}${totals.some(long(600_000)) ? ' has-long-totals' : ''}`;
+}
+
 /** The marks column's header: no word on screen, its name for a screen reader. */
 export const marksHead = html`<th scope="col" class="mark-cell"><span class="visually-hidden">Mark</span></th>`;
 

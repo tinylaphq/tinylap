@@ -88,7 +88,7 @@ test('selectField without a hint or data-name renders as it always has', () => {
     '<div class="field">\n  <label for="x">Direction</label>\n  <select id="x" name="direction" aria-invalid="true" aria-describedby="x-error">\n    <option value="cw" selected>Clockwise</option><option value="ccw">Counter-clockwise</option>\n  </select>\n  <p class="field-error" id="x-error">Pick one.</p>\n</div>');
 });
 
-import { crown, idleNotice, marks, marksHead } from '../server/views/marks.js';
+import { crown, idleNotice, marks, marksHead, timeWidths } from '../server/views/marks.js';
 import { directionIcon } from '../server/views/direction.js';
 
 test('a mark is a cell of its own after the time, empty or not; a record lap shows TR, not PB too', () => {
@@ -100,6 +100,13 @@ test('a mark is a cell of its own after the time, empty or not; a record lap sho
   assert.equal(String(marksHead), '<th scope="col" class="mark-cell"><span class="visually-hidden">Mark</span></th>');
   assert.equal(crown(false), null);
   assert.equal(String(crown(true)), '&#8288;<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>', 'glued to the name by a word joiner');
+});
+
+test('time columns widen only for a lap of a minute or a total of ten minutes', () => {
+  assert.equal(timeWidths([8123, null, undefined, 59_999], [599_999]), '');
+  assert.equal(timeWidths([8123, 60_000]), ' has-minute-laps');
+  assert.equal(timeWidths([8123], [600_000]), ' has-long-totals');
+  assert.equal(timeWidths([60_000], [845_000]), ' has-minute-laps has-long-totals');
 });
 
 test('a car with no session running is a live line, by its driver, or by its code without one', () => {

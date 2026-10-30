@@ -9,7 +9,7 @@ import { localTime } from '@tinylap/design/html/local-time.js';
 import { formatLap } from '../../public/format.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
-import { chip, crown } from './marks.js';
+import { chip, crown, timeWidths } from './marks.js';
 
 export const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
 
@@ -35,7 +35,7 @@ export function recordsTable(request, { track, rows, drivers, layoutOf = null, l
   const base = request.space.base;
   if (!track) return html`<p class="empty">Set the track in <a href="${base}/setup#track">Setup</a> to keep its record.</p>`;
   if (rows.length === 0) return html`<p class="empty">No record yet.</p>`;
-  return html`<div class="board-scroll"><table class="board-table records-table${dates === 'datetime-year' || layoutOf ? ' is-wide' : ''}">
+  return html`<div class="board-scroll"><table class="board-table records-table${dates === 'datetime-year' || layoutOf ? ' is-wide' : ''}${timeWidths(rows.map((r) => r.lapMs))}">
   <colgroup><col class="col-time"><col>${dates === 'datetime-year' ? html`<col class="col-date is-year"><col class="col-date is-year records-wide">` : html`<col class="col-date"><col class="col-date records-wide">`}${layoutOf ? html`<col class="col-date is-year records-wide">` : null}</colgroup>
   <thead><tr><th scope="col" class="num">Lap</th><th scope="col">Driver</th><th scope="col">Set</th><th scope="col" class="records-wide">Held until</th>${layoutOf ? html`<th scope="col" class="records-wide">Layout</th>` : null}</tr></thead>
   <tbody>${rows.map((r, i) => html`<tr${i === 0 ? html` class="is-current"` : null}>

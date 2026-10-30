@@ -10,7 +10,7 @@ import { clockAt, formatClock, formatLap, formatLength } from '../../public/form
 import { html, safe } from './html.js';
 import { errorsSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
-import { chip, crown, idleNotice, marks, marksHead, startPracticeForm } from './marks.js';
+import { chip, crown, idleNotice, marks, marksHead, startPracticeForm, timeWidths } from './marks.js';
 import { recordsTable, trackName } from './records.js';
 
 export const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
@@ -98,7 +98,7 @@ function runningPanel(request, session, drivers, { reload }) {
  */
 function historySection(request, { rows, older, newer }, drivers) {
   const base = request.space.base;
-  const table = rows.length === 0 ? html`<p class="empty">No sessions yet.</p>` : html`<div class="board-scroll"><table class="board-table history-table">
+  const table = rows.length === 0 ? html`<p class="empty">No sessions yet.</p>` : html`<div class="board-scroll"><table class="board-table history-table${timeWidths(rows.map(({ best }) => best?.lapMs))}">
   <colgroup><col class="col-started"><col class="col-kind"><col class="history-wide"><col class="col-count history-wide"><col class="col-count history-wide"><col><col class="col-time"><col class="col-mark"></colgroup>
   <thead><tr><th scope="col">Started</th><th scope="col">Session</th><th scope="col" class="history-wide">Track</th><th scope="col" class="num history-wide">Length</th><th scope="col" class="num history-wide">Drivers</th><th scope="col">Fastest</th><th scope="col" class="num">Best</th>${marksHead}</tr></thead>
   <tbody>${rows.map(({ session, track, drivers: count, best }) => html`<tr class="history-row">
