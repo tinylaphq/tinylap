@@ -68,7 +68,7 @@ No migration. The deployed timing database holds no real club yet, so it starts 
   - Add track (a name, or a planner link);
   - Archived tracks, collapsed (`<details>`), each with Restore and Delete.
 - **A track's page**, `…/tracks/<id>`, members only: its name, the current layout drawn with `layoutToSvgString` from `@tinylap/track-format` (or "No layout"), earlier layouts by date with who attached them, and its records per direction (the record history, as `…/records` shows it). `…/records` keeps showing the current track's and links here.
-- **The board's track header** always has a track: its name, the direction as an icon, and its record or "No record yet". "No track set" goes.
+- **The board's track header** always has a track: its name and the direction as an icon; while a session runs, also its record or "No record yet" (when nobody races, the record is the board's hero instead). "No track set" goes.
 - **The direction icon:** an open loop, like a track seen from above, with one pink arrowhead where it carries on; it points the way the club races. It stands alone, without a visible word. Its meaning is in the SVG's own `<title>` ("Anticlockwise" or "Clockwise", the words the app already uses), which gives screen readers its name (`role="img"`) and a tooltip on hover. Where a member chooses the direction (Setup), the words stay visible.
 - **The board when nobody is racing** shows what's worth seeing, not warnings:
   - The track record is the big thing: the time, the holder with the crown, when it was set and what it beat (or "No record yet").
