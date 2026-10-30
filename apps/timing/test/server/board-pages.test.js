@@ -390,7 +390,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.doesNotMatch(head, /Track record|7\.500/, 'the record is below, once');
     const hero = part(body, '<section class="board-hero"');
     assert.match(hero, /<h1 class="board-hero-label">Track record<\/h1>\s*<p class="num board-hero-time">7\.500<\/p>/);
-    assert.match(hero, /<p class="board-hero-by"><span [^>]+>Haris<\/span><span class="crown"[^>]*>👑<\/span> set <tl-local-time format="date">[\s\S]*?, beat <span [^>]+>Haris<\/span>’s <span class="num">8\.000<\/span><\/p>/);
+    assert.match(hero, /<p class="board-hero-by"><span [^>]+>Haris<\/span><span class="crown"[^>]*>👑<\/span> set <tl-local-time format="datetime-short">[\s\S]*?, beat <span [^>]+>Haris<\/span>’s <span class="num">8\.000<\/span><\/p>/);
     const fastest = part(body, '<section class="board-fastest"');
     assert.match(fastest, /<h2 class="h3" id="board-fastest-title">Fastest on this track<\/h2>/);
     assert.deepEqual([...fastest.matchAll(/>(Haris|Mia)<\/span>[\s\S]*?(\d+\.\d{3})/g)].map((m) => [m[1], m[2]]), [['Haris', '7.500'], ['Mia', '9.000']]);
@@ -398,7 +398,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.match(last, /<h2 class="h3" id="board-last-title">Last session<\/h2>/);
     assert.match(last, /7\.500<span class="marks"><abbr class="mark mark-tr"/);
     assert.match(last, /9\.000<span class="marks"><abbr class="mark mark-pb"/);
-    assert.match(last, /Practice, ended <tl-local-time format="time">/);
+    assert.match(last, /Practice, ended <tl-local-time format="datetime-short">/);
     assert.equal(body.match(/class="crown"/g).length, 2, 'beside the holder in the record and in the last session');
   }
   assert.match(s.board, new RegExp(`<a href="${path}/sessions/${session.id}">All laps</a>`));

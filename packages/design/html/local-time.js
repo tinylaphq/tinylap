@@ -9,13 +9,14 @@ const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
 
 /**
  * @param {number} ms
- * @param {'time' | 'date' | 'datetime' | 'datetime-year'} format `14:32`, `12 Oct`, `12 Oct, 14:32`, or `12 Oct 2026, 14:32`
+ * @param {'time' | 'date' | 'datetime' | 'datetime-year' | 'datetime-short'} format `14:32`, `12 Oct`, `12 Oct, 14:32`, or `12 Oct 2026, 14:32`;
+ *   `datetime-short` is written as `datetime-year`, and the element drops what the viewer's today and year make plain
  */
 export function localTime(ms, format) {
   const d = new Date(ms);
   const time = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
   const date = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
   const text = format === 'time' ? time : format === 'date' ? date
-    : format === 'datetime-year' ? `${date} ${d.getUTCFullYear()}, ${time}` : `${date}, ${time}`;
+    : format === 'datetime-year' || format === 'datetime-short' ? `${date} ${d.getUTCFullYear()}, ${time}` : `${date}, ${time}`;
   return `<tl-local-time format="${format}"><time datetime="${d.toISOString()}">${text}</time></tl-local-time>`;
 }

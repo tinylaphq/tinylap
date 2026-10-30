@@ -148,7 +148,7 @@ function hero(request, snap, members) {
   <div class="board-hero-record">
     <h1 class="board-hero-label">Track record</h1>
     ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
-    <p class="board-hero-by">${chip(snap, r.driverId)}${crown(true)} set ${safe(localTime(r.at, 'date'))}${r.beat ? html`, beat ${chip(snap, r.beat.driverId)}’s <span class="num">${formatLap(r.beat.lapMs)}</span>` : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
+    <p class="board-hero-by">${chip(snap, r.driverId)}${crown(true)} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? html`, beat ${chip(snap, r.beat.driverId)}’s <span class="num">${formatLap(r.beat.lapMs)}</span>` : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
   </div>
   ${members ? go(request, snap) : null}
 </section>`;
@@ -186,7 +186,7 @@ function lastSession(request, snap, link) {
   return html`<section class="board-last" aria-labelledby="board-last-title">
   <h2 class="h3" id="board-last-title">Last session</h2>
   ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}</span><span class="num">${m.best(row)}</span></li>`)}</ol>`}
-  <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'time'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${link ? html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>` : null}</p>
+  <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'datetime-short'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${link ? html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>` : null}</p>
 </section>`;
 }
 

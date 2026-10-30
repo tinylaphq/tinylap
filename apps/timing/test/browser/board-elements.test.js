@@ -280,3 +280,23 @@ test('tl-local-time shows the time in the viewer\'s zone, and the UTC text witho
   assert.deepEqual(await read({ timezoneId: 'Pacific/Auckland' }), ['01:32', '13 Oct', '13 Oct, 01:32', '13 Oct 2026, 01:32']);
   assert.deepEqual(await read({ timezoneId: 'Europe/Berlin', javaScriptEnabled: false }), ['12:32', '12 Oct', '12 Oct, 12:32', '12 Oct 2026, 12:32']);
 });
+
+test('tl-local-time datetime-short drops what the viewer\'s today and year make plain, in their zone', async (t) => {
+  // 12 Oct 2026, 23:30 UTC: already 13 Oct in Berlin and Auckland.
+  const now = Date.UTC(2026, 9, 12, 23, 30);
+  const times = [Date.UTC(2026, 9, 12, 12, 32), Date.UTC(2026, 9, 12, 23, 0), Date.UTC(2025, 9, 12, 12, 32)];
+  const body = `<!doctype html><script type="module" src="/pkg/design/elements/local-time.js"></script><p>${times.map((at) => localTime(at, 'datetime-short')).join('|')}</p>`;
+  const read = async (options) => {
+    const { context, page, errors } = await pageAs(browser, app, null, options);
+    t.after(() => context.close());
+    if (options.javaScriptEnabled !== false) await page.clock.setFixedTime(now);
+    await page.route('**/fixture-short', (route) => route.fulfill({ contentType: 'text/html', body }));
+    await page.goto('/fixture-short');
+    if (options.javaScriptEnabled !== false) await page.waitForFunction(() => customElements.get('tl-local-time'));
+    assert.deepEqual(errors, []);
+    return page.locator('time').allInnerTexts();
+  };
+  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin' }), ['12 Oct, 14:32', '01:00', '12 Oct 2025, 14:32']);
+  assert.deepEqual(await read({ timezoneId: 'Pacific/Auckland' }), ['01:32', '12:00', '13 Oct 2025, 01:32']);
+  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin', javaScriptEnabled: false }), ['12 Oct 2026, 12:32', '12 Oct 2026, 23:00', '12 Oct 2025, 12:32']);
+});

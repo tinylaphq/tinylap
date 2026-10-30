@@ -64,4 +64,5 @@ test('localTime writes the instant with its UTC text as the fallback', () => {
   assert.match(localTime(at, 'date'), /format="date"><time [^>]*>2 Oct<\/time>/);
   assert.match(localTime(at, 'datetime'), /format="datetime"><time [^>]*>2 Oct, 07:05<\/time>/);
   assert.match(localTime(at, 'datetime-year'), /format="datetime-year"><time [^>]*>2 Oct 2026, 07:05<\/time>/);
+  assert.match(localTime(at, 'datetime-short'), /format="datetime-short"><time [^>]*>2 Oct 2026, 07:05<\/time>/, 'in full, for the element to shorten');
 });
