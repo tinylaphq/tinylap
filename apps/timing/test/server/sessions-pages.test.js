@@ -16,6 +16,8 @@ let history;
 let records;
 let idle;
 let gone;
+let lapless;
+let lena;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -26,6 +28,9 @@ before(async () => {
   idle = app.club(ana, 'Idle');
   gone = app.club(ana, 'Gone');
   member = await app.login(ana);
+  const len = await app.signUp('Lena');
+  lapless = app.club(len, 'Lapless');
+  lena = await app.login(len);
   base = `/clubs/${office.id}`;
 });
 after(() => app.close());
@@ -37,8 +42,8 @@ const pass = (ws, t, transponder) => {
   app.engine.ingest({ workspaceId: ws, decoder: `d-${ws}`, via: 'net', batch: { boot: 'b00tb00t', passings: [{ transponder, t }] } });
 };
 /** Drivers by name, each with a transponder named in `codes`. */
-async function driversIn(ws, codes) {
-  for (const name of Object.keys(codes)) await app.form(member, `/clubs/${ws}/drivers`, { name });
+async function driversIn(ws, codes, who = member) {
+  for (const name of Object.keys(codes)) await app.form(who, `/clubs/${ws}/drivers`, { name });
   const drivers = app.store.drivers(ws);
   for (const [name, code] of Object.entries(codes)) app.engine.assign(ws, code, drivers.find((d) => d.name === name).id);
   return Object.fromEntries(drivers.map((d) => [d.name, d]));
@@ -393,6 +398,42 @@ test('a session page: the final table with marks and crown, then every lap', asy
 
   assert.equal((await get(`${hbase}/sessions/nope`)).status, 404);
   assert.equal((await get(`/clubs/${office.id}/sessions/${session.id}`)).status, 404, 'another club’s session is not here');
+});
+
+/** The final table's rows and the lap cards of a session page, as text. */
+async function pageOf(ws, id) {
+  const res = await get(`/clubs/${ws}/sessions/${id}`, lena);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  return { table: /<table class="board-table">[\s\S]*?<\/table>/.exec(body)[0], cards: [...body.matchAll(/<div class="card-static session-laps">[\s\S]*?<\/div>/g)].map((m) => m[0]) };
+}
+
+test('a race aborted during its countdown still opens, its drivers in the table with no laps', async () => {
+  const ws = lapless.id;
+  const { Ana, Ben } = await driversIn(ws, { Ana: '31', Ben: '32' }, lena);
+  const { session } = app.engine.start(ws, { kind: 'race', roster: [Ana.id, Ben.id], durationMs: 120_000, countdownMs: 10_000 });
+  app.engine.abort(ws, session.id);
+  const { table, cards } = await pageOf(ws, session.id);
+  assert.match(table, />Ana</);
+  assert.match(table, />Ben</);
+  assert.equal(cards.length, 2);
+  for (const card of cards) assert.match(card, /No laps/);
+});
+
+test('a roster driver who only crossed the line once has a card saying no laps', async () => {
+  const ws = lapless.id;
+  const { Cy, Di } = await driversIn(ws, { Cy: '41', Di: '42' }, lena);
+  const { session } = app.engine.start(ws, { kind: 'race', roster: [Cy.id, Di.id], durationMs: 120_000 });
+  pass(ws, 1000, '41');
+  pass(ws, 2000, '42');
+  pass(ws, 9000, '42');
+  app.engine.end(ws, session.id);
+  const { table, cards } = await pageOf(ws, session.id);
+  assert.match(table, />Cy</);
+  assert.match(table, />Di</);
+  const ana = cards.find((c) => c.includes('>Cy<'));
+  assert.match(ana, /No laps/);
+  assert.doesNotMatch(cards.find((c) => c.includes('>Di<')), /No laps/);
 });
 
 test('a signed-out request for a session page goes to sign-in', async () => {
