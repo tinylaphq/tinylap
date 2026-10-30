@@ -112,7 +112,6 @@ const STATE_TEXT = {
   connecting: 'Talking to the decoder.',
   listening: 'Connected. Nothing from the device yet.',
   unpaired: 'The decoder is not paired yet.',
-  unknown: "This decoder's pairing isn't known here. Pair it again.",
   choose: 'Choose which decoder this is.',
   disconnected: 'Decoder disconnected.',
 };
@@ -320,6 +319,8 @@ class TlBridge extends HTMLElement {
     for (const section of /** @type {NodeListOf<HTMLElement>} */ (run.root.querySelectorAll('[data-bridge-state]'))) section.hidden = section.dataset.bridgeState !== state;
     if (state === 'disconnected') this.$(run, '[data-bridge-gap]').hidden = !BROWSER_ASSIGNED.has(run.bridge?.kind);
     if (state === 'ready') this.update(run);
+    // The unknown pairing's warning is said by the live region only, in the server's words.
+    else if (state === 'unknown') this.announce(run, this.$(run, '[data-bridge-unknown]').textContent);
     else this.announce(run, STATE_TEXT[state] ?? '');
     // After the state's own text, so unreadable data is what screen readers hear.
     if (state === 'listening') this.unreadable(run);

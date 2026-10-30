@@ -471,9 +471,12 @@ test('a decoder the server no longer knows stops forwarding and offers to pair a
   const [old] = app.store.decoders(space);
   assert.equal((await app.api(vic, 'DELETE', `/workspaces/${space}/decoders/${old.id}`)).status, 204);
 
-  const warning = page.getByRole('alert').filter({ hasText: "This decoder's pairing isn't known here." });
-  await warning.waitFor({ timeout: 20_000 });
+  const warning = page.locator('[data-bridge-unknown]');
+  await warning.filter({ hasText: "This decoder's pairing isn't known here." }).waitFor({ timeout: 20_000 });
   assert.match(await warning.innerText(), /weren't recorded/);
+  // Said once, by the one live region: the warning itself is no alert.
+  assert.equal(await page.getByRole('alert').filter({ visible: true }).count(), 0);
+  assert.equal(await page.locator('#bridge > [role="status"]').textContent(), await warning.textContent());
   assert.equal(await page.locator('[data-bridge-status]').isVisible(), false, 'no longer says it forwards');
   await page.getByLabel('Name for this decoder').fill('Gate again');
   await page.getByRole('button', { name: 'Pair again' }).click();
