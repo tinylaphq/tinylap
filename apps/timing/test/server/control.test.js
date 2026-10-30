@@ -96,3 +96,13 @@ test('two starts at once: one wins, one conflicts', async () => {
   const won = await (results.find((r) => r.status === 201)).json();
   await app.api(member, 'POST', path(`sessions/${won.id}/end`));
 });
+
+test('a tap with no session running is its own problem', async () => {
+  assert.equal(app.store.runningSession(office.id), null);
+  const res = await app.api(member, 'POST', path('tap'), { driverId: ana.id });
+  assert.equal(res.status, 409);
+  const problem = await res.json();
+  assert.equal(problem.type, `${app.base}/problems/no-session`);
+  assert.equal(problem.title, 'No session is running');
+  assert.match(problem.detail, /No session is running/);
+});

@@ -183,6 +183,6 @@ export function tap(request, { driverId }) {
   const wait = request.limiters.tap.take(request.userId);
   if (wait) return limited(`That's a lot of taps. Try again in ${wait} seconds.`, wait);
   const row = request.engine.tap(request.workspaceId, driverId);
-  if (row?.error) return fail('conflict', 'No session is running. Start a practice first.');
+  if (row?.error) return fail('no-session', 'No session is running. Start a practice first.');
   return { value: { stored: row !== null, lapMs: row?.lapMs ?? null } };
 }
