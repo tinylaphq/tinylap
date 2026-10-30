@@ -54,9 +54,9 @@ function trackSection(request, m) {
   <div class="track-now stack-sm">
     <p class="track-head">Now: <a href="${base}/tracks/${m.track.id}"><strong>${m.track.name}</strong></a>, ${DIRECTION_NAME[m.direction]}. ${layoutNote(m.track)}</p>
     <form method="post" action="${base}/track" class="inline-form">
-      ${selectField({ id: 'current-track', label: 'Track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: values.id ?? m.track.id, error })}
+      ${selectField({ id: 'current-track', label: 'Current track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: values.id ?? m.track.id, error })}
       ${selectField({ id: 'current-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error })}
-      <button type="submit" class="btn btn-primary">Switch</button>
+      <button type="submit" class="btn btn-primary">Save</button>
     </form>
     ${trackEdit(request, m, m.track)}
   </div>
@@ -76,7 +76,7 @@ function trackSection(request, m) {
     <div class="inline-form">
       ${textField({ id: 'add-track-name', label: 'Name', name: 'name', maxlength: 60, required: true, value: add.name ?? '', error: addError })}
       ${textField({ id: 'add-track-link', label: 'Planner link', name: 'link', type: 'url', placeholder: 'Optional', value: add.link ?? '', error: addError })}
-      <button type="submit" class="btn btn-primary">Add track</button>
+      <button type="submit" class="btn btn-outline">Add track</button>
     </div>
   </form>
   ${m.archived.length ? html`<details class="track-archive"${m.archived.some((t) => m.errors[`track-restore:${t.id}`]) ? html` open` : null}>

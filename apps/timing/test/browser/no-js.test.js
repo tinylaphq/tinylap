@@ -56,9 +56,9 @@ test('set the track and manage drivers', async (t) => {
   await page.getByLabel('Planner link', { exact: true }).fill(`${planner.url}/layouts/${CLOSED}`);
   await page.getByRole('button', { name: 'Add track' }).click();
   await page.getByRole('link', { name: 'Office loop' }).waitFor();
-  await page.getByRole('combobox', { name: 'Track', exact: true }).selectOption({ label: 'Office loop' });
+  await page.getByRole('combobox', { name: 'Current track' }).selectOption({ label: 'Office loop' });
   await page.getByLabel('Direction').selectOption('cw');
-  await page.getByRole('button', { name: 'Switch' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('Now: Office loop, clockwise.').waitFor();
 
   for (const name of ['Ana', 'Ben']) {

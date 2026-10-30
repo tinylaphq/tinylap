@@ -127,13 +127,22 @@ const renameTrack = withForm((request, form, match) => {
 });
 
 // A different layout answers with the confirmation (§3.4), its link carried in both of its forms.
+// Its "add as a new track" form posts here too (`as=new`), so a failure comes back to the confirmation.
 const attachLayout = withForm(async (request, form, match) => {
   const values = { link: form.get('link') ?? '' };
-  const result = await ops.attachLayout(request, { id: match[2], link: values.link, confirm: form.get('confirm') === '1', by: await by(request) });
-  if (result.error?.problem === 'conflict' && result.error.current) {
+  const confirmation = (status, extras = {}) => {
     const track = request.store.track(request.workspaceId, match[2]);
-    return page(request, 200, changeLayoutPage(request, { track, link: values.link, back: `${request.space.base}/setup#track` }));
+    if (!track) return renderSetup(request, 404, { failed: { error: { message: 'There is no such track here.' } } });
+    return page(request, status, changeLayoutPage(request, { track, link: values.link, back: `${request.space.base}/setup#track`, ...extras }));
+  };
+  if (form.get('as') === 'new') {
+    const name = form.get('name') ?? '';
+    const added = asForm(await ops.addTrack(request, { name, link: values.link, by: await by(request) }));
+    if (!added.error) return seeOther(`${request.space.base}/setup#track`);
+    return confirmation(added.error.status, { error: added.error, name });
   }
+  const result = await ops.attachLayout(request, { id: match[2], link: values.link, confirm: form.get('confirm') === '1', by: await by(request) });
+  if (result.error?.problem === 'conflict' && result.error.current) return confirmation(200);
   return trackForm(request, result, `track-layout:${match[2]}`, values, { link: `track-link-${match[2]}` });
 });
 

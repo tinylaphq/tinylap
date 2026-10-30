@@ -186,7 +186,7 @@ test('the track section lists the current track with its direction in words, and
   const [track] = tracks();
   assert.match(body, new RegExp(`Now: <a href="${pitsBase}/tracks/${track.id}"><strong>Track</strong></a>, anticlockwise\\.`));
   assert.match(body, new RegExp(`<form method="post" action="${pitsBase}/track"`));
-  assert.match(body, /<label for="current-track">Track<\/label>/);
+  assert.match(body, /<label for="current-track">Current track<\/label>/);
   assert.match(body, /<option value="ccw" selected>Anticlockwise<\/option>/);
   assert.match(body, /No layout/);
   assert.match(body, /<label for="add-track-name">Name<\/label>/);
@@ -271,7 +271,8 @@ test('a different layout asks first, on a page that carries the link to both cho
   assert.match(body, /Records on Office loop stay and are compared with laps on the new layout\. If the track itself changed, add it as a new track instead\./);
   const change = new RegExp(`<form method="post" action="${pitsBase}/tracks/${office.id}/layout"[^>]*>\\s*<input type="hidden" name="link" value="${link(OTHER)}">\\s*<input type="hidden" name="confirm" value="1">\\s*<button type="submit" class="btn btn-primary">Change the layout</button>`);
   assert.match(body, change);
-  assert.match(body, new RegExp(`<form method="post" action="${pitsBase}/tracks"[^>]*>\\s*<input type="hidden" name="link" value="${link(OTHER)}">`));
+  assert.match(body, /Or add it as a new track:/);
+  assert.match(body, new RegExp(`<form method="post" action="${pitsBase}/tracks/${office.id}/layout"[^>]*>\\s*<input type="hidden" name="link" value="${link(OTHER)}">\\s*<input type="hidden" name="as" value="new">`));
   assert.match(body, /<input type="text" id="new-track-name" name="name" value="" required maxlength="60">/);
   assert.match(body, />Add as a new track</);
   assert.match(body, new RegExp(`<a class="btn btn-outline" href="${pitsBase}/setup#track">Cancel</a>`));
@@ -280,9 +281,38 @@ test('a different layout asks first, on a page that carries the link to both cho
   const confirmed = await app.form(member, `${pitsBase}/tracks/${office.id}/layout`, { link: link(OTHER), confirm: '1' });
   assert.equal(confirmed.status, 303);
   assert.equal(app.store.track(pits.id, office.id).layout.plannerId, other.track.id);
-  const added = await app.form(member, `${pitsBase}/tracks`, { name: 'Office two', link: link(CLOSED) });
+  const added = await app.form(member, `${pitsBase}/tracks/${office.id}/layout`, { as: 'new', name: 'Office two', link: link(CLOSED) });
+  assert.equal(added.headers.get('location'), `${pitsBase}/setup#track`);
   assert.equal(added.status, 303);
   assert.equal(trackNamed('Office two').layout.plannerId, closed.track.id);
+});
+
+test('a failed new track on the layout confirmation comes back to the confirmation, the name kept and the link in both forms', async () => {
+  const office = trackNamed('Office loop');
+  const before = tracks().length;
+  const res = await app.form(member, `${pitsBase}/tracks/${office.id}/layout`, { as: 'new', name: 'garage', link: link(OTHER) });
+  assert.equal(res.status, 422);
+  const body = await res.text();
+  assert.match(body, /<h1>Change the layout of Office loop\?<\/h1>/);
+  assert.match(body, /Records on Office loop stay and are compared with laps on the new layout\./);
+  assert.match(body, /<p class="status status-error" role="alert"><a href="#new-track-name">A track named garage is already in use\. Rename one of them first\.<\/a><\/p>/);
+  assert.match(body, /<input type="text" id="new-track-name" name="name" value="garage" required maxlength="60" aria-invalid="true"/);
+  assert.equal(body.match(new RegExp(`<input type="hidden" name="link" value="${link(OTHER)}">`, 'g'))?.length, 2);
+  assert.equal(tracks().length, before);
+  assert.equal(app.store.track(pits.id, office.id).layout.plannerId, other.track.id, 'and the layout is as it was');
+});
+
+test('a track name is escaped on Setup and on the confirmation', async () => {
+  assert.equal((await app.form(member, `${pitsBase}/tracks`, { name: '<b>x</b>', link: link(CLOSED) })).status, 303);
+  const bold = trackNamed('<b>x</b>');
+  const setup = await (await get(member, `${pitsBase}/setup`)).text();
+  assert.match(setup, /&lt;b&gt;x&lt;\/b&gt;/);
+  assert.doesNotMatch(setup, /<b>x<\/b>/);
+  const ask = await (await app.form(member, `${pitsBase}/tracks/${bold.id}/layout`, { link: link(OTHER) })).text();
+  assert.match(ask, /Records on &lt;b&gt;x&lt;\/b&gt; stay/);
+  assert.doesNotMatch(ask, /<b>x<\/b>/);
+  await app.form(member, `${pitsBase}/tracks/${bold.id}/archive`, {});
+  assert.equal((await app.form(owner, `${pitsBase}/tracks/${bold.id}/delete`, {})).status, 303);
 });
 
 test('making a track current with a direction; a bad direction is a 422', async () => {
