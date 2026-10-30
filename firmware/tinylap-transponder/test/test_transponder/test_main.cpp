@@ -53,6 +53,19 @@ void test_ids_draw_different_gaps() {
     }
 }
 
+void test_blink_pattern() {
+  // Three 50 ms pulses, 150 ms apart, well inside the watchdog's period.
+  TEST_ASSERT_EQUAL_UINT8(5, TL_BLINK_STEPS);
+  uint32_t total = 0;
+  for (uint8_t i = 0; i < TL_BLINK_STEPS; i++) {
+    TEST_ASSERT_EQUAL_UINT16(i % 2 == 0 ? 50 : 150, tlBlinkStepMs(i));
+    total += tlBlinkStepMs(i);
+  }
+  TEST_ASSERT_EQUAL_UINT32(450, total);
+  TEST_ASSERT_TRUE(total < TL_BLINK_PERIOD_MS / 2);
+  TEST_ASSERT_EQUAL_UINT16(0, tlBlinkStepMs(TL_BLINK_STEPS));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_id_valid);
@@ -60,5 +73,6 @@ int main() {
   RUN_TEST(test_xorshift_never_zero);
   RUN_TEST(test_gaps_in_range);
   RUN_TEST(test_ids_draw_different_gaps);
+  RUN_TEST(test_blink_pattern);
   return UNITY_END();
 }

@@ -95,19 +95,17 @@ If the values change, only the shared definition (§5.1) changes; the tests take
 
 ### 4.1 Hardware, as known and as still open
 
-Known from the board: an ATtiny45 (DIP-8, Atmel "TINY45 20U"), a transistor switching the TSAL6200, an electrolytic capacitor, a diode, three resistors and a three-wire connector (red 5 V, grey ground, blue not connected: it is there because the car's socket has three pins).
+Known from the board and its KiCad schematic (`miniZSender.kicad_sch`): an ATtiny45 (DIP-8, Atmel "TINY45 20U"), an electrolytic capacitor (10 µF), a diode and a three-wire connector (red 5 V, grey ground, blue not connected: it is there because the car's socket has three pins). The LED path is **PB0 (leg 5) → R2 100 Ω → gate of a BS170 N-MOSFET**, which switches the TSAL6200 through **R1 33 Ω** from 5 V; R3 100 kΩ is the third resistor. A high pin turns the LED on. With R1 the LED draws about 100–115 mA while on: at or just above its 100 mA continuous rating, and well inside its 200 mA peak rating at the carrier's 50% duty.
 
 The chips run on the internal 8 MHz oscillator, and the four receivers share one data pin. The old transponder program's source is not available, so the new program starts from scratch.
 
 **Still open:**
 
-1. Which ATtiny pin drives the transistor.
-2. Whether CKDIV8 is set today (it doesn't matter to the program, which clears the prescaler, only to whether the fuse write changes anything).
-3. The LED's current. The current at 50% carrier duty must stay inside the TSAL6200's ratings.
-4. Which programmer is used (USBasp, AVRISP mkII, an Arduino as ISP …), and whether the chip is socketed or programmed on the board.
-5. Whether the car's supply is regulated, or bounces with the track power.
+1. Whether CKDIV8 is set today (it doesn't matter to the program, which clears the prescaler, only to whether the fuse write changes anything).
+2. Which programmer is used (USBasp, AVRISP mkII, an Arduino as ISP …), and whether the chip is socketed or programmed on the board.
+3. Whether the car's supply is regulated, or bounces with the track power.
 
-The program takes the LED pin as a build setting (`-D TL_LED_PIN=PBn`, default PB0), so question 1 changes one line.
+The program takes the LED pin as a build setting (`-D TL_LED_PIN=PBn`, default PB0, the pin of these boards), so another board changes one line.
 
 ### 4.2 Clock and carrier
 
@@ -119,7 +117,7 @@ The program takes the LED pin as a build setting (`-D TL_LED_PIN=PBn`, default P
 ### 4.3 What it does
 
 1. At power-on, clear the prescaler and apply OSCCAL from EEPROM if one is stored (§4.4).
-2. Read the id from EEPROM address 0 and its complement from address 1. **If the id is above 127, or the complement doesn't match, it sends nothing.** A transponder that would claim a wrong id is worse than one that is visibly dead.
+2. Read the id from EEPROM address 0 and its complement from address 1. **If the id is above 127, or the complement doesn't match, it sends no frames.** A transponder that would claim a wrong id is worse than one the decoder never sees. Instead it blinks: three 50 ms pulses, 150 ms apart, every 2 s. The LED is plainly on, without the carrier, so the receivers output nothing and no passing is counted, while a phone camera shows the pattern. The watchdog, in interrupt mode with a 2 s period, wakes the chip for each pattern; it is powered down in between.
 3. Seed a 16-bit xorshift generator from the id (`0xACE1 ^ (id × 0x9E37)`, never zero). Different ids draw different gaps; nothing is written to EEPROM at run time.
 4. Loop: send a frame (§3), wait a gap drawn evenly from 12,000–28,000 µs, repeat.
 
@@ -197,7 +195,7 @@ Native, in CI with the decoder's:
 
 - `tinylap-ir`: parity for all 128 ids; every encoded frame has 10 bursts and the cycle counts of §3.1; `tlEncodeFrame` respects `max`; `tlCyclesToUs` rounds as the table says.
 - The decoder: every id round-trips through `tlEncodeFrame` → levels → `decodeBatch`; each single bit flipped is rejected with `Reject::Parity`; every burst start moved by up to ±79 µs, and every burst end by up to ±132 µs, still decodes; a clock 1.5% slow and 1.5% fast decodes; two frames 12,000 µs apart decode as two.
-- The transponder: the xorshift draws stay within 12,000–28,000 µs, are never stuck at zero, and differ for different ids; an id above 127 or a wrong complement sends nothing; the EEPROM-image script writes the three bytes for a given id and OSCCAL.
+- The transponder: the xorshift draws stay within 12,000–28,000 µs, are never stuck at zero, and differ for different ids; an id above 127 or a wrong complement is refused; the blink pattern's steps are three 50 ms pulses 150 ms apart, inside the watchdog's 2 s period; the EEPROM-image script writes the three bytes for a given id and OSCCAL.
 - `pio run -e attiny45` builds in CI. It is a small download (avr-gcc), cached like the ESP32 toolchain.
 
 The carrier loop's cycle count can't be host-tested; §7 measures it.
@@ -212,7 +210,7 @@ The carrier loop's cycle count can't be host-tested; §7 measures it.
 
 ## 8. Risks
 
-- **The open hardware questions (§4.1).** The pin is a build setting and the timings live in one header, so only a different clock or a different programming setup would mean real changes.
+- **The open hardware questions (§4.1).** The pin is known and a build setting and the timings live in one header, so only a different clock or a different programming setup would mean real changes.
 - **The carrier is a counted loop.** §4.2 fixes its timing with `__builtin_avr_delay_cycles`; §7.1 checks the result.
 - **The view time is unknown.** A car crossing fast under a narrow funnel may be in view for only a few frame periods; §7.2 measures it before the gap is final.
 - **The envelope duty is near the receiver's limit** in a run of zeros (§3.1). If reception is poor, the zero pause grows first.
@@ -223,7 +221,7 @@ The carrier loop's cycle count can't be host-tested; §7 measures it.
 1. The frame of §3: bursts of 15 cycles, the bit in the time between burst starts, even parity as the 8th bit, a 2000 µs start period.
 2. The gap 12–28 ms, so two cars in view both get frames through; adjusted after §7.2.
 3. The decoder reads only the new format (§2, against the decoder spec's §8).
-4. The id lives in EEPROM with its complement, written when flashing; a missing or broken id sends nothing.
+4. The id lives in EEPROM with its complement, written when flashing; a missing or broken id sends no frames, only the slow blink of §4.3.
 5. Carrier in software with interrupts off, so any pin works.
 6. Internal 8 MHz RC; every chip's clock checked with the capture build and calibrated through OSCCAL when it is flashed.
 7. Fuses low `0xE2`, high `0xD5` (EESAVE and brown-out detection on).

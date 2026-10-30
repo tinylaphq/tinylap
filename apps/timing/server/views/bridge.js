@@ -67,6 +67,14 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
         <button type="submit" class="btn btn-primary">Pair</button>
       </form>
     </section>
+    <section data-bridge-state="unknown" hidden class="card-static stack-md">
+      <p class="status status-warning" data-bridge-unknown>This decoder's pairing isn't known here. Its passings before you pair it again weren't recorded.</p>
+      <p>Its decoder may have been deleted, or it was paired with another TinyLap server. Pairing again makes a new decoder for ${where} and sends its token to the device over this cable.</p>
+      <form data-bridge-repair class="stack-sm">
+        <div class="field"><label for="bridge-repair-name">Name for this decoder</label><input type="text" id="bridge-repair-name" name="name" value="Decoder" maxlength="60" required></div>
+        <button type="submit" class="btn btn-primary">Pair again</button>
+      </form>
+    </section>
     <section data-bridge-state="choose" hidden class="card-static stack-md">
       <h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this?</h2>
       <p data-bridge-kind data-where="${where}"></p>

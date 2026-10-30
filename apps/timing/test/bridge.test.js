@@ -116,6 +116,43 @@ test('a group the server refuses for good is dropped and does not block the othe
   await bridge.close();
 });
 
+test("a 404 for the decoder's own id stops forwarding until it is paired again; a 422 doesn't", async () => {
+  const sim = createSimulator({ cars: [], decoder: 'dec_1' });
+  const { port, send } = fakePort(sim);
+  const posts = [];
+  let status = 422;
+  const outbox = memoryOutbox();
+  const bridge = new Bridge({ port, outbox, retryMs: 10_000, post: async (decoder, batch) => {
+    posts.push(decoder);
+    if (decoder === 'dec_1') throw Object.assign(new Error('There is no such decoder.'), { status });
+    return { through: Math.max(...batch.passings.map((x) => x.t)) };
+  } });
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  send(commands.lap('0A', 1000));
+  await until(() => posts.length === 1 && bridge.dropped === 1);
+  assert.equal(bridge.state, 'ready', 'a bad batch is dropped, and forwarding goes on');
+
+  status = 404;
+  send(commands.lap('0A', 9000));
+  await until(() => bridge.state === 'unknown');
+  assert.equal(await outbox.count(), 0);
+  // Its %TLID again (a reboot, say) doesn't make it ready, and its passings go nowhere.
+  await bridge.hello();
+  await until(() => bridge.state === 'unknown');
+  send(commands.lap('0A', 17000));
+  await new Promise((done) => setTimeout(done, 30));
+  assert.equal(posts.length, 2);
+  assert.equal(await outbox.count(), 0);
+
+  await bridge.pair('dec_2', 't'.repeat(43));
+  await until(() => bridge.state === 'ready');
+  assert.equal(sim.decoder, 'dec_2');
+  send(commands.lap('0A', 25000));
+  await until(() => posts.at(-1) === 'dec_2');
+  await bridge.close();
+});
+
 const p = (t, decoder = 'd1') => ({ decoder, boot: 'b1', transponder: '0A', t });
 const failing = (status, message = `answered ${status}`) => Object.assign(new Error(message), { status });
 
@@ -130,6 +167,7 @@ test('only a 404 or a 422 drops the passings: they will never be taken', async (
     });
     assert.equal(refused.refusal.message, 'There is no such decoder.');
     assert.equal(refused.dropped, 3, String(status));
+    assert.deepEqual([...refused.missing], status === 404 ? ['d1'] : [], 'a 404 says the server doesn\'t know the decoder');
     assert.equal(await outbox.count(), 0, String(status));
   }
 });
@@ -142,7 +180,7 @@ test('signed out, too large, rate limited, a 5xx or the network: the passings wa
     assert.equal(await outbox.count(), 1, failure.message);
     await outbox.remove([p(1000)]);
   }
-  assert.deepEqual(await sendOutbox(outbox, async () => ({ through: null })), { refusal: null, dropped: 0, forbidden: null, blocked: 0, sentLines: [] });
+  assert.deepEqual(await sendOutbox(outbox, async () => ({ through: null })), { refusal: null, dropped: 0, forbidden: null, blocked: 0, sentLines: [], missing: new Set() });
 });
 
 test('a decoder of a club without access waits, and does not hold up the others', async () => {

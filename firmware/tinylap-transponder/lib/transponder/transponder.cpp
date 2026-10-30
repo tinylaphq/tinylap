@@ -23,3 +23,8 @@ uint16_t tlNextGapUs(uint16_t& state) {
   while (value >= limit);
   return (uint16_t)(TL_GAP_MIN_US + value % span);
 }
+
+uint16_t tlBlinkStepMs(uint8_t step) {
+  if (step >= TL_BLINK_STEPS) return 0;
+  return step % 2 == 0 ? 50 : 150;
+}

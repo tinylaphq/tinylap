@@ -14,3 +14,11 @@ uint16_t tlXorshift(uint16_t& state);
 
 // The next pause between two frames in microseconds, evenly from TL_GAP_MIN_US to TL_GAP_MAX_US.
 uint16_t tlNextGapUs(uint16_t& state);
+
+// The sign of life of a transponder without a valid id, instead of frames: three short pulses of the LED, plainly
+// on without the carrier so no receiver sees them, once per TL_BLINK_PERIOD_MS (the watchdog's period).
+constexpr uint8_t TL_BLINK_STEPS = 5;
+constexpr uint16_t TL_BLINK_PERIOD_MS = 2000;
+
+// The length of step `step` of the pattern in ms: even steps lit, odd steps dark; 0 past the last step.
+uint16_t tlBlinkStepMs(uint8_t step);

@@ -266,17 +266,21 @@ test('status lines on the bridge read as sentences, not in capitals', async (t) 
 const GONE = 'There is no such decoder: it was removed, or never paired.';
 const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-test('passings for a decoder removed on the server are dropped, and the ready panel says so', async (t) => {
+test('passings for another decoder removed on the server are dropped, and the ready panel says so', async (t) => {
   const { page } = await toPairing(t);
-  await page.getByLabel('Decoder name').fill('Gone');
+  await page.getByLabel('Decoder name').fill('Here');
   await page.getByRole('button', { name: 'Pair' }).click();
-  await page.getByText('Forwarding from Gone', { exact: true }).first().waitFor();
-  const gone = app.store.decoders(personal).find((d) => d.name === 'Gone');
-  assert.equal((await app.api(member, 'DELETE', `/workspaces/${personal}/decoders/${gone.id}`)).status, 204);
+  await page.getByText('Forwarding from Here', { exact: true }).first().waitFor();
+  // A passing an earlier visit left for a decoder the server no longer has; this decoder's own 404 is the test below.
+  await page.evaluate(async () => {
+    const { openOutbox } = await import('/public/outbox.js');
+    await (await openOutbox()).add({ decoder: 'dec_gone', boot: 'b00tb00t', transponder: '0A', t: 1000 });
+  });
   const refused = page.locator('[data-bridge-refused]');
   await refused.waitFor({ timeout: 20_000 });
   assert.match(await refused.innerText(), new RegExp(`^(1 passing was|\\d+ passings were) refused and (is|are) no longer waiting to send: ${escaped(GONE)}$`));
   await page.locator('[data-bridge-outbox]', { hasText: /^0$/ }).waitFor();
+  assert.equal(await page.locator('[data-bridge-status]').innerText(), 'Forwarding from Here');
 });
 
 test('signed out while forwarding, passings wait here and the page says to sign in again', async (t) => {
@@ -449,4 +453,45 @@ test('passings for a club without access wait, say why, and never hold up this d
   }
   assert.deepEqual(seen, [theirs], 'theirs still waits, and only theirs');
   assert.equal(await page.locator('[data-bridge-status]').innerText(), 'Forwarding from Mine');
+});
+
+test('a decoder the server no longer knows stops forwarding and offers to pair again', async (t) => {
+  // Its own member: the file's member has used up their pairings for the minute.
+  const vic = await app.login(await app.signUp('Vic'));
+  const space = (await (await app.api(vic, 'GET', '/auth/me')).json()).workspaces[0].id;
+  app.engine.start(space, { kind: 'practice' });
+  const { context, page, errors } = await pageAs(browser, app, vic);
+  t.after(() => context.close());
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByLabel('Decoder name').fill('Gate');
+  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  const [old] = app.store.decoders(space);
+  assert.equal((await app.api(vic, 'DELETE', `/workspaces/${space}/decoders/${old.id}`)).status, 204);
+
+  const warning = page.locator('[data-bridge-unknown]');
+  await warning.filter({ hasText: "This decoder's pairing isn't known here." }).waitFor({ timeout: 20_000 });
+  assert.match(await warning.innerText(), /weren't recorded/);
+  // Said once, by the one live region: the warning itself is no alert.
+  assert.equal(await page.getByRole('alert').filter({ visible: true }).count(), 0);
+  assert.equal(await page.locator('#bridge > [role="status"]').textContent(), await warning.textContent());
+  assert.equal(await page.locator('[data-bridge-status]').isVisible(), false, 'no longer says it forwards');
+  await page.getByLabel('Name for this decoder').fill('Gate again');
+  await page.getByRole('button', { name: 'Pair again' }).click();
+  await page.getByText('Forwarding from Gate again', { exact: true }).first().waitFor();
+  assert.equal(await warning.isVisible(), false);
+
+  const [fresh] = app.store.decoders(space);
+  assert.notEqual(fresh.id, old.id);
+  assert.equal(fresh.name, 'Gate again');
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('tinylap-sim-decoder') ?? 'null'));
+  assert.equal(stored?.decoder, fresh.id, 'the device stores the new pairing');
+  const before = app.engine.snapshot(space).crossings.length;
+  for (const end = Date.now() + 20_000; app.engine.snapshot(space).crossings.length <= before;) {
+    assert.ok(Date.now() < end, 'passings arrive again');
+    await page.waitForTimeout(100);
+  }
+  assert.deepEqual(errors, []);
 });
