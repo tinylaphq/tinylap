@@ -39,7 +39,7 @@ test('start a race from the form, then abort it after confirming', async () => {
   const started = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['roster', b.id], ['duration', '2'], ['countdown', '0']]);
   assert.equal(started.status, 303);
   assert.equal(started.headers.get('location'), `${base}/board`);
-  const session = app.store.activeSession(office.id);
+  const session = app.store.runningSession(office.id);
   assert.deepEqual([session.kind, session.durationMs, session.roster], ['race', 120_000, [a.id, b.id]]);
 
   const running = await (await get(`${base}/race`)).text();
@@ -77,9 +77,9 @@ test('a blank countdown means the default', async () => {
   const [a] = app.store.drivers(office.id);
   const started = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '1'], ['countdown', '']]);
   assert.equal(started.status, 303);
-  const session = app.store.activeSession(office.id);
+  const session = app.store.runningSession(office.id);
   assert.equal(session.state, 'countdown');
-  await app.form(member, `${base}/sessions/${app.store.activeSession(office.id).id}/abort`, {});
+  await app.form(member, `${base}/sessions/${app.store.runningSession(office.id).id}/abort`, {});
 });
 
 test('a bad form comes back with one summary and what was chosen', async () => {
@@ -118,7 +118,7 @@ test('a bad minutes or countdown value says what is allowed and keeps the input'
   const body = await res.text();
   assert.match(body, /<a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a>/);
   assert.match(body, /id="race-countdown"[^>]*value="2.5"[^>]*aria-invalid="true"/);
-  assert.equal(app.store.activeSession(office.id), null);
+  assert.equal(app.store.runningSession(office.id), null);
 });
 
 test('a running session names its drivers and length', async () => {
@@ -127,7 +127,7 @@ test('a running session names its drivers and length', async () => {
   const body = await (await get(`${base}/race`)).text();
   assert.match(body, /<h2[^>]*>Qualifying, running<\/h2>/);
   assert.match(body, /Ana, Ben\. 3 minutes\./);
-  await app.form(member, `${base}/sessions/${app.store.activeSession(office.id).id}/abort`, {});
+  await app.form(member, `${base}/sessions/${app.store.runningSession(office.id).id}/abort`, {});
 });
 
 test('a session of 30 seconds, started through the API, does not read as a minute', async () => {
@@ -137,5 +137,5 @@ test('a session of 30 seconds, started through the API, does not read as a minut
   const body = await (await get(`${base}/race`)).text();
   assert.match(body, /\. 30 seconds\./);
   assert.doesNotMatch(body, /1 minute/);
-  await app.form(member, `${base}/sessions/${app.store.activeSession(office.id).id}/abort`, {});
+  await app.form(member, `${base}/sessions/${app.store.runningSession(office.id).id}/abort`, {});
 });

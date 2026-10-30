@@ -86,16 +86,18 @@ test('personal bests: counted, decoder-timed, per track and direction', () => {
   assert.deepEqual(store.personalBests(W, 't1', 'ccw'), [{ driverId: 'ana', bestMs: 7000, at: 20 }]);
 });
 
-test('active and open sessions', () => {
+test('running sessions, of any kind', () => {
   const store = openStore(':memory:');
   practice(store);
-  assert.equal(store.openPractice(W).id, 's1');
-  assert.equal(store.activeSession(W), null);
+  assert.equal(store.runningSession(W).id, 's1');
+  assert.deepEqual(store.activeAll().map((s) => s.id), ['s1']);
+  store.updateSession('s1', { state: 'done', endedAt: 4 });
+  assert.equal(store.runningSession(W), null);
   store.addSession({ id: 'r1', workspaceId: W, kind: 'race', trackId: null, direction: 'ccw', roster: ['ana'], state: 'countdown', createdAt: 5, opensAt: 10, closesAt: 20, endedAt: null, durationMs: 10 });
-  assert.deepEqual(store.activeSession(W).roster, ['ana']);
+  assert.deepEqual(store.runningSession(W).roster, ['ana']);
   assert.deepEqual(store.activeAll().map((s) => s.id), ['r1']);
   store.updateSession('r1', { state: 'done', endedAt: 30 });
-  assert.equal(store.activeSession(W), null);
+  assert.equal(store.runningSession(W), null);
   assert.deepEqual(store.listSessions(W, 10).map((s) => s.id), ['r1', 's1']);
 });
 

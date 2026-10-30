@@ -21,6 +21,7 @@ before(async () => {
   base = `/clubs/${office.id}`;
   await app.form(member, `${base}/drivers`, { name: 'Ana' });
   [ana] = app.store.drivers(office.id);
+  app.engine.start(office.id, { kind: 'practice' });
 });
 after(() => app.close());
 
@@ -104,6 +105,7 @@ test('a rate-limited tap is a 429 with Retry-After, as a page and as JSON', asyn
     const path = `/clubs/${club.id}`;
     await limited.form(login, `${path}/drivers`, { name: 'Lim' });
     const [lim] = limited.store.drivers(club.id);
+    limited.engine.start(club.id, { kind: 'practice' });
     assert.equal((await limited.form(login, `${path}/tap`, { driver: lim.id })).status, 303);
     const html = await limited.form(login, `${path}/tap`, { driver: lim.id });
     assert.equal(html.status, 429);

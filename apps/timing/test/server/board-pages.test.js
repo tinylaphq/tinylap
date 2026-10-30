@@ -60,7 +60,8 @@ test('an empty board shows a member how to get the track ready', async () => {
 test('laps, a personal best and an unknown car', async () => {
   // Personal bests are per track: set one, and start practice on it.
   app.store.setTrack(office.id, { id: 't1', shape: 'c30:1:x', name: 'Office loop', snapshotKey: 'k'.repeat(22), layout: '{}' }, 'ccw');
-  app.engine.restartPractice(office.id);
+  clock.now = 1_000_000_000_000 + 1000;
+  app.engine.start(office.id, { kind: 'practice', replace: true });
   await app.form(member, `${base}/drivers`, { name: '<i>Ana</i>' });
   const [ana] = app.store.drivers(office.id);
   app.engine.assign(office.id, '10', ana.id);
@@ -191,6 +192,7 @@ test('the board is a tl-board, and its clock a tl-countdown', async () => {
 
 test('a stopped practice driver shows when they last crossed the line, but not within the minute', async () => {
   await driverIn(practiceClub, 'Cleo', '21');
+  app.engine.start(practiceClub.id, { kind: 'practice' });
   passIn(practiceClub.id, 200_000, '21');
   passIn(practiceClub.id, 208_000, '21');
   const lastAt = clock.now;
@@ -250,13 +252,13 @@ test('no note on a finished row, nor in the results', async () => {
 
 test('no note while the session still says countdown, even for a crossing after the start', async () => {
   // The engine hasn't ticked yet: the state is countdown though opensAt has passed.
-  const old = app.store.activeSession(countdownClub.id);
+  const old = app.store.runningSession(countdownClub.id);
   if (old) app.engine.abort(countdownClub.id, old.id);
   const [dora] = app.store.drivers(countdownClub.id);
   clock.now = 1_000_000_000_000 + 1_000_000;
   const { session } = app.engine.start(countdownClub.id, { kind: 'race', roster: [dora.id], durationMs: 60_000, countdownMs: 30_000 });
   passIn(countdownClub.id, session.opensAt + 5000 - 1_000_000_000_000, '31');
-  assert.equal(app.store.activeSession(countdownClub.id).state, 'countdown');
+  assert.equal(app.store.runningSession(countdownClub.id).state, 'countdown');
   const body = await (await get(member, `/clubs/${countdownClub.id}/board`)).text();
   assert.match(body, /data-state="countdown"/);
   assert.doesNotMatch(body, /tl-relative-time/);

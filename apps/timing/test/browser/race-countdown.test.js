@@ -220,7 +220,7 @@ test('C6: the answer to a POST never reloads', async (t) => {
   await page.getByRole('button', { name: 'Start' }).waitFor();
   const started = await app.form(member, '/personal/sessions', [['kind', 'race'], ['roster', roster[0]], ['duration', '1'], ['countdown', '2']]);
   assert.equal(started.status, 303);
-  const session = app.store.activeSession(personal);
+  const session = app.store.runningSession(personal);
   t.after(() => { app.engine.abort(personal, session.id); });
   const answer = page.waitForResponse((r) => r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Start' }).click();

@@ -13,6 +13,12 @@ import { racePage } from './views/race.js';
 
 const NO_SESSION = { message: 'There is no running qualifying or race here.' };
 
+/** The running qualifying or race; a practice has no controls here yet. */
+const activeSession = (request, ws) => {
+  const session = request.store.runningSession(ws);
+  return session?.kind === 'practice' ? null : session;
+};
+
 /**
  * Race control. Only a 200, the answer to GET /race, lets the clock reload the page: a reload
  * of the answer to a POST would send the form again.
@@ -20,7 +26,7 @@ const NO_SESSION = { message: 'There is no running qualifying or race here.' };
  */
 function renderRace(request, status, { error = null, values = null } = {}) {
   const ws = request.workspaceId;
-  const session = request.store.activeSession(ws);
+  const session = activeSession(request, ws);
   return page(request, status, racePage(request, { session, drivers: request.store.drivers(ws), error, values, reload: status === 200 }));
 }
 
@@ -46,7 +52,7 @@ async function start(request) {
 }
 
 function askAbort(request, match) {
-  const session = request.store.activeSession(request.workspaceId);
+  const session = activeSession(request, request.workspaceId);
   if (!session || session.id !== match[2]) return renderRace(request, 404, { error: NO_SESSION });
   const base = request.space.base;
   return page(request, 200, confirmPage(request, {

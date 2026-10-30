@@ -4,13 +4,12 @@
 
 // Passings become crossings (spec §4–§6). The engine stores each passing
 // once, computes its lap from the transponder's previous reference passing,
-// puts it in the running qualifying or race, or in practice, and publishes
-// what changed. Session state lives in memory as a cache over the stored
+// puts it in the running session, and publishes what changed. Session state lives in memory as a cache over the stored
 // crossings, so a restart only replays them.
 import { randomUUID } from 'node:crypto';
 import { MAX_LAP_MS, MIN_LAP_MS, applyCrossing, emptyState, isComplete, nextLap, standings } from '@tinylap/timing';
 
-export const PRACTICE_GAP_MS = 30 * 60_000;
+export const PRACTICE_IDLE_MS = 60 * 60_000;
 /** Offsets older than this don't count for mapping decoder time (spec §6). */
 const OFFSET_WINDOW_MS = 60_000;
 const ACTIVE = new Set(['countdown', 'running', 'finishing']);
@@ -33,13 +32,15 @@ export function publicSession(session) {
 
 /**
  * @param {{ store: ReturnType<typeof import('./store.js').openStore>, hub: ReturnType<typeof import('./live.js').createHub>,
- *   now?: () => number, minLap?: number, maxLap?: number, practiceGap?: number }} options
+ *   now?: () => number, minLap?: number, maxLap?: number, practiceIdle?: number }} options
  */
-export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, maxLap = MAX_LAP_MS, practiceGap = PRACTICE_GAP_MS }) {
+export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, maxLap = MAX_LAP_MS, practiceIdle = PRACTICE_IDLE_MS }) {
   /** `${decoder} ${boot}` → recent receive offsets. */
   const offsets = new Map();
   /** Session id → state, for open sessions. */
   const states = new Map();
+  /** Workspace id → the latest passing that fell outside any session. */
+  const idles = new Map();
 
   const rulesOf = (s) => ({ kind: s.kind, roster: s.roster, opensAt: s.opensAt, closesAt: s.closesAt });
   function replay(session) {
@@ -78,17 +79,6 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, session: publicSession(ended), standings: standingsOf(ended) });
     return ended;
   }
-  /** The open practice, or a new one after a long enough pause (spec §6). */
-  function practiceFor(workspaceId, at) {
-    const open = store.openPractice(workspaceId);
-    if (open) {
-      const last = store.lastCrossingAt(open.id) ?? open.opensAt;
-      if (at - last <= practiceGap) return open;
-      endSession(open, last);
-    }
-    return createSession(workspaceId, { kind: 'practice', state: 'running', opensAt: at, closesAt: null });
-  }
-
   /** Records every passing's receive offset first, so a late batch maps by its newest passing. */
   function noteOffsets(decoder, boot, passings, receivedAt) {
     const key = `${decoder} ${boot}`;
@@ -103,11 +93,10 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return t + best;
   }
 
-  function cross(workspaceId, passing, { at, driverId, via }) {
+  function cross(workspaceId, session, passing, { at, driverId, via }) {
     const reference = store.lastReference(passing.decoder, passing.transponder);
     const step = nextLap(reference, { boot: passing.boot, t: passing.t }, { minLap, maxLap });
     const lapMs = step.kind === 'lap' ? step.ms : null;
-    const session = store.activeSession(workspaceId) ?? practiceFor(workspaceId, at);
     const counts = applyCrossing(rulesOf(session), stateOf(session), { driverId, at, lapMs });
     const row = {
       workspaceId, sessionId: session.id, ...passing, driverId, at, lapMs, counts, via,
@@ -119,6 +108,12 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     if (counts) publishStandings(session);
     if (session.state === 'finishing' && isComplete(rulesOf(session), stateOf(session), now(), maxLap)) endSession(session, now());
     return row;
+  }
+
+  /** A passing with no session running makes no crossing; members are told (spec §3.2). */
+  function noteIdle(workspaceId, idle) {
+    idles.set(workspaceId, idle);
+    hub.publish(workspaceId, 'idle', idle, null);
   }
 
   /** Stores a batch (spec §5). Repeating it is safe. */
@@ -135,7 +130,10 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
         stored += 1;
         const { driverId, created } = store.seeTransponder(workspaceId, p.transponder, receivedAt);
         seen ||= created;
-        cross(workspaceId, passing, { at: mapped(decoder, batch.boot, p.t), driverId, via });
+        const at = mapped(decoder, batch.boot, p.t);
+        const session = store.runningSession(workspaceId);
+        if (session) cross(workspaceId, session, passing, { at, driverId, via });
+        else noteIdle(workspaceId, { transponder: p.transponder, driverId, at });
       }
       store.touchDecoder(decoder, receivedAt);
       if (seen) publishUnknown(workspaceId);
@@ -147,10 +145,11 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   function tap(workspaceId, driverId) {
     const t = now();
     return store.transaction(() => {
-      const session = store.activeSession(workspaceId) ?? practiceFor(workspaceId, t);
+      const session = store.runningSession(workspaceId);
+      if (!session) return { error: 'no-session' };
       const passing = { decoder: `tap:${workspaceId}`, boot: session.id, transponder: driverId, t };
       if (!store.insertPassing({ ...passing, receivedAt: t, via: 'tap', workspaceId })) return null;
-      return cross(workspaceId, passing, { at: t, driverId, via: 'tap' });
+      return cross(workspaceId, session, passing, { at: t, driverId, via: 'tap' });
     });
   }
 
@@ -161,17 +160,33 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return next;
   }
 
-  /** Starts a qualifying or race (spec §6); one at a time per workspace. */
-  function start(workspaceId, { kind, roster, durationMs, countdownMs = 0 }) {
+  /** The time a practice ends at: its last passing, or now without one. */
+  const practiceEnd = (session) => store.lastCrossingAt(session.id) ?? now();
+
+  /** Starts a session (spec §3.1); one at a time per workspace, and `replace` ends the running one first. */
+  function start(workspaceId, { kind, roster, durationMs, countdownMs = 0, replace = false }) {
     return store.transaction(() => {
-      if (store.activeSession(workspaceId)) return { error: 'conflict' };
+      const running = store.runningSession(workspaceId);
+      if (running && !replace) return { error: 'conflict', running };
       const t = now();
-      const open = store.openPractice(workspaceId);
-      if (open) endSession(open, store.lastCrossingAt(open.id) ?? t);
+      if (running) {
+        if (running.kind === 'practice') endSession(running, practiceEnd(running));
+        else endSession(running, t, 'aborted');
+      }
+      idles.delete(workspaceId);
+      hub.publish(workspaceId, 'idle', null, null);
+      if (kind === 'practice') return { session: createSession(workspaceId, { kind, state: 'running', opensAt: t, closesAt: null }) };
       const opensAt = kind === 'race' ? t + countdownMs : t;
       const state = kind === 'race' && countdownMs > 0 ? 'countdown' : 'running';
       return { session: createSession(workspaceId, { kind, roster, durationMs, state, opensAt, closesAt: opensAt + durationMs }) };
     });
+  }
+
+  /** A member ends a running practice (spec §3.3). */
+  function end(workspaceId, sessionId) {
+    const session = store.session(sessionId);
+    if (!session || session.workspaceId !== workspaceId || session.kind !== 'practice' || session.state !== 'running') return null;
+    return endSession(session, practiceEnd(session));
   }
 
   function abort(workspaceId, sessionId) {
@@ -184,6 +199,11 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   function tick() {
     const t = now();
     for (let session of store.activeAll()) {
+      if (session.kind === 'practice') {
+        const last = store.lastCrossingAt(session.id) ?? session.opensAt;
+        if (t - last >= practiceIdle) endSession(session, last);
+        continue;
+      }
       if (session.state === 'countdown' && t >= session.opensAt) session = setState(session, 'running');
       if (session.state === 'running' && t >= session.closesAt) session = setState(session, 'finishing');
       if (session.state === 'finishing' && isComplete(rulesOf(session), stateOf(session), t, maxLap)) endSession(session, t);
@@ -212,18 +232,18 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     publishUnknown(workspaceId);
   }
 
-  /** A new track or direction starts a new practice (spec §6). */
-  function restartPractice(workspaceId) {
-    const open = store.openPractice(workspaceId);
-    if (open) endSession(open, store.lastCrossingAt(open.id) ?? now());
+  /** A new track or direction ends a running practice (spec §3.1). */
+  function endPractice(workspaceId) {
+    const running = store.runningSession(workspaceId);
+    if (running?.kind === 'practice') endSession(running, practiceEnd(running));
   }
 
   function snapshot(workspaceId, { watcher = false } = {}) {
     const ws = store.ensureWorkspace(workspaceId);
-    const session = store.activeSession(workspaceId) ?? store.openPractice(workspaceId);
+    const session = store.runningSession(workspaceId);
     const track = ws.trackId ? store.track(workspaceId, ws.trackId) : null;
     const recent = session ? store.recentCrossings(session.id, 30) : [];
-    const ended = store.activeSession(workspaceId) ? null : store.lastEnded(workspaceId);
+    const ended = session ? null : store.lastEnded(workspaceId);
     return {
       now: now(),
       track: track && { id: track.id, name: track.name },
@@ -234,7 +254,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       drivers: store.drivers(workspaceId),
       bests: track ? store.personalBests(workspaceId, track.id, ws.direction) : [],
       lastResults: ended && { session: publicSession(ended), standings: standingsOf(ended) },
-      ...(watcher ? {} : { unknown: unknownOf(workspaceId) }),
+      ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idles.get(workspaceId) ?? null }),
     };
   }
 
@@ -244,5 +264,5 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return { session: publicSession(session), standings: standingsOf(session), crossings: store.crossings(sessionId).map(memberCrossing) };
   }
 
-  return { ingest, tap, start, abort, tick, assign, publishUnknown, restartPractice, snapshot, sessionDetail };
+  return { ingest, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, sessionDetail };
 }

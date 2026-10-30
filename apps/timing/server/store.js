@@ -169,10 +169,9 @@ export function openStore(path) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     session: q('SELECT * FROM session WHERE id = ?'),
     updateSession: q('UPDATE session SET state = ?, ended_at = COALESCE(?, ended_at) WHERE id = ?'),
-    activeSession: q(`SELECT * FROM session WHERE workspace_id = ? AND kind != 'practice' AND state IN ${ACTIVE} ORDER BY created_at DESC LIMIT 1`),
-    openPractice: q("SELECT * FROM session WHERE workspace_id = ? AND kind = 'practice' AND state = 'running' ORDER BY created_at DESC LIMIT 1"),
-    lastNonPractice: q("SELECT * FROM session WHERE workspace_id = ? AND kind != 'practice' ORDER BY created_at DESC, rowid DESC LIMIT 1"),
-    activeAll: q(`SELECT * FROM session WHERE kind != 'practice' AND state IN ${ACTIVE} ORDER BY created_at`),
+    runningSession: q(`SELECT * FROM session WHERE workspace_id = ? AND state IN ${ACTIVE} ORDER BY created_at DESC LIMIT 1`),
+    lastSession: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'),
+    activeAll: q(`SELECT * FROM session WHERE state IN ${ACTIVE} ORDER BY created_at`),
     listSessions: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?'),
     // SQLite: with one MIN(), the bare column `at` comes from the row holding the minimum.
     personalBests: q(`SELECT c.driver_id, MIN(c.lap_ms) AS best_ms, c.at FROM crossing c JOIN session s ON s.id = c.session_id
@@ -334,17 +333,14 @@ export function openStore(path) {
     updateSession(id, { state, endedAt = null }) {
       s.updateSession.run(state, endedAt, id);
     },
-    activeSession(ws) {
-      const r = s.activeSession.get(ws);
+    /** The one session in countdown, running or finishing, of any kind. */
+    runningSession(ws) {
+      const r = s.runningSession.get(ws);
       return r ? sessionOf(r) : null;
     },
-    openPractice(ws) {
-      const r = s.openPractice.get(ws);
-      return r ? sessionOf(r) : null;
-    },
-    /** The latest qualifying or race, if it has ended (done or aborted); null while one is open. */
+    /** The latest session of any kind, if it has ended (done or aborted); null while one is open. */
     lastEnded(ws) {
-      const r = s.lastNonPractice.get(ws);
+      const r = s.lastSession.get(ws);
       const session = r ? sessionOf(r) : null;
       return session && (session.state === 'done' || session.state === 'aborted') ? session : null;
     },

@@ -8,13 +8,14 @@ import { createEngine } from '../../server/engine.js';
 import { T0, W, rig } from './rig.js';
 
 test('a race: countdown, start crossings, laps, time up, finish, results', () => {
-  const { engine, store, clock, events, pass } = rig();
+  const { engine, store, clock, events, pass, startPractice } = rig();
+  const practice = startPractice();
   pass(1000);
   clock.now = T0 + 2000;
-  const { session } = engine.start(W, { kind: 'race', roster: ['ana', 'ben'], durationMs: 60_000, countdownMs: 10_000 });
+  const { session } = engine.start(W, { kind: 'race', roster: ['ana', 'ben'], durationMs: 60_000, countdownMs: 10_000, replace: true });
   assert.equal(session.state, 'countdown');
-  assert.equal(store.openPractice(W), null, 'practice ended');
-  assert.deepEqual(engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 1000 }), { error: 'conflict' });
+  assert.equal(store.session(practice.id).state, 'done', 'practice ended');
+  assert.equal(engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 1000 }).error, 'conflict');
 
   pass(9000); // before go: ignored
   clock.now = T0 + 12_000;
@@ -36,8 +37,6 @@ test('a race: countdown, start crossings, laps, time up, finish, results', () =>
   assert.deepEqual(results.standings.map((s) => [s.driverId, s.laps, s.finished]), [['ana', 3, true], ['ben', 2, true]]);
   assert.equal(results.standings[0].elapsedMs, 500 + 8000 + 8000 + 44_500);
 
-  pass(200_000);
-  assert.equal(store.openPractice(W).kind, 'practice', 'practice resumes');
 });
 
 test('qualifying: a window, best lap, complete once everyone crossed after the close', () => {
@@ -70,12 +69,13 @@ test('abort ends a race at once', () => {
 });
 
 test('assigning a transponder recounts its laps', () => {
-  const { engine, store, events, pass } = rig();
+  const { engine, store, events, pass, startPractice } = rig();
+  const practice = startPractice();
   store.addDriver(W, { id: 'cy', name: 'Cy', colour: '#2dff9b' });
   pass(1000, '0C');
   pass(9000, '0C');
   engine.assign(W, '0C', 'cy');
-  const rows = store.crossings(store.openPractice(W).id);
+  const rows = store.crossings(practice.id);
   assert.deepEqual(rows.map((c) => [c.driverId, c.counts]), [['cy', false], ['cy', true]]);
   assert.deepEqual(events.filter((e) => e.type === 'standings').at(-1).data.standings.map((s) => s.driverId), ['cy']);
   assert.deepEqual(events.filter((e) => e.type === 'setup').at(-1).data, { unknown: [] });
@@ -112,9 +112,9 @@ test('a decoder reboot mid-race costs one lap, not the race', () => {
 });
 
 test('the snapshot: members get setup, watchers do not', () => {
-  const { engine, store, pass } = rig();
+  const { engine, store, pass, startPractice } = rig();
   store.setTrack(W, { id: 't1', shape: 'c30:1:x', name: 'Office', snapshotKey: 'k'.repeat(22), layout: '{}' }, 'cw');
-  engine.restartPractice(W);
+  startPractice();
   pass(1000);
   pass(9000);
   pass(9500, '0C');
@@ -166,9 +166,8 @@ test('the snapshot keeps the last results until a new qualifying or race opens',
   engine.tick();
   clock.now = T0 + 100_000;
   engine.tick();
-  pass(200_000); // a car crosses: a new practice
   const member = engine.snapshot(W);
-  assert.equal(member.session.kind, 'practice');
+  assert.equal(member.session, null);
   assert.deepEqual([member.lastResults.session.id, member.lastResults.session.state], [session.id, 'done']);
   assert.equal('workspaceId' in member.lastResults.session, false);
   assert.deepEqual(member.lastResults.standings.map((s) => [s.driverId, s.laps]), [['ana', 1]]);
@@ -179,4 +178,47 @@ test('the snapshot keeps the last results until a new qualifying or race opens',
   clock.now += 1000;
   engine.abort(W, next.id);
   assert.deepEqual(engine.snapshot(W).lastResults.session.state, 'aborted');
+});
+
+test('starting while a session runs is a conflict, unless replace', () => {
+  const { store, engine } = rig();
+  const practice = engine.start(W, { kind: 'practice' }).session;
+  const refused = engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 60_000, countdownMs: 10_000 });
+  assert.equal(refused.error, 'conflict');
+  assert.equal(refused.running.id, practice.id);
+  const { session } = engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 60_000, countdownMs: 10_000, replace: true });
+  assert.equal(store.session(practice.id).state, 'done');
+  assert.equal(store.runningSession(W).id, session.id);
+});
+
+test('replacing a counting-down race aborts it', () => {
+  const { store, engine, clock } = rig();
+  const race = engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 60_000, countdownMs: 10_000 }).session;
+  clock.now = T0 + 3000;
+  const { session } = engine.start(W, { kind: 'practice', replace: true });
+  assert.deepEqual([store.session(race.id).state, store.session(race.id).endedAt], ['aborted', T0 + 3000]);
+  assert.equal(store.runningSession(W).id, session.id);
+});
+
+test('end stops a running practice, and refuses anything else', () => {
+  const { store, engine, clock, pass } = rig();
+  const practice = engine.start(W, { kind: 'practice' }).session;
+  pass(1000);
+  clock.now = T0 + 5000;
+  assert.equal(engine.end('other', practice.id), null);
+  const ended = engine.end(W, practice.id);
+  assert.deepEqual([ended.state, ended.endedAt], ['done', T0 + 1000]);
+  assert.equal(engine.end(W, practice.id), null, 'already ended');
+  const race = engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 60_000, countdownMs: 0 }).session;
+  assert.equal(engine.end(W, race.id), null);
+  assert.equal(store.session(race.id).state, 'running');
+});
+
+test('a new track ends the running practice', () => {
+  const { store, engine, pass } = rig();
+  const practice = engine.start(W, { kind: 'practice' }).session;
+  pass(1000);
+  engine.endPractice(W);
+  assert.deepEqual([store.session(practice.id).state, store.session(practice.id).endedAt], ['done', T0 + 1000]);
+  assert.equal(store.runningSession(W), null);
 });

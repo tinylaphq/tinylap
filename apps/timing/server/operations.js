@@ -117,7 +117,7 @@ export async function setTrack(request, { link, name: rawName, direction }) {
   }
   const ws = request.workspaceId;
   request.store.setTrack(ws, { ...track, name }, direction);
-  request.engine.restartPractice(ws);
+  request.engine.endPractice(ws);
   request.hub.publish(ws, 'track', { track: { id: track.id, name }, direction, bests: request.store.personalBests(ws, track.id, direction) });
   return { value: { id: track.id, name, direction, snapshotKey: track.snapshotKey } };
 }
@@ -170,5 +170,6 @@ export function tap(request, { driverId }) {
   const wait = request.limiters.tap.take(request.userId);
   if (wait) return limited(`That's a lot of taps. Try again in ${wait} seconds.`, wait);
   const row = request.engine.tap(request.workspaceId, driverId);
+  if (row?.error) return fail('conflict', 'No session is running. Start a practice first.');
   return { value: { stored: row !== null, lapMs: row?.lapMs ?? null } };
 }
