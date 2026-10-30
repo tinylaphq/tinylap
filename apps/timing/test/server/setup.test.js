@@ -155,6 +155,36 @@ test('a track is deleted only when archived, and the current track is set by id'
   await problemOf(await app.api(member, 'PUT', path('track'), { trackId: 'nope', direction: 'cw' }), 404, 'not-found');
 });
 
+test('a track PATCH is all or nothing, and missing fields are 422', async () => {
+  const current = (await (await app.api(member, 'GET', path('tracks'))).json()).tracks.find((t) => t.current);
+  await problemOf(await app.api(member, 'PATCH', path(`tracks/${current.id}`), { name: 'Renamed', archived: true }), 409, 'conflict');
+  const after = (await (await app.api(member, 'GET', path('tracks'))).json()).tracks.find((t) => t.id === current.id);
+  assert.deepEqual([after.name, after.archived], [current.name, false]);
+  await problemOf(await app.api(member, 'PATCH', path(`tracks/${current.id}`), { archived: true }), 409, 'conflict');
+  const spare = await (await app.api(member, 'POST', path('tracks'), { name: 'Spare' })).json();
+  const both = await (await app.api(member, 'PATCH', path(`tracks/${spare.id}`), { name: 'Spare 2', archived: true })).json();
+  assert.deepEqual([both.name, both.archived], ['Spare 2', true]);
+  await problemOf(await app.api(member, 'PATCH', path(`tracks/${spare.id}`), { name: 'Home', archived: false }), 409, 'conflict');
+  const kept = (await (await app.api(member, 'GET', path('tracks?archived=1'))).json()).tracks.find((t) => t.id === spare.id);
+  assert.deepEqual([kept.name, kept.archived], ['Spare 2', true]);
+  await problemOf(await app.api(member, 'PUT', path('track'), { trackId: spare.id, direction: 'cw' }), 409, 'conflict');
+  await problemOf(await app.api(member, 'PUT', path('track'), { direction: 'cw' }), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'POST', path('tracks'), {}), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'POST', path(`tracks/${spare.id}/layouts`), {}), 422, 'invalid-request');
+});
+
+test('a track a running session uses is not deleted', async () => {
+  const track = await (await app.api(member, 'POST', path('tracks'), { name: 'Busy' })).json();
+  const keep = (await (await app.api(member, 'GET', path('tracks'))).json()).tracks.find((t) => t.current);
+  await app.api(member, 'PUT', path('track'), { trackId: track.id, direction: 'cw' });
+  const driver = await (await app.api(member, 'POST', path('drivers'), { name: 'Racer' })).json();
+  const started = await app.api(member, 'POST', path('sessions'), { kind: 'race', roster: [driver.id], durationSeconds: 60, countdownSeconds: 0 });
+  assert.equal(started.status, 201);
+  await app.api(member, 'PUT', path('track'), { trackId: keep.id, direction: 'cw' });
+  await app.api(member, 'PATCH', path(`tracks/${track.id}`), { archived: true });
+  await problemOf(await app.api(admin, 'DELETE', path(`tracks/${track.id}`)), 409, 'conflict');
+});
+
 test('strangers and cross-origin writes are refused on tracks', async () => {
   const evil = { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' };
   await problemOf(await app.api(stranger, 'GET', path('tracks')), 404, 'not-found');

@@ -68,17 +68,32 @@ async function addTrack(request) {
   return r.error ? opProblem(request, r.error) : json(201, r.value, NO_STORE);
 }
 
+/** Thrown inside a transaction to undo it, carrying the operation's refusal. */
+class Refused {
+  constructor(result) { this.result = result; }
+}
+
 async function updateTrack(request, match) {
   const { body, error } = await readJson(request);
   if (error) return error;
   if (body.name === undefined && body.archived === undefined) return opProblem(request, { problem: 'invalid-request', message: 'Send a name, archived, or both.' });
   if (body.archived !== undefined && typeof body.archived !== 'boolean') return opProblem(request, { problem: 'invalid-request', message: 'archived is true or false.' });
   const id = match[2];
-  /** @type {any} */
-  let r = { value: null };
-  if (body.name !== undefined) r = ops.renameTrack(request, { id, name: body.name });
-  if (!r.error && body.archived !== undefined) r = (body.archived ? ops.archiveTrack : ops.restoreTrack)(request, { id });
-  return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
+  // Both changes or neither: a failing second step rolls the first back. Archiving goes first, as renaming tells the board.
+  try {
+    const r = request.store.transaction(() => {
+      /** @type {any} */
+      let step = { value: null };
+      if (body.archived !== undefined) step = (body.archived ? ops.archiveTrack : ops.restoreTrack)(request, { id });
+      if (!step.error && body.name !== undefined) step = ops.renameTrack(request, { id, name: body.name });
+      if (step.error) throw new Refused(step);
+      return step;
+    });
+    return json(200, r.value, NO_STORE);
+  } catch (caught) {
+    if (caught instanceof Refused) return opProblem(request, caught.result.error);
+    throw caught;
+  }
 }
 
 async function attachLayout(request, match) {
@@ -96,6 +111,7 @@ function deleteTrack(request, match) {
 async function putTrack(request) {
   const { body, error } = await readJson(request);
   if (error) return error;
+  if (typeof body.trackId !== 'string') return opProblem(request, { problem: 'invalid-request', message: 'Pick a track.' });
   const r = ops.setCurrentTrack(request, { id: body.trackId, direction: body.direction });
   return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
 }
