@@ -79,6 +79,46 @@ test('a practice started by hand counts from the first crossing after its start'
   assert.deepEqual(store.crossings(session.id).map((c) => [c.lapMs, c.counts]), [[null, false], [8000, true]]);
 });
 
+test('a practice that replaces one while a car runs starts clean', () => {
+  const { store, engine, clock, pass } = rig();
+  engine.start(W, { kind: 'practice' });
+  pass(1000);
+  pass(9000);
+  clock.now = T0 + 10_000;
+  const { session } = engine.start(W, { kind: 'practice', replace: true });
+  pass(17_000); // began 9000, before the start: a reference, not a lap
+  pass(25_000);
+  assert.deepEqual(store.crossings(session.id).map((c) => [c.lapMs, c.counts]), [[8000, false], [8000, true]]);
+});
+
+test('a practice started just after another ended starts clean', () => {
+  const { store, engine, clock, pass } = rig();
+  const first = engine.start(W, { kind: 'practice' }).session;
+  pass(1000);
+  pass(9000);
+  clock.now = T0 + 10_000;
+  engine.end(W, first.id);
+  clock.now = T0 + 12_000;
+  const { session } = engine.start(W, { kind: 'practice' });
+  pass(17_000);
+  pass(25_000);
+  assert.deepEqual(store.crossings(session.id).map((c) => [c.lapMs, c.counts]), [[8000, false], [8000, true]]);
+});
+
+test('a late crossing driven before a practice started is no lap of it', () => {
+  const { store, engine, clock, pass } = rig();
+  engine.start(W, { kind: 'practice' });
+  pass(1000);
+  pass(9000);
+  clock.now = T0 + 20_000;
+  const { session } = engine.start(W, { kind: 'practice', replace: true });
+  // A backlog arrives: driven at 17 000, before the start at 20 000.
+  engine.ingest({ workspaceId: W, decoder: 'd1', via: 'serial', batch: { boot: BOOT, passings: [{ transponder: '0A', t: 17_000 }] } });
+  pass(25_000); // began 17 000, before the start too
+  pass(33_000);
+  assert.deepEqual(store.crossings(session.id).map((c) => [c.at - T0, c.lapMs, c.counts]), [[17_000, 8000, false], [25_000, 8000, false], [33_000, 8000, true]]);
+});
+
 test('a practice ends after an hour without a passing, at its last passing', () => {
   const { store, engine, clock, pass } = rig();
   clock.now = T0;

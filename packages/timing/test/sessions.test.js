@@ -26,6 +26,12 @@ test('practice standings leave out drivers without a lap', () => {
   assert.deepEqual(standings(practice, state), []);
 });
 
+test('practice counts only laps begun at or after its start', () => {
+  const started = { ...practice, opensAt: 100_000 };
+  const { counted } = run(started, [['ana', 95_000, 8000], ['ana', 103_000, 8000], ['ana', 111_000, 8000]]);
+  assert.deepEqual(counted, [false, false, true]);
+});
+
 test('qualifying counts laps begun inside the window', () => {
   const { counted } = run(qualifying, [
     ['ana', 105_000, 8000], // began at 97 000, before the window

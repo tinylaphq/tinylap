@@ -40,6 +40,8 @@ export function applyCrossing(rules, state, { driverId, at, lapMs }) {
   d.lastAt = at;
   if (rules.kind === 'practice') {
     if (lapMs === null) return false;
+    // Starts clean: a lap begun before the start, as a reference from an earlier session leaves, is no lap of it.
+    if (rules.opensAt !== null && (at < rules.opensAt || at - lapMs < rules.opensAt)) return false;
     addLap(d, lapMs, at);
     return true;
   }
