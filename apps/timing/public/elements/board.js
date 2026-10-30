@@ -14,12 +14,14 @@
 // - pagehide closes the stream, so a hidden or cached board holds no
 //   connection; pageshow from the back/forward cache reopens it, showing
 //   "Reconnecting…" until it opens.
-// - The bell: the switch its `sound` attribute names is revealed, pressed or
-//   not as localStorage['tinylap-sound'] remembers. Browsers start audio only
-//   after a gesture, so the AudioContext is made on the switch's click, or on
-//   the first click or key after a reload that remembered sound on. A swap
-//   that brings a data-record-new this page has not seen rings it; the first
-//   render never does.
+// - The bell: the switch its `sound` attribute names is revealed, and
+//   localStorage['tinylap-sound'] remembers whether sound is wanted. Browsers
+//   start audio only after a gesture, so the AudioContext is made on the
+//   switch's click, or on the first click or key after a reload that
+//   remembered sound on. The switch shows pressed only while the context
+//   runs; wanted but not running, it shows its "Tap to turn sound on" state
+//   (data-state="wanted"). A swap that brings a data-record-new this page has
+//   not seen rings it; the first render never does.
 // Without EventSource there is no stream; without JavaScript the page
 // reloads every ten seconds (<noscript> refresh).
 
@@ -59,6 +61,8 @@ class TlBoard extends HTMLElement {
   sound = null;
   /** @type {AudioContext | null} */
   audio = null;
+  /** Whether sound is wanted, as remembered or last chosen. */
+  wanted = false;
   /** The newest data-record-new this page has shown. @type {string | null} */
   seen = null;
 
@@ -86,13 +90,12 @@ class TlBoard extends HTMLElement {
     return this.querySelector('[data-record-new]')?.getAttribute('data-record-new') ?? null;
   }
 
-  /** Reveals the switch, pressed as remembered. */
+  /** Reveals the switch, asking for a tap if sound is remembered on. */
   initSound() {
     this.sound = document.getElementById(this.getAttribute('sound') ?? '');
     if (!this.sound || !('AudioContext' in window)) return;
-    let on = false;
-    try { on = localStorage.getItem(SOUND_KEY) === 'on'; } catch { /* storage blocked: sound starts off */ }
-    this.sound.setAttribute('aria-pressed', String(on));
+    try { this.wanted = localStorage.getItem(SOUND_KEY) === 'on'; } catch { /* storage blocked: sound starts off */ }
+    this.showSound();
     this.sound.hidden = false;
     this.sound.addEventListener('click', this);
     for (const type of GESTURES) addEventListener(type, this);
@@ -103,15 +106,28 @@ class TlBoard extends HTMLElement {
     for (const type of GESTURES) removeEventListener(type, this);
   }
 
+  /** Sound can ring: wanted, and the context runs. */
   get soundOn() {
-    return this.sound?.getAttribute('aria-pressed') === 'true';
+    return this.wanted && this.audio?.state === 'running';
   }
 
-  /** On a gesture, while sound is on: makes the context and resumes it; once it runs, the gestures are no longer needed. */
+  /** Pressed only while sound can ring; wanted but not running, the switch asks for a tap. */
+  showSound() {
+    const on = this.soundOn;
+    this.sound?.setAttribute('aria-pressed', String(on));
+    if (this.wanted && !on) this.sound?.setAttribute('data-state', 'wanted');
+    else this.sound?.removeAttribute('data-state');
+  }
+
+  /** On a gesture, while sound is wanted: makes the context and resumes it; once it runs, the gestures are no longer needed. */
   wake() {
-    if (!this.soundOn) return;
+    if (!this.wanted) return;
     const audio = this.audio ??= new AudioContext();
-    audio.resume().then(() => { if (audio.state === 'running') this.lock(); }, () => {});
+    audio.resume().then(() => {
+      if (audio !== this.audio) return;
+      if (audio.state === 'running') this.lock();
+      this.showSound();
+    }, () => {});
   }
 
   open() {
@@ -142,9 +158,10 @@ class TlBoard extends HTMLElement {
     switch (event.type) {
       case 'click': // the switch's own click toggles; any click is a gesture
         if (event.currentTarget === this.sound) {
-          const on = !this.soundOn;
-          this.sound?.setAttribute('aria-pressed', String(on));
-          try { localStorage.setItem(SOUND_KEY, on ? 'on' : 'off'); } catch { /* storage blocked: the choice lasts this page */ }
+          // Pressed turns it off; off or waiting for a tap turns it on.
+          this.wanted = !this.soundOn;
+          this.showSound();
+          try { localStorage.setItem(SOUND_KEY, this.wanted ? 'on' : 'off'); } catch { /* storage blocked: the choice lasts this page */ }
         }
         this.wake();
         break;

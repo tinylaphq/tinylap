@@ -296,6 +296,13 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .navbar-right .btn[hidden] { display: none; }
 /* The bell's switch, pressed: the filled button. */
 .navbar-right .btn[aria-pressed="true"] { background: var(--p-text); border-color: var(--p-text); color: var(--p-bg); }
+/* Sound remembered on, but the browser waits for a tap before it plays: the
+ * switch asks for one, with the amber lamp the stream uses while it waits. */
+#sound-switch:not([data-state="wanted"]) .sound-wanted, #sound-switch[data-state="wanted"] .sound-on { display: none; }
+#sound-switch[data-state="wanted"] { border-color: var(--p-warning); }
+#sound-switch[data-state="wanted"]::before { content: ''; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
+@media (prefers-reduced-motion: reduce) { #sound-switch[data-state="wanted"]::before { animation: none; } }
+body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
 .nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
 .nav-tabs li { display: flex; }
 

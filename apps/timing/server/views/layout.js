@@ -56,7 +56,7 @@ ${importMap}${importMap && request.settings?.simulate ? html`<script type="modul
   <div class="navbar-right">
     ${screen === 'board' || watcher ? html`${big ? html`<button type="button" class="btn btn-sm btn-outline" data-fullscreen hidden>Full screen</button>
     ` : null}<span class="live-status" id="live-status" data-state="off" hidden></span>
-    <button type="button" class="btn btn-sm btn-outline" id="sound-switch" aria-pressed="false" hidden>Sound on</button>
+    <button type="button" class="btn btn-sm btn-outline" id="sound-switch" aria-pressed="false" hidden><span class="sound-on">Sound on</span><span class="sound-wanted">Tap to turn sound on</span></button>
     <a class="btn btn-sm btn-outline" href="${bigLink}">${big ? 'Leave big screen' : 'Big screen'}</a>` : null}
     ${watcher ? null : accountMenu(request)}${signIn}
   </div>
