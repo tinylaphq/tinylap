@@ -63,7 +63,7 @@ export function addDriver(request, { name: raw, colour: rawColour }) {
   const existing = request.store.drivers(request.workspaceId);
   if (existing.length >= MAX_DRIVERS) return invalid(`You can have at most ${MAX_DRIVERS} drivers here.`, 'name');
   const colour = rawColour === undefined ? COLOURS[existing.length % COLOURS.length] : colourOf(rawColour);
-  if (!colour) return invalid('A colour is #rrggbb.', 'colour');
+  if (!colour) return invalid('Choose a colour with the swatch.', 'colour');
   const driver = { id: randomUUID(), name, colour };
   request.store.addDriver(request.workspaceId, driver);
   publishDrivers(request);
@@ -77,7 +77,7 @@ export function renameDriver(request, { id, name: rawName, colour: rawColour }) 
   const name = rawName === undefined ? current.name : nameOf(rawName);
   if (!name) return invalid('Give the driver a name of 1 to 60 characters.', 'name');
   const colour = rawColour === undefined ? current.colour : colourOf(rawColour);
-  if (!colour) return invalid('A colour is #rrggbb.', 'colour');
+  if (!colour) return invalid('Choose a colour with the swatch.', 'colour');
   request.store.updateDriver(request.workspaceId, current.id, { name, colour });
   publishDrivers(request);
   return { value: { id: current.id, name, colour } };

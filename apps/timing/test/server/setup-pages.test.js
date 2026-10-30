@@ -106,15 +106,15 @@ test('changing a driver\'s colour saves it with the name, and the page shows it'
   assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="#12ab9f"`));
 });
 
-test('a colour that is not #rrggbb is a 422, the input kept and nothing saved', async () => {
+test('a colour that is not #rrggbb is a 422 in plain words, the name kept, the swatch on the saved colour, and nothing saved', async () => {
   const [dan] = drivers();
   for (const colour of ['red; background: url(x)', 'red', '#12ab9', '#12ab9f; x', '']) {
     const res = await app.form(member, `${base}/drivers/${dan.id}`, { name: 'Danny', colour });
     assert.equal(res.status, 422, colour);
     const body = await res.text();
-    assert.match(body, new RegExp(`<p class="status status-error" role="alert"><a href="#colour-${dan.id}">A colour is #rrggbb\\.</a></p>`));
-    const kept = colour.replace(/[()]/g, '\\$&');
-    assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="${kept}"[^>]*aria-invalid="true"`), colour);
+    assert.match(body, new RegExp(`<p class="status status-error" role="alert"><a href="#colour-${dan.id}">Choose a colour with the swatch\\.</a></p>`));
+    // A colour input can't show a refused value (it would turn black), so it shows the saved one.
+    assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="#12ab9f"[^>]*aria-invalid="true"`), colour);
     assert.match(body, new RegExp(`<input[^>]*id="rename-${dan.id}"[^>]*value="Danny"`));
     assert.doesNotMatch(body, /--driver: red/);
   }
@@ -445,4 +445,32 @@ test('track forms from another site change nothing', async () => {
   }
   assert.equal(tracks().length, before);
   assert.equal(trackNamed('Garage').name, 'Garage');
+});
+
+test('the setup page’s headings: the page, a plain h2 per section, an h3 within', async () => {
+  const body = await (await get(owner, `${base}/setup`)).text();
+  for (const id of ['track', 'drivers', 'transponders', 'decoders', 'watchers']) assert.match(body, new RegExp(`<h2 id="${id}-title">`), id);
+  assert.doesNotMatch(body, /<h2 class="h3"/);
+  assert.match(body, /<h3 class="track-subhead">Add a track<\/h3>/);
+});
+
+test('a track’s fold holds its two forms in one grid', async () => {
+  const body = await (await get(owner, `${base}/setup`)).text();
+  assert.match(body, /<details class="track-edit">\s*<summary>[^<]+<\/summary>\s*<div class="track-edit-forms">\s*<form method="post" action="[^"]+\/tracks\/[^"/]+" class="inline-form">[\s\S]*?<\/form>\s*<form method="post" action="[^"]+\/layout" class="inline-form" data-frame="off">[\s\S]*?<\/form>\s*<\/div>\s*<\/details>/);
+});
+
+test('a refused current track that names none keeps the current one selected, not the list’s first', async () => {
+  await app.form(owner, `${base}/tracks`, { name: 'Aardvark loop' });
+  const current = app.store.workspace(office.id).trackId;
+  const bad = await app.form(owner, `${base}/track`, { id: 'nope', direction: 'cw' });
+  assert.equal(bad.status, 404, 'no such track: the setup page again, with the error');
+  const select = /<select id="current-track"[\s\S]*?<\/select>/.exec(await bad.text())[0];
+  assert.match(select, new RegExp(`<option value="${current}" selected>`));
+  assert.equal((select.match(/ selected>/g) ?? []).length, 1);
+});
+
+test('the watchers link’s field has its label for screen readers only; the heading says it', async () => {
+  await app.form(owner, `${base}/watch-link`, {});
+  const body = await (await get(owner, `${base}/setup`)).text();
+  assert.match(body, /<label for="watch-link" class="visually-hidden">Watchers link<\/label>/);
 });

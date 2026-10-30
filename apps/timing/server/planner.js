@@ -40,7 +40,7 @@ export async function fetchTrack(plannerUrl, link, { fetch: fetchImpl = fetch, t
     throw new TrackError('unavailable', 'The planner cannot be reached right now.', { cause: error });
   }
   if (res.status === 404) throw new TrackError('invalid', 'The planner has no shared track at this link. Share it again and paste the new link.');
-  if (!res.ok) throw new TrackError('unavailable', `The planner answered ${res.status}.`);
+  if (!res.ok) throw new TrackError('unavailable', 'The planner is not answering right now. Try again in a minute.');
   const text = await res.text();
   if (text.length > MAX_LAYOUT) throw new TrackError('invalid', 'This track is too large to time.');
   let layout;
