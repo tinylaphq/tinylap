@@ -5,6 +5,8 @@
 // A track's page (named tracks spec §3.4, §4): its name, the current layout
 // drawn, the earlier ones by date with who attached them, and the record
 // history per direction, each record naming the layout it was driven on.
+// It is for looking back years later, so every date has its year, and a
+// layout its time too, so two attached on one day stay apart.
 import { localTime } from '@tinylap/design/html/local-time.js';
 import { layoutToSvgString, parseLayout } from '@tinylap/track-format';
 import { html, safe } from './html.js';
@@ -32,7 +34,7 @@ const figure = (entry, trackName, current) => {
   const art = drawing(entry.layout);
   return html`<figure class="track-drawing${current ? ' is-current' : ''}" id="layout-${entry.attachedAt}">
   ${art ? html`<div class="track-drawing-art" role="img" aria-label="Layout of ${trackName}">${art}</div>` : null}
-  <figcaption>${current ? 'Since ' : null}${safe(localTime(entry.attachedAt, 'date'))}, by ${entry.by ?? 'former member'}</figcaption>
+  <figcaption>${current ? 'Since ' : null}${safe(localTime(entry.attachedAt, 'datetime-year'))}, by ${entry.by ?? 'former member'}</figcaption>
 </figure>`;
 };
 
@@ -55,7 +57,7 @@ export function trackPage(request, { track, layouts, current, direction, records
     <p><a href="${base}/setup#track">Setup</a></p>
     <h1>${track.name}</h1>
     ${current ? html`<p class="subtitle">The current track, ${direction === 'cw' ? 'clockwise' : 'anticlockwise'}.</p>` : null}
-    ${track.archivedAt !== null ? html`<p class="subtitle">Archived ${safe(localTime(track.archivedAt, 'date'))}.</p>` : null}
+    ${track.archivedAt !== null ? html`<p class="subtitle">Archived ${safe(localTime(track.archivedAt, 'datetime-year'))}.</p>` : null}
   </div>
   <section class="stack-md" aria-labelledby="layout-title">
     <h2 id="layout-title">Layout</h2>
@@ -69,7 +71,7 @@ export function trackPage(request, { track, layouts, current, direction, records
     <h2 id="records-title">Records</h2>
     ${order.map(([id, label]) => html`<section class="stack-sm" aria-labelledby="records-${id}">
       <h3 id="records-${id}">${label}</h3>
-      ${recordsTable(request, { track, rows: records[id], drivers, layoutOf: layouts.length > 0 ? layoutOf : null })}
+      ${recordsTable(request, { track, rows: records[id], drivers, layoutOf: layouts.length > 0 ? layoutOf : null, dates: 'datetime-year' })}
     </section>`)}
   </section>
 </div>`,

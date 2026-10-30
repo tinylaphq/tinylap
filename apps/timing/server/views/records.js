@@ -16,18 +16,20 @@ export const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
 /** "Office loop, clockwise". @param {{ name: string }} track @param {string} direction */
 export const trackName = (track, direction) => `${track.name}, ${DIRECTION[direction]}`;
 
-/** A layout by its date, linking to it on its track's page; nothing without one. */
-const layoutLink = (entry, href) => entry ? html`<a href="${href}#layout-${entry.attachedAt}">${safe(localTime(entry.attachedAt, 'date'))}</a>` : null;
+/** A layout by when it was attached, to the minute and with the year, linking to it on its track's page; nothing without one. */
+const layoutLink = (entry, href) => entry ? html`<a href="${href}#layout-${entry.attachedAt}">${safe(localTime(entry.attachedAt, 'datetime-year'))}</a>` : null;
 
 /**
  * Newest first. A row held the record until the row before it took it; the
  * first is the record now, its holder crowned. With `layoutOf`, a column names
- * the layout each was driven on, by its date, linking to it under `layouts`.
+ * the layout each was driven on, linking to it under `layouts`. `dates` is the
+ * format of the Set and Held until times.
  * @param {any} request
  * @param {{ track: any, rows: { driverId: string, lapMs: number, at: number, sessionId: string }[], drivers: any[],
- *   layoutOf?: ((at: number) => { attachedAt: number } | null) | null, layouts?: string }} model
+ *   layoutOf?: ((at: number) => { attachedAt: number } | null) | null, layouts?: string,
+ *   dates?: 'datetime' | 'datetime-year' }} model
  */
-export function recordsTable(request, { track, rows, drivers, layoutOf = null, layouts = '' }) {
+export function recordsTable(request, { track, rows, drivers, layoutOf = null, layouts = '', dates = 'datetime' }) {
   const base = request.space.base;
   if (!track) return html`<p class="empty">Set the track in <a href="${base}/setup#track">Setup</a> to keep its record.</p>`;
   if (rows.length === 0) return html`<p class="empty">No record yet.</p>`;
@@ -36,8 +38,8 @@ export function recordsTable(request, { track, rows, drivers, layoutOf = null, l
   <tbody>${rows.map((r, i) => html`<tr${i === 0 ? html` class="is-current"` : null}>
     <td class="num">${formatLap(r.lapMs)}</td>
     <td class="board-driver">${chip(drivers, r.driverId)}${crown(i === 0)}</td>
-    <td><a href="${base}/sessions/${r.sessionId}">${safe(localTime(r.at, 'datetime'))}</a></td>
-    <td>${i === 0 ? 'Now' : safe(localTime(rows[i - 1].at, 'datetime'))}</td>
+    <td><a href="${base}/sessions/${r.sessionId}">${safe(localTime(r.at, dates))}</a></td>
+    <td>${i === 0 ? 'Now' : safe(localTime(rows[i - 1].at, dates))}</td>
     ${layoutOf ? html`<td>${layoutLink(layoutOf(r.at), layouts)}</td>` : null}
   </tr>`)}</tbody>
 </table></div>`;

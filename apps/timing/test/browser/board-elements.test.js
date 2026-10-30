@@ -266,7 +266,7 @@ test('B8: without a now attribute, tl-relative-time uses the device clock', asyn
 
 test('tl-local-time shows the time in the viewer\'s zone, and the UTC text without script', async (t) => {
   const at = Date.UTC(2026, 9, 12, 12, 32);
-  const body = `<!doctype html><script type="module" src="/pkg/design/elements/local-time.js"></script><p>${localTime(at, 'time')}|${localTime(at, 'date')}|${localTime(at, 'datetime')}</p>`;
+  const body = `<!doctype html><script type="module" src="/pkg/design/elements/local-time.js"></script><p>${localTime(at, 'time')}|${localTime(at, 'date')}|${localTime(at, 'datetime')}|${localTime(at, 'datetime-year')}</p>`;
   const read = async (options) => {
     const { context, page, errors } = await pageAs(browser, app, null, options);
     t.after(() => context.close());
@@ -276,7 +276,7 @@ test('tl-local-time shows the time in the viewer\'s zone, and the UTC text witho
     assert.deepEqual(errors, []);
     return page.locator('time').allInnerTexts();
   };
-  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin' }), ['14:32', '12 Oct', '12 Oct, 14:32']);
-  assert.deepEqual(await read({ timezoneId: 'Pacific/Auckland' }), ['01:32', '13 Oct', '13 Oct, 01:32']);
-  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin', javaScriptEnabled: false }), ['12:32', '12 Oct', '12 Oct, 12:32']);
+  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin' }), ['14:32', '12 Oct', '12 Oct, 14:32', '12 Oct 2026, 14:32']);
+  assert.deepEqual(await read({ timezoneId: 'Pacific/Auckland' }), ['01:32', '13 Oct', '13 Oct, 01:32', '13 Oct 2026, 01:32']);
+  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin', javaScriptEnabled: false }), ['12:32', '12 Oct', '12 Oct, 12:32', '12 Oct 2026, 12:32']);
 });

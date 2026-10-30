@@ -207,7 +207,8 @@ function showSession(request, match) {
 function showRecords(request) {
   const { store, workspaceId: ws } = request;
   const records = recordsOf(request, -1);
-  const layoutOf = records.track ? (at) => store.layoutAt(ws, records.track.id, at) : null;
+  // The Layout column only where the track has had a layout.
+  const layoutOf = records.track?.layout ? (at) => store.layoutAt(ws, records.track.id, at) : null;
   return page(request, 200, recordsPage(request, { ...records, drivers: store.drivers(ws), layoutOf }));
 }
 

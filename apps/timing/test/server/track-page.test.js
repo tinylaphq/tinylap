@@ -70,6 +70,10 @@ test('a track with layouts shows them all drawn, newest first, with who attached
   assert.match(body, new RegExp(`id="layout-${T0 + 25_000}"`));
   assert.match(body, new RegExp(`id="layout-${T0 + 15_000}"`));
   assert.match(body, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
+  // Looked back on years later: every date has its year, a layout its time too.
+  assert.match(body, /Since <tl-local-time format="datetime-year"><time [^>]*>9 Sep 2001, 01:47<\/time><\/tl-local-time>, by Ben/);
+  assert.match(body, /<tl-local-time format="datetime-year"><time [^>]*>9 Sep 2001, 01:46<\/time><\/tl-local-time>, by former member/);
+  assert.doesNotMatch(body, /format="(date|datetime)"/);
 });
 
 test('each record names the layout it was driven on, or none', async () => {
@@ -107,5 +111,17 @@ test('signed out, the track page goes to sign-in', async () => {
 test('the records page links to the track page and names each record\'s layout', async () => {
   const body = await (await get(`${base}/records`)).text();
   assert.match(body, new RegExp(`<a href="${base}/tracks/office">Office</a>, anticlockwise`));
-  assert.match(body, new RegExp(`<a href="${base}/tracks/office#layout-${T0 + 25_000}">`));
+  assert.match(body, new RegExp(`<a href="${base}/tracks/office#layout-${T0 + 25_000}"><tl-local-time format="datetime-year">`));
+  assert.match(body, /<th scope="col">Layout<\/th>/);
+});
+
+test('the records page has no Layout column for a track without layouts', async () => {
+  app.engine.end(ws, app.store.runningSession(ws).id);
+  app.store.setCurrentTrack(ws, 'bare', 'ccw');
+  app.engine.start(ws, { kind: 'practice' });
+  pass(40_000);
+  pass(50_000);
+  const body = await (await get(`${base}/records`)).text();
+  assert.match(body, /10\.000/);
+  assert.doesNotMatch(body, />Layout</);
 });
