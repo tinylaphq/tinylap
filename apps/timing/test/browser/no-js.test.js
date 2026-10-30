@@ -91,10 +91,10 @@ test('assign a transponder that crossed the line', async (t) => {
 
 test('race, tap and Back and Forward across a POST and its 303 change nothing twice', async (t) => {
   const page = await plainPage(t);
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   await page.getByLabel('Minutes').fill('2');
   await page.getByLabel(/Countdown/).fill('0');
-  await page.getByRole('button', { name: 'Start' }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
   assert.equal(pathOf(page), '/personal/board');
   await page.getByRole('heading', { name: 'Race' }).waitFor();
   const started = app.engine.snapshot(personal).session?.id;
@@ -102,7 +102,7 @@ test('race, tap and Back and Forward across a POST and its 303 change nothing tw
 
   // Back lands before the POST, Forward on the board again: no resubmit, no second session.
   await page.goBack();
-  assert.equal(pathOf(page), '/personal/race');
+  assert.equal(pathOf(page), '/personal/sessions');
   await page.goForward();
   assert.equal(pathOf(page), '/personal/board');
   assert.equal(app.engine.snapshot(personal).session?.id, started);
@@ -117,11 +117,11 @@ test('race, tap and Back and Forward across a POST and its 303 change nothing tw
   await page.getByRole('status').filter({ hasText: 'Ana: started' }).waitFor();
   assert.equal(app.engine.snapshot(personal).crossings.length, crossings, 'Back and Forward did not tap again');
 
-  await page.getByRole('link', { name: 'Race', exact: true }).click();
+  await page.getByRole('link', { name: 'Sessions', exact: true }).click();
   await page.getByRole('link', { name: 'Abort' }).click();
   await page.getByRole('heading', { name: 'Abort the race?' }).waitFor();
   await page.getByRole('button', { name: 'Abort' }).click();
-  await page.getByRole('button', { name: 'Start' }).waitFor();
+  await page.getByRole('button', { name: 'Start', exact: true }).waitFor();
 });
 
 test('the bridge page offers its links without JavaScript', async (t) => {
@@ -168,6 +168,8 @@ test('without JavaScript the board says when a stopped driver last crossed the l
   const decoder = await (await app.api(member, 'POST', `/workspaces/${personal}/decoders`, { name: 'Line' })).json();
   const ana = app.store.drivers(personal).find((d) => d.name === 'Ana');
   app.engine.assign(personal, '4712', ana.id);
+  app.engine.start(personal, { kind: 'practice', replace: true });
+  clock.offset += 10_000; // a practice starts clean: the lap begins after its start
   const sent = await app.api(null, 'POST', `/decoders/${decoder.id}/passings`, { boot: 'b00tb00t', passings: [{ transponder: '4712', t: 1000 }, { transponder: '4712', t: 9000 }] }, { authorization: `Bearer ${decoder.token}` });
   assert.equal(sent.status, 200);
   clock.offset += 180_000;

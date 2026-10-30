@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { brand, brandLockup } from '../html/brand.js';
 import { accountMenu, signInLink } from '../html/account.js';
 import { escapeHtml, safeHref } from '../html/escape.js';
+import { localTime } from '../html/local-time.js';
 
 test('escapeHtml escapes the five characters HTML cares about; null and undefined are empty', () => {
   assert.equal(escapeHtml(`<a href="x">'&'</a>`), '&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;');
@@ -55,4 +56,11 @@ test('extra items are buttons with the caller’s id, hidden when asked; a custo
   const out = accountMenu({ name: 'Ana', accountUrl: '/', items: [{ id: 'menu-library', label: 'Library', hidden: true }], signOutAction: '/out' });
   assert.match(out, /<button type="button" class="nav-account-item" id="menu-library" hidden>Library<\/button>/);
   assert.match(out, /action="\/out"/);
+});
+
+test('localTime writes the instant with its UTC text as the fallback', () => {
+  const at = Date.UTC(2026, 9, 2, 7, 5);
+  assert.equal(localTime(at, 'time'), '<tl-local-time format="time"><time datetime="2026-10-02T07:05:00.000Z">07:05</time></tl-local-time>');
+  assert.match(localTime(at, 'date'), /format="date"><time [^>]*>2 Oct<\/time>/);
+  assert.match(localTime(at, 'datetime'), /format="datetime"><time [^>]*>2 Oct, 07:05<\/time>/);
 });

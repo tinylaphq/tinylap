@@ -9,6 +9,17 @@
  * The one loud thing is the clock: a dark slab with a hard accent shadow,
  * like the display at a track's start line. The table around it stays plain. */
 
+/* Record marks (records spec §4.2), in the colours a timing screen uses:
+ * purple for the fastest lap anyone has driven here, green for a driver's own
+ * best. The session's best lap tints its whole row. */
+:root {
+  --tl-record: var(--p-accent-2);
+  --tl-record-ink: var(--p-surface);
+  --tl-pb: var(--p-success);
+  --tl-pb-ink: var(--p-text);
+  --tl-session-best: color-mix(in srgb, var(--p-accent-3) 22%, var(--p-surface));
+}
+
 body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-text); font-family: var(--p-font); }
 
 .navbar { gap: var(--p-space-md); }
@@ -41,12 +52,42 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   max-width: 1400px;
   margin-inline: auto;
 }
-.board-head, .board-unknown { grid-column: 1 / -1; }
-.board-unknown { margin: 0; }
+.board-track, .board-head, .board-unknown, .board > .idle-notice { grid-column: 1 / -1; }
+.board-unknown, .board > .idle-notice { margin: 0; }
+/* The track and its record (records spec §5.1): a quiet strip, its edge in the
+ * record colour. When a record falls it fills with that colour and stands out
+ * like the clock (§4.3); that is the board's one moment of colour. */
+.board-track {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--p-space-xs) var(--p-space-lg);
+  padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text); border-left: 6px solid var(--tl-record);
+}
+.board-track p { margin: 0; }
+.board-track-name { color: var(--p-text-secondary); }
+.board-track-name strong { color: var(--p-text); font-size: 1.15em; margin-right: var(--p-space-xs); }
+.board-track-record { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
+.board-track-label { font-weight: 700; }
+.board-track-time { font-weight: 700; font-size: 1.15em; }
+.board-track-by { color: var(--p-text-secondary); }
+.board-track-by .driver { color: var(--p-text); }
+.board-track.is-record {
+  background: var(--tl-record); color: var(--tl-record-ink); border-left-width: var(--p-border-width);
+  box-shadow: var(--p-shadow-lg) var(--p-text); padding-block: var(--p-space-md);
+}
+.board-track.is-record .board-track-name, .board-track.is-record .board-track-name strong,
+.board-track.is-record .board-track-by, .board-track.is-record .board-track-by .driver { color: inherit; }
+.board-track.is-record .board-track-record { display: grid; justify-items: end; gap: var(--p-space-xs); }
+.board-track-new { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
+.board-track-new .board-track-label { font-size: 1.4em; letter-spacing: -0.01em; }
+.board-track-new .board-track-time { font-size: 1.8em; line-height: 1.1; }
+.board-track-beat { opacity: 0.85; }
 .board-head {
   display: flex; justify-content: space-between; align-items: stretch; gap: var(--p-space-md); flex-wrap: wrap;
 }
-.board-head .eyebrow { margin: 0 0 var(--p-space-xs); color: var(--p-text-secondary); }
+/* With no session running: when the last one ended, and Start practice. */
+.board-ended { margin: var(--p-space-xs) 0 0; color: var(--p-text-secondary); }
+.board-head .start-practice { align-self: center; }
+.board-ended .tag { font-size: 10px; padding: 1px 6px; vertical-align: middle; }
 .board-title { margin: 0; font-size: clamp(1.75rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -0.02em; }
 .board-clock {
   display: grid; justify-items: end; align-content: center; gap: var(--p-space-xs);
@@ -55,15 +96,13 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 }
 .board-clock-label { color: var(--p-accent-3); margin: 0; }
 .board-clock-time { font: 700 clamp(2.5rem, 9vw, 6rem) / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
-/* Race control's clock: one row, the label as palace's .stat-label. */
+/* The Sessions tab's clock: one row, the label as palace's .stat-label. */
 .race-clock { display: flex; align-items: baseline; gap: var(--p-space-sm); }
 .race-clock-time { font: 700 1.5rem / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
 
 /* Wide tables scroll inside the board, not the page; the padding keeps the hard shadow in view. */
 .board-scroll { overflow-x: auto; padding: 0 4px 4px 0; }
 .board-main { display: grid; gap: var(--p-space-lg); align-content: start; min-width: 0; }
-.board-results-title { display: flex; gap: var(--p-space-sm); align-items: baseline; margin: 0 0 var(--p-space-sm); }
-.board-results-title .tag { font-size: 10px; padding: 1px 6px; }
 .board-results .empty { margin: 0; }
 .board-table { font-size: 1em; width: 100%; border-collapse: collapse; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
 .board-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-surface); background: var(--p-dark); }
@@ -86,7 +125,6 @@ tl-bridge { display: block; }
 .board-ago time { white-space: nowrap; }
 .num { text-align: right; font-family: var(--p-font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .is-finished td { color: var(--p-text-muted); }
-.pb { margin-left: var(--p-space-xs); background: var(--p-accent-1); vertical-align: middle; }
 .board-empty { margin: 0; padding: var(--p-space-xl) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) dashed var(--p-border-dashed); text-align: center; }
 
 .driver { font-weight: 600; }
@@ -114,7 +152,11 @@ body.big .board {
   /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
   padding-top: calc(0.5rem + 44px + var(--p-space-md));
 }
-body.big .board-head .eyebrow, body.big .board-clock-label { font-size: 0.6em; }
+body.big .board-clock-label, body.big .board-ended { font-size: 0.6em; }
+body.big .board-track { font-size: 0.75em; }
+@media (max-width: 600px) {
+  .board-track.is-record .board-track-record { justify-items: start; }
+}
 body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
 body.big .board-table th, body.big .board-table td { padding-block: 0.6em; }
@@ -251,6 +293,20 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
   font: 600 11px/1.4 var(--p-font); letter-spacing: 1px; text-transform: uppercase;
 }
 .navbar-right .btn { border-color: var(--p-border-dark); }
+.navbar-right .btn[hidden] { display: none; }
+/* A switch, pressed (Sound on, Notify me): filled light on the dark bar, where off is the outline. */
+.navbar-right .btn[aria-pressed="true"], .navbar-right .btn[aria-pressed="true"]:hover { background: var(--p-surface); border-color: var(--p-surface); color: var(--p-dark); }
+/* Sound remembered on, but the browser waits for a tap before it plays: the
+ * switch asks for one, with the amber lamp the stream uses while it waits. */
+#sound-switch:not([data-state="wanted"]) .sound-wanted, #sound-switch[data-state="wanted"] .sound-on { display: none; }
+#sound-switch[data-state="wanted"] { border-color: var(--p-warning); }
+#sound-switch[data-state="wanted"]::before { content: ''; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
+@media (prefers-reduced-motion: reduce) { #sound-switch[data-state="wanted"]::before { animation: none; } }
+body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
+/* Notifications the browser blocks for this site: a dimmed, dashed switch that
+ * says so, since only the browser's site settings can undo it. */
+#notify-switch:not([data-state="blocked"]) .notify-blocked, #notify-switch[data-state="blocked"] .notify-on { display: none; }
+.navbar-right .btn:disabled { background: transparent; border-style: dashed; border-color: var(--p-text-faint); color: var(--p-text-faint); }
 .nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
 .nav-tabs li { display: flex; }
 
@@ -333,10 +389,45 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
   .inline-form:has(> .field > label:not(.visually-hidden)) > .btn { margin-top: 0; align-self: flex-start; }
 }
 
-/* Race control: choice groups are fieldsets; the length boxes sit in a row. */
+/* The start form: choice groups are fieldsets; the length boxes sit in a row. */
 .choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
 .choices-inline { display: flex; flex-wrap: wrap; gap: var(--p-space-lg); }
 .race-times { display: flex; flex-wrap: wrap; gap: var(--p-space-lg); align-items: flex-start; }
 .race-times input[type="number"] { width: 5.5rem; font-variant-numeric: tabular-nums; }
 .field-hint { margin: 0; color: var(--p-text-muted); font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdown) { opacity: 0.5; }
+
+/* Marks after a lap time: a slot one mark wide whether it holds one or not,
+ * so the times above and below stay aligned in their column. */
+.marks { display: inline-block; width: 2.4em; text-align: left; margin-left: var(--p-space-xs); vertical-align: middle; }
+.mark {
+  display: inline-block; padding: 0.15em 0.35em; text-decoration: none; cursor: help;
+  font: 700 0.7em/1 var(--p-font); letter-spacing: 0.04em; border: var(--p-border-thin) solid var(--p-text);
+}
+.mark-tr { background: var(--tl-record); color: var(--tl-record-ink); }
+.mark-pb { background: var(--tl-pb); color: var(--tl-pb-ink); }
+.crown { margin-left: var(--p-space-xs); }
+.board-table tr.is-best td { background: var(--tl-session-best); }
+
+/* "A car crossed the line…": prose with its button, not palace's upper-cased label. */
+.idle-notice { display: flex; flex-wrap: wrap; gap: var(--p-space-sm) var(--p-space-md); align-items: center; justify-content: space-between; text-transform: none; letter-spacing: 0; }
+.idle-notice p { margin: 0; font-weight: 600; }
+
+/* The Sessions tab, a session's page and the records: wider than a form page, for their tables. */
+.sessions-screen { max-width: 960px; }
+.sessions-screen h2 { margin: 0; }
+.sessions-screen .subtitle { margin: 0; }
+.start-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--p-space-lg); align-items: start; }
+.start-grid .h3 { margin: 0; }
+.history-table a { white-space: nowrap; }
+.session-facts { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-xl); margin: 0; }
+.session-facts dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
+.session-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.session-laps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--p-space-md); }
+.session-laps .h3 { margin: 0 0 var(--p-space-sm); }
+.lap-table td, .lap-table th { padding-block: var(--p-space-xs); }
+.lap-table .tag { font-size: 10px; padding: 1px 6px; }
+.lap-table tr.is-not-counted .num { color: var(--p-text-muted); }
+@media (max-width: 720px) {
+  .start-grid { grid-template-columns: 1fr; }
+}

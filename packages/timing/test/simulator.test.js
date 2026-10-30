@@ -69,7 +69,7 @@ test('noise: a double read comes 50 to 300 ms later, and a miss drops the crossi
 });
 
 const vectors = JSON.parse(readFileSync(new URL('./zround-vectors.json', import.meta.url), 'utf8'));
-const stat = (up, pass) => `%TLLOG stat up=${up} batches=0 frames=0 rej.start=0 rej.bit=0 rej.stop=0 rej.short=0 rej.burst=0 rej.long=0 rej.parity=0 overflow=0 ringlow=0 qdrop=0 pass=${pass} single=0 quiet=0 minlap=0 rxdrop=0 suppressed=0 heap=200000&`;
+const stat = (up, pass) => `%TLLOG stat up=${up} batches=${pass * 8} frames=${pass * 8} rej.start=0 rej.bit=0 rej.stop=0 rej.short=0 rej.burst=0 rej.long=0 rej.parity=0 overflow=0 ringlow=8192 qdrop=0 pass=${pass} single=0 quiet=0 minlap=0 rxdrop=0 suppressed=0 heap=200000&`;
 
 test('start gives %TLID, then %TLLOG boot', () => {
   const sim = createSimulator({ cars: [], decoder: 'dec_1' });

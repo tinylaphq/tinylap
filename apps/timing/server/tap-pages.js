@@ -24,7 +24,7 @@ function showTap(request) {
   // A lap needs its time, as digits; the other results carry none. Anything else is no result.
   const ms = /^\d{1,9}$/.test(q.get('ms') ?? '') ? Number(q.get('ms')) : null;
   const result = driver && RESULTS.has(kind) && (kind !== 'lap' || ms !== null) ? { result: kind, ms: kind === 'lap' ? ms : null, driver } : null;
-  return page(request, 200, tapPage(request, { drivers, result }));
+  return page(request, 200, tapPage(request, { drivers, result, running: !!request.store.runningSession(request.workspaceId) }));
 }
 
 /** @param {{ stored: boolean, lapMs: number | null }} value */
@@ -39,7 +39,7 @@ async function postTap(request) {
   if (result.error) {
     const headers = retryHeaders(result.error);
     if (wantsJson(request.req)) return { ...json(result.error.status, { error: result.error.message }, { 'Cache-Control': 'no-store', ...headers }), credentials: true };
-    return page(request, result.error.status, tapPage(request, { drivers, error: result.error }), { headers });
+    return page(request, result.error.status, tapPage(request, { drivers, error: result.error, running: !!request.store.runningSession(request.workspaceId) }), { headers });
   }
   const outcome = outcomeOf(result.value);
   const driver = drivers.find((d) => d.id === driverId);

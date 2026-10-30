@@ -22,6 +22,7 @@ before(async () => {
   base = `/clubs/${office.id}`;
   await app.form(owner, `${base}/drivers`, { name: '<b>Ben</b>' });
   app.engine.assign(office.id, '10', app.store.drivers(office.id)[0].id);
+  app.engine.start(office.id, { kind: 'practice' });
 });
 after(() => app.close());
 

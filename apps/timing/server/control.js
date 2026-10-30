@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Race control (spec §6, §8): start a qualifying or race, list and read
-// sessions, abort. Practice is never started by hand.
+// Race control (spec §6, §8): start a practice, qualifying or race, list and
+// read sessions, end a practice, abort a qualifying or race.
 import { NO_STORE, workspaceRoute } from './access.js';
 import { readJson } from './body.js';
 import { publicSession } from './engine.js';
@@ -19,7 +19,7 @@ async function startSession(request) {
   for (const key of ['durationSeconds', 'countdownSeconds']) {
     if (typeof body[key] === 'string') return invalid(request, `\`${key}\` must be a whole number.`);
   }
-  const r = ops.startSession(request, { kind: body.kind, roster: body.roster, durationSeconds: body.durationSeconds, countdownSeconds: body.countdownSeconds });
+  const r = ops.startSession(request, { kind: body.kind, roster: body.roster, durationSeconds: body.durationSeconds, countdownSeconds: body.countdownSeconds, replace: body.replace });
   return r.error ? opProblem(request, r.error) : json(201, r.value, NO_STORE);
 }
 
@@ -41,10 +41,17 @@ function abortSession(request, match) {
   return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
 }
 
+function endSession(request, match) {
+  request.req.resume();
+  const r = ops.endSession(request, { id: match[2] });
+  return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
+}
+
 const path = (rest) => new RegExp(`^/workspaces/([^/]+)/${rest}$`);
 
 export const controlRoutes = [
   { pattern: path('sessions'), credentials: true, methods: { GET: workspaceRoute('timing.run', listSessions), POST: workspaceRoute('timing.run', startSession, { write: true }) } },
   { pattern: path('sessions/([^/]+)'), credentials: true, methods: { GET: workspaceRoute('timing.run', getSession) } },
+  { pattern: path('sessions/([^/]+)/end'), credentials: true, methods: { POST: workspaceRoute('timing.run', endSession, { write: true }) } },
   { pattern: path('sessions/([^/]+)/abort'), credentials: true, methods: { POST: workspaceRoute('timing.run', abortSession, { write: true }) } },
 ];

@@ -139,7 +139,7 @@ test('a role that may not, or a form from elsewhere: the forbidden page', async 
 test('the navbar: brand, screens, and the shared account menu with your clubs and Sign out', async () => {
   const body = await (await get(anaLogin, `/clubs/${office.id}/probe`)).text();
   assert.match(body, /<a class="navbar-brand" href="\/">/);
-  for (const [path, label] of [['board', 'Board'], ['race', 'Race'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]) {
+  for (const [path, label] of [['board', 'Board'], ['sessions', 'Sessions'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]) {
     assert.match(body, new RegExp(`href="/clubs/${office.id}/${path}"[^>]*>${label}</a>`));
   }
   assert.match(body, /<tl-menu class="nav-account">\s*<details class="navbar-menu" name="tl-account">\s*<summary><span class="visually-hidden">Account: <\/span><span class="nav-account-name">Ana &lt;b&gt;<\/span><\/summary>/);

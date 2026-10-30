@@ -54,8 +54,23 @@ CREATE TABLE IF NOT EXISTS crossing (
   via TEXT NOT NULL, flag TEXT
 );
 CREATE INDEX IF NOT EXISTS crossing_session ON crossing (session_id, seq);
+CREATE INDEX IF NOT EXISTS crossing_session_at ON crossing (session_id, at);
 CREATE INDEX IF NOT EXISTS crossing_reference ON crossing (decoder_id, transponder, ref, seq);
+CREATE INDEX IF NOT EXISTS passing_received ON passing (received_at);
+CREATE INDEX IF NOT EXISTS crossing_passing ON crossing (decoder_id, boot, transponder, t);
 CREATE INDEX IF NOT EXISTS crossing_transponder ON crossing (workspace_id, transponder, driver_id);
+CREATE INDEX IF NOT EXISTS session_track ON session (workspace_id, track_id, direction);
+CREATE INDEX IF NOT EXISTS session_created ON session (workspace_id, created_at, id);
+CREATE TABLE IF NOT EXISTS track_record (
+  workspace_id TEXT NOT NULL, track_id TEXT NOT NULL, direction TEXT NOT NULL, crossing_seq INTEGER PRIMARY KEY,
+  driver_id TEXT NOT NULL, lap_ms INTEGER NOT NULL, at INTEGER NOT NULL, session_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS track_record_at ON track_record (workspace_id, track_id, direction, at);
+CREATE TABLE IF NOT EXISTS personal_best (
+  workspace_id TEXT NOT NULL, track_id TEXT NOT NULL, direction TEXT NOT NULL, driver_id TEXT NOT NULL,
+  lap_ms INTEGER NOT NULL, at INTEGER NOT NULL, crossing_seq INTEGER NOT NULL,
+  PRIMARY KEY (workspace_id, track_id, direction, driver_id)
+);
 `;
 
 const ACTIVE = "('countdown', 'running', 'finishing')";
@@ -112,6 +127,7 @@ const sessionOf = (r) => ({
   roster: r.roster === null ? null : JSON.parse(String(r.roster)), state: String(r.state), createdAt: Number(r.created_at),
   opensAt: num(r.opens_at), closesAt: num(r.closes_at), endedAt: num(r.ended_at), durationMs: num(r.duration_ms),
 });
+const recordOf = (r) => ({ driverId: String(r.driver_id), lapMs: Number(r.lap_ms), at: Number(r.at), sessionId: String(r.session_id), seq: Number(r.crossing_seq) });
 const crossingOf = (r) => ({
   seq: Number(r.seq), sessionId: String(r.session_id), decoder: String(r.decoder_id), boot: String(r.boot), transponder: String(r.transponder),
   t: Number(r.t), driverId: str(r.driver_id), at: Number(r.at), lapMs: num(r.lap_ms), counts: r.counts === 1, ref: r.ref === 1,
@@ -154,6 +170,9 @@ export function openStore(path) {
     touchDecoder: q('UPDATE decoder SET last_seen_at = ? WHERE id = ?'),
     insertPassing: q(`INSERT INTO passing (decoder_id, boot, transponder, t, received_at, via, workspace_id)
       VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`),
+    deleteLoosePassings: q(`DELETE FROM passing WHERE received_at >= ? AND received_at < ? AND NOT EXISTS (SELECT 1 FROM crossing c
+      WHERE c.decoder_id = passing.decoder_id AND c.boot = passing.boot AND c.transponder = passing.transponder AND c.t = passing.t)`),
+    countPassings: q('SELECT COUNT(*) AS n FROM passing WHERE workspace_id = ?'),
     through: q('SELECT MAX(t) AS t FROM passing WHERE decoder_id = ? AND boot = ?'),
     lastReference: q('SELECT boot, t FROM crossing WHERE decoder_id = ? AND transponder = ? AND ref = 1 ORDER BY seq DESC LIMIT 1'),
     addCrossing: q(`INSERT INTO crossing (workspace_id, session_id, decoder_id, boot, transponder, t, driver_id, at, lap_ms, counts, ref, via, flag)
@@ -169,20 +188,35 @@ export function openStore(path) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     session: q('SELECT * FROM session WHERE id = ?'),
     updateSession: q('UPDATE session SET state = ?, ended_at = COALESCE(?, ended_at) WHERE id = ?'),
-    activeSession: q(`SELECT * FROM session WHERE workspace_id = ? AND kind != 'practice' AND state IN ${ACTIVE} ORDER BY created_at DESC LIMIT 1`),
-    openPractice: q("SELECT * FROM session WHERE workspace_id = ? AND kind = 'practice' AND state = 'running' ORDER BY created_at DESC LIMIT 1"),
-    lastNonPractice: q("SELECT * FROM session WHERE workspace_id = ? AND kind != 'practice' ORDER BY created_at DESC, rowid DESC LIMIT 1"),
-    activeAll: q(`SELECT * FROM session WHERE kind != 'practice' AND state IN ${ACTIVE} ORDER BY created_at`),
-    listSessions: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?'),
-    // SQLite: with one MIN(), the bare column `at` comes from the row holding the minimum.
-    personalBests: q(`SELECT c.driver_id, MIN(c.lap_ms) AS best_ms, c.at FROM crossing c JOIN session s ON s.id = c.session_id
-      WHERE c.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND c.counts = 1 AND c.via != 'tap' AND c.driver_id IS NOT NULL
-      GROUP BY c.driver_id ORDER BY best_ms`),
+    runningSession: q(`SELECT * FROM session WHERE workspace_id = ? AND state IN ${ACTIVE} ORDER BY created_at DESC LIMIT 1`),
+    lastSession: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'),
+    activeAll: q(`SELECT * FROM session WHERE state IN ${ACTIVE} ORDER BY created_at`),
+    listSessions: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, id DESC LIMIT ?'),
+    listSessionsBefore: q('SELECT * FROM session WHERE workspace_id = ? AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?'),
+    // A session's counted laps only, through crossing_session: never a club's whole history.
+    sessionDrivers: q('SELECT COUNT(DISTINCT driver_id) AS n FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL'),
+    sessionBest: q('SELECT seq, driver_id, lap_ms FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL AND lap_ms IS NOT NULL ORDER BY lap_ms, seq LIMIT 1'),
+    // Records and personal bests (records spec §4, §6): projections of the qualifying laps, written with each lap.
+    personalBests: q(`SELECT driver_id, lap_ms, at, crossing_seq FROM personal_best
+      WHERE workspace_id = ? AND track_id = ? AND direction = ? AND driver_id IN (SELECT value FROM json_each(?)) ORDER BY lap_ms, at, crossing_seq`),
+    offerPersonalBest: q(`INSERT INTO personal_best (workspace_id, track_id, direction, driver_id, lap_ms, at, crossing_seq) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT DO UPDATE SET lap_ms = excluded.lap_ms, at = excluded.at, crossing_seq = excluded.crossing_seq
+      WHERE (excluded.lap_ms, excluded.at, excluded.crossing_seq) < (lap_ms, at, crossing_seq)`),
+    recordHistory: q('SELECT * FROM track_record WHERE workspace_id = ? AND track_id = ? AND direction = ? ORDER BY at DESC, crossing_seq DESC LIMIT ?'),
+    recordAt: q('SELECT * FROM track_record WHERE workspace_id = ? AND track_id = ? AND direction = ? AND at <= ? ORDER BY at DESC, crossing_seq DESC LIMIT 1'),
+    addRecord: q('INSERT INTO track_record (workspace_id, track_id, direction, crossing_seq, driver_id, lap_ms, at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
+    deleteRecords: q('DELETE FROM track_record WHERE workspace_id = ? AND track_id = ? AND direction = ?'),
+    deleteBests: q('DELETE FROM personal_best WHERE workspace_id = ? AND track_id = ? AND direction = ?'),
+    qualifyingLaps: q(`SELECT c.seq, c.driver_id, c.lap_ms, c.at, c.session_id FROM session s JOIN crossing c ON c.session_id = s.id
+      WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND c.counts = 1 AND c.via != 'tap' AND c.driver_id IS NOT NULL AND c.lap_ms IS NOT NULL
+      ORDER BY c.at, c.seq`),
+    trackDirections: q('SELECT DISTINCT workspace_id, track_id, direction FROM session WHERE track_id IS NOT NULL'),
     selectCursor: q('SELECT seq FROM feed_cursor WHERE feed = ?'),
     upsertCursor: q('INSERT INTO feed_cursor (feed, seq) VALUES (?, ?) ON CONFLICT (feed) DO UPDATE SET seq = excluded.seq'),
   };
   const purge = ['workspace WHERE id', 'track WHERE workspace_id', 'driver WHERE workspace_id', 'transponder WHERE workspace_id',
-    'decoder WHERE workspace_id', 'passing WHERE workspace_id', 'session WHERE workspace_id', 'crossing WHERE workspace_id']
+    'decoder WHERE workspace_id', 'passing WHERE workspace_id', 'session WHERE workspace_id', 'crossing WHERE workspace_id',
+    'track_record WHERE workspace_id', 'personal_best WHERE workspace_id']
     .map((t) => q(`DELETE FROM ${t} = ?`));
 
   let depth = 0;
@@ -201,6 +235,32 @@ export function openStore(path) {
     } finally {
       depth -= 1;
     }
+  }
+
+  /** Rewrites a track and direction's records and personal bests from its qualifying laps. */
+  function rebuildRecords(ws, trackId, direction) {
+    transaction(() => {
+      s.deleteRecords.run(ws, trackId, direction);
+      s.deleteBests.run(ws, trackId, direction);
+      let record = Infinity;
+      const best = new Map();
+      for (const r of s.qualifyingLaps.all(ws, trackId, direction)) {
+        const lap = { seq: Number(r.seq), driverId: String(r.driver_id), lapMs: Number(r.lap_ms), at: Number(r.at) };
+        if (lap.lapMs < record) {
+          record = lap.lapMs;
+          s.addRecord.run(ws, trackId, direction, lap.seq, lap.driverId, lap.lapMs, lap.at, String(r.session_id));
+        }
+        if (lap.lapMs < (best.get(lap.driverId)?.lapMs ?? Infinity)) best.set(lap.driverId, lap);
+      }
+      for (const b of best.values()) s.offerPersonalBest.run(ws, trackId, direction, b.driverId, b.lapMs, b.at, b.seq);
+    });
+  }
+  // Records and bests are filled from the existing laps once; the marker commits with the fill, so a fill cut short runs again.
+  if (!s.selectCursor.get('records-filled')) {
+    transaction(() => {
+      for (const r of s.trackDirections.all()) rebuildRecords(String(r.workspace_id), String(r.track_id), String(r.direction));
+      s.upsertCursor.run('records-filled', 1);
+    });
   }
 
   const workspace = (id) => {
@@ -304,6 +364,18 @@ export function openStore(path) {
 
     insertPassing: ({ decoder, boot, transponder, t, receivedAt, via, workspaceId }) =>
       s.insertPassing.run(decoder, boot, transponder, t, receivedAt, via, workspaceId).changes === 1,
+    /**
+     * Deletes passings received before `before` that no crossing was made from; returns how many. Each call judges only what
+     * the last one did not (a watermark in feed_cursor); the first starts at `since`, not at the oldest passing.
+     * @param {number} before @param {number} since
+     */
+    deleteLoosePassings: (before, since) => transaction(() => {
+      const from = Number(s.selectCursor.get('loose-passings')?.seq ?? since);
+      const deleted = Number(s.deleteLoosePassings.run(from, before).changes);
+      if (before > from) s.upsertCursor.run('loose-passings', before);
+      return deleted;
+    }),
+    countPassings: (workspaceId) => num(s.countPassings.get(workspaceId)?.n),
     through: (decoder, boot) => num(s.through.get(decoder, boot)?.t),
     lastReference(decoder, transponder) {
       const r = s.lastReference.get(decoder, transponder);
@@ -334,24 +406,51 @@ export function openStore(path) {
     updateSession(id, { state, endedAt = null }) {
       s.updateSession.run(state, endedAt, id);
     },
-    activeSession(ws) {
-      const r = s.activeSession.get(ws);
+    /** The one session in countdown, running or finishing, of any kind. */
+    runningSession(ws) {
+      const r = s.runningSession.get(ws);
       return r ? sessionOf(r) : null;
     },
-    openPractice(ws) {
-      const r = s.openPractice.get(ws);
-      return r ? sessionOf(r) : null;
-    },
-    /** The latest qualifying or race, if it has ended (done or aborted); null while one is open. */
+    /** The latest session of any kind, if it has ended (done or aborted); null while one is open. */
     lastEnded(ws) {
-      const r = s.lastNonPractice.get(ws);
+      const r = s.lastSession.get(ws);
       const session = r ? sessionOf(r) : null;
       return session && (session.state === 'done' || session.state === 'aborted') ? session : null;
     },
     activeAll: () => s.activeAll.all().map(sessionOf),
-    listSessions: (ws, limit) => s.listSessions.all(ws, limit).map(sessionOf),
+    /** Sessions newest first; `before`, the last row of a page, pages on to older ones. @param {string} ws @param {number} limit @param {{ createdAt: number, id: string } | null} [before] */
+    listSessions: (ws, limit, before = null) => (before === null ? s.listSessions.all(ws, limit) : s.listSessionsBefore.all(ws, before.createdAt, before.id, limit)).map(sessionOf),
+    /** How many drivers a session counted, and its best lap. */
+    sessionSummary(sessionId) {
+      const best = s.sessionBest.get(sessionId);
+      return {
+        drivers: Number(s.sessionDrivers.get(sessionId)?.n ?? 0),
+        best: best ? { seq: Number(best.seq), driverId: String(best.driver_id), lapMs: Number(best.lap_ms) } : null,
+      };
+    },
 
-    personalBests: (ws, trackId, direction) => s.personalBests.all(ws, trackId, direction).map((r) => ({ driverId: String(r.driver_id), bestMs: Number(r.best_ms), at: Number(r.at) })),
+    /** The personal bests on a track and direction of the drivers asked for, fastest first. */
+    personalBests: (ws, trackId, direction, driverIds) => s.personalBests.all(ws, trackId, direction, JSON.stringify(driverIds))
+      .map((r) => ({ driverId: String(r.driver_id), bestMs: Number(r.lap_ms), at: Number(r.at), seq: Number(r.crossing_seq) })),
+    /** Keeps the faster lap as the driver's best, the earlier one on a tie. */
+    offerPersonalBest(ws, trackId, direction, { driverId, lapMs, at, seq }) {
+      s.offerPersonalBest.run(ws, trackId, direction, driverId, lapMs, at, seq);
+    },
+    /** The laps that set a record on a track and direction, newest first. */
+    recordHistory: (ws, trackId, direction, { limit = -1 } = {}) => s.recordHistory.all(ws, trackId, direction, limit).map(recordOf),
+    currentRecord(ws, trackId, direction) {
+      const r = s.recordHistory.get(ws, trackId, direction, 1);
+      return r ? recordOf(r) : null;
+    },
+    /** The record as it stood when a lap at `at` was driven: the newest row up to `at`. */
+    recordAt(ws, trackId, direction, at) {
+      const r = s.recordAt.get(ws, trackId, direction, at);
+      return r ? recordOf(r) : null;
+    },
+    addRecord({ workspaceId, trackId, direction, seq, driverId, lapMs, at, sessionId }) {
+      s.addRecord.run(workspaceId, trackId, direction, seq, driverId, lapMs, at, sessionId);
+    },
+    rebuildRecords,
 
     close() {
       db.close();

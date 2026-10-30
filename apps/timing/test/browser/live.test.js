@@ -7,13 +7,15 @@ import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
 import { openBrowser, pageAs, postPassings } from './browser.js';
 
+// Server time runs with real time; a test only ever moves it forward.
+const clock = { offset: 0, get now() { return Date.now() + this.offset; } };
 let app;
 let browser;
 let member;
 let decoder;
 
 before(async () => {
-  app = await startTiming();
+  app = await startTiming({ clock });
   browser = await openBrowser();
   const user = await app.signUp('Ana');
   member = await app.login(user);
@@ -32,7 +34,9 @@ test('the board updates live and its clock ticks', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/board');
-  await page.getByRole('heading', { name: 'Waiting for the first car' }).waitFor();
+  await page.getByRole('heading', { name: 'No session yet' }).waitFor();
+  app.engine.start((await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id, { kind: 'practice' });
+  clock.offset += 10_000; // a practice starts clean: the lap begins after its start
   await postPassings(app, decoder, [{ transponder: '10', t: 1000 }, { transponder: '10', t: 9000 }]);
   await page.getByRole('heading', { name: 'Practice' }).waitFor();
   await page.locator('.board-table').getByText('Ana').waitFor();

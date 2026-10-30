@@ -543,7 +543,7 @@ The `/api` page shows only a request body's media type (`pages.js`), so it picks
 
 These were for the board session (decoder spec §11, checklist items 1 and 2). None of them blocks the implementation.
 
-1. **Answered: the board does not reset when Chrome opens the port.** Its uptime runs on across a connect. Uploading resets it (through RTS), and so does a replug, but a replug happens with the port closed. `resetOnOpen` still defaults to `true` (§4), which models Arduino boards that reset on open, not this one.
+1. **Answered: the board does not reset when Chrome opens the port.** Its uptime runs on across a connect. Uploading resets it (through RTS), and so does a replug, but a replug happens with the port closed. `tinylapModel`'s `resetOnOpen` still defaults to `true` (§4), for the tests of boards that reset on open; the decoder `TINYLAP_SIMULATE` opens runs without it.
 2. **Open:** how many framing errors a reset's ROM output causes, which sets the 20-errors-in-a-row guard (§3.2). With no reset on open, only a crash or a power dip resets the board while it is connected, and it has no reset button to try it with.
 3. **Open:** whether a non-fatal read error leaves `port.writable` alone (§3.1). It needs the reset from guess 2.
 4. **Not needed:** `setSignals` (§6). Nothing resets the board on open, so the bridge has nothing to hold back.

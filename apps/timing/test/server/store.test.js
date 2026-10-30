@@ -4,6 +4,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { openStore } from '../../server/store.js';
 
 const W = 'ws-1';
@@ -79,24 +83,86 @@ test('personal bests: counted, decoder-timed, per track and direction', () => {
   practice(store);
   practice(store, 'cw', { direction: 'cw' });
   crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
-  crossing(store, { driverId: 'ana', lapMs: 7000, counts: true, at: 20 });
+  const seq = crossing(store, { driverId: 'ana', lapMs: 7000, counts: true, at: 20 });
   crossing(store, { driverId: 'ana', lapMs: 6000, counts: false, at: 30 });
   crossing(store, { driverId: 'ana', lapMs: 5000, counts: true, at: 40, via: 'tap' });
   crossing(store, { sessionId: 'cw', driverId: 'ana', lapMs: 4000, counts: true, at: 50 });
-  assert.deepEqual(store.personalBests(W, 't1', 'ccw'), [{ driverId: 'ana', bestMs: 7000, at: 20 }]);
+  store.rebuildRecords(W, 't1', 'ccw');
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ana']), [{ driverId: 'ana', bestMs: 7000, at: 20, seq }]);
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ben']), []);
 });
 
-test('active and open sessions', () => {
+test('a database from before records gets them filled from its laps on open', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  const store = openStore(path);
+  practice(store);
+  practice(store, 'cw', { direction: 'cw' });
+  crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
+  crossing(store, { driverId: 'ben', lapMs: 7000, counts: true, at: 20 });
+  crossing(store, { sessionId: 'cw', driverId: 'ana', lapMs: 6000, counts: true, at: 30 });
+  store.close();
+  const db = new DatabaseSync(path);
+  db.exec("DROP TABLE track_record; DROP TABLE personal_best; DELETE FROM feed_cursor WHERE feed = 'records-filled';");
+  db.close();
+  const reopened = openStore(path);
+  assert.deepEqual(reopened.recordHistory(W, 't1', 'ccw').map((r) => [r.driverId, r.lapMs]), [['ben', 7000], ['ana', 8000]]);
+  assert.deepEqual(reopened.recordHistory(W, 't1', 'cw').map((r) => [r.driverId, r.lapMs]), [['ana', 6000]]);
+  assert.deepEqual(reopened.personalBests(W, 't1', 'ccw', ['ana', 'ben']).map((b) => [b.driverId, b.bestMs]), [['ben', 7000], ['ana', 8000]]);
+  reopened.close();
+});
+
+test('a fill of records cut short is done again on the next open, and only until it is done', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  const store = openStore(path);
+  practice(store);
+  crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
+  store.close();
+  // The tables were created, but the fill never committed.
+  let db = new DatabaseSync(path);
+  db.exec("DELETE FROM feed_cursor WHERE feed = 'records-filled'");
+  db.close();
+  const reopened = openStore(path);
+  assert.deepEqual(reopened.recordHistory(W, 't1', 'ccw').map((r) => [r.driverId, r.lapMs]), [['ana', 8000]]);
+  reopened.close();
+  db = new DatabaseSync(path);
+  db.exec('DELETE FROM track_record');
+  db.close();
+  const again = openStore(path);
+  assert.deepEqual(again.recordHistory(W, 't1', 'ccw'), [], 'filled once, not on every open');
+  again.close();
+});
+
+test('running sessions, of any kind', () => {
   const store = openStore(':memory:');
   practice(store);
-  assert.equal(store.openPractice(W).id, 's1');
-  assert.equal(store.activeSession(W), null);
+  assert.equal(store.runningSession(W).id, 's1');
+  assert.deepEqual(store.activeAll().map((s) => s.id), ['s1']);
+  store.updateSession('s1', { state: 'done', endedAt: 4 });
+  assert.equal(store.runningSession(W), null);
   store.addSession({ id: 'r1', workspaceId: W, kind: 'race', trackId: null, direction: 'ccw', roster: ['ana'], state: 'countdown', createdAt: 5, opensAt: 10, closesAt: 20, endedAt: null, durationMs: 10 });
-  assert.deepEqual(store.activeSession(W).roster, ['ana']);
+  assert.deepEqual(store.runningSession(W).roster, ['ana']);
   assert.deepEqual(store.activeAll().map((s) => s.id), ['r1']);
   store.updateSession('r1', { state: 'done', endedAt: 30 });
-  assert.equal(store.activeSession(W), null);
+  assert.equal(store.runningSession(W), null);
   assert.deepEqual(store.listSessions(W, 10).map((s) => s.id), ['r1', 's1']);
+});
+
+test('sessions page on by createdAt, and a summary reads one session\'s counted laps', () => {
+  const store = openStore(':memory:');
+  practice(store, 's1', { createdAt: 1 });
+  practice(store, 's2', { createdAt: 2 });
+  practice(store, 's3', { createdAt: 3 });
+  practice(store, 's2b', { createdAt: 2 });
+  assert.deepEqual(store.listSessions(W, 2).map((s) => s.id), ['s3', 's2b']);
+  // A page ends between two sessions of the same createdAt: the next starts with the other one.
+  assert.deepEqual(store.listSessions(W, 2, { createdAt: 2, id: 's2b' }).map((s) => s.id), ['s2', 's1']);
+  assert.deepEqual(store.sessionSummary('s1'), { drivers: 0, best: null });
+  crossing(store, { t: 1, driverId: 'ana', counts: true });
+  crossing(store, { t: 2, driverId: 'ana', lapMs: 8000, counts: true });
+  const best = crossing(store, { t: 3, driverId: 'ben', lapMs: 7000, counts: true });
+  crossing(store, { t: 4, driverId: 'cem', lapMs: 6000, counts: false });
+  crossing(store, { t: 5, driverId: null, lapMs: 5000, counts: false });
+  assert.deepEqual(store.sessionSummary('s1'), { drivers: 2, best: { seq: best, driverId: 'ben', lapMs: 7000 } });
 });
 
 test('decoders are found by their token hash', () => {
@@ -125,8 +191,12 @@ test('deleting a workspace removes all of its rows', () => {
   store.addDriver(W, { id: 'ana', name: 'Ana', colour: '#ff2d9b' });
   store.addDecoder(W, { id: 'd1', name: 'Gate', tokenHash: 'h1', createdAt: 1 });
   store.insertPassing({ decoder: 'd1', boot: 'b00tb00t', transponder: '0A', t: 1, receivedAt: 1, via: 'net', workspaceId: W });
-  crossing(store, {});
+  crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
+  store.rebuildRecords(W, 't1', 'ccw');
+  assert.equal(store.currentRecord(W, 't1', 'ccw').lapMs, 8000);
   store.deleteWorkspaceData(W);
+  assert.equal(store.currentRecord(W, 't1', 'ccw'), null);
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ana']), []);
   assert.equal(store.workspace(W), null);
   assert.deepEqual(store.drivers(W), []);
   assert.equal(store.decoder('d1'), null);
@@ -150,4 +220,29 @@ test('choosableDecoders drops a decoder that sends over Wi-Fi, keeps one that on
   store.insertPassing({ decoder: 'd1', boot: 'b00tb00t', transponder: '0A', t: 1, receivedAt: 1, via: 'net', workspaceId: W });
   store.insertPassing({ decoder: 'd2', boot: 'b00tb00t', transponder: '0A', t: 1, receivedAt: 1, via: 'serial', workspaceId: W });
   assert.deepEqual(store.choosableDecoders(W), [{ id: 'd2', name: 'Cable', createdAt: 2, lastSeenAt: null }]);
+});
+
+test('deleteLoosePassings deletes passings without a crossing once, and only before the cutoff', () => {
+  const store = openStore(':memory:');
+  practice(store);
+  const p = { decoder: 'd1', boot: 'b00tb00t', transponder: '0A', t: 1000, receivedAt: 10, via: 'net', workspaceId: W };
+  store.insertPassing(p);
+  store.insertPassing({ ...p, t: 2000 });
+  store.insertPassing({ ...p, t: 3000, receivedAt: 500 });
+  store.insertPassing({ ...p, t: 500, receivedAt: 2 }); // before the first sweep's start: it stays
+  crossing(store, { t: 1000 });
+  assert.equal(store.deleteLoosePassings(100, 5), 1, 'the first sweep starts at `since`, not at 0');
+  assert.equal(store.countPassings(W), 3);
+  assert.equal(store.deleteLoosePassings(100, 5), 0);
+  assert.equal(store.deleteLoosePassings(1000, 5), 1);
+  assert.equal(store.countPassings(W), 2);
+});
+
+test('a session’s last crossing is read through an index, not by scanning its laps', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  openStore(path).close();
+  const db = new DatabaseSync(path);
+  const plan = db.prepare("EXPLAIN QUERY PLAN SELECT MAX(at) AS at FROM crossing WHERE session_id = 'x'").all().map((r) => String(r.detail)).join(' ');
+  db.close();
+  assert.match(plan, /COVERING INDEX crossing_session_at/);
 });

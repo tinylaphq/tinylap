@@ -16,7 +16,7 @@ test('a failure takes its status from the problem table, and an unknown problem 
 
 test('every problem the operations and pages name is in the table', () => {
   const named = new Set(Object.values(TRACK_PROBLEMS));
-  for (const file of ['operations.js', 'race-pages.js']) {
+  for (const file of ['operations.js', 'sessions-pages.js']) {
     const source = readFileSync(new URL(`../../server/${file}`, import.meta.url), 'utf8');
     for (const [, name] of source.matchAll(/\bfail\('([^']+)'/g)) named.add(name);
   }

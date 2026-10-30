@@ -10,7 +10,7 @@ import { brand } from '@tinylap/design/html/brand.js';
 import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 import { html, safe } from './html.js';
 
-export const SCREENS = /** @type {const} */ ([['board', 'Board'], ['race', 'Race'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]);
+export const SCREENS = /** @type {const} */ ([['board', 'Board'], ['sessions', 'Sessions'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]);
 
 /** An asset's URL: versioned under /v/<build>/ in production. @param {any} request @param {string} path without a leading slash */
 export const asset = (request, path) => (request.build && request.build !== 'dev' ? `/v/${request.build}/${path}` : `/${path}`);
@@ -56,6 +56,8 @@ ${importMap}${importMap && request.settings?.simulate ? html`<script type="modul
   <div class="navbar-right">
     ${screen === 'board' || watcher ? html`${big ? html`<button type="button" class="btn btn-sm btn-outline" data-fullscreen hidden>Full screen</button>
     ` : null}<span class="live-status" id="live-status" data-state="off" hidden></span>
+    <button type="button" class="btn btn-sm btn-outline" id="sound-switch" aria-pressed="false" hidden><span class="sound-on">Sound on</span><span class="sound-wanted">Tap to turn sound on</span></button>
+    <button type="button" class="btn btn-sm btn-outline" id="notify-switch" aria-pressed="false" hidden><span class="notify-on">Notify me</span><span class="notify-blocked">Notifications blocked</span></button>
     <a class="btn btn-sm btn-outline" href="${bigLink}">${big ? 'Leave big screen' : 'Big screen'}</a>` : null}
     ${watcher ? null : accountMenu(request)}${signIn}
   </div>

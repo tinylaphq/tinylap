@@ -28,12 +28,39 @@ export function simulation(value) {
   return { name: /** @type {keyof typeof MODELS} */ (name), transport: MODELS[name].transport, lapMs: speed === 'fast' ? 2000 : 8000 };
 }
 
+const NVS_KEY = 'tinylap-sim-decoder';
+
 /**
- * A fresh simulated device for one pick (spec §5.4): every pick is a new device, so an unplug and
+ * The simulated TinyLap decoder's flash, in this browser's storage: like the board, it stays paired
+ * across a replug and a reload. Without storage it forgets on every pick.
+ */
+const browserNvs = {
+  load() {
+    try {
+      const value = JSON.parse(localStorage.getItem(NVS_KEY) ?? 'null');
+      return typeof value?.decoder === 'string' && typeof value?.token === 'string' ? value : null;
+    } catch {
+      return null;
+    }
+  },
+  /** @param {{ decoder: string, token: string }} pairing */
+  save(pairing) {
+    try {
+      localStorage.setItem(NVS_KEY, JSON.stringify(pairing));
+    } catch {
+      // No storage: the pairing lasts as long as this device.
+    }
+  },
+};
+
+/**
+ * A fresh simulated device for one pick (spec §5.4): every pick is a new device (a TinyLap one keeps its pairing), so an unplug and
  * Connect again is one too. @param {{ name: keyof typeof MODELS, transport: 'serial' | 'hid', lapMs: number }} sim
  * @param {{ hid?: EventTarget }} [options]
  */
 export function simulatedDevice(sim, { hid } = {}) {
-  const model = MODELS[sim.name].create({ lapMs: sim.lapMs });
+  const model = sim.name === 'tinylap'
+    ? tinylapModel({ lapMs: sim.lapMs, cars: 4, resetOnOpen: false, nvs: browserNvs })
+    : MODELS[sim.name].create({ lapMs: sim.lapMs });
   return sim.transport === 'serial' ? fakeSerialPort(model) : fakeHidDevice(model, { hid });
 }

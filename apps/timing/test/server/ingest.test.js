@@ -31,6 +31,7 @@ before(async () => {
   gate = await pair('Gate');
   spare = await pair('Spare');
   ana = await (await app.api(member, 'POST', `/workspaces/${office.id}/drivers`, { name: 'Ana' })).json();
+  app.engine.start(office.id, { kind: 'practice' });
 });
 after(() => app.close());
 

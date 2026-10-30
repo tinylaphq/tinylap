@@ -22,6 +22,7 @@ before(async () => {
   member = await app.login(owner);
   stranger = await app.login(zed);
   ana = await (await app.api(member, 'POST', path('/drivers'), { name: 'Ana' })).json();
+  app.engine.start(office.id, { kind: 'practice' });
 });
 after(() => app.close());
 

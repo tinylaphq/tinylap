@@ -27,5 +27,7 @@ export function rig() {
     clock.now = T0 + t;
     return engine.ingest({ workspaceId: W, decoder: 'd1', via: 'net', batch: { boot, passings: [{ transponder, t }] } });
   };
-  return { store, hub, engine, clock, events, pass };
+  /** Starts a practice, as a member does before passings count. */
+  const startPractice = () => engine.start(W, { kind: 'practice' }).session;
+  return { store, hub, engine, clock, events, pass, startPractice };
 }

@@ -9,6 +9,7 @@
 // clock when no server time is given.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { localTime } from '@tinylap/design/html/local-time.js';
 import { formatClock } from '../../public/format.js';
 import { startTiming } from '../server/helpers.js';
 import { openBrowser, pageAs } from './browser.js';
@@ -37,6 +38,8 @@ before(async () => {
   await app.form(member, '/personal/drivers', { name: 'Ana' });
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
   app.engine.assign(personal, '10', app.store.drivers(personal)[0].id);
+  app.engine.start(personal, { kind: 'practice' });
+  clock.offset += 10_000; // a practice starts clean: B1's lap begins after its start
   ticker = setInterval(() => app.engine.tick(), 100);
 });
 after(async () => {
@@ -259,4 +262,21 @@ test('B8: without a now attribute, tl-relative-time uses the device clock', asyn
   assert.equal(await page.locator('time').innerText(), '2 min ago');
   assert.equal(await page.getByText('last lap 2 min ago').isVisible(), true);
   assert.deepEqual(errors, []);
+});
+
+test('tl-local-time shows the time in the viewer\'s zone, and the UTC text without script', async (t) => {
+  const at = Date.UTC(2026, 9, 12, 12, 32);
+  const body = `<!doctype html><script type="module" src="/pkg/design/elements/local-time.js"></script><p>${localTime(at, 'time')}|${localTime(at, 'date')}|${localTime(at, 'datetime')}</p>`;
+  const read = async (options) => {
+    const { context, page, errors } = await pageAs(browser, app, null, options);
+    t.after(() => context.close());
+    await page.route('**/fixture-local', (route) => route.fulfill({ contentType: 'text/html', body }));
+    await page.goto('/fixture-local');
+    if (options.javaScriptEnabled !== false) await page.waitForFunction(() => customElements.get('tl-local-time'));
+    assert.deepEqual(errors, []);
+    return page.locator('time').allInnerTexts();
+  };
+  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin' }), ['14:32', '12 Oct', '12 Oct, 14:32']);
+  assert.deepEqual(await read({ timezoneId: 'Pacific/Auckland' }), ['01:32', '13 Oct', '13 Oct, 01:32']);
+  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin', javaScriptEnabled: false }), ['12:32', '12 Oct', '12 Oct, 12:32']);
 });

@@ -27,11 +27,11 @@ test('a hovered navbar link is prefetched, and the click uses it', async (t) => 
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/board');
-  const prefetched = page.waitForRequest((r) => new URL(r.url()).pathname === '/personal/race' && /prefetch/i.test(r.headers()['sec-purpose'] ?? ''));
-  await page.getByRole('link', { name: 'Race' }).hover();
+  const prefetched = page.waitForRequest((r) => new URL(r.url()).pathname === '/personal/sessions' && /prefetch/i.test(r.headers()['sec-purpose'] ?? ''));
+  await page.getByRole('link', { name: 'Sessions' }).hover();
   await prefetched;
-  await page.getByRole('link', { name: 'Race' }).click();
-  await page.waitForURL('**/personal/race');
+  await page.getByRole('link', { name: 'Sessions' }).click();
+  await page.waitForURL('**/personal/sessions');
   assert.equal(await page.evaluate(() => /** @type {any} */ (performance.getEntriesByType('navigation')[0]).deliveryType), 'navigational-prefetch');
   assert.deepEqual(errors, []);
 });

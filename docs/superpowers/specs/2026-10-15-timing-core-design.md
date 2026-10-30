@@ -34,7 +34,7 @@ decoder firmware and hardware.
 | Is the internet fast enough? | **Yes**, because the **decoder stamps every passing** on its own clock. A lap is the difference of two stamps from the same decoder, so network delay never changes a lap time. It only delays the screens (typically 0.1–0.5 s). |
 | Who computes laps? | **The server**, as the authority. The same code (`packages/timing`) runs in the bridge tab for an offline preview. |
 | Hardware today? | **None.** A simulator and tap entry stand in until the firmware exists. |
-| Session modes | **Practice** (always on, no end), **qualifying** (a time window, best lap), **race** (a timed race, most laps). Qualifying and races are started explicitly and take the track over; practice resumes when they end. |
+| Session modes | **Practice** (best lap, ends by hand or when idle), **qualifying** (a time window, best lap), **race** (a timed race, most laps). A member starts each one; only one runs at a time. |
 | Race and qualifying format | **The RC norm: time windows.** Qualifying: laps anytime within X minutes, best lap ranks. Race: X minutes, most laps wins, ties broken by total time; when time is up each driver finishes their current lap. |
 | Race start | **A grid behind the line** and an on-screen countdown. Each driver's first crossing after "go" starts their race. |
 | Cars and drivers | A transponder belongs to a **driver**; a driver can own several. Drivers are records, not accounts (identity spec). |
@@ -140,8 +140,8 @@ The server adds `receivedAt` (its own clock) and `via` (`serial`, `net` or
 
 **Tap entry** has no decoder. Each workspace has one virtual tap decoder,
 `boot` = the session id, the driver's id as the transponder, and `t` = the
-server's receive time in milliseconds. Tap laps are marked `via: 'tap'` and never count towards
-personal bests.
+server's receive time in milliseconds. Tap laps are marked `via: 'tap'` and
+never count towards personal bests.
 
 ## 5. Transports
 
@@ -200,24 +200,27 @@ The server never sees or stores the Wi-Fi credentials.
 
 ## 6. Sessions
 
+> This section is superseded by `2026-10-29-sessions-and-records-design.md`:
+> every session, practice included, is started by hand, and nothing is
+> recorded as a lap while none runs.
+
 Every lap belongs to one session. A workspace has at most one running
-qualifying or race; when none runs, laps go to the current practice
-session.
+session; passings that arrive while none runs make no laps.
 
 | | Practice | Qualifying | Race |
 | --- | --- | --- | --- |
-| Started | automatically | by a member | by a member |
+| Started | by a member | by a member | by a member |
 | Roster | anyone with a known transponder | chosen drivers | chosen drivers |
-| Length | none | X minutes (default 5) | X minutes (default 5) |
+| Length | until ended, or 60 min without a passing | X minutes (default 5) | X minutes (default 5) |
 | Start | — | window opens at "start" | countdown (default 10 s), grid behind the line |
 | A lap counts if | always | it **started** before the window closed | it is after the driver's first crossing after "go" |
 | Ranking | best lap | best lap, then the time it was set | most laps, then total time |
 | End | — | the window closes; laps already started finish | time up → each driver's next crossing finishes them |
 
 - **Cars not on the roster** of a running qualifying or race are stored as
-  passings but make no laps in that session or in practice.
-- **Practice sessions** split automatically after 30 minutes without a
-  passing, so a day's driving is one session.
+  passings but make no laps in that session.
+- **A practice** ends by hand, or after 60 minutes without a passing, at its
+  last passing.
 - **States:** `countdown` → `running` → `finishing` → `done`, or `aborted`.
   `finishing` ends when every driver of the roster has crossed after time up,
   or after `maxLap`. Results freeze at `done`.
@@ -230,13 +233,16 @@ session.
   Their laps are stored; assigning the transponder later gives them to the
   driver.
 - **Track and direction** are copied from the workspace onto each session
-  when it starts. Changing them starts a new practice session.
+  when it starts. Changing them ends a running practice.
 
 ### Personal bests
 
-Not stored: a query over valid, decoder-timed laps by workspace, track,
-direction and driver. The workspace is the venue prefix the track-identity
-spec requires (§ "Requirements this places on the timing app").
+A personal best is a driver's fastest valid, decoder-timed lap per workspace,
+track and direction. Personal bests are kept in their own table, alongside the
+track record, and written in the transaction of the lap that changes them.
+After a recount they are rebuilt from the laps (`2026-10-29-sessions-and-records-design.md`
+§4 and §6). The workspace is the venue prefix the track-identity spec requires
+(§ "Requirements this places on the timing app").
 
 ## 7. Live updates
 
@@ -257,10 +263,10 @@ Built on palace-ui and `@tinylap/design`, plain ES modules, import maps, no
 bundler, like the planner. Screens:
 
 - **Live board:** session clock, leaderboard, last laps, personal-best
-  highlights. One layout that scales from a phone to a wall screen; a full
-  screen mode for the big screen.
-- **Race control:** start qualifying or a race (drivers, duration), countdown,
-  abort.
+  and track-record marks. One layout that scales from a phone to a wall
+  screen; a full screen mode for the big screen.
+- **Sessions:** start practice, qualifying or a race (drivers, duration), end
+  or abort; the history, a page per session and the track record history.
 - **Tap entry:** a tile per driver; a tap is a passing.
 - **Setup:** drivers, transponders, decoders and pairing, the current track
   (paste a planner link) and direction, the watchers link.

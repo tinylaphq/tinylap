@@ -25,6 +25,8 @@ before(async () => {
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
   wren = await app.login(await app.signUp('Wren'));
   wrens = (await (await app.api(wren, 'GET', '/auth/me')).json()).workspaces[0].id;
+  app.engine.start(personal, { kind: 'practice' });
+  app.engine.start(wrens, { kind: 'practice' });
 });
 after(async () => {
   await browser?.close();
@@ -412,6 +414,7 @@ test('passings for a club without access wait, say why, and never hold up this d
   // Its own member: the file's member has used up their pairings for the minute.
   const uma = await app.login(await app.signUp('Uma'));
   const own = (await (await app.api(uma, 'GET', '/auth/me')).json()).workspaces[0].id;
+  app.engine.start(own, { kind: 'practice' });
   const { context, page } = await pageAs(browser, app, uma);
   t.after(() => context.close());
   simulating(t, 'tinylap,fast');
