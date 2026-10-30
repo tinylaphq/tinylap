@@ -53,12 +53,13 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
   <h3 class="h3">${chip(drivers, id)}</h3>
   <table class="lap-table">
     <thead><tr><th scope="col" class="num">Lap</th><th scope="col" class="num">Time</th><th scope="col"><span class="visually-hidden">Notes</span></th></tr></thead>
-    <tbody>${laps.get(id).map((c, i) => html`<tr${c.counts ? null : html` class="is-not-counted"`}>
+    <tbody>${(laps.get(id) ?? []).map((c, i) => html`<tr${c.counts ? null : html` class="is-not-counted"`}>
       <td class="num">${i + 1}</td>
       <td class="num">${formatLap(c.lapMs)}${markOf(c)}</td>
       <td>${c.via === 'tap' ? html`<span class="tag">tap</span>` : null}${c.counts ? null : html`<span class="tag">not counted</span>`}</td>
     </tr>`)}</tbody>
   </table>
+  ${laps.get(id) ? null : html`<p class="empty">No laps.</p>`}
 </div>`);
 
   return layout(request, {
