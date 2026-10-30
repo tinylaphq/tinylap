@@ -49,7 +49,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const states = new Map();
   /** Workspace id → the latest passing that fell outside any session. */
   const idles = new Map();
-  /** Workspace id → the record that fell live, its session, and whether its holder has crossed since. */
+  /** Workspace id → the record that fell live, its session, and whether it still waits for the holder's next crossing in that session. */
   const recordNews = new Map();
   let lastSweep = -Infinity;
 
@@ -86,7 +86,9 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     store.updateSession(session.id, { state, endedAt });
     const ended = { ...session, state, endedAt };
     states.delete(session.id);
-    if (recordNews.get(session.workspaceId)?.sessionId === session.id) clearRecord(session.workspaceId);
+    const shown = recordNews.get(session.workspaceId);
+    // The holder can't cross again in an ended session: the record shows its RECORD_SHOW_MS and no longer.
+    if (shown?.sessionId === session.id) shown.waiting = false;
     publishSession(ended);
     if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, session: publicSession(ended), standings: standingsOf(ended) });
     return ended;
@@ -117,7 +119,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     };
     row.seq = store.addCrossing(row);
     const shown = recordNews.get(workspaceId);
-    if (shown && driverId === shown.recordNew.driverId) shown.crossedAgain = true;
+    if (shown && shown.sessionId === session.id && driverId === shown.recordNew.driverId) shown.waiting = false;
     if (counts && via !== 'tap' && driverId !== null && lapMs !== null && session.trackId !== null) noteLap(session, row);
     hub.publish(workspaceId, 'crossing', memberCrossing(row), watcherCrossing(row));
     if (counts) publishStandings(session);
@@ -138,7 +140,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     store.addRecord({ workspaceId, trackId, direction, seq, driverId, lapMs, at, sessionId });
     if (!before || now() - at >= RECORD_FRESH_MS) return;
     const recordNew = { seq, driverId, lapMs, at, beat: { driverId: before.driverId, lapMs: before.lapMs, at: before.at } };
-    recordNews.set(workspaceId, { recordNew, sessionId, crossedAgain: false });
+    recordNews.set(workspaceId, { recordNew, sessionId, waiting: true });
     hub.publish(workspaceId, 'record', { recordNew });
   }
   /** Ends the live record state, and tells every board. */
@@ -149,7 +151,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   /** The live record while it shows. */
   function recordNewOf(workspaceId, t = now()) {
     const shown = recordNews.get(workspaceId);
-    return shown && (t - shown.recordNew.at < RECORD_SHOW_MS || !shown.crossedAgain) ? shown.recordNew : null;
+    return shown && (t - shown.recordNew.at < RECORD_SHOW_MS || shown.waiting) ? shown.recordNew : null;
   }
 
   /** A passing with no session running makes no crossing; members are told (spec §3.2). */
@@ -217,6 +219,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       }
       idles.delete(workspaceId);
       hub.publish(workspaceId, 'idle', { idle: null }, null);
+      clearRecord(workspaceId);
       if (kind === 'practice') return { session: createSession(workspaceId, { kind, state: 'running', opensAt: t, closesAt: null }) };
       const opensAt = kind === 'race' ? t + countdownMs : t;
       const state = kind === 'race' && countdownMs > 0 ? 'countdown' : 'running';

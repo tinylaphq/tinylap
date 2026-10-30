@@ -217,14 +217,54 @@ test('the record state lasts 30 s even when the holder crosses again sooner', ()
   assert.equal(r.engine.snapshot(W).recordNew, null);
 });
 
-test('the record state ends with its session', () => {
+test('a record on a practice ended by hand still shows its 30 s, then ends', () => {
   const r = onTrack();
   laps(r.pass, '0A', 1000, 8000);
-  laps(r.pass, '0B', 10_000, 7900);
+  const at = laps(r.pass, '0B', 10_000, 7900);
+  r.clock.now = T0 + at + 5000;
   r.engine.end(W, r.store.runningSession(W).id);
+  r.engine.tick();
+  assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
+  r.clock.now = T0 + at + RECORD_SHOW_MS;
+  r.engine.tick();
   assert.equal(r.engine.snapshot(W).recordNew, null);
   assert.deepEqual(recordLaps(r.events), [7900, null]);
   assert.equal(r.engine.snapshot(W).record.lapMs, 7900, 'the record stays');
+});
+
+test('a record on a race’s final lap is celebrated, and ends 30 s later', () => {
+  const r = onTrack();
+  const watched = watch(r.hub);
+  laps(r.pass, '0A', 1000, 8000);
+  r.clock.now = T0 + 20_000;
+  const { session } = r.engine.start(W, { kind: 'race', roster: ['ana', 'ben'], durationMs: 20_000, replace: true });
+  r.pass(21_000);
+  r.pass(21_500, '0B');
+  r.pass(30_000);
+  r.pass(33_600, '0B');
+  r.clock.now = T0 + 40_000;
+  r.engine.tick();
+  r.pass(41_000); // ana finishes
+  const at = 41_500;
+  r.pass(at, '0B'); // ben's last lap, 7900, is a record and finishes the race
+  assert.equal(r.store.session(session.id).state, 'done');
+  assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
+  r.clock.now = T0 + at + RECORD_SHOW_MS - 1;
+  r.engine.tick();
+  assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
+  r.clock.now = T0 + at + RECORD_SHOW_MS;
+  r.engine.tick();
+  assert.equal(r.engine.snapshot(W).recordNew, null);
+  assert.deepEqual(recordLaps(watched), [7900, null]);
+});
+
+test('a new session ends the record state at once', () => {
+  const r = onTrack();
+  laps(r.pass, '0A', 1000, 8000);
+  laps(r.pass, '0B', 10_000, 7900);
+  r.engine.start(W, { kind: 'practice', replace: true });
+  assert.equal(r.engine.snapshot(W).recordNew, null);
+  assert.deepEqual(recordLaps(r.events), [7900, null]);
 });
 
 test('the record state ends when the track or direction changes', () => {
