@@ -293,6 +293,9 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
   font: 600 11px/1.4 var(--p-font); letter-spacing: 1px; text-transform: uppercase;
 }
 .navbar-right .btn { border-color: var(--p-border-dark); }
+.navbar-right .btn[hidden] { display: none; }
+/* The bell's switch, pressed: the filled button. */
+.navbar-right .btn[aria-pressed="true"] { background: var(--p-text); border-color: var(--p-text); color: var(--p-bg); }
 .nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
 .nav-tabs li { display: flex; }
 

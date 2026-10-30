@@ -14,12 +14,21 @@
 // - pagehide closes the stream, so a hidden or cached board holds no
 //   connection; pageshow from the back/forward cache reopens it, showing
 //   "Reconnecting…" until it opens.
+// - The bell: the switch its `sound` attribute names is revealed, pressed or
+//   not as localStorage['tinylap-sound'] remembers. Browsers start audio only
+//   after a gesture, so the AudioContext is made on the switch's click, or on
+//   the first click or key after a reload that remembered sound on. A swap
+//   that brings a data-record-new this page has not seen rings it; the first
+//   render never does.
 // Without EventSource there is no stream; without JavaScript the page
 // reloads every ten seconds (<noscript> refresh).
+
+import { ring } from '../bell.js';
 
 const STATES = { live: 'Live', reconnecting: 'Reconnecting…', off: 'Disconnected' };
 // Once the stream gives up, reload: the server then answers the board, sign-in or the gone page.
 const RELOAD_MS = 10_000;
+const SOUND_KEY = 'tinylap-sound';
 
 /** The focused element's counterpart in `next`, by href or id. @param {Element} next @param {Element | null} focused */
 function counterpart(next, focused) {
@@ -44,8 +53,16 @@ class TlBoard extends HTMLElement {
   source = null;
   /** @type {ReturnType<typeof setTimeout> | 0} */
   timer = 0;
+  /** @type {HTMLElement | null} */
+  sound = null;
+  /** @type {AudioContext | null} */
+  audio = null;
+  /** The newest data-record-new this page has shown. @type {string | null} */
+  seen = null;
 
   connectedCallback() {
+    this.seen = this.recordSeq();
+    this.initSound();
     if (!('EventSource' in window)) return;
     addEventListener('pagehide', this);
     addEventListener('pageshow', this);
@@ -53,9 +70,43 @@ class TlBoard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.sound?.removeEventListener('click', this);
+    removeEventListener('pointerdown', this);
+    removeEventListener('keydown', this);
+    this.audio?.close().catch(() => {});
+    this.audio = null;
     this.close();
     removeEventListener('pagehide', this);
     removeEventListener('pageshow', this);
+  }
+
+  /** The record state's seq on the board now, if any. */
+  recordSeq() {
+    return this.querySelector('[data-record-new]')?.getAttribute('data-record-new') ?? null;
+  }
+
+  /** Reveals the switch, pressed as remembered. */
+  initSound() {
+    this.sound = document.getElementById(this.getAttribute('sound') ?? '');
+    if (!this.sound || !('AudioContext' in window)) return;
+    let on = false;
+    try { on = localStorage.getItem(SOUND_KEY) === 'on'; } catch { /* storage blocked: sound starts off */ }
+    this.sound.setAttribute('aria-pressed', String(on));
+    this.sound.hidden = false;
+    this.sound.addEventListener('click', this);
+    addEventListener('pointerdown', this);
+    addEventListener('keydown', this);
+  }
+
+  get soundOn() {
+    return this.sound?.getAttribute('aria-pressed') === 'true';
+  }
+
+  /** Makes the context once a gesture allows it, while sound is on. */
+  wake() {
+    if (!this.soundOn || this.audio) return;
+    this.audio = new AudioContext();
+    this.audio.resume().catch(() => {});
   }
 
   open() {
@@ -84,6 +135,17 @@ class TlBoard extends HTMLElement {
   /** @param {Event} event */
   handleEvent(event) {
     switch (event.type) {
+      case 'click': {
+        const on = !this.soundOn;
+        this.sound?.setAttribute('aria-pressed', String(on));
+        try { localStorage.setItem(SOUND_KEY, on ? 'on' : 'off'); } catch { /* storage blocked: the choice lasts this page */ }
+        this.wake();
+        break;
+      }
+      case 'pointerdown':
+      case 'keydown':
+        this.wake();
+        break;
       case 'open':
         this.setStatus('live');
         break;
@@ -101,6 +163,9 @@ class TlBoard extends HTMLElement {
         const next = template.content.firstElementChild;
         const current = this.querySelector('#board-live');
         if (next && current) swap(current, next);
+        const seq = this.recordSeq();
+        if (seq && seq !== this.seen && this.audio && this.soundOn) ring(this.audio);
+        this.seen = seq ?? this.seen;
         break;
       }
       case 'pagehide':

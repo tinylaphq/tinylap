@@ -188,7 +188,8 @@ async function driverIn(club, name, transponder) {
 
 test('the board is a tl-board, and its clock a tl-countdown', async () => {
   const body = await (await get(member, `${base}/board`)).text();
-  assert.match(body, /<tl-board status="live-status">\s*<div id="board-live"/);
+  assert.match(body, /<tl-board status="live-status" sound="sound-switch">\s*<div id="board-live"/);
+  assert.match(body, /<button type="button" class="btn btn-sm btn-outline" id="sound-switch" aria-pressed="false" hidden>Sound on<\/button>/);
   // A practice's label is the server's alone ("Started 14:32"); a race's follows the clock.
   assert.match(body, /<tl-countdown class="board-clock"><span class="stat-label board-clock-label">Started <tl-local-time format="time">/);
 });
