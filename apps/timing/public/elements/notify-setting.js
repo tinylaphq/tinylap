@@ -4,7 +4,7 @@
 
 // <tl-notify-setting>: the Notifications setting in a member's account menu,
 // on every page but the big board. The server renders it hidden, with its
-// button (Notifications: Off / On) and the text for a browser that blocks
+// button (palace's setting: its switch follows aria-pressed) and the text for a browser that blocks
 // them; this element only switches attributes.
 // - Where the browser has Notification, it reveals itself, and
 //   localStorage['tinylap-notify'] remembers whether notifications are wanted.

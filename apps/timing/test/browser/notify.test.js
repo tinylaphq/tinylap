@@ -131,11 +131,39 @@ test('the setting is in the account menu, Off to start, and with it off a new re
     const button = setting(page);
     await button.waitFor();
     assert.equal(await button.getAttribute('aria-pressed'), 'false');
-    assert.equal((await button.innerText()).trim(), 'Notifications: Off');
+    assert.equal((await button.innerText()).trim(), 'Notifications', 'the switch shows the state, not the words');
     assert.equal(await page.locator('.nav-account-blocked').isVisible(), false);
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     assert.deepEqual(await notes(), []);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('the setting is a group of its own under a rule, and its switch follows the setting', async () => {
+  const { context, page, errors } = await boardPage();
+  try {
+    await openMenu(page);
+    const button = setting(page);
+    await button.waitFor();
+    const look = () => page.evaluate(() => {
+      const group = document.querySelector('#notify-setting');
+      const b = group.querySelector('button');
+      const sw = getComputedStyle(b, '::after');
+      return { rule: getComputedStyle(group).borderTopStyle, switchWidth: sw.width, switchBg: sw.backgroundColor, at: sw.backgroundPosition };
+    });
+    const off = await look();
+    assert.equal(off.rule, 'solid', 'a rule above the group');
+    assert.equal(off.switchWidth, '28px', "palace's switch");
+    assert.ok(await page.evaluate(() => document.querySelector('.nav-account-link').compareDocumentPosition(document.querySelector('#notify-setting')) & Node.DOCUMENT_POSITION_FOLLOWING), 'after Account');
+    await button.click();
+    await page.locator('#notify-setting button[aria-pressed="true"]').waitFor();
+    const on = await look();
+    assert.notEqual(on.switchBg, off.switchBg, 'the switch fills when on');
+    assert.notEqual(on.at, off.at, 'its knob moves');
+    await button.click();
+    await page.locator('#notify-setting button[aria-pressed="false"]').waitFor();
+    assert.deepEqual(await look(), off, 'and back when off');
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });
@@ -150,7 +178,7 @@ test('turning it on asks for permission from the click, says On, and leaves the 
     });
     await turnOn(page);
     assert.deepEqual(await page.evaluate(() => window.asked), [true], 'asked once, within the click');
-    assert.equal((await setting(page).innerText()).trim(), 'Notifications: On');
+    assert.equal(await setting(page).getAttribute('aria-pressed'), 'true');
     assert.equal(await isOpen(page), true);
     assert.equal(await page.evaluate(() => localStorage.getItem('tinylap-notify')), 'on');
     assert.deepEqual(errors, []);

@@ -25,12 +25,14 @@ the browser notification of the sessions-and-records design (2026-10-29), whose
 ## Notifications
 
 - A setting in a signed-in member's account menu, on every page but the big
-  board: "Notifications: Off" or "Notifications: On". The watch link has no
+  board: palace's menu setting, "Notifications" with a switch that shows on or
+  off. The watch link has no
   account menu, so no setting; the big board leaves it out.
 - The layout hands the markup to the shared `accountMenu` as `settings`, after
-  the app's items and before Account. It is a `<tl-notify-setting>` with a
-  button (`aria-pressed`, accessible name "Notifications", the visible state
-  beside it) and the text for a blocked browser: "Notifications blocked by the
+  Account and before Sign out. It is a `<tl-notify-setting>`, a
+  `.navbar-menu-group` of its own under a rule, with a
+  `button.navbar-menu-setting` (`aria-pressed`, accessible name
+  "Notifications"; palace draws the switch from `aria-pressed`) and the text for a blocked browser: "Notifications blocked by the
   browser", with the hint "Allow them in this site's settings in the address
   bar, then reload." Both are server-rendered; CSS shows one by `data-state`.
 - `tl-notify-setting` (`public/elements/notify-setting.js`) owns the setting:

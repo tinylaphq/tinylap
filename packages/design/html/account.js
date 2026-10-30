@@ -4,7 +4,7 @@
 
 // The navbar's account control, the same in every TinyLap app: the signed-in
 // name opens a menu (your clubs where the app has them, its own items, Account,
-// Sign out), and a signed-out visitor gets Sign in. A <details> works without
+// the app's settings in a group of their own, Sign out), and a signed-out visitor gets Sign in. A <details> works without
 // script; tl-menu (elements/menu.js) adds Escape and closing from outside.
 // No ids of its own (only the ones a caller gives its items), so two menus
 // never collide; apps find the parts by class
@@ -21,7 +21,8 @@ import { escapeHtml as e, safeHref as url } from './escape.js';
  *   items?: { id: string, label: string, hidden?: boolean }[],
  *   settings?: string,
  * }} menu  clubs: personal first, as the caller lists them; settings: the
- *   app's own markup after its items (a setting with its state), trusted as given
+ *   app's own markup after Account, before Sign out (a .navbar-menu-group of
+ *   settings, each a button.navbar-menu-setting with aria-pressed), trusted as given
  */
 export function accountMenu({ name, accountUrl, signOutAction = '/auth/logout', clubs = null, items = [], settings = '' }) {
   const clubList = clubs?.length ? `
@@ -34,9 +35,9 @@ ${clubs.map((c) => `        <li><a href="${url(c.href)}"${c.current ? ' aria-cur
   return `<tl-menu class="nav-account">
   <details class="navbar-menu" name="tl-account">
     <summary><span class="visually-hidden">Account: </span><span class="nav-account-name">${e(name)}</span></summary>
-    <div class="nav-account-menu navbar-menu-panel">${clubList}${extra}${settings ? `
+    <div class="nav-account-menu navbar-menu-panel">${clubList}${extra}
+      <a class="nav-account-link" href="${url(accountUrl)}">Account</a>${settings ? `
       ${settings}` : ''}
-      <a class="nav-account-link" href="${url(accountUrl)}">Account</a>
       <form method="post" action="${url(signOutAction)}">
         <button type="submit" class="nav-account-signout">Sign out</button>
       </form>

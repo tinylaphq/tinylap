@@ -58,9 +58,9 @@ test('extra items are buttons with the caller’s id, hidden when asked; a custo
   assert.match(out, /action="\/out"/);
 });
 
-test('an app’s own settings markup goes after its items, before Account, as given', () => {
+test('an app’s own settings markup goes after Account, before Sign out, as given', () => {
   const out = accountMenu({ name: 'Ana', accountUrl: '/acc', items: [{ id: 'menu-library', label: 'Library' }], settings: '<tl-x id="x">X &amp; Y</tl-x>' });
-  assert.match(out, /id="menu-library">Library<\/button>\s*<tl-x id="x">X &amp; Y<\/tl-x>\s*<a class="nav-account-link" href="\/acc">Account<\/a>/);
+  assert.match(out, /id="menu-library">Library<\/button>\s*<a class="nav-account-link" href="\/acc">Account<\/a>\s*<tl-x id="x">X &amp; Y<\/tl-x>\s*<form method="post"/);
 });
 
 test('localTime writes the instant with its UTC text as the fallback', () => {
