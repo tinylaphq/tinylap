@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS crossing (
   via TEXT NOT NULL, flag TEXT
 );
 CREATE INDEX IF NOT EXISTS crossing_session ON crossing (session_id, seq);
+CREATE INDEX IF NOT EXISTS crossing_session_at ON crossing (session_id, at);
 CREATE INDEX IF NOT EXISTS crossing_reference ON crossing (decoder_id, transponder, ref, seq);
 CREATE INDEX IF NOT EXISTS passing_received ON passing (received_at);
 CREATE INDEX IF NOT EXISTS crossing_passing ON crossing (decoder_id, boot, transponder, t);

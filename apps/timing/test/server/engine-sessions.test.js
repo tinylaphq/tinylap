@@ -222,3 +222,40 @@ test('a new track ends the running practice', () => {
   assert.deepEqual([store.session(practice.id).state, store.session(practice.id).endedAt], ['done', T0 + 1000]);
   assert.equal(store.runningSession(W), null);
 });
+
+test('an idle board reads the last session’s laps once, not on every render', () => {
+  const { store, hub, clock } = rig();
+  let reads = 0;
+  const counted = { ...store, crossings: (id) => (reads++, store.crossings(id)) };
+  const engine = createEngine({ store: counted, hub, now: () => clock.now });
+  const pass = (t, transponder = '0A') => {
+    clock.now = T0 + t;
+    engine.ingest({ workspaceId: W, decoder: 'd1', via: 'net', batch: { boot: 'b', passings: [{ transponder, t }] } });
+  };
+  const { session } = engine.start(W, { kind: 'practice' });
+  pass(1000);
+  pass(9000);
+  pass(9500, '0C');
+  pass(17_400, '0C');
+  engine.end(W, session.id);
+  pass(20_000); // a loose passing: the board renders again
+  const before = reads;
+  for (let i = 0; i < 3; i++) assert.deepEqual(engine.snapshot(W).lastResults.standings.map((s) => s.driverId), ['ana']);
+  assert.equal(reads, before, 'no replay per render');
+  assert.equal(engine.idleOf(W).at, T0 + 20_000);
+  store.addDriver(W, { id: 'cy', name: 'Cy', colour: '#2dff9b' });
+  engine.assign(W, '0C', 'cy'); // recounts the ended practice: the board shows it
+  assert.deepEqual(engine.snapshot(W).lastResults.standings.map((s) => s.driverId), ['cy', 'ana']);
+});
+
+test('a running practice’s driver count comes from the engine', () => {
+  const { engine, pass, startPractice } = rig();
+  const session = startPractice();
+  assert.equal(engine.driverCount(session), 0);
+  pass(1000);
+  pass(9000);
+  pass(9500, '0B');
+  assert.equal(engine.driverCount(session), 1);
+  pass(17_500, '0B');
+  assert.equal(engine.driverCount(session), 2);
+});

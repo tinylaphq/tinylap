@@ -77,7 +77,7 @@ function renderTab(request, status, { error = null, values = null } = {}) {
   return page(request, status, sessionsPage(request, {
     session: request.store.runningSession(ws),
     drivers: request.store.drivers(ws),
-    idle: request.engine.snapshot(ws).idle,
+    idle: request.engine.idleOf(ws),
     history: historyOf(request, before),
     records: recordsOf(request, LATEST_RECORDS),
     error,
@@ -93,7 +93,7 @@ function renderTab(request, status, { error = null, values = null } = {}) {
 function askReplace(request, values, running) {
   const base = request.space.base;
   const minutes = Math.floor(Math.max(0, request.now() - (running.opensAt ?? running.createdAt)) / 60_000);
-  const drivers = running.kind === 'practice' ? request.engine.snapshot(request.workspaceId).standings.length : (running.roster ?? []).length;
+  const drivers = running.kind === 'practice' ? request.engine.driverCount(running) : (running.roster ?? []).length;
   const what = values.kind === 'race' || values.kind === 'qualifying' ? values.kind : 'practice';
   const fields = values.kind === 'practice'
     ? [['kind', 'practice']]

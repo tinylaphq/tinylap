@@ -51,6 +51,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const idles = new Map();
   /** Workspace id → the record that fell live, its session, and whether it still waits for the holder's next crossing in that session. */
   const recordNews = new Map();
+  /** Workspace id → the last ended session's id and standings, so an idle board doesn't replay it on every render. */
+  const endedStandings = new Map();
   let lastSweep = -Infinity;
 
   const rulesOf = (s) => ({ kind: s.kind, roster: s.roster, opensAt: s.opensAt, closesAt: s.closesAt });
@@ -69,6 +71,14 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return state;
   }
   const standingsOf = (session) => standings(rulesOf(session), ACTIVE.has(session.state) ? stateOf(session) : replay(session));
+  /** The standings of a workspace's last ended session, replayed once and then kept. */
+  function lastStandingsOf(ended) {
+    const cached = endedStandings.get(ended.workspaceId);
+    if (cached?.sessionId === ended.id) return cached.rows;
+    const rows = standingsOf(ended);
+    endedStandings.set(ended.workspaceId, { sessionId: ended.id, rows });
+    return rows;
+  }
   const unknownOf = (workspaceId) => store.transponders(workspaceId).filter((t) => t.driverId === null).map((t) => t.code);
   const publishUnknown = (workspaceId) => hub.publish(workspaceId, 'setup', { unknown: unknownOf(workspaceId) }, null);
 
@@ -85,12 +95,15 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   function endSession(session, endedAt, state = 'done') {
     store.updateSession(session.id, { state, endedAt });
     const ended = { ...session, state, endedAt };
+    // Its in-memory state is its final table: no replay of its laps.
+    const rows = standings(rulesOf(ended), stateOf(session));
+    endedStandings.set(session.workspaceId, { sessionId: session.id, rows });
     states.delete(session.id);
     const shown = recordNews.get(session.workspaceId);
     // The holder can't cross again in an ended session: the record shows its RECORD_SHOW_MS and no longer.
     if (shown?.sessionId === session.id) shown.waiting = false;
     publishSession(ended);
-    if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, session: publicSession(ended), standings: standingsOf(ended) });
+    if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, session: publicSession(ended), standings: rows });
     return ended;
   }
   /** Records every passing's receive offset first, so a late batch maps by its newest passing. */
@@ -273,6 +286,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     }
     if (ACTIVE.has(session.state)) states.set(sessionId, state);
     else states.delete(sessionId);
+    if (endedStandings.get(session.workspaceId)?.sessionId === sessionId) endedStandings.delete(session.workspaceId);
     publishStandings(session);
   }
 
@@ -305,7 +319,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const recent = session ? store.recentCrossings(session.id, 30) : [];
     const ended = session ? null : store.lastEnded(workspaceId);
     const rows = session ? standingsOf(session) : [];
-    const endedRows = ended ? standingsOf(ended) : [];
+    const endedRows = ended ? lastStandingsOf(ended) : [];
     const record = track ? store.currentRecord(workspaceId, track.id, ws.direction) : null;
     return {
       now: now(),
@@ -319,8 +333,24 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       record: record && { driverId: record.driverId, lapMs: record.lapMs, at: record.at },
       recordNew: recordNewOf(workspaceId),
       lastResults: ended && { session: publicSession(ended), standings: endedRows },
-      ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idles.get(workspaceId) ?? null }),
+      ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idleOf(workspaceId) }),
     };
+  }
+
+  /** The latest passing that fell outside any session, for members. */
+  const idleOf = (workspaceId) => idles.get(workspaceId) ?? null;
+
+  /** How many drivers a running session has counted a lap for, from its state in memory. */
+  const driverCount = (session) => Object.values(stateOf(session).drivers).filter((d) => d.laps > 0).length;
+
+  /** The personal bests on the workspace's track and direction of the drivers its board shows. */
+  function bestsOf(workspaceId) {
+    const ws = store.ensureWorkspace(workspaceId);
+    if (!ws.trackId) return [];
+    const session = store.runningSession(workspaceId);
+    const ended = session ? null : store.lastEnded(workspaceId);
+    const rows = session ? standingsOf(session) : ended ? lastStandingsOf(ended) : [];
+    return store.personalBests(workspaceId, ws.trackId, ws.direction, rows.map((r) => r.driverId));
   }
 
   function sessionDetail(workspaceId, sessionId) {
@@ -329,5 +359,5 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return { session: publicSession(session), standings: standingsOf(session), crossings: store.crossings(sessionId).map(memberCrossing) };
   }
 
-  return { ingest, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, sessionDetail };
+  return { ingest, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, idleOf, driverCount, bestsOf, sessionDetail };
 }

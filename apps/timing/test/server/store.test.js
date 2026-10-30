@@ -215,3 +215,12 @@ test('deleteLoosePassings deletes passings without a crossing once, and only bef
   assert.equal(store.deleteLoosePassings(1000), 1);
   assert.equal(store.countPassings(W), 1);
 });
+
+test('a session’s last crossing is read through an index, not by scanning its laps', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  openStore(path).close();
+  const db = new DatabaseSync(path);
+  const plan = db.prepare("EXPLAIN QUERY PLAN SELECT MAX(at) AS at FROM crossing WHERE session_id = 'x'").all().map((r) => String(r.detail)).join(' ');
+  db.close();
+  assert.match(plan, /COVERING INDEX crossing_session_at/);
+});
