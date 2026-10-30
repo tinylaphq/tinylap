@@ -5,7 +5,9 @@
 // A workspace's setup (spec §8 Setup): drivers, transponders, decoders and
 // pairing, the current track and the watchers link. Every route reads the
 // session cookie; deleting needs `timing.delete` (owners and admins).
+import { DIRECTIONS } from '@tinylap/track-format';
 import { NO_STORE, workspaceRoute } from './access.js';
+import { displayName } from './auth.js';
 import { readJson } from './body.js';
 import * as ops from './operations.js';
 import { json, opProblem } from './responses.js';
@@ -56,11 +58,18 @@ function deleteDecoder(request, match) {
   return r.error ? opProblem(request, r.error) : { status: 204, headers: NO_STORE };
 }
 
+// Until the API takes a track id: adds a track from a planner link and makes it current.
 async function putTrack(request) {
   const { body, error } = await readJson(request);
   if (error) return error;
-  const r = await ops.setTrack(request, { link: body.link, name: body.name, direction: body.direction });
-  return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
+  // The direction is checked first, so a bad one adds no track.
+  if (!DIRECTIONS.includes(body.direction)) return opProblem(request, ops.setCurrentTrack(request, { id: '', direction: body.direction }).error);
+  const by = { userId: request.userId, name: await displayName(request) };
+  const added = await ops.addTrack(request, { name: body.name ?? 'Track', link: body.link ?? '', by });
+  const r = added.error ? added : ops.setCurrentTrack(request, { id: added.value.id, direction: body.direction });
+  if (r.error) return opProblem(request, r.error);
+  const { id, name, layout } = added.value;
+  return json(200, { id, name, direction: body.direction, snapshotKey: layout?.snapshotKey }, NO_STORE);
 }
 
 const getWatchToken = (request) => json(200, { token: request.store.workspace(request.workspaceId).watchToken }, NO_STORE);

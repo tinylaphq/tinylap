@@ -46,7 +46,8 @@ test('the track comes from a planner link; a bad one comes back with the link ke
   const ok = await app.form(member, `${base}/track`, { link: `${planner.url}/layouts/${CLOSED}`, name: 'Office loop', direction: 'cw' });
   assert.equal(ok.status, 303);
   assert.equal(ok.headers.get('location'), `${base}/setup#track`);
-  assert.equal(app.store.workspace(office.id).trackId, closed.track.id);
+  const added = app.store.track(office.id, app.store.workspace(office.id).trackId);
+  assert.deepEqual([added.name, added.layout.plannerId], ['Office loop', closed.track.id]);
   assert.match(await (await get(member, `${base}/setup`)).text(), /Now: <strong>Office loop<\/strong>, clockwise\./);
   const open = await app.form(member, `${base}/track`, { link: `${planner.url}/layouts/${OPEN}`, name: '', direction: 'cw' });
   assert.equal(open.status, 422);

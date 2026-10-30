@@ -97,9 +97,11 @@ test('pairing is rate limited per member', async () => {
 
 test('the current track comes from a planner link', async () => {
   const res = await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name: 'Office loop', direction: 'cw' });
-  assert.deepEqual(await res.json(), { id: closed.track.id, name: 'Office loop', direction: 'cw', snapshotKey: CLOSED });
+  const { id, ...rest } = await res.json();
+  assert.deepEqual(rest, { name: 'Office loop', direction: 'cw', snapshotKey: CLOSED });
+  assert.equal(app.store.track(office.id, id).layout.plannerId, closed.track.id);
   const snapshot = await (await app.api(member, 'GET', `/workspaces/${office.id}`)).json();
-  assert.deepEqual([snapshot.track, snapshot.direction], [{ id: closed.track.id, name: 'Office loop' }, 'cw']);
+  assert.deepEqual([snapshot.track, snapshot.direction], [{ id, name: 'Office loop' }, 'cw']);
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${OPEN}`, direction: 'cw' }), 422, 'not-a-circuit');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, direction: 'up' }), 422, 'invalid-request');
   await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name: '', direction: 'cw' }), 422, 'invalid-request');

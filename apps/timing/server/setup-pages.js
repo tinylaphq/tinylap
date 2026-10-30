@@ -6,6 +6,8 @@
 // URL and answers 303 to the setup section it changed; a failure renders the
 // page again with the error and what was typed.
 import { can, open, seal } from '@tinylap/auth';
+import { DIRECTIONS } from '@tinylap/track-format';
+import { displayName } from './auth.js';
 import * as ops from './operations.js';
 import { readForm } from './form.js';
 import { pageRoute, toPage } from './page-access.js';
@@ -105,10 +107,16 @@ function showSetup(request) {
   return renderSetup(request, 200, { paired, headers: { 'Set-Cookie': [clearPaired] } });
 }
 
+// Until Setup lists tracks: adds a track from the planner link and makes it current.
 const setTrack = withForm(async (request, form) => {
   const values = { link: form.get('link') ?? '', name: form.get('name') ?? '', direction: form.get('direction') ?? '' };
-  // A blank name is "use the default" on a form; the operation only takes a missing one.
-  const result = await ops.setTrack(request, { ...values, name: values.name || undefined });
+  // The direction is checked first, so a bad one adds no track.
+  let result = DIRECTIONS.includes(values.direction) ? null : ops.setCurrentTrack(request, { id: '', direction: values.direction });
+  if (!result) {
+    // A blank name is "use the default" on a form.
+    result = await ops.addTrack(request, { name: values.name || 'Track', link: values.link, by: { userId: request.userId, name: await displayName(request) } });
+    if (!result.error) result = ops.setCurrentTrack(request, { id: result.value.id, direction: values.direction });
+  }
   return afterForm(request, result, { key: 'track', values, section: 'track', fieldId: result.error?.field ? `track-${result.error.field}` : null });
 });
 
