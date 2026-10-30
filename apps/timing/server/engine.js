@@ -309,24 +309,25 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   function snapshot(workspaceId, { watcher = false } = {}) {
     const ws = store.ensureWorkspace(workspaceId);
     const session = store.runningSession(workspaceId);
-    const track = ws.trackId ? store.track(workspaceId, ws.trackId) : null;
+    // A club always has a current track (named tracks spec §3.1).
+    const track = store.track(workspaceId, ws.trackId);
     const recent = session ? store.recentCrossings(session.id, 30) : [];
     const ended = session ? null : store.lastEnded(workspaceId);
     const rows = session ? standingsOf(session) : [];
     const endedRows = ended ? lastStandingsOf(ended) : [];
-    const record = track ? store.currentRecord(workspaceId, track.id, ws.direction) : null;
+    const record = store.currentRecord(workspaceId, track.id, ws.direction);
     // A race keeps its track when the workspace's changes: its record shows only under its own header.
     const shown = recordNews.get(workspaceId);
     const recordNew = shown?.trackId === ws.trackId && shown?.direction === ws.direction ? recordNewOf(workspaceId) : null;
     return {
       now: now(),
-      track: track && { id: track.id, name: track.name },
+      track: { id: track.id, name: track.name },
       direction: ws.direction,
       session: session && publicSession(session),
       standings: rows,
       crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),
       drivers: store.drivers(workspaceId),
-      bests: track ? store.personalBests(workspaceId, track.id, ws.direction, [...rows, ...endedRows].map((r) => r.driverId)) : [],
+      bests: store.personalBests(workspaceId, track.id, ws.direction, [...rows, ...endedRows].map((r) => r.driverId)),
       record: record && { driverId: record.driverId, lapMs: record.lapMs, at: record.at },
       recordNew,
       lastResults: ended && { session: publicSession(ended), standings: endedRows },

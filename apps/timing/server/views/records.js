@@ -13,8 +13,8 @@ import { chip, crown } from './marks.js';
 
 export const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
 
-/** "Office loop, clockwise". @param {{ name: string }} track @param {string} direction */
-export const trackName = (track, direction) => `${track.name}, ${DIRECTION[direction]}`;
+/** "Office loop, clockwise", or "a deleted track" once it is gone (named tracks spec §3.5). @param {{ name: string } | null} track @param {string} direction */
+export const trackName = (track, direction) => (track ? `${track.name}, ${DIRECTION[direction]}` : 'a deleted track');
 
 /** A layout by when it was attached, to the minute and with the year, linking to it on its track's page; nothing without one. */
 const layoutLink = (entry, href) => entry ? html`<a href="${href}#layout-${entry.attachedAt}">${safe(localTime(entry.attachedAt, 'datetime-year'))}</a>` : null;

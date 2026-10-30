@@ -15,6 +15,7 @@ let base;
 let history;
 let records;
 let idle;
+let gone;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -23,6 +24,7 @@ before(async () => {
   history = app.club(ana, 'History');
   records = app.club(ana, 'Records');
   idle = app.club(ana, 'Idle');
+  gone = app.club(ana, 'Gone');
   member = await app.login(ana);
   base = `/clubs/${office.id}`;
 });
@@ -437,4 +439,29 @@ test('a car with no session running shows the notice and Start practice on the t
   assert.equal(body.match(/>Start practice<\/button>/g).length, 2, 'the notice has its own button');
   app.engine.start(ws, { kind: 'practice' });
   assert.doesNotMatch(await (await get(`/clubs/${ws}/sessions`)).text(), /A car crossed the line/);
+});
+
+test('history rows and a session page name the track, or "a deleted track" once it is gone', async () => {
+  const ws = gone.id;
+  const home = app.store.ensureWorkspace(ws).trackId;
+  const ring = useTrack(app.store, ws, 'Old ring', 'cw');
+  clock.now = T0 + 9_000_000;
+  const old = app.engine.start(ws, { kind: 'practice' }).session;
+  app.engine.end(ws, old.id);
+  app.store.setCurrentTrack(ws, home, 'ccw');
+  clock.now = T0 + 9_100_000;
+  const kept = app.engine.start(ws, { kind: 'practice' }).session;
+  app.engine.end(ws, kept.id);
+  app.store.setArchived(ws, ring, T0);
+  assert.equal(app.store.deleteTrack(ws, ring), 'deleted');
+
+  const body = await (await get(`/clubs/${ws}/sessions`)).text();
+  assert.match(body, /<th scope="col">Track<\/th>/);
+  const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
+  assert.equal(rows.length, 2);
+  assert.match(rows[0], /<td>Track, anticlockwise<\/td>/);
+  assert.match(rows[1], /<td>a deleted track<\/td>/);
+  const page = await (await get(`/clubs/${ws}/sessions/${old.id}`)).text();
+  assert.match(page, /<div><dt>Track<\/dt><dd>a deleted track<\/dd><\/div>/);
+  assert.match(await (await get(`/clubs/${ws}/sessions/${kept.id}`)).text(), /<div><dt>Track<\/dt><dd>Track, anticlockwise<\/dd><\/div>/);
 });

@@ -39,7 +39,10 @@ function historyOf(request, before) {
   const { store, workspaceId: ws } = request;
   const ended = store.listSessions(ws, PAGE + 2, before).filter((s) => s.state === 'done' || s.state === 'aborted');
   const sessions = ended.slice(0, PAGE);
-  const rows = sessions.map((session) => ({ session, ...store.sessionSummary(session.id) }));
+  // Each track once: a page holds few of them, and a deleted one is null.
+  const tracks = new Map(sessions.map((session) => [session.trackId, null]));
+  for (const id of tracks.keys()) if (id !== null) tracks.set(id, store.track(ws, id));
+  const rows = sessions.map((session) => ({ session, track: tracks.get(session.trackId), ...store.sessionSummary(session.id) }));
   const groups = new Map();
   for (const row of rows) {
     if (!row.best || row.session.trackId === null) continue;

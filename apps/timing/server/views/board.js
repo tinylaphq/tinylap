@@ -33,9 +33,7 @@ const recordLine = (snap, r) => html`<span class="num board-track-time">${format
  * new time and holder in the record colour, and the record it beat.
  */
 function trackHeader(snap) {
-  const where = snap.track
-    ? html`<p class="board-track-name"><strong>${snap.track.name}</strong> ${DIRECTION[snap.direction]}</p>`
-    : html`<p class="board-track-name">No track set</p>`;
+  const where = html`<p class="board-track-name"><strong>${snap.track.name}</strong> ${DIRECTION[snap.direction]}</p>`;
   const n = snap.recordNew;
   if (n) {
     return html`<header class="board-track is-record" data-record-new="${n.seq}">
@@ -48,7 +46,7 @@ function trackHeader(snap) {
   }
   const record = snap.record
     ? html`<p class="board-track-record"><span class="board-track-label">Track record</span> ${recordLine(snap, snap.record)}</p>`
-    : snap.track ? html`<p class="board-track-record"><span class="board-track-label">No record yet</span></p>` : null;
+    : html`<p class="board-track-record"><span class="board-track-label">No record yet</span></p>`;
   return html`<header class="board-track">
   ${where}
   ${record}
@@ -90,7 +88,7 @@ function header(snap, start) {
  * direction the record belongs to.
  */
 function markers(snap, session, standings) {
-  const here = snap.track !== null && session.trackId === snap.track.id && session.direction === snap.direction;
+  const here = session.trackId === snap.track.id && session.direction === snap.direction;
   const record = here ? snap.record : null;
   const pbs = new Map(here ? snap.bests.map((b) => [b.driverId, b]) : []);
   const same = (lap, row) => lap !== null && lap !== undefined && row.bestMs !== null && lap.lapMs === row.bestMs && lap.at === row.bestAt;
@@ -160,13 +158,11 @@ function feed(snap) {
 
 function steps(request, snap) {
   const base = request.space.base;
-  const where = snap.track && `${snap.track.name}, ${DIRECTION[snap.direction]}`;
   const n = snap.drivers.length;
   const step = (title, done, text, links) => html`<li class="board-step${done ? ' is-done' : ''}"><h3>${title}</h3><p>${done ?? text}</p>${links ? html`<p class="board-step-links">${links}</p>` : null}</li>`;
   return html`<section class="board-steps" aria-labelledby="board-steps-title">
   <h2 class="h3" id="board-steps-title">Get the track ready</h2>
   <ol>
-    ${step('Choose the track', where, 'Paste a share link from the planner, and pick the direction you race.', where ? null : html`<a href="${base}/setup#track">Set the track</a>`)}
     ${step('Add drivers', n ? `${n} ${n === 1 ? 'driver' : 'drivers'}` : null, 'Give everyone a name, then their car’s transponder once it has crossed the line.', n ? null : html`<a href="${base}/setup#drivers">Add drivers</a>`)}
     ${step('Start timing', null, 'Connect the decoder by USB, or tap each crossing by hand.', html`<a href="${base}/bridge">Connect the decoder</a> <a href="${base}/tap">Tap laps by hand</a>`)}
   </ol>

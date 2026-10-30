@@ -92,10 +92,11 @@ function runningPanel(request, session, drivers, { reload }) {
 function historySection(request, { rows, older, newer }, drivers) {
   const base = request.space.base;
   const table = rows.length === 0 ? html`<p class="empty">No sessions yet.</p>` : html`<div class="board-scroll"><table class="board-table history-table">
-  <thead><tr><th scope="col">Started</th><th scope="col">Session</th><th scope="col" class="num">Length</th><th scope="col" class="num">Drivers</th><th scope="col">Fastest</th><th scope="col" class="num">Best</th></tr></thead>
-  <tbody>${rows.map(({ session, drivers: count, best }) => html`<tr class="history-row">
+  <thead><tr><th scope="col">Started</th><th scope="col">Session</th><th scope="col">Track</th><th scope="col" class="num">Length</th><th scope="col" class="num">Drivers</th><th scope="col">Fastest</th><th scope="col" class="num">Best</th></tr></thead>
+  <tbody>${rows.map(({ session, track, drivers: count, best }) => html`<tr class="history-row">
     <td><a href="${base}/sessions/${session.id}">${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</a></td>
     <td>${KIND[session.kind]}${session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}</td>
+    <td>${trackName(track, session.direction)}</td>
     <td class="num">${shortLength(drivenMs(session))}</td>
     <td class="num">${count}</td>
     <td class="board-driver">${best ? html`${chip(drivers, best.driverId)}${crown(best.isHolder)}` : null}</td>

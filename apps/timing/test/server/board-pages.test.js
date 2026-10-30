@@ -49,7 +49,9 @@ test('an empty board shows a member how to get the track ready', async () => {
   const body = await res.text();
   assert.match(body, /<h1 class="board-title">No session yet<\/h1>/);
   assert.match(body, /aria-labelledby="board-steps-title"/);
-  assert.match(body, /<li class="board-step is-done"><h3>Choose the track<\/h3><p>Track, anticlockwise<\/p><\/li>/, 'a new club starts on its "Track"');
+  assert.match(body, /<header class="board-track">\s*<p class="board-track-name"><strong>Track<\/strong> anticlockwise<\/p>\s*<p class="board-track-record"><span class="board-track-label">No record yet<\/span><\/p>/, 'a new club starts on its "Track"');
+  assert.doesNotMatch(body, /No track set|Choose the track/);
+  assert.deepEqual([...body.matchAll(/<li class="board-step[^"]*"><h3>([^<]+)<\/h3>/g)].map((m) => m[1]), ['Add drivers', 'Start timing']);
   assert.match(body, /<noscript><meta http-equiv="refresh" content="10"><\/noscript>/);
   assert.match(body, new RegExp(`<div id="board-live"[^>]* data-events="${base}/board/events"`));
   assert.match(body, /<script type="module" src="\/public\/board.js"><\/script>/);
