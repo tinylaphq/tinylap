@@ -40,8 +40,9 @@ async function tapPage(t, { install = false } = {}) {
   if (install) await page.clock.install();
   await page.goto('/personal/tap');
   if (install) {
-    // Frames and timers run only when the test says.
-    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 10));
+    // Frames and timers run only when the test says. The margin is one a slow machine can't outrun:
+    // pausing at a time already past throws.
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   }
   const counts = { posts: 0 };
   page.on('request', (r) => { if (r.method() === 'POST') counts.posts += 1; });
