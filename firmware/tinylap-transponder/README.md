@@ -11,11 +11,11 @@ One transponder per car:
 | Part | What | Notes |
 | --- | --- | --- |
 | Controller | Microchip ATtiny45 (DIP-8) | Internal 8 MHz RC oscillator. The program clears the clock prescaler itself, so it runs at 8 MHz whether the CKDIV8 fuse is set or not. |
-| Driver | A transistor switches the LED | Which ATtiny pin drives it is open: see "Settings that depend on the board". |
+| Driver | BS170 N-channel MOSFET switches the LED | Its gate is on leg 5 (PB0) through R2, 100 Ω. A high pin turns the LED on. |
 | Emitter | Vishay TSAL6200: IR LED, GaAlAs, 940 nm, 34°, 5 mm (T-1 ¾) | Half the light 17° off its axis, so the transponder's aim matters more than the distance. |
 | Connector | Three wires: red is 5 V, grey is ground, blue is not connected | The car's socket has three pins. |
 
-The board also carries an electrolytic capacitor, a diode and three resistors.
+The board also carries an electrolytic capacitor, a diode and two more resistors. The wiring is from the board's KiCad schematic, `miniZSender.kicad_sch`.
 
 To test one on the bench, power it from any 5 V supply. An ESP32-C3 SuperMini on a power bank works as one: red to its `5V` pin, grey to `G`.
 
@@ -41,8 +41,8 @@ Set both in `platformio.ini` (env `attiny45`) to the real board and programmer *
 
 | Setting | Default | What |
 | --- | --- | --- |
-| `TL_LED_PIN` (in `build_flags`, as `-DTL_LED_PIN=PBn`) | `PB0` | The ATtiny pin that drives the transistor. Not yet known for the boards in the cars; with the wrong pin the LED stays dark. |
-| `upload_protocol` | `usbasp` | The programmer. Any avrdude programmer works, such as `avrispmkII` or `arduinoisp`. |
+| `TL_LED_PIN` (in `build_flags`, as `-DTL_LED_PIN=PBn`) | `PB0` | The ATtiny pin that drives the transistor. PB0 is right for the boards in the cars (see "Hardware"). For another board, set the pin its driver is on; with the wrong pin the LED stays dark. |
+| `upload_protocol` | `usbasp` | The programmer, for `-t fuses`. Any avrdude programmer works, such as `avrispmkII`, `arduino_as_isp` (ArduinoISP) or `linuxspi`; add `upload_port` for one that needs a port. |
 
 The same programmer goes to `tools/flash.py` as `--programmer`, with `--port` for a serial one.
 
@@ -63,7 +63,9 @@ python3 -m unittest discover -s tools # tests of the flash script
 
 ## Flashing a transponder
 
-Python 3.9 or later. The script runs avrdude through PlatformIO, so build first with `pio run -e attiny45`. Plain `pio run -t upload` is not used: it writes no id.
+Python 3.9 or later. The script runs avrdude through PlatformIO, so build first with `pio run -e attiny45`.
+
+**Only `tools/flash.py flash` (or avrdude with the EEPROM line below) writes the id.** `pio run -t upload`, and avrdude with only `-U flash:w:…`, write the program and leave the EEPROM as it was, so a new chip has no id. A transponder without a valid id sends no frames (see "Checks on the bench" for how to tell).
 
 1. **Fuses, once per chip.** They set the internal 8 MHz oscillator, SPI programming and brown-out detection at 2.7 V, and keep the EEPROM across uploads. Nothing locks the chip.
 
@@ -104,7 +106,20 @@ Python 3.9 or later. The script runs avrdude through PlatformIO, so build first 
 
 `flash` and `read-cal` take `--programmer` (default `usbasp`) and `--port`; `flash` also takes `--hex` (default `.pio/build/attiny45/firmware.hex`).
 
-To flash without PlatformIO, use avrdude directly, with `-C` (config file), `-c` (programmer) and `-p t45`. The fuses first, once per chip:
+`--programmer` takes any avrdude programmer name, passed on as `-c`, and `--port` is passed on as `-P`. For example:
+
+| Programmer | Options |
+| --- | --- |
+| USBasp | none (the default) |
+| ArduinoISP on an Arduino | `--programmer arduino_as_isp --port /dev/ttyACM0` (the Arduino's serial port). This entry talks at the sketch's 19200 baud; plain `arduino` defaults to 115200, and the script has no option for the baud rate. |
+| A Raspberry Pi's SPI pins | `--programmer linuxspi --port /dev/spidev0.0` |
+| A Raspberry Pi's GPIO pins, bit-banged | `--programmer linuxgpio`, with the pins set in a `linuxgpio` entry of the avrdude config |
+
+The script runs PlatformIO's avrdude with PlatformIO's `avrdude.conf` (`~/.platformio/packages/tool-avrdude/`), so a `linuxgpio` entry with your pins goes in that file. `linuxspi` and `linuxgpio` work only on Linux.
+
+For the fuses in step 1 with another programmer, set `upload_protocol` (and `upload_port`) in `platformio.ini` to the same values, or write them with avrdude as below.
+
+To flash without PlatformIO, use avrdude directly, with `-C` (config file), `-c` (programmer), `-P` (port, when the programmer needs one) and `-p t45`. The examples use a USBasp; put your programmer in `-c`. The fuses first, once per chip:
 
 ```sh
 avrdude -C avrdude.conf -c usbasp -p t45 -U lfuse:w:0xE2:m -U hfuse:w:0xD5:m
