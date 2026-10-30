@@ -68,8 +68,15 @@ No migration. The deployed timing database holds no real club yet, so it starts 
   - Add track (a name, or a planner link);
   - Archived tracks, collapsed (`<details>`), each with Restore and Delete.
 - **A track's page**, `…/tracks/<id>`, members only: its name, the current layout drawn with `layoutToSvgString` from `@tinylap/track-format` (or "No layout"), earlier layouts by date with who attached them, and its records per direction (the record history, as `…/records` shows it). `…/records` keeps showing the current track's and links here.
-- **The board's track header** always has a track: "Track · counter-clockwise" and its record or "No record yet". "No track set" goes.
-- **The board's setup steps** lose "Choose the track"; they are Add drivers and Start timing.
+- **The board's track header** always has a track: its name, the direction as an icon, and its record or "No record yet". "No track set" goes.
+- **The direction icon:** an open loop, like a track seen from above, with one pink arrowhead where it carries on; it points the way the club races. It stands alone, without a visible word. Its meaning is in the SVG's own `<title>` ("Counter-clockwise" or "Clockwise"), which gives screen readers its name (`role="img"`) and a tooltip on hover. Where a member chooses the direction (Setup), the words stay visible.
+- **The board when nobody is racing** shows what's worth seeing, not warnings:
+  - The track record is the big thing: the time, the holder with the crown, when it was set and what it beat (or "No record yet").
+  - Beside it, **Start practice** (members, not on the big board or the watch link). While a car crosses with no session, a live line says so ("Car 23 is on the track") instead of a yellow notice.
+  - Cars without a driver are one quiet line under the button ("2 cars have no driver yet. Assign them"), not a notice.
+  - Below: **Fastest on this track** (each driver's best on the current track and direction) and **Last session** (its top finishers, when it ended, a link to its page).
+  - A club that has never driven a lap gets one card instead: "Ready when your cars are", with Add drivers, Connect the decoder and Tap laps by hand.
+  - Gone: the "No session yet" headline, the empty "Last laps" card, the setup steps for clubs that have driven, and both yellow notices. Yellow notices stay for things that are wrong, such as a decoder offline.
 - The words follow the glossary: a *track* is what a club races on; a *layout* is the planner's drawing of it.
 
 ## 5. Data
