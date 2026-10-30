@@ -79,13 +79,15 @@ async function updateTrack(request, match) {
   if (body.name === undefined && body.archived === undefined) return opProblem(request, { problem: 'invalid-request', message: 'Send a name, archived, or both.' });
   if (body.archived !== undefined && typeof body.archived !== 'boolean') return opProblem(request, { problem: 'invalid-request', message: 'archived is true or false.' });
   const id = match[2];
-  // Both changes or neither: a failing second step rolls the first back. Archiving goes first, as renaming tells the board.
+  // Both changes or neither: a failing second step rolls the first back. Archiving goes first, as renaming tells the board;
+  // restoring goes last, so a new name can end a clash.
   try {
     const r = request.store.transaction(() => {
       /** @type {any} */
       let step = { value: null };
-      if (body.archived !== undefined) step = (body.archived ? ops.archiveTrack : ops.restoreTrack)(request, { id });
+      if (body.archived === true) step = ops.archiveTrack(request, { id });
       if (!step.error && body.name !== undefined) step = ops.renameTrack(request, { id, name: body.name });
+      if (!step.error && body.archived === false) step = ops.restoreTrack(request, { id });
       if (step.error) throw new Refused(step);
       return step;
     });

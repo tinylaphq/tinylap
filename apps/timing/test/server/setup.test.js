@@ -155,6 +155,17 @@ test('a track is deleted only when archived, and the current track is set by id'
   await problemOf(await app.api(member, 'PUT', path('track'), { trackId: 'nope', direction: 'cw' }), 404, 'not-found');
 });
 
+test('a track PATCH that restores and renames renames first, so the new name can end a clash', async () => {
+  const old = await (await app.api(member, 'POST', path('tracks'), { name: 'Clash' })).json();
+  await app.api(member, 'PATCH', path(`tracks/${old.id}`), { archived: true });
+  await app.api(member, 'POST', path('tracks'), { name: 'Clash' });
+  await problemOf(await app.api(member, 'PATCH', path(`tracks/${old.id}`), { archived: false }), 409, 'conflict');
+  const res = await app.api(member, 'PATCH', path(`tracks/${old.id}`), { name: 'Clash old', archived: false });
+  assert.equal(res.status, 200);
+  const both = await res.json();
+  assert.deepEqual([both.name, both.archived], ['Clash old', false]);
+});
+
 test('a track PATCH is all or nothing, and missing fields are 422', async () => {
   const current = (await (await app.api(member, 'GET', path('tracks'))).json()).tracks.find((t) => t.current);
   await problemOf(await app.api(member, 'PATCH', path(`tracks/${current.id}`), { name: 'Renamed', archived: true }), 409, 'conflict');
