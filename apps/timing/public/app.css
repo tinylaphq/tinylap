@@ -331,19 +331,35 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 }
 .navbar-right .btn { border-color: var(--p-border-dark); }
 .navbar-right .btn[hidden] { display: none; }
-/* A switch, pressed (Sound on, Notify me): filled light on the dark bar, where off is the outline. */
+/* A switch, pressed: filled light on the dark bar, where off is the outline. */
 .navbar-right .btn[aria-pressed="true"], .navbar-right .btn[aria-pressed="true"]:hover { background: var(--p-surface); border-color: var(--p-surface); color: var(--p-dark); }
+/* An icon button: as tall as the text buttons beside it (its icon is their
+ * line height), square-ish, its name in aria-label and title. */
+.navbar-right .btn-icon { position: relative; padding-inline: 8px; }
+.btn-icon svg { display: block; width: 1.4em; height: 1.4em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Sound: off, the speaker struck through in outline; on (pressed), the
+ * speaker filled, with its waves. */
+#sound-switch .sound-waves { display: none; }
+#sound-switch[aria-pressed="true"] .sound-speaker { fill: currentColor; }
+#sound-switch[aria-pressed="true"] .sound-waves { display: inline; }
+#sound-switch[aria-pressed="true"] .sound-strike, #sound-switch[data-state="wanted"] .sound-strike { display: none; }
 /* Sound remembered on, but the browser waits for a tap before it plays: the
- * switch asks for one, with the amber lamp the stream uses while it waits. */
-#sound-switch:not([data-state="wanted"]) .sound-wanted, #sound-switch[data-state="wanted"] .sound-on { display: none; }
+ * speaker, with the amber lamp the stream uses while it waits at its corner. */
 #sound-switch[data-state="wanted"] { border-color: var(--p-warning); }
-#sound-switch[data-state="wanted"]::before { content: ''; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
-@media (prefers-reduced-motion: reduce) { #sound-switch[data-state="wanted"]::before { animation: none; } }
+#sound-switch[data-state="wanted"]::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
+@media (prefers-reduced-motion: reduce) { #sound-switch[data-state="wanted"]::after { animation: none; } }
 body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
-/* Notifications the browser blocks for this site: a dimmed, dashed switch that
- * says so, since only the browser's site settings can undo it. */
-#notify-switch:not([data-state="blocked"]) .notify-blocked, #notify-switch[data-state="blocked"] .notify-on { display: none; }
-.navbar-right .btn:disabled { background: transparent; border-style: dashed; border-color: var(--p-text-faint); color: var(--p-text-faint); }
+body.big .navbar-right .btn-icon { padding-inline: 12px; }
+
+/* Notifications in the account menu: a setting with its state ("Notifications:
+ * On"), or, once the browser blocks them, a note on how to allow them again. */
+.nav-account-setting { display: block; }
+.nav-account-setting[hidden] { display: none; }
+.nav-account-setting button[aria-pressed="true"] .notify-off, .nav-account-setting button[aria-pressed="false"] .notify-on { display: none; }
+.nav-account-blocked { display: none; margin: 0; padding: var(--p-space-sm) var(--p-space-md); font: 600 13px/1.4 var(--p-font); color: var(--p-text); }
+.nav-account-hint { display: block; margin-top: 2px; font-weight: 400; font-size: 12px; color: var(--p-text-faint); }
+.nav-account-setting[data-state="blocked"] button { display: none; }
+.nav-account-setting[data-state="blocked"] .nav-account-blocked { display: block; }
 .nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
 .nav-tabs li { display: flex; }
 

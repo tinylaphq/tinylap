@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The bell (records spec §4.3): the Sound on switch, and tl-board ringing once
+// The bell (records spec §4.3): the Sound icon switch, and tl-board ringing once
 // when a swap brings a track record it has not seen. AudioContext is a stub
 // that counts the oscillators a ring starts.
 import test, { after, before } from 'node:test';
@@ -81,10 +81,15 @@ async function boardPage(path = '/personal/board') {
   return { context, page, errors, rings };
 }
 
+/** Waiting for a gesture: the switch's state and the title the server gave for it. */
+const WANTED = '#sound-switch[data-state="wanted"][title="Tap to turn sound on"][aria-label="Sound"]';
+/** Which of the icon's parts show. */
+const parts = (page) => page.locator('#sound-switch path').evaluateAll((paths) => paths.filter((p) => getComputedStyle(p).display !== 'none').map((p) => p.getAttribute('class')));
+
 test('the switch is revealed by tl-board and toggles aria-pressed', async () => {
   const { context, page, errors } = await boardPage();
   try {
-    const sound = page.getByRole('button', { name: 'Sound on' });
+    const sound = page.getByRole('button', { name: 'Sound', exact: true });
     await sound.waitFor();
     assert.equal(await sound.getAttribute('aria-pressed'), 'false');
     await sound.click();
@@ -92,6 +97,29 @@ test('the switch is revealed by tl-board and toggles aria-pressed', async () => 
     assert.equal(await page.evaluate(() => window.contexts), 1);
     await sound.click();
     assert.equal(await sound.getAttribute('aria-pressed'), 'false');
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('the icon: struck through and outline when off, with waves and the pressed fill when on, the amber lamp while it waits for a tap', async () => {
+  const { context, page, errors } = await boardPage();
+  try {
+    const sound = page.locator('#sound-switch');
+    await sound.waitFor();
+    assert.equal(await sound.getAttribute('title'), 'Sound');
+    assert.deepEqual(await parts(page), ['sound-speaker', 'sound-strike']);
+    const lamp = () => sound.evaluate((b) => getComputedStyle(b, '::after').content);
+    assert.equal(await lamp(), 'none');
+    const off = await sound.evaluate((b) => getComputedStyle(b).backgroundColor);
+    await sound.click();
+    await page.locator('#sound-switch[aria-pressed="true"]').waitFor();
+    assert.deepEqual(await parts(page), ['sound-speaker', 'sound-waves']);
+    await page.waitForFunction((was) => getComputedStyle(document.querySelector('#sound-switch')).backgroundColor !== was, off); // filled when pressed, after palace's transition
+    assert.equal(await sound.getAttribute('title'), 'Sound');
+    await page.reload();
+    await page.locator(WANTED).waitFor();
+    assert.deepEqual(await parts(page), ['sound-speaker']);
+    assert.notEqual(await lamp(), 'none', 'the amber lamp');
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });
@@ -108,7 +136,7 @@ test('with sound off a new record does not ring', async () => {
 test('with sound on a new record rings once, and the same record in a later swap does not ring again', async () => {
   const { context, page, rings } = await boardPage('/personal/board?big');
   try {
-    await page.getByRole('button', { name: 'Sound on' }).click();
+    await page.getByRole('button', { name: 'Sound', exact: true }).click();
     await page.locator('#sound-switch[aria-pressed="true"]').waitFor();
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
@@ -129,7 +157,7 @@ test('a record already showing on the first render does not ring', async () => {
   const { context, page, rings } = await boardPage();
   try {
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
-    await page.getByRole('button', { name: 'Sound on' }).click();
+    await page.getByRole('button', { name: 'Sound', exact: true }).click();
     await page.waitForTimeout(300);
     assert.equal(await rings(), 0);
   } finally { await context.close(); }
@@ -138,17 +166,17 @@ test('a record already showing on the first render does not ring', async () => {
 test('a reload with sound remembered on asks for a tap, and only a running context shows the switch pressed', async () => {
   const { context, page, rings } = await boardPage();
   try {
-    await page.getByRole('button', { name: 'Sound on' }).click();
+    await page.getByRole('button', { name: 'Sound', exact: true }).click();
     await page.reload();
     await page.locator('#live-status[data-state="live"]').waitFor();
     const sound = page.locator('#sound-switch');
-    await page.getByRole('button', { name: 'Tap to turn sound on' }).waitFor();
+    await page.locator(WANTED).waitFor();
     assert.equal(await sound.getAttribute('aria-pressed'), 'false');
     assert.equal(await page.evaluate(() => window.contexts), 0);
     await sound.click();
     await page.locator('#sound-switch[aria-pressed="true"]').waitFor();
     assert.equal(await sound.getAttribute('data-state'), null);
-    await page.getByRole('button', { name: 'Sound on', exact: true }).waitFor();
+    assert.equal(await sound.getAttribute('title'), 'Sound');
     assert.equal(await page.evaluate(() => window.contexts), 1);
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
@@ -159,10 +187,10 @@ test('a reload with sound remembered on asks for a tap, and only a running conte
 test('after a reload with sound remembered on, a click anywhere starts it too', async () => {
   const { context, page, rings } = await boardPage();
   try {
-    await page.getByRole('button', { name: 'Sound on' }).click();
+    await page.getByRole('button', { name: 'Sound', exact: true }).click();
     await page.reload();
     await page.locator('#live-status[data-state="live"]').waitFor();
-    await page.getByRole('button', { name: 'Tap to turn sound on' }).waitFor();
+    await page.locator(WANTED).waitFor();
     await page.locator('main').click({ position: { x: 5, y: 5 } });
     await page.locator('#sound-switch[aria-pressed="true"]').waitFor();
     assert.equal(await page.evaluate(() => window.contexts), 1);
@@ -181,7 +209,7 @@ test('a context the browser keeps suspended leaves the switch asking for a tap',
       };
     });
     await page.locator('#sound-switch').click();
-    await page.getByRole('button', { name: 'Tap to turn sound on' }).waitFor();
+    await page.locator(WANTED).waitFor();
     assert.equal(await page.locator('#sound-switch').getAttribute('aria-pressed'), 'false');
   } finally { await context.close(); }
 });
@@ -189,7 +217,7 @@ test('a context the browser keeps suspended leaves the switch asking for a tap',
 test('the context is closed when tl-board is disconnected', async () => {
   const { context, page } = await boardPage();
   try {
-    await page.getByRole('button', { name: 'Sound on' }).click();
+    await page.getByRole('button', { name: 'Sound', exact: true }).click();
     assert.equal(await page.evaluate(() => window.contexts), 1);
     assert.equal(await page.evaluate(() => window.closes), 0);
     await page.evaluate(() => document.querySelector('tl-board').remove());
@@ -206,7 +234,7 @@ test('the watch link has the switch too, and it works with storage blocked', asy
       Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } });
     });
     await page.goto(`/watch/${token}`);
-    const sound = page.getByRole('button', { name: 'Sound on' });
+    const sound = page.getByRole('button', { name: 'Sound', exact: true });
     await sound.waitFor();
     await sound.click();
     await page.locator('#sound-switch[aria-pressed="true"]').waitFor();

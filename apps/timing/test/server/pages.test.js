@@ -151,7 +151,7 @@ test('the navbar: brand, screens, and the shared account menu with your clubs an
   assert.match(body, /<link rel="icon" href="\/pkg\/design\/mark.svg"/);
   assert.match(body, /<img src="\/pkg\/design\/mark.svg" alt="" width="24" height="24"> TinyLap Timing<\/a>/);
   const scripts = body.replace(SPECULATION_RULES, '').match(/<script[^>]*>/g) ?? [];
-  assert.deepEqual(scripts, ['<script type="module" src="/pkg/design/elements/menu.js">'], 'only the menu, and the speculation rules');
+  assert.deepEqual(scripts, ['<script type="module" src="/pkg/design/elements/menu.js">', '<script type="module" src="/public/elements/notify-setting.js">'], 'only the menu and its Notifications setting, and the speculation rules');
 });
 
 test('in production every asset is under /v/<build>/', async () => {

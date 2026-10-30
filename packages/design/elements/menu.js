@@ -10,7 +10,8 @@
 //   menu, or on the page after a mouse open; focus elsewhere (a dialog)
 //   keeps its Escape;
 // - a press outside, or focus moving outside, closes it;
-// - a click on an in-page item (button type=button) closes it first;
+// - a click on an in-page item (button type=button) closes it first, except
+//   a setting that toggles in place (aria-pressed), which shows its new state;
 // - leaving the page closes it, so Back never shows it open.
 // The document listeners exist only while it is open.
 
@@ -83,7 +84,7 @@ class TlMenu extends HTMLElement {
         break;
       }
       case 'click':
-        if (event.target instanceof Element && event.target.closest('details > :not(summary) button[type="button"]')) this.close();
+        if (event.target instanceof Element && event.target.closest('details > :not(summary) button[type="button"]:not([aria-pressed])')) this.close();
         break;
       case 'pagehide':
         this.close();

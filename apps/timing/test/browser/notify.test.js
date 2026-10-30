@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The browser notification (records spec §4.3): the Notify me switch, and
-// tl-board raising one notification when a swap brings a track record it has
-// not seen. Notification is a stub that records what is constructed; the test
+// The browser notification (records spec §4.3): the Notifications setting in
+// a member's account menu (tl-notify-setting), and tl-board raising one
+// notification when a swap brings a track record it has not seen. Notification is a stub that records what is constructed; the test
 // sets its permission and what requestPermission answers.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
@@ -108,21 +108,51 @@ async function boardPage(path = '/personal/board', { permission = 'default', ans
   return { context, page, errors, notes, rings };
 }
 
-/** Turns Notify me on and waits for it to show pressed. */
-async function turnOn(page) {
-  await page.getByRole('button', { name: 'Notify me' }).click();
-  await page.locator('#notify-switch[aria-pressed="true"]').waitFor();
+const menuSummary = (page) => page.locator('.nav-account summary');
+const setting = (page) => page.locator('.nav-account-menu').getByRole('button', { name: 'Notifications', exact: true });
+const isOpen = (page) => page.locator('.nav-account details').evaluate((d) => /** @type {HTMLDetailsElement} */ (d).open);
+
+/** Opens the account menu if closed. */
+async function openMenu(page) {
+  if (!(await isOpen(page))) await menuSummary(page).click();
 }
 
-test('with Notify me off a new record shows no notification', async () => {
+/** Turns Notifications on from the account menu and waits for it to show On. */
+async function turnOn(page) {
+  await openMenu(page);
+  await setting(page).click();
+  await page.locator('#notify-setting button[aria-pressed="true"]').waitFor();
+}
+
+test('the setting is in the account menu, Off to start, and with it off a new record shows no notification', async () => {
   const { context, page, notes, errors } = await boardPage();
   try {
-    const notify = page.getByRole('button', { name: 'Notify me' });
-    await notify.waitFor();
-    assert.equal(await notify.getAttribute('aria-pressed'), 'false');
+    await openMenu(page);
+    const button = setting(page);
+    await button.waitFor();
+    assert.equal(await button.getAttribute('aria-pressed'), 'false');
+    assert.equal((await button.innerText()).trim(), 'Notifications: Off');
+    assert.equal(await page.locator('.nav-account-blocked').isVisible(), false);
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     assert.deepEqual(await notes(), []);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('turning it on asks for permission from the click, says On, and leaves the menu open', async () => {
+  const { context, page, errors } = await boardPage();
+  try {
+    await page.evaluate(() => {
+      const ask = window.Notification.requestPermission;
+      window.asked = [];
+      window.Notification.requestPermission = () => { window.asked.push(navigator.userActivation?.isActive ?? null); return ask(); };
+    });
+    await turnOn(page);
+    assert.deepEqual(await page.evaluate(() => window.asked), [true], 'asked once, within the click');
+    assert.equal((await setting(page).innerText()).trim(), 'Notifications: On');
+    assert.equal(await isOpen(page), true);
+    assert.equal(await page.evaluate(() => localStorage.getItem('tinylap-notify')), 'on');
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });
@@ -131,7 +161,6 @@ test('on and granted, a new record shows one notification with its text and tag;
   const { context, page, notes, errors } = await boardPage();
   try {
     await turnOn(page);
-    assert.equal(await page.evaluate(() => localStorage.getItem('tinylap-notify')), 'on');
     const beat = lapMs;
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
@@ -149,7 +178,7 @@ test('on and granted, a new record shows one notification with its text and tag;
 });
 
 test('the same record in a later swap notifies once; the next record notifies again; a second click turns it off', async () => {
-  const { context, page, notes } = await boardPage('/personal/board?big');
+  const { context, page, notes } = await boardPage();
   try {
     await turnOn(page);
     const seq = newRecord();
@@ -163,8 +192,9 @@ test('the same record in a later swap notifies once; the next record notifies ag
     const next = newRecord();
     await page.locator(`[data-record-new="${next}"]`).waitFor();
     assert.deepEqual((await notes()).map((n) => n.tag), [`tinylap-record-${seq}`, `tinylap-record-${next}`]);
-    await page.getByRole('button', { name: 'Notify me' }).click();
-    await page.locator('#notify-switch[aria-pressed="false"]').waitFor();
+    await openMenu(page);
+    await setting(page).click();
+    await page.locator('#notify-setting button[aria-pressed="false"]').waitFor();
     assert.equal(await page.evaluate(() => localStorage.getItem('tinylap-notify')), 'off');
     const last = newRecord();
     await page.locator(`[data-record-new="${last}"]`).waitFor();
@@ -172,7 +202,7 @@ test('the same record in a later swap notifies once; the next record notifies ag
   } finally { await context.close(); }
 });
 
-test('a record already showing on the first render shows no notification, with Notify me remembered on', async () => {
+test('a record already showing on the first render shows no notification, with Notifications remembered on', async () => {
   const { context, page, notes } = await boardPage('/personal/board', { permission: 'granted' });
   try {
     await turnOn(page);
@@ -180,48 +210,85 @@ test('a record already showing on the first render shows no notification, with N
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     await page.reload();
     await page.locator('#live-status[data-state="live"]').waitFor();
-    await page.locator('#notify-switch[aria-pressed="true"]').waitFor();
+    await page.locator('#notify-setting button[aria-pressed="true"]').waitFor({ state: 'attached' });
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     await page.waitForTimeout(300);
     assert.deepEqual(await notes(), []);
   } finally { await context.close(); }
 });
 
-test('denied, the switch shows it is blocked and nothing is notified', async () => {
+test('turned on from Setup, it notifies on the board', async () => {
+  const { context, page, notes, errors } = await boardPage('/personal/board', { permission: 'granted' });
+  try {
+    await page.goto('/personal/setup');
+    await turnOn(page);
+    await page.goto('/personal/board');
+    await page.locator('#live-status[data-state="live"]').waitFor();
+    const seq = newRecord();
+    await page.locator(`[data-record-new="${seq}"]`).waitFor();
+    assert.deepEqual((await notes()).map((n) => n.tag), [`tinylap-record-${seq}`]);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('denied, the menu says the browser blocks them and how to allow them; nothing is notified', async () => {
   const { context, page, notes } = await boardPage('/personal/board', { answer: 'denied' });
   try {
-    await page.getByRole('button', { name: 'Notify me' }).click();
-    const notify = page.locator('#notify-switch[data-state="blocked"]');
-    await notify.waitFor();
-    assert.equal(await notify.isDisabled(), true);
-    assert.equal(await notify.getAttribute('aria-pressed'), 'false');
-    await page.getByRole('button', { name: 'Notifications blocked' }).waitFor();
+    await openMenu(page);
+    await setting(page).click();
+    await page.locator('#notify-setting[data-state="blocked"]').waitFor({ state: 'attached' });
+    await openMenu(page);
+    const blocked = page.locator('.nav-account-blocked');
+    assert.equal(await blocked.isVisible(), true);
+    assert.equal(await page.locator('#notify-setting button').isVisible(), false, 'no button that does nothing');
+    assert.equal(await isOpen(page), true, 'the menu stays open');
+    await page.waitForFunction(() => document.activeElement?.matches('.nav-account-menu .nav-account-blocked'));
+    assert.equal((await blocked.innerText()).replace(/\s+/g, ' ').trim(), "Notifications blocked by the browser Allow them in this site's settings in the address bar, then reload.");
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     assert.deepEqual(await notes(), []);
   } finally { await context.close(); }
   const again = await boardPage('/personal/board', { permission: 'denied' });
   try {
-    await again.page.getByRole('button', { name: 'Notifications blocked' }).waitFor();
-    assert.equal(await again.page.locator('#notify-switch').isDisabled(), true);
+    await openMenu(again.page);
+    await again.page.locator('.nav-account-blocked').waitFor();
+    assert.equal(await again.page.locator('.nav-account-hint').isVisible(), true);
   } finally { await again.context.close(); }
 });
 
-test('without Notification in the browser the switch stays hidden', async () => {
+test('without Notification in the browser the setting stays hidden', async () => {
   const { context, page, errors } = await boardPage('/personal/board', { notification: false });
   try {
-    await page.getByRole('button', { name: 'Sound on' }).waitFor();
-    assert.equal(await page.locator('#notify-switch').isHidden(), true);
+    await page.getByRole('button', { name: 'Sound', exact: true }).waitFor();
+    await openMenu(page);
+    assert.equal(await page.locator('#notify-setting').isHidden(), true);
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });
 
-test('the watch link has the switch too, and it works with storage blocked', async () => {
+test('the big board and the watch link have no setting, and notify nothing even when it was turned on', async () => {
   await app.form(member, '/personal/watch-link', {});
   const token = app.store.workspace(personal).watchToken;
-  const { context, page, notes, errors } = await boardPage(`/watch/${token}`, { storage: false, who: null });
+  for (const [path, who] of [['/personal/board?big', member], [`/watch/${token}`, null]]) {
+    const { context, page, notes, errors } = await boardPage(path, { permission: 'granted', who });
+    try {
+      await page.evaluate(() => localStorage.setItem('tinylap-notify', 'on'));
+      await page.reload();
+      await page.locator('#live-status[data-state="live"]').waitFor({ state: 'attached' });
+      assert.equal(await page.locator('#notify-setting').count(), 0, path);
+      const seq = newRecord();
+      await page.locator(`[data-record-new="${seq}"]`).waitFor();
+      await page.waitForTimeout(200);
+      assert.deepEqual(await notes(), [], path);
+      assert.deepEqual(errors, [], path);
+    } finally { await context.close(); }
+  }
+});
+
+test('with storage blocked it still turns on for the page and notifies', async () => {
+  const { context, page, notes, errors } = await boardPage('/personal/board', { storage: false });
   try {
     await turnOn(page);
     const seq = newRecord();
@@ -234,7 +301,7 @@ test('the watch link has the switch too, and it works with storage blocked', asy
 test('a notification the browser refuses to construct leaves one ring of the bell and no page error', async () => {
   const { context, page, errors, rings } = await boardPage('/personal/board', { throws: true });
   try {
-    await page.getByRole('button', { name: 'Sound on' }).click();
+    await page.getByRole('button', { name: 'Sound', exact: true }).click();
     await page.locator('#sound-switch[aria-pressed="true"]').waitFor();
     await turnOn(page);
     const seq = newRecord();
@@ -247,7 +314,7 @@ test('a notification the browser refuses to construct leaves one ring of the bel
   } finally { await context.close(); }
 });
 
-test('a permission revoked while the page was hidden unpresses the switch when it shows again', async () => {
+test('a permission revoked while the page was hidden shows Off when it shows again, and removing the setting stops it listening', async () => {
   const { context, page } = await boardPage();
   try {
     await turnOn(page);
@@ -255,6 +322,34 @@ test('a permission revoked while the page was hidden unpresses the switch when i
       window.Notification.permission = 'default';
       document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); // as the browser's does
     });
-    await page.locator('#notify-switch[aria-pressed="false"]').waitFor();
+    await page.locator('#notify-setting button[aria-pressed="false"]').waitFor({ state: 'attached' });
+    await page.evaluate(() => {
+      const el = document.getElementById('notify-setting');
+      window.detached = el;
+      el.remove();
+      window.Notification.permission = 'denied';
+      document.dispatchEvent(new Event('visibilitychange', { bubbles: true }));
+    });
+    assert.equal(await page.evaluate(() => window.detached.hasAttribute('data-state')), false, 'not updated once removed');
+  } finally { await context.close(); }
+});
+
+test('tabs agree: a choice made in another tab, or found when the page shows again, is followed', async () => {
+  const { context, page, notes } = await boardPage('/personal/board', { permission: 'granted' });
+  try {
+    await page.locator('#notify-setting button[aria-pressed="false"]').waitFor({ state: 'attached' });
+    const other = await context.newPage();
+    await other.addInitScript(() => { window.Notification = class { static permission = 'granted'; static requestPermission() { return Promise.resolve('granted'); } }; });
+    await other.goto('/personal/setup');
+    await turnOn(other);
+    await page.locator('#notify-setting button[aria-pressed="true"]').waitFor({ state: 'attached' }); // the storage event
+    const seq = newRecord();
+    await page.locator(`[data-record-new="${seq}"]`).waitFor();
+    assert.deepEqual((await notes()).map((n) => n.tag), [`tinylap-record-${seq}`]);
+    await page.evaluate(() => {
+      localStorage.setItem('tinylap-notify', 'off'); // no storage event in its own tab
+      document.dispatchEvent(new Event('visibilitychange', { bubbles: true }));
+    });
+    await page.locator('#notify-setting button[aria-pressed="false"]').waitFor({ state: 'attached' });
   } finally { await context.close(); }
 });
