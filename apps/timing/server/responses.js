@@ -25,19 +25,19 @@ export const html = (status, text, headers = {}) => ({
   body: text,
 });
 
-/** RFC 9457. @param {{ origin: string }} request @param {string} name @param {string} detail @returns {Response} */
-export function problem(request, name, detail, headers = {}) {
+/** RFC 9457. @param {{ origin: string }} request @param {string} name @param {string} detail @param {Record<string, string>} [headers] @param {Record<string, unknown>} [extra] members beyond the standard ones @returns {Response} */
+export function problem(request, name, detail, headers = {}, extra = {}) {
   const { status, title } = PROBLEMS[name];
   return {
     status,
     headers: { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store', ...headers },
-    body: JSON.stringify({ type: `${request.origin}/problems/${name}`, title, status, detail }),
+    body: JSON.stringify({ type: `${request.origin}/problems/${name}`, title, status, detail, ...extra }),
   };
 }
 
 /** A 429's Retry-After header, if the error has one. @param {{ retryAfter?: number }} error @returns {Record<string, string>} */
 export const retryHeaders = (error) => (error.retryAfter ? { 'Retry-After': String(error.retryAfter) } : {});
 
-/** An operation's error as Problem Details. @param {{ origin: string }} request @param {{ problem: string, message: string, retryAfter?: number }} error */
+/** An operation's error as Problem Details. @param {{ origin: string }} request @param {{ problem: string, message: string, retryAfter?: number, running?: unknown }} error */
 export const opProblem = (request, error) =>
-  problem(request, error.problem, error.message, retryHeaders(error));
+  problem(request, error.problem, error.message, retryHeaders(error), error.running ? { running: error.running } : {});

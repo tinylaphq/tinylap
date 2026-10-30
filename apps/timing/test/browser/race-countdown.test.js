@@ -225,7 +225,7 @@ test('C6: the answer to a POST never reloads', async (t) => {
   const answer = page.waitForResponse((r) => r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Start' }).click();
   assert.equal((await answer).status(), 409);
-  await page.getByText('A qualifying or race is already running here.').waitFor();
+  await page.getByText('A race is already running here.').waitFor();
   assert.equal(await page.locator('tl-countdown').count(), 1);
   assert.equal(await page.locator('tl-countdown[reload-on-phase]').count(), 0);
   // The text shows before the 409 page's own load event and its last assets: count from a settled page.

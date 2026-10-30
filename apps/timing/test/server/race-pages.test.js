@@ -52,7 +52,7 @@ test('start a race from the form, then abort it after confirming', async () => {
   const again = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0']]);
   assert.equal(again.status, 409);
   const conflict = await again.text();
-  assert.match(conflict, /<p class="status status-error" role="alert">A qualifying or race is already running here\.<\/p>/);
+  assert.match(conflict, /<p class="status status-error" role="alert">A race is already running here\.<\/p>/);
   assert.match(conflict, /<tl-countdown class="race-clock">/, 'the answer to a POST never reloads');
 
   const ask = await get(`${base}/sessions/${session.id}/abort`);

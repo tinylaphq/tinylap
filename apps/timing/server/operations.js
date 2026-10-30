@@ -18,7 +18,7 @@ export const MAX_NAME = 60;
 const MAX_DRIVERS = 200;
 const MAX_ROSTER = 20;
 const COLOUR = /^#[0-9a-f]{6}$/i;
-const KINDS = new Set(['qualifying', 'race']);
+const KINDS = new Set(['practice', 'qualifying', 'race']);
 
 /** SHA-256, hex: what is stored of a decoder token. @param {string} token */
 export const tokenHash = (token) => createHash('sha256').update(token).digest('hex');
@@ -146,23 +146,36 @@ export function rotateWatchLink(request) {
   return { value: { token } };
 }
 
-export function startSession(request, { kind, roster, durationSeconds, countdownSeconds }) {
-  if (!KINDS.has(kind)) return invalid('Pick a race or a qualifying.', 'kind');
-  if (!Array.isArray(roster) || roster.length < 1 || roster.length > MAX_ROSTER) return invalid(`Pick 1 to ${MAX_ROSTER} drivers.`, 'roster');
-  if (new Set(roster).size !== roster.length) return invalid('A driver can be on the roster only once.', 'roster');
-  if (!roster.every((id) => typeof id === 'string' && request.store.driver(request.workspaceId, id))) return invalid('Pick only drivers you have set up.', 'roster');
-  const duration = intIn(durationSeconds, 10, 3600, 300);
-  if (duration === null) return invalid('A session lasts 10 seconds to an hour.', 'duration');
-  const countdown = intIn(countdownSeconds, 0, 30, 10);
-  if (countdown === null) return invalid('The countdown is 0 to 30 seconds.', 'countdown');
-  const result = request.engine.start(request.workspaceId, { kind, roster, durationMs: duration * 1000, countdownMs: kind === 'race' ? countdown * 1000 : 0 });
-  if (result.error) return fail('conflict', 'A qualifying or race is already running here.');
+export function startSession(request, { kind, roster, durationSeconds, countdownSeconds, replace = undefined }) {
+  if (!KINDS.has(kind)) return invalid('Pick a practice, a qualifying or a race.', 'kind');
+  if (replace !== undefined && typeof replace !== 'boolean') return invalid('`replace` must be true or false.', 'replace');
+  let spec = { kind, replace: replace === true };
+  if (kind !== 'practice') {
+    if (!Array.isArray(roster) || roster.length < 1 || roster.length > MAX_ROSTER) return invalid(`Pick 1 to ${MAX_ROSTER} drivers.`, 'roster');
+    if (new Set(roster).size !== roster.length) return invalid('A driver can be on the roster only once.', 'roster');
+    if (!roster.every((id) => typeof id === 'string' && request.store.driver(request.workspaceId, id))) return invalid('Pick only drivers you have set up.', 'roster');
+    const duration = intIn(durationSeconds, 10, 3600, 300);
+    if (duration === null) return invalid('A session lasts 10 seconds to an hour.', 'duration');
+    const countdown = intIn(countdownSeconds, 0, 30, 10);
+    if (countdown === null) return invalid('The countdown is 0 to 30 seconds.', 'countdown');
+    spec = { ...spec, roster, durationMs: duration * 1000, countdownMs: kind === 'race' ? countdown * 1000 : 0 };
+  }
+  const result = request.engine.start(request.workspaceId, spec);
+  if (result.error) {
+    const { error } = fail('conflict', `A ${result.running.kind} is already running here.`);
+    return { error: { ...error, running: publicSession(result.running) } };
+  }
   return { value: publicSession(result.session) };
 }
 
 export function abortSession(request, { id }) {
   const ended = request.engine.abort(request.workspaceId, id);
   return ended ? { value: publicSession(ended) } : missing('running qualifying or race');
+}
+
+export function endSession(request, { id }) {
+  const ended = request.engine.end(request.workspaceId, id);
+  return ended ? { value: publicSession(ended) } : missing('running practice');
 }
 
 export function tap(request, { driverId }) {
