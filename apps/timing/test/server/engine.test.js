@@ -53,13 +53,19 @@ test('watchers never see transponder codes or unknown cars', () => {
 });
 
 test('a passing with no session makes no crossing, and members hear of it', () => {
-  const { store, engine, events, pass } = rig();
+  const { store, engine, hub, events, pass } = rig();
+  const watched = [];
+  hub.subscribe(W, { lastEventId: null, watcher: true }, (e) => watched.push(e));
   pass(1000);
   assert.equal(store.runningSession(W), null);
   assert.equal(store.listSessions(W, 10).length, 0);
   assert.deepEqual(engine.snapshot(W).idle, { transponder: '0A', driverId: 'ana', at: T0 + 1000 });
   assert.equal(engine.snapshot(W, { watcher: true }).idle, undefined);
-  assert.ok(events.some((e) => e.type === 'idle'));
+  const idle = { transponder: '0A', driverId: 'ana', at: T0 + 1000 };
+  assert.deepEqual(events.filter((e) => e.type === 'idle').map((e) => e.data), [{ idle }]);
+  engine.start(W, { kind: 'practice' });
+  assert.deepEqual(events.filter((e) => e.type === 'idle').map((e) => e.data), [{ idle }, { idle: null }], 'starting clears it');
+  assert.equal(watched.some((e) => e.type === 'idle'), false);
 });
 
 test('a practice started by hand counts from the first crossing after its start', () => {

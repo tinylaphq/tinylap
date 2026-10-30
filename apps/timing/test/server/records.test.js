@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RECORD_SHOW_MS } from '../../server/engine.js';
+import { RECORD_FRESH_MS, RECORD_SHOW_MS } from '../../server/engine.js';
 import { BOOT, T0, W, rig } from './rig.js';
 
 const TRACK = { id: 'trk', shape: 'c30:1:x', name: 'Office', snapshotKey: 'k'.repeat(22), layout: '{}' };
@@ -30,6 +30,14 @@ function late({ engine, clock }, receivedT, transponder, ts) {
   return engine.ingest({ workspaceId: W, decoder: 'd1', via: 'net', batch: { boot: BOOT, passings: ts.map((t) => ({ transponder, t })) } });
 }
 const recordEvents = (events) => events.filter((e) => e.type === 'record');
+/** The lap times of the 'record' events: a number when one falls, null when its state ends. */
+const recordLaps = (events) => recordEvents(events).map((e) => e.data.recordNew?.lapMs ?? null);
+/** Events a watcher's subscription receives. */
+function watch(hub) {
+  const seen = [];
+  hub.subscribe(W, { lastEventId: null, watcher: true }, (e) => seen.push(e));
+  return seen;
+}
 const history = (store, ws = W, direction = 'cw') => store.recordHistory(ws, 'trk', direction).map((r) => [r.driverId, r.lapMs]);
 const allDrivers = (store, ws = W) => store.drivers(ws).map((d) => d.id);
 
@@ -53,6 +61,7 @@ test('the first lap on a track sets the record silently', () => {
 
 test('a faster lap takes the record, live, with what it beat', () => {
   const r = onTrack();
+  const watched = watch(r.hub);
   laps(r.pass, '0A', 1000, 8000);
   laps(r.pass, '0B', 10_000, 7900);
   const snap = r.engine.snapshot(W);
@@ -63,7 +72,8 @@ test('a faster lap takes the record, live, with what it beat', () => {
     beat: { driverId: 'ana', lapMs: 8000, at: T0 + 9000 },
   });
   assert.deepEqual(r.engine.snapshot(W, { watcher: true }).recordNew, snap.recordNew);
-  assert.deepEqual(recordEvents(r.events).map((e) => e.data), [snap.recordNew]);
+  assert.deepEqual(recordEvents(r.events).map((e) => e.data), [{ recordNew: snap.recordNew }]);
+  assert.deepEqual(recordEvents(watched).map((e) => e.data), [{ recordNew: snap.recordNew }]);
   assert.deepEqual(r.store.recordHistory(W, 'trk', 'cw').map((x) => x.lapMs), [7900, 8000]);
   assertProjection(r.store);
 });
@@ -176,12 +186,7 @@ test('records are per workspace', () => {
 
 test('the record state ends after 30 s, or at the holder’s next lap if later', () => {
   const r = onTrack();
-  const published = [];
-  const publish = r.hub.publish;
-  r.hub.publish = (ws, type, data, watcher) => {
-    if (type === 'record') published.push(data);
-    publish(ws, type, data, watcher);
-  };
+  const watched = watch(r.hub);
   laps(r.pass, '0A', 1000, 8000);
   const at = laps(r.pass, '0B', 10_000, 7900);
   r.clock.now = T0 + at + RECORD_SHOW_MS - 1000;
@@ -193,9 +198,10 @@ test('the record state ends after 30 s, or at the holder’s next lap if later',
   r.pass(at + 40_000, '0B');
   r.engine.tick();
   assert.equal(r.engine.snapshot(W).recordNew, null);
-  assert.deepEqual(published.map((d) => d?.lapMs ?? null), [7900, null]);
+  assert.deepEqual(recordLaps(r.events), [7900, null]);
+  assert.deepEqual(recordLaps(watched), [7900, null], 'the end reaches watchers too');
   r.engine.tick();
-  assert.equal(published.length, 2, 'once');
+  assert.deepEqual(recordLaps(r.events), [7900, null], 'once');
   assertProjection(r.store);
 });
 
@@ -209,4 +215,35 @@ test('the record state lasts 30 s even when the holder crosses again sooner', ()
   r.clock.now = T0 + at + RECORD_SHOW_MS;
   r.engine.tick();
   assert.equal(r.engine.snapshot(W).recordNew, null);
+});
+
+test('the record state ends with its session', () => {
+  const r = onTrack();
+  laps(r.pass, '0A', 1000, 8000);
+  laps(r.pass, '0B', 10_000, 7900);
+  r.engine.end(W, r.store.runningSession(W).id);
+  assert.equal(r.engine.snapshot(W).recordNew, null);
+  assert.deepEqual(recordLaps(r.events), [7900, null]);
+  assert.equal(r.engine.snapshot(W).record.lapMs, 7900, 'the record stays');
+});
+
+test('the record state ends when the track or direction changes', () => {
+  const r = onTrack();
+  laps(r.pass, '0A', 1000, 8000);
+  laps(r.pass, '0B', 10_000, 7900);
+  r.store.setTrack(W, TRACK, 'ccw');
+  r.engine.endPractice(W);
+  assert.equal(r.engine.snapshot(W).recordNew, null);
+  assert.deepEqual(recordLaps(r.events), [7900, null]);
+});
+
+test('a record lap is celebrated only if it arrives less than a minute after it was driven', () => {
+  for (const [delay, celebrated] of [[30_000, true], [RECORD_FRESH_MS + 1000, false]]) {
+    const r = onTrack();
+    laps(r.pass, '0A', 1000, 8000);
+    late(r, 17_900 + delay, '0B', [10_000, 17_900]);
+    assert.equal(r.engine.snapshot(W).record.lapMs, 7900);
+    assert.equal(r.engine.snapshot(W).recordNew?.lapMs ?? null, celebrated ? 7900 : null, `${delay} ms late`);
+    assert.deepEqual(recordLaps(r.events), celebrated ? [7900] : [], `${delay} ms late`);
+  }
 });

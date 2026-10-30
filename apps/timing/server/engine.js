@@ -49,7 +49,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const states = new Map();
   /** Workspace id → the latest passing that fell outside any session. */
   const idles = new Map();
-  /** Workspace id → the record that fell live, and whether its holder has crossed since. */
+  /** Workspace id → the record that fell live, its session, and whether its holder has crossed since. */
   const recordNews = new Map();
   let lastSweep = -Infinity;
 
@@ -86,6 +86,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     store.updateSession(session.id, { state, endedAt });
     const ended = { ...session, state, endedAt };
     states.delete(session.id);
+    if (recordNews.get(session.workspaceId)?.sessionId === session.id) clearRecord(session.workspaceId);
     publishSession(ended);
     if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, session: publicSession(ended), standings: standingsOf(ended) });
     return ended;
@@ -137,8 +138,13 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     store.addRecord({ workspaceId, trackId, direction, seq, driverId, lapMs, at, sessionId });
     if (!before || now() - at >= RECORD_FRESH_MS) return;
     const recordNew = { seq, driverId, lapMs, at, beat: { driverId: before.driverId, lapMs: before.lapMs, at: before.at } };
-    recordNews.set(workspaceId, { recordNew, crossedAgain: false });
-    hub.publish(workspaceId, 'record', recordNew);
+    recordNews.set(workspaceId, { recordNew, sessionId, crossedAgain: false });
+    hub.publish(workspaceId, 'record', { recordNew });
+  }
+  /** Ends the live record state, and tells every board. */
+  function clearRecord(workspaceId) {
+    if (!recordNews.delete(workspaceId)) return;
+    hub.publish(workspaceId, 'record', { recordNew: null });
   }
   /** The live record while it shows. */
   function recordNewOf(workspaceId, t = now()) {
@@ -149,7 +155,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   /** A passing with no session running makes no crossing; members are told (spec §3.2). */
   function noteIdle(workspaceId, idle) {
     idles.set(workspaceId, idle);
-    hub.publish(workspaceId, 'idle', idle, null);
+    hub.publish(workspaceId, 'idle', { idle }, null);
   }
 
   /** Stores a batch (spec §5). Repeating it is safe. */
@@ -210,7 +216,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
         else endSession(running, t, 'aborted');
       }
       idles.delete(workspaceId);
-      hub.publish(workspaceId, 'idle', null, null);
+      hub.publish(workspaceId, 'idle', { idle: null }, null);
       if (kind === 'practice') return { session: createSession(workspaceId, { kind, state: 'running', opensAt: t, closesAt: null }) };
       const opensAt = kind === 'race' ? t + countdownMs : t;
       const state = kind === 'race' && countdownMs > 0 ? 'countdown' : 'running';
@@ -239,9 +245,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       store.deleteLoosePassings(t - LOOSE_PASSING_MS);
     }
     for (const workspaceId of recordNews.keys()) {
-      if (recordNewOf(workspaceId, t)) continue;
-      recordNews.delete(workspaceId);
-      hub.publish(workspaceId, 'record', null);
+      if (!recordNewOf(workspaceId, t)) clearRecord(workspaceId);
     }
     for (let session of store.activeAll()) {
       if (session.kind === 'practice') {
@@ -284,10 +288,11 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     publishUnknown(workspaceId);
   }
 
-  /** A new track or direction ends a running practice (spec §3.1). */
+  /** A new track or direction ends a running practice (spec §3.1) and the live record state of the old one. */
   function endPractice(workspaceId) {
     const running = store.runningSession(workspaceId);
     if (running?.kind === 'practice') endSession(running, practiceEnd(running));
+    clearRecord(workspaceId);
   }
 
   function snapshot(workspaceId, { watcher = false } = {}) {
