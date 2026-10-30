@@ -184,7 +184,7 @@ test('records are per workspace', () => {
   assertProjection(r.store, ws2);
 });
 
-test('the record state ends after 30 s, or at the holder’s next lap if later', () => {
+test('the record state lasts 30 s after the lap, and its end reaches every board', () => {
   const r = onTrack();
   const watched = watch(r.hub);
   laps(r.pass, '0A', 1000, 8000);
@@ -192,12 +192,9 @@ test('the record state ends after 30 s, or at the holder’s next lap if later',
   r.clock.now = T0 + at + RECORD_SHOW_MS - 1000;
   r.engine.tick();
   assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
-  r.clock.now = T0 + at + RECORD_SHOW_MS + 5000;
+  r.clock.now = T0 + at + RECORD_SHOW_MS;
   r.engine.tick();
-  assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900, 'ben has not crossed again');
-  r.pass(at + 40_000, '0B');
-  r.engine.tick();
-  assert.equal(r.engine.snapshot(W).recordNew, null);
+  assert.equal(r.engine.snapshot(W).recordNew, null, 'ben has not crossed again, and it ends anyway');
   assert.deepEqual(recordLaps(r.events), [7900, null]);
   assert.deepEqual(recordLaps(watched), [7900, null], 'the end reaches watchers too');
   r.engine.tick();
@@ -205,11 +202,13 @@ test('the record state ends after 30 s, or at the holder’s next lap if later',
   assertProjection(r.store);
 });
 
-test('the record state lasts 30 s even when the holder crosses again sooner', () => {
+test('the holder’s later laps don’t extend the record state', () => {
   const r = onTrack();
   laps(r.pass, '0A', 1000, 8000);
   const at = laps(r.pass, '0B', 10_000, 7900);
   r.pass(at + 8500, '0B');
+  r.pass(at + 17_000, '0B');
+  r.pass(at + 25_500, '0B');
   r.engine.tick();
   assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
   r.clock.now = T0 + at + RECORD_SHOW_MS;
@@ -258,27 +257,42 @@ test('a record on a race’s final lap is celebrated, and ends 30 s later', () =
   assert.deepEqual(recordLaps(watched), [7900, null]);
 });
 
-test('a new session ends the record state at once', () => {
+test('the record state survives a session’s end and a new start within its 30 s', () => {
   const r = onTrack();
   laps(r.pass, '0A', 1000, 8000);
-  laps(r.pass, '0B', 10_000, 7900);
+  const at = laps(r.pass, '0B', 10_000, 7900);
+  r.clock.now = T0 + at + 5000;
   r.engine.start(W, { kind: 'practice', replace: true });
+  r.engine.tick();
+  assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
+  assert.deepEqual(recordLaps(r.events), [7900]);
+  r.clock.now = T0 + at + RECORD_SHOW_MS;
+  r.engine.tick();
   assert.equal(r.engine.snapshot(W).recordNew, null);
   assert.deepEqual(recordLaps(r.events), [7900, null]);
 });
 
-test('the record state ends when the track or direction changes', () => {
+test('the record state shows only under its own track and direction, and again when they come back within its 30 s', () => {
   const r = onTrack();
   laps(r.pass, '0A', 1000, 8000);
-  laps(r.pass, '0B', 10_000, 7900);
+  const at = laps(r.pass, '0B', 10_000, 7900);
+  r.clock.now = T0 + at + 5000;
   r.store.setTrack(W, TRACK, 'ccw');
   r.engine.endPractice(W);
+  r.engine.tick();
+  assert.equal(r.engine.snapshot(W).recordNew, null, 'not under the anticlockwise header');
+  r.store.setTrack(W, TRACK, 'cw');
+  r.engine.endPractice(W);
+  assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
+  assert.deepEqual(recordLaps(r.events), [7900]);
+  r.clock.now = T0 + at + RECORD_SHOW_MS;
+  r.engine.tick();
   assert.equal(r.engine.snapshot(W).recordNew, null);
   assert.deepEqual(recordLaps(r.events), [7900, null]);
 });
 
 test('a record lap is celebrated only if it arrives less than a minute after it was driven', () => {
-  for (const [delay, celebrated] of [[30_000, true], [RECORD_FRESH_MS + 1000, false]]) {
+  for (const [delay, celebrated] of [[20_000, true], [RECORD_FRESH_MS + 1000, false]]) {
     const r = onTrack();
     laps(r.pass, '0A', 1000, 8000);
     late(r, 17_900 + delay, '0B', [10_000, 17_900]);
