@@ -292,7 +292,7 @@ test('the record state shows only under its own track and direction, and again w
 });
 
 test('a record lap is celebrated only if it arrives less than a minute after it was driven', () => {
-  for (const [delay, celebrated] of [[20_000, true], [RECORD_FRESH_MS + 1000, false]]) {
+  for (const [delay, celebrated] of [[30_000, true], [RECORD_FRESH_MS + 1000, false]]) {
     const r = onTrack();
     laps(r.pass, '0A', 1000, 8000);
     late(r, 17_900 + delay, '0B', [10_000, 17_900]);
@@ -300,6 +300,20 @@ test('a record lap is celebrated only if it arrives less than a minute after it 
     assert.equal(r.engine.snapshot(W).recordNew?.lapMs ?? null, celebrated ? 7900 : null, `${delay} ms late`);
     assert.deepEqual(recordLaps(r.events), celebrated ? [7900] : [], `${delay} ms late`);
   }
+});
+
+test('a lap that arrives 45 s late shows the record state for 30 s from its arrival', () => {
+  const r = onTrack();
+  laps(r.pass, '0A', 1000, 8000);
+  const arrived = 17_900 + 45_000;
+  late(r, arrived, '0B', [10_000, 17_900]);
+  r.clock.now = T0 + arrived + RECORD_SHOW_MS - 1000;
+  r.engine.tick();
+  assert.equal(r.engine.snapshot(W).recordNew.lapMs, 7900);
+  r.clock.now = T0 + arrived + RECORD_SHOW_MS;
+  r.engine.tick();
+  assert.equal(r.engine.snapshot(W).recordNew, null);
+  assert.deepEqual(recordLaps(r.events), [7900, null]);
 });
 
 test('a record set in a race after the track changed shows only under its own track', () => {

@@ -14,7 +14,7 @@ export const PRACTICE_IDLE_MS = 60 * 60_000;
 /** Passings outside any session are deleted after this long. */
 export const LOOSE_PASSING_MS = 24 * 60 * 60_000;
 const LOOSE_SWEEP_MS = 10 * 60_000;
-/** A new record shows this long after its lap (records spec §4.3). */
+/** A new record shows this long from its arrival (records spec §4.3). */
 export const RECORD_SHOW_MS = 30_000;
 /** A record lap driven longer than this before it arrived falls silently. */
 export const RECORD_FRESH_MS = 60_000;
@@ -49,7 +49,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const states = new Map();
   /** Workspace id → the latest passing that fell outside any session. */
   const idles = new Map();
-  /** Workspace id → the record that fell live, with its track and direction. */
+  /** Workspace id → the record that fell live, when it arrived, and its track and direction. */
   const recordNews = new Map();
   /** Workspace id → the last ended session's id and standings, so an idle board doesn't replay it on every render. */
   const endedStandings = new Map();
@@ -148,7 +148,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     store.addRecord({ workspaceId, trackId, direction, seq, driverId, lapMs, at, sessionId });
     if (!before || now() - at >= RECORD_FRESH_MS) return;
     const recordNew = { seq, driverId, lapMs, at, beat: { driverId: before.driverId, lapMs: before.lapMs, at: before.at } };
-    recordNews.set(workspaceId, { recordNew, trackId, direction });
+    recordNews.set(workspaceId, { recordNew, since: now(), trackId, direction });
     hub.publish(workspaceId, 'record', { recordNew });
   }
   /** Ends the live record state, and tells every board. */
@@ -159,7 +159,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   /** The live record while it shows. */
   function recordNewOf(workspaceId, t = now()) {
     const shown = recordNews.get(workspaceId);
-    return shown && t - shown.recordNew.at < RECORD_SHOW_MS ? shown.recordNew : null;
+    return shown && t - shown.since < RECORD_SHOW_MS ? shown.recordNew : null;
   }
 
   /** A passing with no session running makes no crossing; members are told (spec §3.2). */
