@@ -62,13 +62,29 @@ void applyOsccal() {
   while (OSCCAL != target) OSCCAL = OSCCAL < target ? OSCCAL + 1 : OSCCAL - 1;
 }
 
-[[noreturn]] void sendNothing() {
-  cli();
+// Without a valid id: no frames, but the pattern of tlBlinkStepMs once per watchdog period, powered down in
+// between. The LED is plainly on, without the 38 kHz carrier, so the receivers' output stays idle and the decoder
+// counts nothing, while a phone camera shows it. R1 (33 ohm) holds the LED near 100 mA, its continuous rating.
+[[noreturn]] void blinkWithoutId() {
+  WDTCR = _BV(WDCE) | _BV(WDE);                           // timed sequence: the next write within 4 clocks
+  WDTCR = _BV(WDIE) | _BV(WDP2) | _BV(WDP1) | _BV(WDP0);  // an interrupt every 2 s (TL_BLINK_PERIOD_MS), no reset
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  for (;;) sleep_mode();  // with interrupts off, nothing wakes it
+  for (;;) {
+    for (uint8_t i = 0; i < TL_BLINK_STEPS; i++) {
+      if (i % 2 == 0) PORTB |= kLedBit;
+      else PORTB &= (uint8_t)~kLedBit;
+      for (uint16_t n = tlBlinkStepMs(i); n; n--) _delay_ms(1);
+    }
+    PORTB &= (uint8_t)~kLedBit;
+    sei();
+    sleep_mode();  // until the watchdog's next interrupt
+    cli();
+  }
 }
 
 }  // namespace
+
+EMPTY_INTERRUPT(WDT_vect);  // only wakes blinkWithoutId
 
 int main() {
   clock_prescale_set(clock_div_1);  // 8 MHz whether CKDIV8 is set or not
@@ -78,7 +94,7 @@ int main() {
   PORTB &= (uint8_t)~kLedBit;
 
   uint8_t id = eeprom_read_byte(kEeId);
-  if (!tlIdValid(id, eeprom_read_byte(kEeIdComplement))) sendNothing();
+  if (!tlIdValid(id, eeprom_read_byte(kEeIdComplement))) blinkWithoutId();
   tlEncodeFrame(id, levels, TL_LEVELS);
   uint16_t state = tlSeed(id);
 

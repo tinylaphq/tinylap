@@ -25,7 +25,7 @@ Programming needs an AVR ISP programmer on the chip's SCK, MISO, MOSI and RESET 
 
 The frame is defined in one place, `firmware/lib/tinylap-ir`, which both this program and the decoder build on. The design (§3.1 of the spec) explains the choices. The carrier is made in software, with interrupts off while a frame goes out, and the transponder waits a random gap between frames.
 
-At power-on the program reads the id from EEPROM. If the id is above 127 or its complement does not match, it sends nothing: a transponder that is visibly dead is better than one that claims a wrong id.
+At power-on the program reads the id from EEPROM. If the id is above 127 or its complement does not match, it sends no frames: a transponder that the decoder never sees is better than one that claims a wrong id. It blinks instead, as a sign that it runs but has no id (see "Checks on the bench").
 
 An id is 0–127. The app shows it in upper-case hex, so label each transponder with its hex id: `0C` for 12.
 
@@ -65,7 +65,7 @@ python3 -m unittest discover -s tools # tests of the flash script
 
 Python 3.9 or later. The script runs avrdude through PlatformIO, so build first with `pio run -e attiny45`.
 
-**Only `tools/flash.py flash` (or avrdude with the EEPROM line below) writes the id.** `pio run -t upload`, and avrdude with only `-U flash:w:…`, write the program and leave the EEPROM as it was, so a new chip has no id. A transponder without a valid id sends no frames (see "Checks on the bench" for how to tell).
+**Only `tools/flash.py flash` (or avrdude with the EEPROM line below) writes the id.** `pio run -t upload`, and avrdude with only `-U flash:w:…`, write the program and leave the EEPROM as it was, so a new chip has no id. A transponder without a valid id sends no frames; it blinks instead (see "Checks on the bench").
 
 1. **Fuses, once per chip.** They set the internal 8 MHz oscillator, SPI programming and brown-out detection at 2.7 V, and keep the EEPROM across uploads. Nothing locks the chip.
 
@@ -132,5 +132,15 @@ avrdude -C avrdude.conf -c usbasp -p t45 -U flash:w:.pio/build/attiny45/firmware
 ```
 
 ## Checks on the bench
+
+**Is it running, and does it have an id?** The IR LED is invisible to the eye; look at it through a phone camera (the front camera, if the main one filters infrared).
+
+| What the camera shows | What it means |
+| --- | --- |
+| A steady faint glow or flicker | Frames go out: it runs and has a valid id. |
+| Three short flashes about every 2 seconds | It runs but has no valid id: EEPROM is blank or wrong, for example after `pio run -t upload`. Flash it with `tools/flash.py flash --id …`. |
+| Nothing | No power, no program, wrong fuses, or a fault on the LED's side of the board. |
+
+The flashes are the LED plainly on for 50 ms each, without the 38 kHz carrier, so the decoder's receivers ignore them and no passing is counted. Between them the chip sleeps, woken by its watchdog.
 
 With the capture build on the decoder and the transponder fixed under the gantry at car height, for 60 seconds: at least 90% of frames whole, and the start period within ±1.5% of 2000 µs.
