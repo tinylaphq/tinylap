@@ -18,6 +18,8 @@ import { sessionsPage } from './views/sessions.js';
 const NO_RACE = { message: 'There is no running qualifying or race here.' };
 const NO_PRACTICE = { message: 'There is no running practice here.' };
 const PAGE = 20;
+/** The start form's fields, in its order. */
+const FIELDS = ['kind', 'roster', 'duration', 'countdown'];
 const LATEST_RECORDS = 5;
 /** A confirmation sent twice: the session running is the one its first send started, if of its kind and this new. */
 const DOUBLE_SUBMIT_MS = 10_000;
@@ -71,9 +73,9 @@ function recordsOf(request, limit) {
 /**
  * The Sessions tab. Only a 200, the answer to GET, lets the clock reload the page: a reload
  * of the answer to a POST would send the form again.
- * @param {any} request @param {number} status @param {{ error?: any, values?: any }} [extras]
+ * @param {any} request @param {number} status @param {{ error?: any, errors?: any[], values?: any }} [extras]
  */
-function renderTab(request, status, { error = null, values = null } = {}) {
+function renderTab(request, status, { error = null, errors = error ? [error] : [], values = null } = {}) {
   const ws = request.workspaceId;
   const cursor = CURSOR.exec(request.url.searchParams.get('before') ?? '');
   const before = cursor ? { createdAt: Number(cursor[1]), id: cursor[2] } : null;
@@ -83,7 +85,7 @@ function renderTab(request, status, { error = null, values = null } = {}) {
     idle: request.engine.idleOf(ws),
     history: historyOf(request, before),
     records: recordsOf(request, LATEST_RECORDS),
-    error,
+    errors,
     values,
     reload: status === 200,
   }));
@@ -121,9 +123,19 @@ async function start(request) {
   // A blank box is "use the default" on a form; the operation only takes a missing value.
   // The box takes whole minutes, as its min and max say: plain digits only, not "1e1" or "0x10".
   const minutes = practice || values.duration === '' ? undefined : /^[0-9]+$/.test(values.duration) ? Number(values.duration) : NaN;
-  if (minutes !== undefined && !(Number.isInteger(minutes) && minutes >= 1 && minutes <= 60)) {
-    const { error } = ops.fail('invalid-request', 'A session lasts 1 to 60 minutes.', 'duration');
-    return renderTab(request, error.status, { error, values });
+  const badMinutes = minutes !== undefined && !(Number.isInteger(minutes) && minutes >= 1 && minutes <= 60);
+  const args = {
+    kind: values.kind,
+    roster: practice ? undefined : values.roster,
+    durationSeconds: minutes === undefined || badMinutes ? undefined : minutes * 60,
+    countdownSeconds: practice || values.countdown === '' ? undefined : values.countdown,
+  };
+  // Every field's error at once, in the form's order, so one round trip shows all that needs fixing.
+  const errors = ops.startErrors(request, args);
+  if (badMinutes) errors.push(ops.fail('invalid-request', 'A session lasts 1 to 60 minutes.', 'duration').error);
+  if (errors.length) {
+    errors.sort((a, b) => FIELDS.indexOf(a.field) - FIELDS.indexOf(b.field));
+    return renderTab(request, errors[0].status, { errors, values });
   }
   // Where a start leads: the board, or back to the Tap page its form came from (a fixed name, never a URL).
   const from = form.get('from') === 'tap' ? 'tap' : null;
@@ -135,13 +147,7 @@ async function start(request) {
   const named = form.get('replace');
   const running = named ? request.store.runningSession(request.workspaceId) : null;
   if (running && running.id !== named) return twice(running) ? seeOther(done) : askReplace(request, values, running, from);
-  const result = ops.startSession(request, {
-    kind: values.kind,
-    roster: practice ? undefined : values.roster,
-    durationSeconds: minutes === undefined ? undefined : minutes * 60,
-    countdownSeconds: practice || values.countdown === '' ? undefined : values.countdown,
-    replace: running !== null,
-  });
+  const result = ops.startSession(request, { ...args, replace: running !== null });
   if (!result.error) return seeOther(done);
   if ('running' in result.error) return twice(result.error.running) ? seeOther(done) : askReplace(request, values, result.error.running, from);
   return renderTab(request, result.error.status, { error: result.error, values });

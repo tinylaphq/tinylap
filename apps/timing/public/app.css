@@ -510,6 +510,9 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .race-times input[type="number"] { width: 5.5rem; font-variant-numeric: tabular-nums; }
 .field-hint { margin: 0; color: var(--p-text-muted); font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdown) { opacity: 0.5; }
+/* A form that failed on several fields lists them, each linking to its field. */
+.error-list { margin: 0; padding-left: 1.25em; }
+.error-list li + li { margin-top: var(--p-space-xs); }
 
 /* A lap time's mark, in a narrow column after the time's (.mark-cell): the
  * time keeps its column's edge, and the mark sits on its baseline. The time's

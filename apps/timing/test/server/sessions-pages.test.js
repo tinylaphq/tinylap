@@ -242,6 +242,18 @@ test('a bad form comes back with one summary and what was chosen', async () => {
   assert.match(text, /id="race-duration"[^>]*value="120"[^>]*aria-invalid="true"/);
 });
 
+test('a form wrong in several fields names every error at once, in the form\'s order', async () => {
+  const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['duration', '90'], ['countdown', '45']]);
+  assert.equal(res.status, 422);
+  const body = await res.text();
+  assert.equal(body.match(/role="alert"/g).length, 1);
+  assert.match(body, /<div class="status status-error" role="alert"><ul class="error-list"><li><a href="#race-roster">Pick 1 to 20 drivers\.<\/a><\/li><li><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/li><li><a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a><\/li><\/ul><\/div>/);
+  assert.match(body, /<fieldset aria-describedby="race-roster-error">/);
+  assert.match(body, /id="race-duration"[^>]*value="90"[^>]*aria-invalid="true"/);
+  assert.match(body, /id="race-countdown"[^>]*value="45"[^>]*aria-invalid="true"/);
+  assert.equal(app.store.runningSession(office.id), null);
+});
+
 test('a bad minutes or countdown value says what is allowed and keeps the input', async () => {
   const [a] = app.store.drivers(office.id);
   for (const duration of ['abc', '1e3', '1e1', '0x10', ' 5', '-5', '0.0001']) {

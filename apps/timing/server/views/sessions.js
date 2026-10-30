@@ -8,7 +8,7 @@
 import { localTime } from '@tinylap/design/html/local-time.js';
 import { clockAt, formatClock, formatLap, formatLength } from '../../public/format.js';
 import { html, safe } from './html.js';
-import { errorSummary, textField } from './form-parts.js';
+import { errorsSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
 import { chip, crown, idleNotice, marks, marksHead, startPracticeForm } from './marks.js';
 import { recordsTable, trackName } from './records.js';
@@ -24,15 +24,16 @@ export const shortLength = (ms) => (ms < 60_000 ? `${Math.round(ms / 1000)} s` :
 /** How long an ended session was driven: from its start (after any countdown) to its end. */
 export const drivenMs = (session) => Math.max(0, (session.endedAt ?? session.opensAt ?? 0) - (session.opensAt ?? session.createdAt));
 
-function startForm(request, { drivers, error, values }) {
+function startForm(request, { drivers, errors, values }) {
   const base = request.space.base;
   if (drivers.length === 0) {
     return html`<div class="card-static stack-md"><h3 class="h3">Qualifying or race</h3><p>Add drivers before you start a race.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>`;
   }
   const kind = values?.kind ?? 'race';
   const roster = values ? new Set(values.roster) : new Set(drivers.map((d) => d.id));
-  const rosterError = error?.field === 'roster' ? error.message : null;
-  const kindError = error?.field === 'kind' ? error.message : null;
+  const errorOf = (field) => errors.find((e) => e.field === field) ?? null;
+  const rosterError = errorOf('roster')?.message;
+  const kindError = errorOf('kind')?.message;
   return html`<form method="post" action="${base}/sessions" class="card-static stack-md">
   <h3 class="h3">Qualifying or race</h3>
   <fieldset${kindError ? html` aria-describedby="race-kind-error"` : null}>
@@ -48,8 +49,8 @@ function startForm(request, { drivers, error, values }) {
   <fieldset>
     <legend>Length</legend>
     <div class="race-times">
-      ${textField({ id: 'race-duration', label: 'Minutes', name: 'duration', type: 'number', inputmode: 'numeric', required: true, min: 1, max: 60, value: values?.duration ?? '5', error })}
-      ${textField({ id: 'race-countdown', label: 'Countdown (seconds)', name: 'countdown', type: 'number', inputmode: 'numeric', min: 0, max: 30, value: values?.countdown ?? '10', hint: 'Races only.', error })}
+      ${textField({ id: 'race-duration', label: 'Minutes', name: 'duration', type: 'number', inputmode: 'numeric', required: true, min: 1, max: 60, value: values?.duration ?? '5', error: errorOf('duration') })}
+      ${textField({ id: 'race-countdown', label: 'Countdown (seconds)', name: 'countdown', type: 'number', inputmode: 'numeric', min: 0, max: 30, value: values?.countdown ?? '10', hint: 'Races only.', error: errorOf('countdown') })}
     </div>
   </fieldset>
   <div class="button-row"><button type="submit" class="btn btn-primary">Start</button></div>
@@ -130,9 +131,9 @@ function recordsSection(request, { track, direction, rows }, drivers) {
 
 /**
  * @param {any} request
- * @param {{ session: any, drivers: any[], idle?: any, history: any, records: any, error?: any, values?: any, reload?: boolean }} model
+ * @param {{ session: any, drivers: any[], idle?: any, history: any, records: any, errors?: any[], values?: any, reload?: boolean }} model
  */
-export function sessionsPage(request, { session, drivers, idle = null, history, records, error = null, values = null, reload = false }) {
+export function sessionsPage(request, { session, drivers, idle = null, history, records, errors = [], values = null, reload = false }) {
   return layout(request, {
     title: 'Sessions',
     screen: 'sessions',
@@ -140,7 +141,7 @@ export function sessionsPage(request, { session, drivers, idle = null, history, 
     modules: ['pkg/design/elements/local-time.js'],
     body: html`<div class="container sessions-screen stack-xl screen">
   <h1>Sessions</h1>
-  ${errorSummary(error, FIELD_ID[error?.field])}
+  ${errorsSummary(errors, (field) => FIELD_ID[field])}
   ${idleNotice(idle, drivers)}
   ${session ? runningPanel(request, session, drivers, { reload }) : null}
   <section class="stack-md" aria-labelledby="start-title">
@@ -151,7 +152,7 @@ export function sessionsPage(request, { session, drivers, idle = null, history, 
         <p>Times everyone whose car has a driver, for as long as you like. It ends when you end it, or after an hour without a car.</p>
         ${startPracticeForm(request)}
       </div>
-      ${startForm(request, { drivers, error, values: values?.kind === 'practice' ? null : values })}
+      ${startForm(request, { drivers, errors, values: values?.kind === 'practice' ? null : values })}
     </div>
   </section>
   ${historySection(request, history, drivers)}
