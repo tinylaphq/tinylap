@@ -159,8 +159,8 @@ test('loose passings older than a day are deleted; passings of a session and tra
   pass(1000); // loose
   clock.now = T0 + 2000;
   engine.start(W, { kind: 'practice' });
-  pass(9000); // in the practice
-  clock.now = T0 + 1000 + 24 * 60 * 60_000 + 1;
+  pass(9000); // in the practice, and as old as the loose one when the day is over
+  clock.now = T0 + 9000 + 24 * 60 * 60_000 + 1;
   engine.tick();
   assert.equal(store.through('d1', BOOT), 9000);
   assert.equal(store.countPassings(W), 1);

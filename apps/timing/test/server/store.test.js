@@ -153,3 +153,18 @@ test('choosableDecoders drops a decoder that sends over Wi-Fi, keeps one that on
   store.insertPassing({ decoder: 'd2', boot: 'b00tb00t', transponder: '0A', t: 1, receivedAt: 1, via: 'serial', workspaceId: W });
   assert.deepEqual(store.choosableDecoders(W), [{ id: 'd2', name: 'Cable', createdAt: 2, lastSeenAt: null }]);
 });
+
+test('deleteLoosePassings deletes passings without a crossing once, and only before the cutoff', () => {
+  const store = openStore(':memory:');
+  practice(store);
+  const p = { decoder: 'd1', boot: 'b00tb00t', transponder: '0A', t: 1000, receivedAt: 10, via: 'net', workspaceId: W };
+  store.insertPassing(p);
+  store.insertPassing({ ...p, t: 2000 });
+  store.insertPassing({ ...p, t: 3000, receivedAt: 500 });
+  crossing(store, { t: 1000 });
+  assert.equal(store.deleteLoosePassings(100), 1);
+  assert.equal(store.countPassings(W), 2);
+  assert.equal(store.deleteLoosePassings(100), 0);
+  assert.equal(store.deleteLoosePassings(1000), 1);
+  assert.equal(store.countPassings(W), 1);
+});

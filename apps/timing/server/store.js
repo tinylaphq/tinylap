@@ -156,7 +156,7 @@ export function openStore(path) {
     touchDecoder: q('UPDATE decoder SET last_seen_at = ? WHERE id = ?'),
     insertPassing: q(`INSERT INTO passing (decoder_id, boot, transponder, t, received_at, via, workspace_id)
       VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`),
-    deleteLoosePassings: q(`DELETE FROM passing WHERE received_at < ? AND NOT EXISTS (SELECT 1 FROM crossing c
+    deleteLoosePassings: q(`DELETE FROM passing WHERE received_at >= ? AND received_at < ? AND NOT EXISTS (SELECT 1 FROM crossing c
       WHERE c.decoder_id = passing.decoder_id AND c.boot = passing.boot AND c.transponder = passing.transponder AND c.t = passing.t)`),
     countPassings: q('SELECT COUNT(*) AS n FROM passing WHERE workspace_id = ?'),
     through: q('SELECT MAX(t) AS t FROM passing WHERE decoder_id = ? AND boot = ?'),
@@ -308,8 +308,13 @@ export function openStore(path) {
 
     insertPassing: ({ decoder, boot, transponder, t, receivedAt, via, workspaceId }) =>
       s.insertPassing.run(decoder, boot, transponder, t, receivedAt, via, workspaceId).changes === 1,
-    /** Deletes passings received before `before` that no crossing was made from; returns how many. */
-    deleteLoosePassings: (before) => Number(s.deleteLoosePassings.run(before).changes),
+    /** Deletes passings received before `before` that no crossing was made from; returns how many. Each call judges only what the last one did not (a watermark in feed_cursor). */
+    deleteLoosePassings: (before) => transaction(() => {
+      const from = Number(s.selectCursor.get('loose-passings')?.seq ?? 0);
+      const deleted = Number(s.deleteLoosePassings.run(from, before).changes);
+      if (before > from) s.upsertCursor.run('loose-passings', before);
+      return deleted;
+    }),
     countPassings: (workspaceId) => num(s.countPassings.get(workspaceId)?.n),
     through: (decoder, boot) => num(s.through.get(decoder, boot)?.t),
     lastReference(decoder, transponder) {
