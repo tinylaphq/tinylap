@@ -140,8 +140,8 @@ The server adds `receivedAt` (its own clock) and `via` (`serial`, `net` or
 
 **Tap entry** has no decoder. Each workspace has one virtual tap decoder,
 `boot` = the session id, the driver's id as the transponder, and `t` = the
-server's receive time in milliseconds. Tap laps are marked `via: 'tap'` and never count towards
-personal bests.
+server's receive time in milliseconds. Tap laps are marked `via: 'tap'` and
+never count towards personal bests.
 
 ## 5. Transports
 
@@ -237,9 +237,12 @@ session; passings that arrive while none runs make no laps.
 
 ### Personal bests
 
-Valid, decoder-timed laps by workspace, track, direction and driver; they are
-stored with each lap, along with the track record (see the newer spec). The workspace is the venue prefix the track-identity
-spec requires (§ "Requirements this places on the timing app").
+A personal best is a driver's fastest valid, decoder-timed lap per workspace,
+track and direction. Personal bests are kept in their own table, alongside the
+track record, and written in the transaction of the lap that changes them.
+After a recount they are rebuilt from the laps (`2026-10-29-sessions-and-records-design.md`
+§4 and §6). The workspace is the venue prefix the track-identity spec requires
+(§ "Requirements this places on the timing app").
 
 ## 7. Live updates
 
@@ -260,8 +263,8 @@ Built on palace-ui and `@tinylap/design`, plain ES modules, import maps, no
 bundler, like the planner. Screens:
 
 - **Live board:** session clock, leaderboard, last laps, personal-best
-  and track-record marks. One layout that scales from a phone to a wall screen; a full
-  screen mode for the big screen.
+  and track-record marks. One layout that scales from a phone to a wall
+  screen; a full screen mode for the big screen.
 - **Sessions:** start practice, qualifying or a race (drivers, duration), end
   or abort; the history, a page per session and the track record history.
 - **Tap entry:** a tile per driver; a tap is a passing.
