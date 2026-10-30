@@ -13,7 +13,7 @@ Goals:
 1. **Every session is started by someone.** Practice, qualifying and race are the three kinds; nothing runs on its own.
 2. **One session at a time.** Starting one ends the running one, after a confirmation.
 3. **A practice is "just start the timer"**: no settings, open as long as wanted, ended by hand or by an hour without a passing.
-4. **The track record**, per track and direction, shown on every board, celebrated when it falls: a notice on every screen, a bell where sound is on, a crown for the holder.
+4. **The track record**, per track and direction, shown on every board, celebrated when it falls: a notice on every screen, a bell where sound is on, a browser notification where it's wanted, a crown for the holder.
 5. **A history of sessions**, each with its final table and every lap, and the history of the track record.
 
 Non-goals:
@@ -88,7 +88,8 @@ Marks sit in a fixed slot beside the time, so times stay aligned in their column
 
 - **Every screen showing the board**, the read-only ones included, shows it at once: the track header turns to the record colour and reads "New track record", with the new time, the holder, and the record it beat (time, holder, date).
 - **The bell** rings on every screen with sound on. Browsers play sound only after a click on the page, so the board has a "Sound on" switch, remembered in this browser (`localStorage`, a per-viewer convenience). *My call: the bell is made with the Web Audio API, no sound file.*
-- The header stays in its record state for 30 seconds or until that driver's next lap, whichever is later, then shows the new record normally. *My call.*
+- **A browser notification** shows where "Notify me" is on: a system notification "New track record" with the time, the holder and the record it beat, while a TinyLap board is open, also in the background. The board has a "Notify me" switch next to "Sound on"; turning it on asks the browser's permission, and the choice is remembered in this browser (`localStorage`). Several open boards show one notification, not one each. Reaching people who have no TinyLap board open (Web Push) is a separate piece of work.
+- The header stays in its record state for 30 seconds after the lap, then shows the new record normally. It only ever shows on the track and direction the record was set on.
 - **Late laps.** A lap is checked against the record as it stood when the lap was driven (its `at`), not as it stands when it arrives. It is celebrated only if it was driven less than a minute before it arrives; an older one (an outbox resend, a Wi-Fi backlog) takes the record silently, and the history places it at its own time. *My call.*
 
 ## 5. Screens
@@ -143,6 +144,6 @@ A session's page, `…/sessions/<id>`: its final table (as the board showed it w
 4. **Passings without a session** make no laps, prompt members to start a practice, and are deleted after a day; transponder codes stay.
 5. **The track record** belongs to the workspace's track and direction; decoder laps of any session count, tapped laps never; it and personal bests are stored as a projection of the laps, rebuilt from them when laps are recounted, so no board read grows with a club's history.
 6. **Marks**: TR and PB after the time, the session's best as a highlighted row, a crown for the holder.
-7. **A new record** shows on every screen and rings the bell where sound is on; the notice matters more than the sound.
+7. **A new record** shows on every screen for 30 seconds, rings the bell where sound is on and raises a browser notification where "Notify me" is on; the notice matters more than the sound.
 8. **The Sessions tab** replaces Race: start, end, history, record history. Each session has its own page.
 9. **Read-only screens** never show a notice or a button; they show the running session, or the last one.
