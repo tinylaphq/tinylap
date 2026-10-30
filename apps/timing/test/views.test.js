@@ -88,22 +88,26 @@ test('selectField without a hint or data-name renders as it always has', () => {
     '<div class="field">\n  <label for="x">Direction</label>\n  <select id="x" name="direction" aria-invalid="true" aria-describedby="x-error">\n    <option value="cw" selected>Clockwise</option><option value="ccw">Counter-clockwise</option>\n  </select>\n  <p class="field-error" id="x-error">Pick one.</p>\n</div>');
 });
 
-import { crown, idleNotice, marks } from '../server/views/marks.js';
+import { crown, idleNotice, marks, marksHead } from '../server/views/marks.js';
 import { directionIcon } from '../server/views/direction.js';
 
-test('marks sit in one slot after a time, empty or not; a record lap shows TR, not PB too', () => {
-  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: false })), '<span class="marks"></span>');
-  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true })), '<span class="marks"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span></span>');
-  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isPb: true })), '<span class="marks"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR</abbr><span class="visually-hidden">Track record</span></span>');
-  assert.equal(String(marks({ lapMs: null, isRecord: true, isPb: true })), '<span class="marks"></span>', 'no lap, no mark');
+test('a mark is a cell of its own after the time, empty or not; a record lap shows TR, not PB too', () => {
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: false })), '<td class="mark-cell"></td>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true })), '<td class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span></td>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isPb: true })), '<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR</abbr><span class="visually-hidden">Track record</span></td>');
+  assert.equal(String(marks({ lapMs: null, isRecord: true, isPb: true })), '<td class="mark-cell"></td>', 'no lap, no mark');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true }, { list: true, note: 'Session best' })), '<span class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span>Session best</span>', 'in a list, a span, with its note after');
+  assert.equal(String(marksHead), '<th scope="col" class="mark-cell"><span class="visually-hidden">Mark</span></th>');
   assert.equal(crown(false), null);
-  assert.equal(String(crown(true)), '<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>');
+  assert.equal(String(crown(true)), '&#8288;<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>', 'glued to the name by a word joiner');
 });
 
-test('a car with no session running is a live line, by its code', () => {
-  assert.equal(idleNotice(null), null);
-  assert.equal(String(idleNotice({ transponder: '23', driverId: 'h', at: 1 })), '<p class="board-on-track" role="status">Car 23 is on the track</p>');
-  assert.match(String(idleNotice({ transponder: '<b>', driverId: null, at: 1 })), /Car &lt;b&gt; is on the track/);
+test('a car with no session running is a live line, by its driver, or by its code without one', () => {
+  const drivers = [{ id: 'h', name: 'Haris', colour: '#1e88e5' }];
+  assert.equal(idleNotice(null, drivers), null);
+  assert.equal(String(idleNotice({ transponder: '23', driverId: 'h', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span><span class="driver" style="--driver: #1e88e5">Haris</span> is on the track</span></p>');
+  assert.equal(String(idleNotice({ transponder: '23', driverId: 'gone', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span>Car 23 is on the track</span></p>', 'a driver since deleted: the code');
+  assert.match(String(idleNotice({ transponder: '<b>', driverId: null, at: 1 }, drivers)), /Car &lt;b&gt; is on the track/);
 });
 
 test('the direction icon: an open loop with one arrowhead, named by its own title', () => {

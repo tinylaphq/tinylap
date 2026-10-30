@@ -13,7 +13,7 @@ import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
 import { directionIcon } from './direction.js';
-import { chip as driverChip, crown, idleNotice, marks, startPracticeForm } from './marks.js';
+import { chip as driverChip, crown, idleNotice, marks, marksHead, startPracticeForm } from './marks.js';
 
 const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
 
@@ -26,8 +26,8 @@ export function clockOf(session, now) {
 
 const chip = (snap, id) => driverChip(snap.drivers, id);
 
-/** A record's time, holder and date: "7.412 · Haris · 12 Oct". */
-const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by">· ${chip(snap, r.driverId)} · ${safe(localTime(r.at, 'date'))}</span>`;
+/** A record's time, holder and date, apart by their line's gap, not by dots: "7.412  Haris  12 Oct". */
+const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by">${chip(snap, r.driverId)}</span> <span class="board-track-by">${safe(localTime(r.at, 'date'))}</span>`;
 
 /**
  * The track, its direction as an icon, and its record, above every board
@@ -93,9 +93,11 @@ function markers(snap, session, standings) {
   return {
     isBest: (row) => row === best,
     crown: (row) => crown(record?.driverId === row.driverId),
-    best: (row) => {
+    /** The mark cell after a row's best lap; in a list, a span. */
+    mark: (row, list = false) => {
       const pb = pbs.get(row.driverId);
-      return html`${formatLap(row.bestMs)}${marks({ lapMs: row.bestMs, isRecord: record?.driverId === row.driverId && same(record, row), isPb: same(pb && { lapMs: pb.bestMs, at: pb.at }, row) })}${row === best ? html`<span class="visually-hidden">Session best</span>` : null}`;
+      const note = row === best ? html`<span class="visually-hidden">Session best</span>` : null;
+      return marks({ lapMs: row.bestMs, isRecord: record?.driverId === row.driverId && same(record, row), isPb: same(pb && { lapMs: pb.bestMs, at: pb.at }, row) }, { note, list });
     },
   };
 }
@@ -109,20 +111,29 @@ function ago(snap, row) {
   return html`<tl-relative-time class="board-ago" now="${snap.now}" min="60000"${hidden ? html` hidden` : null}>last lap <time datetime="${new Date(row.lastAt).toISOString()}">${formatAgo(row.lastAt, snap.now)}</time></tl-relative-time>`;
 }
 
+/**
+ * The leaderboard. Its columns have fixed widths (app.css), so a live update
+ * never moves one; the driver takes what is left. A race's Last column goes on
+ * a phone, where the feed below repeats it. A driver who has finished keeps
+ * their row as it was, with the chequered flag after their position.
+ */
 function standingsTable(snap) {
   const race = snap.session?.kind === 'race';
+  // The last counted lap: one before the session opened is in the feed, marked, not here.
   const last = new Map();
-  for (const c of snap.crossings) if (c.lapMs !== null && c.driverId && !last.has(c.driverId)) last.set(c.driverId, c.lapMs);
+  for (const c of snap.crossings) if (c.lapMs !== null && c.driverId && c.counts && !last.has(c.driverId)) last.set(c.driverId, c.lapMs);
   const m = markers(snap, snap.session, snap.standings);
   if (snap.standings.length === 0) return html`<p class="empty board-empty">No laps yet.</p>`;
-  return html`<div class="board-scroll"><table class="board-table">
-  <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th><th scope="col" class="num">Last</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
+  return html`<div class="board-scroll"><table class="board-table standings-table${race ? ' is-race' : ''}">
+  <colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last">${race ? html`<col class="col-total">` : null}</colgroup>
+  <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${marksHead}<th scope="col" class="num col-last">Last</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
   <tbody>${snap.standings.map((row) => { const cls = [row.finished && 'is-finished', m.isBest(row) && 'is-best'].filter(Boolean).join(' '); return html`<tr${cls ? html` class="${cls}"` : null}>
-    <td class="pos">${row.position}</td>
+    <td class="pos">${row.position}${row.finished ? html`<span class="finish" role="img" aria-label="Finished" title="Finished"></span>` : null}</td>
     <td class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}${ago(snap, row)}</td>
     <td class="num">${row.laps}</td>
-    <td class="num">${m.best(row)}</td>
-    <td class="num">${formatLap(last.get(row.driverId))}</td>
+    <td class="num">${formatLap(row.bestMs)}</td>
+    ${m.mark(row)}
+    <td class="num col-last">${formatLap(last.get(row.driverId))}</td>
     ${race ? html`<td class="num">${formatLap(row.elapsedMs)}</td>` : null}
   </tr>`; })}</tbody>
 </table></div>`;
@@ -132,9 +143,12 @@ function feed(snap) {
   const laps = snap.crossings.filter((c) => c.lapMs !== null).slice(0, 12);
   return html`<aside class="board-feed" aria-label="Last laps">
   <h2 class="h3">Last laps</h2>
-  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps">${laps.map((c) => html`<li>${chip(snap, c.driverId)}<span class="num">${formatLap(c.lapMs)}</span>${c.via === 'tap' ? html`<span class="tag">tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">not counted</span>` : null}</li>`)}</ol>`}
+  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps">${laps.map((c) => html`<li>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag">tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span></li>`)}</ol>`}
 </aside>`;
 }
+
+/** What a record beat: "beat Mia’s 8.200", or "beat their own 8.200". */
+const beaten = (snap, r) => html`, beat ${r.beat.driverId === r.driverId ? 'their own' : html`${chip(snap, r.beat.driverId)}’s`} <span class="num">${formatLap(r.beat.lapMs)}</span>`;
 
 /**
  * The track record as the big thing (named tracks spec §4): the time, the
@@ -148,7 +162,7 @@ function hero(request, snap, members) {
   <div class="board-hero-record">
     <h1 class="board-hero-label">Track record</h1>
     ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
-    <p class="board-hero-by">${chip(snap, r.driverId)}${crown(true)} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? html`, beat ${chip(snap, r.beat.driverId)}’s <span class="num">${formatLap(r.beat.lapMs)}</span>` : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
+    <p class="board-hero-by">${chip(snap, r.driverId)}${crown(true)} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? beaten(snap, r) : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
   </div>
   ${members ? go(request, snap) : null}
 </section>`;
@@ -162,7 +176,7 @@ function go(request, snap) {
     ? html`<p class="board-quiet" role="status">${n === 1 ? '1 car has' : `${n} cars have`} no driver yet. <a href="${base}/setup#transponders">${n === 1 ? 'Assign it' : 'Assign them'}</a></p>`
     : html`<p class="board-quiet">Or a <a href="${base}/sessions#start-title">qualifying or race</a>.</p>`;
   return html`<div class="board-hero-go">
-    ${idleNotice(snap.idle)}
+    ${idleNotice(snap.idle, snap.drivers)}
     ${startPracticeForm(request)}
     ${quiet}
   </div>`;
@@ -185,7 +199,7 @@ function lastSession(request, snap, link) {
   const ended = r.session.endedAt ?? r.session.createdAt;
   return html`<section class="board-last" aria-labelledby="board-last-title">
   <h2 class="h3" id="board-last-title">Last session</h2>
-  ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}</span><span class="num">${m.best(row)}</span></li>`)}</ol>`}
+  ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}</span><span class="num">${formatLap(row.bestMs)}</span>${m.mark(row, true)}</li>`)}</ol>`}
   <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'datetime-short'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${link ? html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>` : null}</p>
 </section>`;
 }

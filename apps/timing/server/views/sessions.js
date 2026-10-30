@@ -10,7 +10,7 @@ import { clockAt, formatClock, formatLap, formatLength } from '../../public/form
 import { html, safe } from './html.js';
 import { errorSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
-import { chip, crown, idleNotice, marks, startPracticeForm } from './marks.js';
+import { chip, crown, idleNotice, marks, marksHead, startPracticeForm } from './marks.js';
 import { recordsTable, trackName } from './records.js';
 
 export const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
@@ -86,13 +86,15 @@ function runningPanel(request, session, drivers, { reload }) {
 }
 
 /**
- * Past sessions, newest first, 20 a page.
+ * Past sessions, newest first, 20 a page. The columns have fixed widths
+ * (app.css); the track and the fastest driver share what is left.
  * @param {any} request @param {{ rows: any[], older: number | null, newer: boolean }} history @param {any[]} drivers
  */
 function historySection(request, { rows, older, newer }, drivers) {
   const base = request.space.base;
   const table = rows.length === 0 ? html`<p class="empty">No sessions yet.</p>` : html`<div class="board-scroll"><table class="board-table history-table">
-  <thead><tr><th scope="col">Started</th><th scope="col">Session</th><th scope="col">Track</th><th scope="col" class="num">Length</th><th scope="col" class="num">Drivers</th><th scope="col">Fastest</th><th scope="col" class="num">Best</th></tr></thead>
+  <colgroup><col class="col-started"><col class="col-kind"><col><col class="col-count"><col class="col-count"><col><col class="col-time"><col class="col-mark"></colgroup>
+  <thead><tr><th scope="col">Started</th><th scope="col">Session</th><th scope="col">Track</th><th scope="col" class="num">Length</th><th scope="col" class="num">Drivers</th><th scope="col">Fastest</th><th scope="col" class="num">Best</th>${marksHead}</tr></thead>
   <tbody>${rows.map(({ session, track, drivers: count, best }) => html`<tr class="history-row">
     <td><a href="${base}/sessions/${session.id}">${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</a></td>
     <td>${KIND[session.kind]}${session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}</td>
@@ -100,7 +102,8 @@ function historySection(request, { rows, older, newer }, drivers) {
     <td class="num">${shortLength(drivenMs(session))}</td>
     <td class="num">${count}</td>
     <td class="board-driver">${best ? html`${chip(drivers, best.driverId)}${crown(best.isHolder)}` : null}</td>
-    <td class="num">${formatLap(best?.lapMs)}${marks({ lapMs: best?.lapMs, isRecord: Boolean(best?.isRecord), isPb: Boolean(best?.isPb) })}</td>
+    <td class="num">${formatLap(best?.lapMs)}</td>
+    ${marks({ lapMs: best?.lapMs, isRecord: Boolean(best?.isRecord), isPb: Boolean(best?.isPb) })}
   </tr>`)}</tbody>
 </table></div>`;
   const links = [
@@ -138,7 +141,7 @@ export function sessionsPage(request, { session, drivers, idle = null, history, 
     body: html`<div class="container sessions-screen stack-xl screen">
   <h1>Sessions</h1>
   ${errorSummary(error, FIELD_ID[error?.field])}
-  ${idleNotice(idle)}
+  ${idleNotice(idle, drivers)}
   ${session ? runningPanel(request, session, drivers, { reload }) : null}
   <section class="stack-md" aria-labelledby="start-title">
     <h2 id="start-title">Start</h2>

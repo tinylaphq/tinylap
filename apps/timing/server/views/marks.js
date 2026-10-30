@@ -11,28 +11,38 @@ import { html } from './html.js';
 const mark = (kind, letters, name) => html`<abbr class="mark mark-${kind}" title="${name}" aria-hidden="true">${letters}</abbr><span class="visually-hidden">${name}</span>`;
 
 /**
- * The marks after a lap time, in a slot of its own width whether it holds one
- * or not, so times stay aligned in their column. A record lap is its driver's
- * best too: it shows TR alone.
+ * The mark of a lap time, in a narrow column of its own after the time's, so
+ * the time keeps its column's edge whether a mark follows it or not. A record
+ * lap is its driver's best too: it shows TR alone. `note` is read after it,
+ * such as "Session best". In a list, the cell is a span.
  * @param {{ lapMs: number | null | undefined, isRecord: boolean, isPb: boolean }} lap
+ * @param {{ note?: any, list?: boolean }} [options]
  */
-export function marks({ lapMs, isRecord, isPb }) {
+export function marks({ lapMs, isRecord, isPb }, { note = null, list = false } = {}) {
   const has = lapMs !== null && lapMs !== undefined;
   const shown = !has ? null
     : isRecord ? mark('tr', 'TR', 'Track record')
       : isPb ? mark('pb', 'PB', 'Personal best') : null;
-  return html`<span class="marks">${shown}</span>`;
+  return list ? html`<span class="mark-cell">${shown}${note}</span>` : html`<td class="mark-cell">${shown}${note}</td>`;
 }
 
-/** The crown after the record holder's name, on every leaderboard of the record's track and direction. @param {boolean} isHolder */
+/** The marks column's header: no word on screen, its name for a screen reader. */
+export const marksHead = html`<th scope="col" class="mark-cell"><span class="visually-hidden">Mark</span></th>`;
+
+/**
+ * The crown after the record holder's name, on every leaderboard of the
+ * record's track and direction. A word joiner glues it to the name, so a long
+ * name wraps with it rather than leaving it alone on a line.
+ * @param {boolean} isHolder
+ */
 export const crown = (isHolder) => (isHolder
-  ? html`<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>`
+  ? html`&#8288;<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>`
   : null);
 
 /** A driver's name with their colour, or what is left of one. @param {{ id: string, name: string, colour?: string }[]} drivers @param {string | null} id */
 export function chip(drivers, id) {
   const d = drivers.find((x) => x.id === id);
-  if (!d) return html`<span class="driver">${id ? 'former driver' : 'unknown car'}</span>`;
+  if (!d) return html`<span class="driver">${id ? 'Former driver' : 'Unknown car'}</span>`;
   return html`<span class="driver" style="--driver: ${d.colour}">${d.name}</span>`;
 }
 
@@ -48,10 +58,12 @@ export function startPracticeForm(request, { from } = {}) {
 /**
  * "Car 23 is on the track": a live line, not a warning, while a car crosses
  * with no session running (named tracks spec §4); for members only, from the
- * snapshot's `idle`.
+ * snapshot's `idle`. A car with a driver says who: "Ana is on the track".
  * @param {{ transponder: string, driverId: string | null } | null} idle
+ * @param {{ id: string, name: string, colour?: string }[]} drivers
  */
-export function idleNotice(idle) {
+export function idleNotice(idle, drivers) {
   if (!idle) return null;
-  return html`<p class="board-on-track" role="status">Car ${idle.transponder} is on the track</p>`;
+  const who = idle.driverId && drivers.some((d) => d.id === idle.driverId) ? chip(drivers, idle.driverId) : html`Car ${idle.transponder}`;
+  return html`<p class="board-on-track" role="status"><span>${who} is on the track</span></p>`;
 }

@@ -74,7 +74,7 @@ function askDeleteDriver(request, match) {
   const base = request.space.base;
   return page(request, 200, confirmPage(request, {
     title: `Delete ${driver.name}?`,
-    text: 'Their laps stay on the board as "former driver", and their transponders become unassigned.',
+    text: 'Their laps stay on the board as "Former driver", and their transponders become unassigned.',
     action: `${base}/drivers/${driver.id}/delete`,
     button: 'Delete',
     back: `${base}/setup#drivers`,

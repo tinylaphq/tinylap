@@ -82,12 +82,13 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 /* The accent arrowhead is too faint on the record colour (about 1.6:1): it takes the ink there. */
 .board-track.is-record .direction-icon path:last-child { stroke: currentColor; }
 .board-track.is-record .board-track-record { display: grid; justify-items: end; gap: var(--p-space-xs); }
-.board-track-new { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
+.board-track-new, .board-track-beat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
 .board-track-new .board-track-label { font-size: 1.4em; letter-spacing: -0.01em; }
 .board-track-new .board-track-time { font-size: 1.8em; line-height: 1.1; }
 .board-track-beat { opacity: 0.85; }
+/* The title sits on the clock's bottom edge, not floating at its top. */
 .board-head {
-  display: flex; justify-content: space-between; align-items: stretch; gap: var(--p-space-md); flex-wrap: wrap;
+  display: flex; justify-content: space-between; align-items: end; gap: var(--p-space-md); flex-wrap: wrap;
 }
 .board-title { margin: 0; font-size: clamp(1.75rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -0.02em; }
 .board-clock {
@@ -101,35 +102,51 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .race-clock { display: flex; align-items: baseline; gap: var(--p-space-sm); }
 .race-clock-time { font: 700 1.5rem / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
 
-/* Wide tables scroll inside the board, not the page; the padding keeps the hard shadow in view. */
-.board-scroll { overflow-x: auto; padding: 0 4px 4px 0; }
+/* Wide tables scroll inside the board, not the page; the padding keeps the hard
+ * shadow in view. Positioned, so palace's .visually-hidden text inside stays in it. */
+.board-scroll { position: relative; overflow-x: auto; padding: 0 4px 4px 0; }
 .board-main { display: grid; gap: var(--p-space-lg); align-content: start; min-width: 0; }
-.board-table { font-size: 1em; width: 100%; border-collapse: collapse; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
+/* A fixed layout: the <colgroup> sets every column's width but one, so a live
+ * update never moves a column and tables of one kind line up. --cell-x is the
+ * cells' side padding; th and td share it, so a number sits flush under its
+ * header. */
+.board-table {
+  --cell-x: var(--p-space-md); --cell-y: var(--p-space-sm); --mark-gap: var(--p-space-xs);
+  font-size: 1em; width: 100%; table-layout: fixed; border-collapse: collapse;
+  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text);
+}
 .board-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-surface); background: var(--p-dark); }
-.board-table th, .board-table td { padding: var(--p-space-sm) var(--p-space-md); text-align: left; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
+.board-table th, .board-table td { padding: var(--cell-y) var(--cell-x); text-align: left; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
+/* A row's names, numbers and marks share one baseline. */
+.board-table td, .lap-table td { vertical-align: baseline; }
 .board-table th.num, .board-table td.num { text-align: right; }
 .board-table td, .board-table th { font-size: inherit; }
 .board-table th { font-size: 0.7em; }
 .board-table tbody tr:first-child .pos { box-shadow: inset 4px 0 0 var(--p-accent-1); }
-.board-table .pos { font: 700 1.25em var(--p-font-mono); width: 3.5em; }
+.board-table .pos { font: 700 1.25em var(--p-font-mono); }
 /* The board element; the stream swaps the #board-live inside it. */
 tl-board { display: block; }
 /* The tap element; the tap screen inside it is unchanged. */
 tl-tap { display: block; }
 /* The bridge element; #bridge inside it is unchanged, and it takes #bridge's place in the stack. */
 tl-bridge { display: block; }
-/* Room for "last lap 14 Oct 2026", so a note appearing never moves a column (spec §5.2). */
-.board-table .board-driver { min-width: 9.5em; }
+/* The driver takes what the fixed columns leave; a name too long for it breaks rather than run under the next column. */
+.board-table .board-driver { overflow-wrap: anywhere; }
 /* A quiet second line under a driver who has stopped. */
 .board-ago { display: block; color: var(--p-text-secondary); font-weight: 400; font-size: 0.75em; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .board-ago time { white-space: nowrap; }
 .num { text-align: right; font-family: var(--p-font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.is-finished td { color: var(--p-text-muted); }
+/* A driver who has finished: a chequered flag after the position; the row keeps its colour. */
+.finish {
+  display: inline-block; width: 0.5em; height: 0.5em; margin-left: 0.2em;
+  border: var(--p-border-thin) solid var(--p-text);
+  background: repeating-conic-gradient(var(--p-text) 0 25%, var(--p-surface) 0 50%) 0 0 / 50% 50%;
+}
 .board-empty { margin: 0; padding: var(--p-space-xl) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) dashed var(--p-border-dashed); text-align: center; }
 
 .driver { font-weight: 600; }
 .driver::before {
-  content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: var(--p-space-xs);
+  content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: 0.25em;
   background: var(--driver, var(--p-text-faint)); border: var(--p-border-thin) solid var(--p-text);
 }
 
@@ -138,16 +155,23 @@ tl-bridge { display: block; }
 .board-laps { list-style: none; margin: 0; padding: 0; }
 .board-laps li { display: flex; gap: var(--p-space-sm); align-items: baseline; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-border-light); }
 .board-laps .num { margin-left: auto; }
+/* A lap on the board: the driver, any tags, then the time in a column of its own width, so tags never push it. */
+.board-feed .board-laps li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.6em; }
+.board-laps-tags { display: flex; flex-wrap: wrap; justify-content: end; gap: var(--p-space-xs); }
 .board-laps .tag { font-size: 10px; padding: 1px 6px; }
 
 /* The wall screen (?big, spec 6.1): every part follows .board's font size, which
    follows the smaller of the screen's width and height; only the way out stays fixed. */
 body.big .board {
-  font-size: clamp(1rem, min(2.4vw, 3.6vh), 2.6rem);
+  /* One size in rem and viewport units, so th and td can share paddings made from it. */
+  --board-font: clamp(1rem, min(2.4vw, 3.6vh), 2.6rem);
+  font-size: var(--board-font);
   min-height: 100dvh; box-sizing: border-box; max-width: none; align-content: start;
   /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
   padding-top: calc(0.5rem + 44px + var(--p-space-md));
 }
+/* The table takes three quarters and the feed may shrink, so the table keeps every column and room for names. */
+@media (min-width: 721px) { body.big .board:not(.is-idle) { grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); } }
 body.big .board-clock-label { font-size: 0.6em; }
 body.big .board-track { font-size: 0.75em; }
 @media (max-width: 600px) {
@@ -155,11 +179,12 @@ body.big .board-track { font-size: 0.75em; }
 }
 body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
-body.big .board-table th, body.big .board-table td { padding-block: 0.6em; }
-body.big .board-feed { font-size: 0.7em; }
+body.big .board-table { --cell-x: calc(var(--board-font) * 0.5); --cell-y: calc(var(--board-font) * 0.6); --mark-gap: calc(var(--board-font) * 0.2); }
+body.big .board-feed { font-size: max(0.7em, 0.875rem); }
 body.big .board-ago { font-size: 0.6em; }
 body.big .board-hero-time { font-size: 4.5em; }
 body.big .board-hero-by, body.big .board-last-meta { font-size: 0.7em; }
+body.big .board .board-last-meta .tag { font-size: 0.8em; }
 /* The way out: a dark pill at the top right, always there, big enough to hit by touch. */
 body.big .navbar { position: fixed; top: 0.5rem; right: 0.5rem; left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
 body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; }
@@ -173,15 +198,14 @@ body.big .navbar-right .live-status::before { width: 0.75em; height: 0.75em; }
 body.big .navbar:has(.live-status:not([data-state="live"]):not([hidden])) { opacity: 1; }
 body.big .navbar-right .btn { font-size: 16px; min-height: 44px; padding-inline: var(--p-space-md); color: var(--p-surface); }
 @media (max-width: 640px) {
-  body.big .board { font-size: 0.9rem; }
-  body.big .board-table th, body.big .board-table td { padding-inline: 0.3em; }
+  body.big .board { --board-font: 0.9rem; }
+  body.big .board-table { --cell-x: calc(var(--board-font) * 0.3); }
 }
 
 @media (max-width: 720px) {
   .board { grid-template-columns: 1fr; padding: var(--p-space-md); }
   .board-clock { width: 100%; box-sizing: border-box; grid-template-columns: auto auto; justify-content: space-between; justify-items: start; align-items: center; }
-  .board-table th, .board-table td { padding: var(--p-space-sm); }
-  .board-table .board-driver { min-width: 6em; }
+  .board-table { --cell-x: var(--p-space-sm); }
   .navbar { height: auto; flex-wrap: wrap; padding: var(--p-space-sm) var(--p-space-md); }
   .navbar-right { flex-wrap: wrap; gap: var(--p-space-sm); }
   .nav-tabs { margin-left: 0; }
@@ -280,10 +304,14 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-hero-none { margin: var(--p-space-xs) 0; font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .board-hero-by { margin: 0; color: var(--p-text-secondary); }
 .board-hero-by .driver, .board-hero-by .num { color: var(--p-text); }
+/* Three rows, the first kept for the line that a car is on the track, so the button never moves when it comes or goes. */
 .board-hero-go {
-  display: grid; align-content: center; gap: var(--p-space-md);
+  display: grid; grid-template-rows: minmax(1.5em, auto) auto auto; align-content: center; gap: var(--p-space-md);
   padding: var(--p-space-lg); border-left: var(--p-border-width) solid var(--p-text);
 }
+.board-hero-go > .board-on-track { grid-row: 1; }
+.board-hero-go > .start-practice { grid-row: 2; }
+.board-hero-go > .board-quiet { grid-row: 3; }
 .board-hero-go .btn { width: 100%; font-size: 1.15em; padding-block: var(--p-space-md); }
 /* A car on the track with no session: the live lamp, in the accent, blinking like the stream's. */
 .board-on-track { display: flex; align-items: center; gap: var(--p-space-sm); margin: 0; font-weight: 600; }
@@ -294,8 +322,9 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--p-space-lg); align-items: start; margin-top: var(--p-space-sm); }
 .board-idle h2 { margin: 0 0 var(--p-space-sm); }
 .board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); }
+/* Pos, driver, then the time and its mark in columns of fixed width, so the times of both lists line up. */
 .board-ranks li {
-  display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; align-items: baseline; gap: var(--p-space-sm);
+  display: grid; grid-template-columns: 2em minmax(0, 1fr) 3.6em 1.8em; align-items: baseline; gap: var(--p-space-sm);
   padding: var(--p-space-sm) var(--p-space-md); border-bottom: var(--p-border-thin) solid var(--p-border-light);
 }
 .board-ranks li:last-child { border-bottom: 0; }
@@ -315,8 +344,10 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
   .board-hero-go { border-left: 0; border-top: var(--p-border-width) solid var(--p-text); }
   .board-first { padding: var(--p-space-lg); box-shadow: var(--p-shadow-lg) var(--tl-record); }
 }
-/* The display and the watchers have the record alone. */
+/* The display and the watchers have the record alone, in the middle. */
 .board-hero:not(:has(.board-hero-go)) { grid-template-columns: minmax(0, 1fr); }
+.board-hero:not(:has(.board-hero-go)) .board-hero-record { justify-items: center; text-align: center; }
+.board-hero:not(:has(.board-hero-go)) .board-hero-time { text-align: center; }
 
 /* The navbar's right side: the live status, Big screen and Sign in take the
  * btn-sm box (same padding, 1px border, line height) that the shared account
@@ -480,16 +511,19 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .field-hint { margin: 0; color: var(--p-text-muted); font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdown) { opacity: 0.5; }
 
-/* Marks after a lap time: a slot one mark wide whether it holds one or not,
- * so the times above and below stay aligned in their column. */
-.marks { display: inline-block; width: 2.4em; text-align: left; margin-left: var(--p-space-xs); vertical-align: middle; }
+/* A lap time's mark, in a narrow column after the time's (.mark-cell): the
+ * time keeps its column's edge, and the mark sits on its baseline. The time's
+ * cell gives up most of its right padding to bring the mark near. */
+.board-table th:has(+ .mark-cell), .board-table td:has(+ .mark-cell),
+.lap-table th:has(+ .mark-cell), .lap-table td:has(+ .mark-cell) { padding-right: var(--mark-gap); }
+.board-table .mark-cell, .lap-table .mark-cell { padding-left: 0; padding-right: var(--cell-x); white-space: nowrap; }
 .mark {
   display: inline-block; padding: 0.15em 0.35em; text-decoration: none; cursor: help;
-  font: 700 0.7em/1 var(--p-font); letter-spacing: 0.04em; border: var(--p-border-thin) solid var(--p-text);
+  font: 700 0.8em/1 var(--p-font); letter-spacing: 0.04em; border: var(--p-border-thin) solid var(--p-text);
 }
 .mark-tr { background: var(--tl-record); color: var(--tl-record-ink); }
 .mark-pb { background: var(--tl-pb); color: var(--tl-pb-ink); }
-.crown { margin-left: var(--p-space-xs); }
+.crown { margin-left: 0.25em; }
 .board-table tr.is-best td { background: var(--tl-session-best); }
 
 /* A notice on the board ("Unknown cars…" while a session runs):
@@ -512,7 +546,9 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .session-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .session-laps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--p-space-md); }
 .session-laps .h3 { margin: 0 0 var(--p-space-sm); }
-.lap-table td, .lap-table th { padding-block: var(--p-space-xs); }
+/* A driver's laps: fixed columns, so a tag never moves the time, and every card's columns line up. */
+.lap-table { --cell-x: 8px; --mark-gap: var(--p-space-xs); table-layout: fixed; font-size: 13px; }
+.lap-table td, .lap-table th { padding: var(--p-space-xs) var(--cell-x); }
 .lap-table .tag { font-size: 10px; padding: 1px 6px; }
 .lap-table tr.is-not-counted .num { color: var(--p-text-muted); }
 /* A track's page: each layout drawn on the track's dark floor, the current one large. */
@@ -528,4 +564,35 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .track-page h3 { margin: 0; }
 @media (max-width: 720px) {
   .start-grid { grid-template-columns: 1fr; }
+}
+
+/* Column widths, in em of the table's font, so ?big scales them. A time is
+ * mono, 0.6em a digit: "12.345", or a race's "4:05.123" (a "14:05.123" takes
+ * some of its padding). The mark's column is one mark wide. The rest are what
+ * their header or content needs. */
+.col-pos { width: calc(2.2em + 2 * var(--cell-x)); }
+.col-laps { width: calc(2.2em + 2 * var(--cell-x)); }
+.col-lap { width: calc(2em + 2 * var(--cell-x)); }
+.col-time { width: calc(3.6em + var(--cell-x) + var(--mark-gap)); }
+/* Last has no mark after it: both its paddings. */
+.col-last { width: calc(3.6em + 2 * var(--cell-x)); }
+.col-total { width: calc(5em + 2 * var(--cell-x)); }
+.col-mark { width: calc(1.8em + var(--cell-x)); }
+.col-count { width: calc(4.4em + 2 * var(--cell-x)); }
+.col-started { width: calc(7.5em + 2 * var(--cell-x)); }
+.col-kind { width: calc(6em + 2 * var(--cell-x)); }
+.col-date { width: calc(7.5em + 2 * var(--cell-x)); }
+.col-date.is-year { width: calc(10em + 2 * var(--cell-x)); }
+/* A record's lap has no mark after it: both its paddings. */
+.records-table .col-time { width: calc(3.6em + 2 * var(--cell-x)); }
+/* Below their widths' sum the history and records scroll inside .board-scroll. */
+.history-table { min-width: 48rem; }
+.records-table { min-width: 36rem; }
+/* With the year in its dates, or a Layout column: room for those and a driver's name. */
+.records-table.is-wide { min-width: 52rem; }
+.records-table td:not(.board-driver) { white-space: nowrap; }
+@media (max-width: 480px) {
+  /* A phone: smaller table type, and a race's Last goes; the feed below has it. */
+  .board .board-table { font-size: 0.875em; }
+  .standings-table.is-race .col-last { display: none; }
 }

@@ -20,7 +20,8 @@ export const trackName = (track, direction) => (track ? `${track.name}, ${DIRECT
 const layoutLink = (entry, href) => entry ? html`<a href="${href}#layout-${entry.attachedAt}">${safe(localTime(entry.attachedAt, 'datetime-year'))}</a>` : null;
 
 /**
- * Newest first. A row held the record until the row before it took it; the
+ * Newest first. The columns have fixed widths (app.css), so the tables of a
+ * track's two directions line up. A row held the record until the row before it took it; the
  * first is the record now, its holder crowned. With `layoutOf`, a column names
  * the layout each was driven on, linking to it under `layouts`. `dates` is the
  * format of the Set and Held until times.
@@ -33,7 +34,8 @@ export function recordsTable(request, { track, rows, drivers, layoutOf = null, l
   const base = request.space.base;
   if (!track) return html`<p class="empty">Set the track in <a href="${base}/setup#track">Setup</a> to keep its record.</p>`;
   if (rows.length === 0) return html`<p class="empty">No record yet.</p>`;
-  return html`<div class="board-scroll"><table class="board-table records-table">
+  return html`<div class="board-scroll"><table class="board-table records-table${dates === 'datetime-year' || layoutOf ? ' is-wide' : ''}">
+  <colgroup><col class="col-time"><col>${dates === 'datetime-year' ? html`<col class="col-date is-year"><col class="col-date is-year">` : html`<col class="col-date"><col class="col-date">`}${layoutOf ? html`<col class="col-date is-year">` : null}</colgroup>
   <thead><tr><th scope="col" class="num">Lap</th><th scope="col">Driver</th><th scope="col">Set</th><th scope="col">Held until</th>${layoutOf ? html`<th scope="col">Layout</th>` : null}</tr></thead>
   <tbody>${rows.map((r, i) => html`<tr${i === 0 ? html` class="is-current"` : null}>
     <td class="num">${formatLap(r.lapMs)}</td>
