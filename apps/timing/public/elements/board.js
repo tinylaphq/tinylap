@@ -22,6 +22,13 @@
 //   runs; wanted but not running, it shows its "Tap to turn sound on" state
 //   (data-state="wanted"). A swap that brings a data-record-new this page has
 //   not seen rings it; the first render never does.
+// - The notification: the switch its `notify` attribute names is revealed
+//   where the browser has Notification, and localStorage['tinylap-notify']
+//   remembers whether it is wanted. Turning it on asks for permission from the
+//   click. It shows pressed only while wanted and granted, and blocked
+//   (data-state="blocked", disabled) once the browser denies it. The same
+//   swap that rings shows "New track record" with the header's text; its tag
+//   makes several open boards show one.
 // Without EventSource there is no stream; without JavaScript the page
 // reloads every ten seconds (<noscript> refresh).
 
@@ -31,6 +38,7 @@ const STATES = { live: 'Live', reconnecting: 'Reconnecting…', off: 'Disconnect
 // Once the stream gives up, reload: the server then answers the board, sign-in or the gone page.
 const RELOAD_MS = 10_000;
 const SOUND_KEY = 'tinylap-sound';
+const NOTIFY_KEY = 'tinylap-notify';
 // What Safari and iOS accept as a gesture that unlocks audio.
 const GESTURES = ['click', 'touchend', 'keydown'];
 
@@ -63,12 +71,17 @@ class TlBoard extends HTMLElement {
   audio = null;
   /** Whether sound is wanted, as remembered or last chosen. */
   wanted = false;
+  /** @type {HTMLButtonElement | null} */
+  notify = null;
+  /** Whether notifications are wanted, as remembered or last chosen. */
+  notifyWanted = false;
   /** The newest data-record-new this page has shown. @type {string | null} */
   seen = null;
 
   connectedCallback() {
     this.seen = this.recordSeq();
     this.initSound();
+    this.initNotify();
     if (!('EventSource' in window)) return;
     addEventListener('pagehide', this);
     addEventListener('pageshow', this);
@@ -77,6 +90,7 @@ class TlBoard extends HTMLElement {
 
   disconnectedCallback() {
     this.sound?.removeEventListener('click', this);
+    this.notify?.removeEventListener('click', this);
     this.lock();
     this.audio?.close().catch(() => {});
     this.audio = null;
@@ -130,6 +144,53 @@ class TlBoard extends HTMLElement {
     }, () => {});
   }
 
+  /** Reveals the notification switch where the browser can notify. */
+  initNotify() {
+    const notify = document.getElementById(this.getAttribute('notify') ?? '');
+    if (!(notify instanceof HTMLButtonElement) || !('Notification' in window)) return;
+    this.notify = notify;
+    try { this.notifyWanted = localStorage.getItem(NOTIFY_KEY) === 'on'; } catch { /* storage blocked: it starts off */ }
+    this.showNotify();
+    notify.hidden = false;
+    notify.addEventListener('click', this);
+  }
+
+  /** Notifications can show: wanted, and granted. */
+  get notifyOn() {
+    return this.notifyWanted && Notification.permission === 'granted';
+  }
+
+  /** Pressed only while it can notify; denied, it says blocked and can't be pressed. */
+  showNotify() {
+    if (!this.notify) return;
+    const blocked = Notification.permission === 'denied';
+    this.notify.setAttribute('aria-pressed', String(this.notifyOn));
+    this.notify.disabled = blocked;
+    if (blocked) this.notify.setAttribute('data-state', 'blocked');
+    else this.notify.removeAttribute('data-state');
+  }
+
+  /** Pressed turns it off; otherwise on, asking for permission from the click. */
+  toggleNotify() {
+    this.notifyWanted = !this.notifyOn;
+    try { localStorage.setItem(NOTIFY_KEY, this.notifyWanted ? 'on' : 'off'); } catch { /* storage blocked: the choice lasts this page */ }
+    this.showNotify();
+    if (this.notifyWanted && Notification.permission !== 'granted') Notification.requestPermission().then(() => this.showNotify(), () => {});
+  }
+
+  /** Shows the record on the board as a notification: its time and holder, then what it beat. @param {string} seq */
+  notifyRecord(seq) {
+    const text = (/** @type {string} */ selector) => this.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    const now = text('.board-track-new .board-track-time');
+    const holder = text('.board-track-new .driver');
+    const beat = text('.board-track-beat');
+    const note = new Notification('New track record', { body: `${now} · ${holder}${beat ? `\n${beat}` : ''}`, tag: `tinylap-record-${seq}` });
+    note.addEventListener('click', () => {
+      window.focus();
+      note.close();
+    });
+  }
+
   open() {
     const url = /** @type {HTMLElement | null} */ (this.querySelector('#board-live'))?.dataset.events;
     if (!url) return;
@@ -157,6 +218,10 @@ class TlBoard extends HTMLElement {
   handleEvent(event) {
     switch (event.type) {
       case 'click': // the switch's own click toggles; any click is a gesture
+        if (event.currentTarget === this.notify) {
+          this.toggleNotify();
+          break;
+        }
         if (event.currentTarget === this.sound) {
           // Pressed turns it off; off or waiting for a tap turns it on.
           this.wanted = !this.soundOn;
@@ -190,6 +255,7 @@ class TlBoard extends HTMLElement {
         if (next && current) swap(current, next);
         const seq = this.recordSeq();
         if (seq && seq !== this.seen && this.audio && this.soundOn) ring(this.audio);
+        if (seq && seq !== this.seen && this.notifyOn) this.notifyRecord(seq);
         this.seen = seq ?? this.seen;
         break;
       }

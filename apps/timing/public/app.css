@@ -303,6 +303,10 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 #sound-switch[data-state="wanted"]::before { content: ''; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
 @media (prefers-reduced-motion: reduce) { #sound-switch[data-state="wanted"]::before { animation: none; } }
 body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
+/* Notifications the browser blocks for this site: palace's disabled button,
+ * saying so, since only the browser's site settings can undo it. */
+#notify-switch:not([data-state="blocked"]) .notify-blocked, #notify-switch[data-state="blocked"] .notify-on { display: none; }
+.navbar-right .btn:disabled { background: transparent; border-color: var(--p-border-dark); color: var(--p-disabled-text); }
 .nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
 .nav-tabs li { display: flex; }
 

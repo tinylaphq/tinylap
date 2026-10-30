@@ -188,10 +188,20 @@ async function driverIn(club, name, transponder) {
 
 test('the board is a tl-board, and its clock a tl-countdown', async () => {
   const body = await (await get(member, `${base}/board`)).text();
-  assert.match(body, /<tl-board status="live-status" sound="sound-switch">\s*<div id="board-live"/);
+  assert.match(body, /<tl-board status="live-status" sound="sound-switch" notify="notify-switch">\s*<div id="board-live"/);
   assert.match(body, /<button type="button" class="btn btn-sm btn-outline" id="sound-switch" aria-pressed="false" hidden><span class="sound-on">Sound on<\/span><span class="sound-wanted">Tap to turn sound on<\/span><\/button>/);
   // A practice's label is the server's alone ("Started 14:32"); a race's follows the clock.
   assert.match(body, /<tl-countdown class="board-clock"><span class="stat-label board-clock-label">Started <tl-local-time format="time">/);
+});
+
+test('the board, the big board and the watch link have the Notify me switch, hidden until tl-board reveals it', async () => {
+  const button = /<button type="button" class="btn btn-sm btn-outline" id="sound-switch"[^]*?<\/button>\s*<button type="button" class="btn btn-sm btn-outline" id="notify-switch" aria-pressed="false" hidden><span class="notify-on">Notify me<\/span><span class="notify-blocked">Notifications blocked<\/span><\/button>/;
+  const token = await watchToken();
+  for (const path of [`${base}/board`, `${base}/board?big`, `/watch/${token}`]) {
+    const body = await (await get(member, path)).text();
+    assert.match(body, /<tl-board status="live-status" sound="sound-switch" notify="notify-switch">/, path);
+    assert.match(body, button, path);
+  }
 });
 
 test('a stopped practice driver shows when they last crossed the line, but not within the minute', async () => {

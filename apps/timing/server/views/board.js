@@ -204,6 +204,6 @@ export function boardPage(request, snap, { watcher = false, big = false, token =
     scripts: ['board.js', 'elements/board.js', 'elements/countdown.js'],
     modules: ['pkg/design/elements/relative-time.js', 'pkg/design/elements/local-time.js'],
     head: html`<noscript><meta http-equiv="refresh" content="10"></noscript>\n`,
-    body: html`<tl-board status="live-status" sound="sound-switch">\n${boardLive(request, snap, { watcher, big, token })}\n</tl-board>`,
+    body: html`<tl-board status="live-status" sound="sound-switch" notify="notify-switch">\n${boardLive(request, snap, { watcher, big, token })}\n</tl-board>`,
   });
 }
