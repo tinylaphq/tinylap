@@ -19,13 +19,13 @@ CREATE TABLE IF NOT EXISTS workspace (
   id TEXT PRIMARY KEY, track_id TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'ccw', watch_token TEXT UNIQUE
 );
 CREATE TABLE IF NOT EXISTS track (
-  workspace_id TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, archived_at INTEGER,
+  workspace_id TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, name_key TEXT NOT NULL, archived_at INTEGER,
   PRIMARY KEY (workspace_id, id)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS track_name ON track (workspace_id, name COLLATE NOCASE) WHERE archived_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS track_name ON track (workspace_id, name_key) WHERE archived_at IS NULL;
 CREATE TABLE IF NOT EXISTS track_layout (
-  workspace_id TEXT NOT NULL, track_id TEXT NOT NULL, attached_at INTEGER NOT NULL, planner_id TEXT NOT NULL,
-  shape TEXT NOT NULL, snapshot_key TEXT NOT NULL, layout TEXT NOT NULL, attached_by_user TEXT, attached_by_name TEXT,
+  workspace_id TEXT NOT NULL, track_id TEXT NOT NULL, attached_at INTEGER NOT NULL, attached_by_user TEXT, attached_by_name TEXT,
+  planner_id TEXT NOT NULL, shape TEXT NOT NULL, snapshot_key TEXT NOT NULL, layout TEXT NOT NULL,
   PRIMARY KEY (workspace_id, track_id, attached_at)
 );
 CREATE TABLE IF NOT EXISTS driver (
@@ -145,10 +145,17 @@ const trackOf = (r) => ({
     attached_at: r.l_attached_at, planner_id: r.l_planner_id, shape: r.l_shape, snapshot_key: r.l_snapshot_key, layout: r.l_layout, attached_by_name: r.l_attached_by_name,
   }),
 });
+/** What makes two track names the same, in any script: SQLite's NOCASE folds ASCII only. @param {string} name */
+export const nameKey = (name) => name.normalize('NFKC').toLowerCase();
 const TRACK_WITH_LAYOUT = `SELECT t.id, t.name, t.archived_at, l.attached_at AS l_attached_at, l.planner_id AS l_planner_id, l.shape AS l_shape,
     l.snapshot_key AS l_snapshot_key, l.layout AS l_layout, l.attached_by_name AS l_attached_by_name
   FROM track t LEFT JOIN track_layout l ON l.workspace_id = t.workspace_id AND l.track_id = t.id
     AND l.attached_at = (SELECT MAX(attached_at) FROM track_layout WHERE workspace_id = t.workspace_id AND track_id = t.id)`;
+/** The board's reads of a track and a club's tracks, each with its newest layout (planned in the store tests). */
+export const TRACK_SQL = {
+  track: `${TRACK_WITH_LAYOUT} WHERE t.workspace_id = ? AND t.id = ?`,
+  tracks: `${TRACK_WITH_LAYOUT} WHERE t.workspace_id = ? AND (t.archived_at IS NOT NULL) = ? ORDER BY t.name_key, t.id`,
+};
 /** SQLite's code for a broken UNIQUE constraint: a track name already in use. */
 const UNIQUE = 2067;
 const nameInUse = (error) => error?.errcode === UNIQUE;
@@ -170,10 +177,10 @@ export function openStore(path) {
     selectWorkspace: q('SELECT * FROM workspace WHERE id = ?'),
     insertWorkspace: q('INSERT INTO workspace (id, track_id) VALUES (?, ?)'),
     setTrackOf: q('UPDATE workspace SET track_id = ?, direction = ? WHERE id = ?'),
-    selectTrack: q(`${TRACK_WITH_LAYOUT} WHERE t.workspace_id = ? AND t.id = ?`),
-    selectTracks: q(`${TRACK_WITH_LAYOUT} WHERE t.workspace_id = ? AND (t.archived_at IS NOT NULL) = ? ORDER BY t.name COLLATE NOCASE, t.id`),
-    addTrack: q('INSERT INTO track (workspace_id, id, name) VALUES (?, ?, ?)'),
-    renameTrack: q('UPDATE track SET name = ? WHERE workspace_id = ? AND id = ?'),
+    selectTrack: q(TRACK_SQL.track),
+    selectTracks: q(TRACK_SQL.tracks),
+    addTrack: q('INSERT INTO track (workspace_id, id, name, name_key) VALUES (?, ?, ?, ?)'),
+    renameTrack: q('UPDATE track SET name = ?, name_key = ? WHERE workspace_id = ? AND id = ?'),
     setArchived: q('UPDATE track SET archived_at = ? WHERE workspace_id = ? AND id = ?'),
     deleteTrack: q('DELETE FROM track WHERE workspace_id = ? AND id = ?'),
     deleteTrackLayouts: q('DELETE FROM track_layout WHERE workspace_id = ? AND track_id = ?'),
@@ -311,7 +318,7 @@ export function openStore(path) {
     transaction(() => {
       const trackId = randomUUID();
       s.insertWorkspace.run(id, trackId);
-      s.addTrack.run(id, trackId, 'Track');
+      s.addTrack.run(id, trackId, 'Track', nameKey('Track'));
     });
     return workspace(id);
   }
@@ -355,7 +362,7 @@ export function openStore(path) {
     tracks: (ws, { archived }) => s.selectTracks.all(ws, archived ? 1 : 0).map(trackOf),
     addTrack(ws, { id, name }) {
       try {
-        s.addTrack.run(ws, id, name);
+        s.addTrack.run(ws, id, name, nameKey(name));
         return 'added';
       } catch (error) {
         if (nameInUse(error)) return 'name-in-use';
@@ -364,7 +371,7 @@ export function openStore(path) {
     },
     renameTrack(ws, id, name) {
       try {
-        return s.renameTrack.run(name, ws, id).changes === 1 ? 'renamed' : 'missing';
+        return s.renameTrack.run(name, nameKey(name), ws, id).changes === 1 ? 'renamed' : 'missing';
       } catch (error) {
         if (nameInUse(error)) return 'name-in-use';
         throw error;

@@ -11,6 +11,7 @@ import { transponderCode } from '@tinylap/timing';
 import { publicSession } from './engine.js';
 import { TrackError, fetchTrack } from './planner.js';
 import { PROBLEMS } from './problems.js';
+import { nameKey } from './store.js';
 
 /** Driver colours, handed out in order (palace's accents first). */
 export const COLOURS = ['#ff2d9b', '#2d9bff', '#ffb82d', '#2dff9b', '#b82dff', '#ff5a2d', '#2dfff0', '#f0ff2d'];
@@ -119,7 +120,7 @@ export async function setTrack(request, { link, name: rawName, direction }) {
   // Until tracks are managed on their own, as before: the track keyed by the planner's id, else the active one of this
   // name, gets the name and the layout, or one is added under the planner's id; it becomes current.
   const store = request.store;
-  const found = store.track(ws, track.id) ?? store.tracks(ws, { archived: false }).find((t) => t.name.toLowerCase() === name.toLowerCase());
+  const found = store.track(ws, track.id) ?? store.tracks(ws, { archived: false }).find((t) => nameKey(t.name) === nameKey(name));
   const id = found?.id ?? track.id;
   if (!found) store.addTrack(ws, { id, name });
   else if (found.name !== name) store.renameTrack(ws, id, name);

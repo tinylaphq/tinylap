@@ -8,7 +8,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { openStore } from '../../server/store.js';
+import { TRACK_SQL, openStore } from '../../server/store.js';
 
 const W = 'ws-1';
 
@@ -160,16 +160,22 @@ test('purging a club removes its tracks and layouts', () => {
   assert.deepEqual(store.layouts(W, 't1'), []);
 });
 
+test('names compare case-insensitively beyond ASCII', () => {
+  const store = openStore(':memory:');
+  store.ensureWorkspace(W);
+  assert.equal(store.addTrack(W, { id: 'a', name: 'Büro' }), 'added');
+  assert.equal(store.addTrack(W, { id: 'b', name: 'büro' }), 'name-in-use');
+  assert.equal(store.addTrack(W, { id: 'b', name: 'BÜRO' }), 'name-in-use');
+  assert.equal(store.addTrack(W, { id: 'b', name: 'Halle' }), 'added');
+  assert.equal(store.renameTrack(W, 'b', 'bu\u0308ro'), 'name-in-use', 'the same name, composed differently');
+});
+
 test('the board reads a track and its newest layout through their keys, not by scanning', () => {
   const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
   openStore(path).close();
   const db = new DatabaseSync(path);
   const plan = (sql) => db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all().map((r) => String(r.detail)).join(' | ');
-  const withLayout = `SELECT t.id, l.layout FROM track t LEFT JOIN track_layout l ON l.workspace_id = t.workspace_id AND l.track_id = t.id
-    AND l.attached_at = (SELECT MAX(attached_at) FROM track_layout WHERE workspace_id = t.workspace_id AND track_id = t.id)`;
-  for (const sql of [`${withLayout} WHERE t.workspace_id = 'w' AND t.id = 't'`, `${withLayout} WHERE t.workspace_id = 'w' AND (t.archived_at IS NOT NULL) = 0`]) {
-    assert.doesNotMatch(plan(sql), /\bSCAN\b/, sql);
-  }
+  for (const sql of Object.values(TRACK_SQL)) assert.doesNotMatch(plan(sql), /\bSCAN\b/, sql);
   db.close();
 });
 

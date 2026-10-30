@@ -212,7 +212,7 @@ test('a stopped practice driver shows when they last crossed the line, but not w
   const lastAt = clock.now;
   clock.now = lastAt + 180_000;
   let body = await (await get(member, `/clubs/${practiceClub.id}/board`)).text();
-  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+">Cleo</span>(?:<span class="crown"[^>]*>👑</span>)?<tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
+  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+">Cleo</span><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span><tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
 
   passIn(practiceClub.id, 396_000, '21');
   passIn(practiceClub.id, 404_000, '21');
@@ -254,13 +254,13 @@ test('no note on a finished row, nor in the results', async () => {
   clock.now += 180_000;
   let body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
   assert.match(body, /data-state="finishing"/);
-  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<\/td>\s*<td class="board-driver"><span [^>]+>Abe<\/span>(?:<span class="crown"[^>]*>👑<\/span>)?<\/td>/);
+  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<\/td>\s*<td class="board-driver"><span [^>]+>Abe<\/span><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><\/td>/);
   assert.match(body, />Bea<\/span><tl-relative-time class="board-ago"[^>]*>last lap <time [^>]+>3 min ago<\/time>/);
 
   app.engine.abort(finishClub.id, session.id);
   body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
   const results = body.slice(body.indexOf('<section class="board-results"'), body.indexOf('</section>', body.indexOf('<section class="board-results"')));
-  assert.match(results, /<td class="board-driver"><span [^>]+>Abe<\/span>(?:<span class="crown"[^>]*>👑<\/span>)?<\/td>/);
+  assert.match(results, /<td class="board-driver"><span [^>]+>Abe<\/span><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><\/td>/);
   assert.doesNotMatch(results, /tl-relative-time/);
 });
 
