@@ -37,8 +37,11 @@ class TlTap extends HTMLElement {
   /** @param {string} name */
   template(name) { return /** @type {HTMLTemplateElement | null} */ (this.querySelector(`template[data-tap="${name}"]`)); }
 
-  /** @param {string} state @param {string} text @param {string} colour @param {boolean} [signedOut] @param {string} [name] the driver's part of `text`, if any */
-  show(state, text, colour, signedOut = false, name = '') {
+  /**
+   * @param {string} state @param {string} text @param {string} colour @param {boolean} [signedOut]
+   * @param {string} [name] the driver's part of `text`, if any @param {string} [spoken] the sentence a screen reader reads, if not `text`
+   */
+  show(state, text, colour, signedOut = false, name = '', spoken = text) {
     cancelAnimationFrame(this.frame);
     const bar = /** @type {HTMLElement | null} */ (this.querySelector('.tap-bar'));
     const status = this.querySelector('#tap-result');
@@ -65,6 +68,8 @@ class TlTap extends HTMLElement {
     this.frame = requestAnimationFrame(() => {
       const line = /** @type {DocumentFragment} */ (result.content.cloneNode(true));
       line.querySelector('.tap-state').textContent = LABEL[state];
+      const sentence = line.querySelector('.tap-spoken');
+      if (sentence) sentence.textContent = spoken;
       const nameSpan = line.querySelector('.tap-name');
       const detail = line.querySelector('.tap-detail');
       if (nameSpan && detail && text.startsWith(name)) {
@@ -97,6 +102,7 @@ class TlTap extends HTMLElement {
     let text = NO_ANSWER;
     let signedOut = false;
     let name = '';
+    let spoken = '';
     try {
       const res = await fetch(form.action, {
         method: 'POST',
@@ -112,8 +118,10 @@ class TlTap extends HTMLElement {
         state = data.stored ? (data.lapMs === null ? 'started' : 'lap') : 'again';
         text = data.text;
         name = typeof data.name === 'string' ? data.name : '';
+        spoken = typeof data.spoken === 'string' ? data.spoken : '';
       } else if (data?.problem === 'no-session') {
-        location.assign(form.action);
+        // The page that offers Start practice, saying the tap wasn't counted; only for the latest tap.
+        if (mine === this.latest) location.assign(`${form.action}?result=no-session`);
         return;
       } else if (typeof data?.error === 'string') {
         text = data.error;
@@ -121,7 +129,7 @@ class TlTap extends HTMLElement {
     } catch {
       // Keep the fallback text.
     }
-    if (mine === this.latest) this.show(state, text, state === 'error' ? '' : colour, signedOut, name);
+    if (mine === this.latest) this.show(state, text, state === 'error' ? '' : colour, signedOut, name, spoken || text);
   }
 }
 

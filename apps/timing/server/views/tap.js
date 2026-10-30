@@ -10,17 +10,21 @@ import { layout } from './layout.js';
 import { startPracticeForm } from './marks.js';
 
 /**
- * What a tap did, in two parts: the driver's name, which the bar may cut
- * short, and what follows it, which always shows. Again has no name.
+ * What a tap did, in two parts for the eye: the driver's name, which the bar
+ * may cut short, and what follows it, which always shows. Again has no name.
+ * And as one sentence for a screen reader, which reads the bar's label and
+ * parts as fragments: "Lap for Ana: 7.000."
  * @param {{ result: string, ms?: number | null }} result @param {{ name: string }} driver
  */
 export function tapResultParts(result, driver) {
-  if (result.result === 'again') return { name: '', detail: 'Too fast, tap again.' };
-  return { name: driver.name, detail: `: ${result.result === 'started' ? 'started' : formatLap(result.ms ?? null)}` };
+  if (result.result === 'again') return { name: '', detail: 'Too fast, tap again.', spoken: 'Too fast, tap again.' };
+  if (result.result === 'started') return { name: driver.name, detail: ': started', spoken: `${driver.name} started.` };
+  const time = formatLap(result.ms ?? null);
+  return { name: driver.name, detail: `: ${time}`, spoken: `Lap for ${driver.name}: ${time}.` };
 }
 
-/** The result's words: the name and the rest, each its own span. @param {{ name: string, detail: string }} parts */
-const resultText = ({ name, detail }) => html`<span class="tap-text"><span class="tap-name">${name}</span><span class="tap-detail">${detail}</span></span>`;
+/** The result's words: the sentence a screen reader reads, then the name and the rest for the eye. @param {{ name: string, detail: string, spoken: string }} parts */
+const resultText = ({ name, detail, spoken }) => html`<span class="visually-hidden tap-spoken">${spoken}</span><span class="tap-text" aria-hidden="true"><span class="tap-name">${name}</span><span class="tap-detail">${detail}</span></span>`;
 
 /** The letters in a name's longest word, for its tile's type size. @param {string} name */
 const longestWord = (name) => Math.max(1, ...name.split(/\s+/).map((w) => [...w].length));
@@ -38,17 +42,21 @@ function resultBar(result, error) {
   <p class="tap-result" id="tap-result" role="status" aria-live="polite"><span class="tap-text">Tap a driver as their car crosses the line.</span></p></div>`;
   }
   return html`<div class="tap-bar" data-state="${result.result}" style="--driver: ${result.driver.colour}"><div id="tap-alert"></div>
-  <p class="tap-result" id="tap-result" role="status" aria-live="polite"><span class="tap-state">${STATE_LABEL[result.result]}</span> ${resultText(tapResultParts(result, result.driver))}</p></div>`;
+  <p class="tap-result" id="tap-result" role="status" aria-live="polite"><span class="tap-state" aria-hidden="true">${STATE_LABEL[result.result]}</span> ${resultText(tapResultParts(result, result.driver))}</p></div>`;
 }
 
 /** The pieces tl-tap clones; one line each, so they add no text nodes. */
-const tapTemplates = (request) => html`<template data-tap="result"><span class="tap-state"></span> <span class="tap-text"><span class="tap-name"></span><span class="tap-detail"></span></span></template>
+const tapTemplates = (request) => html`<template data-tap="result"><span class="tap-state" aria-hidden="true"></span> <span class="visually-hidden tap-spoken"></span><span class="tap-text" aria-hidden="true"><span class="tap-name"></span><span class="tap-detail"></span></span></template>
 <template data-tap="alert"><p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text"></span></p></template>
 <template data-tap="signed-out"><a href="${request.url.pathname + request.url.search}">Sign in again</a> to keep tapping.</template>
 `;
 
-/** @param {any} request @param {{ drivers: any[], result?: any, error?: any, running?: boolean }} data */
-export function tapPage(request, { drivers, result = null, error = null, running = true }) {
+/**
+ * `missed`: a tap just found no session, here or (?result=no-session) from
+ * tl-tap; the card then says the tap was not counted, and why.
+ * @param {any} request @param {{ drivers: any[], result?: any, error?: any, running?: boolean, missed?: boolean }} data
+ */
+export function tapPage(request, { drivers, result = null, error = null, running = true, missed = false }) {
   const base = request.space.base;
   return layout(request, {
     title: 'Tap',
@@ -69,7 +77,7 @@ ${tapTemplates(request)}</tl-tap>`
   <h1>Tap</h1>
   ${error && error.problem !== 'no-session' ? html`<p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text">${error.message}</span></p>` : null}
   ${drivers.length
-    ? html`<div class="card-static stack-md"><p>No session is running.</p>${startPracticeForm(request, { from: 'tap' })}</div>`
+    ? html`<div class="card-static stack-md"><p>${missed || error?.problem === 'no-session' ? 'That tap wasn’t counted: no session is running.' : 'No session is running.'}</p>${startPracticeForm(request, { from: 'tap' })}</div>`
     : html`<div class="card-static stack-md"><p>Add drivers to tap their laps.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>`}
 </div>`,
   });
