@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Race control's tl-countdown in the browser (spec step two §2.2, §7, C1–C9):
+// The Sessions tab's tl-countdown in the browser (spec step two §2.2, §7, C1–C9):
 // one reload by GET at a phase change, and never a loop, a second reload,
 // a reload without storage, a reload of a hidden page, nor a reload of the
 // answer to a POST; and a clock moved in the page keeps its reload.
@@ -47,8 +47,8 @@ function race(t, { countdownMs, durationMs = 60_000 }) {
   return session;
 }
 
-/** A race control page that counts its loads and its own requests (not prefetches). */
-async function racePage(t) {
+/** A Sessions tab that counts its loads and its own requests (not prefetches). */
+async function sessionsTab(t) {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   const loads = [];
@@ -89,14 +89,14 @@ async function until(fn, what, ms = 10_000) {
   }
 }
 
-test('C1: the countdown reaching zero reloads race control once, by GET', async (t) => {
+test('C1: the countdown reaching zero reloads the Sessions tab once, by GET', async (t) => {
   ticking(t);
   const session = race(t, { countdownMs: 2000 });
-  const { page, errors, loads, requests } = await racePage(t);
+  const { page, errors, loads, requests } = await sessionsTab(t);
   await page.clock.install({ time: clock.now });
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   // A key left by an earlier race on this page.
-  await page.evaluate(() => sessionStorage.setItem('tl-countdown reload /personal/race 1 running', '1'));
+  await page.evaluate(() => sessionStorage.setItem('tl-countdown reload /personal/sessions 1 running', '1'));
   await page.getByText('Starts in', { exact: true }).waitFor();
   const first = await page.locator('time[data-clock]').innerText();
   await advance(page, 1000);
@@ -109,27 +109,27 @@ test('C1: the countdown reaching zero reloads race control once, by GET', async 
   await advance(page, 2000);
   await settle();
   assert.equal(loads.length, 2, 'exactly one reload');
-  const pages = requests.filter(([, path]) => path === '/personal/race');
-  assert.deepEqual(pages, [['GET', '/personal/race'], ['GET', '/personal/race']]);
+  const pages = requests.filter(([, path]) => path === '/personal/sessions');
+  assert.deepEqual(pages, [['GET', '/personal/sessions'], ['GET', '/personal/sessions']]);
   assert.equal(requests.some(([method]) => method !== 'GET'), false, 'no POST');
-  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage)), [`tl-countdown reload /personal/race ${session.opensAt} countdown`], 'the earlier race’s key is gone');
+  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage)), [`tl-countdown reload /personal/sessions ${session.opensAt} countdown`], 'the earlier race’s key is gone');
   assert.deepEqual(errors, []);
 });
 
 test('C2: a server that has not moved the session gets one reload, not a loop', async (t) => {
   // No ticker: the server is stalled. The page says countdown, with data-opens already past.
   race(t, { countdownMs: 0 });
-  const { page, errors, loads } = await racePage(t);
+  const { page, errors, loads } = await sessionsTab(t);
   // A third request would be a loop: refuse it, so a broken guard fails here instead of reloading forever.
   let served = 0;
-  await page.route('**/personal/race', async (route) => {
+  await page.route('**/personal/sessions', async (route) => {
     served += 1;
     if (served > 2) return route.abort();
     const res = await route.fetch();
     return route.fulfill({ response: res, body: (await res.text()).replace(/data-state="running"/, 'data-state="countdown"') });
   });
   await page.clock.install({ time: clock.now });
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   await advance(page, 1000);
   await until(() => loads.length >= 2, 'the reload');
   await advance(page, 4000);
@@ -143,10 +143,10 @@ test('C2: a server that has not moved the session gets one reload, not a loop', 
 test('C3: without sessionStorage it never reloads', async (t) => {
   ticking(t);
   const session = race(t, { countdownMs: 2000 });
-  const { page, errors, loads } = await racePage(t);
+  const { page, errors, loads } = await sessionsTab(t);
   await page.addInitScript(() => Object.defineProperty(window, 'sessionStorage', { configurable: true, get() { throw new Error('blocked'); } }));
   await page.clock.install({ time: clock.now });
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   assert.equal(await page.evaluate(() => { try { void sessionStorage.length; return false; } catch { return true; } }), true, 'storage really throws');
   await past(page, session.opensAt + 3000);
   await settle();
@@ -157,7 +157,7 @@ test('C3: without sessionStorage it never reloads', async (t) => {
 
 test('C4: a prefetched page reloads early on the device clock, and the next page still reloads at the boundary', async (t) => {
   ticking(t);
-  const { page, errors, loads } = await racePage(t);
+  const { page, errors, loads } = await sessionsTab(t);
   const session = race(t, { countdownMs: 10_000 });
   await page.clock.setSystemTime(clock.now + 5000);
   // After the clock, which brings its own performance object: the first load only says it was prefetched.
@@ -167,7 +167,7 @@ test('C4: a prefetched page reloads early on the device clock, and the next page
     const entries = performance.getEntriesByType.bind(performance);
     performance.getEntriesByType = (type) => (type === 'navigation' ? [/** @type {any} */ ({ deliveryType: 'navigational-prefetch' })] : entries(type));
   });
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   // The prefetched page reloads 1 s past the boundary on the device clock, 5 s ahead: 4 s before it.
   await past(page, session.opensAt - 3000);
   await until(() => loads.length === 2, 'the early reload');
@@ -182,10 +182,10 @@ test('C4: a prefetched page reloads early on the device clock, and the next page
   assert.deepEqual(errors, []);
 });
 
-test('C5: hovering the Race tab on race control fetches nothing ahead, so the reload at the boundary is one fresh page', async (t) => {
+test('C5: hovering the Sessions tab on the Sessions tab fetches nothing ahead, so the reload at the boundary is one fresh page', async (t) => {
   ticking(t);
   const session = race(t, { countdownMs: 6000 });
-  const { page, errors } = await racePage(t);
+  const { page, errors } = await sessionsTab(t);
   // How each document arrived: Chrome may serve location.reload() from the prefetch cache. A stale
   // page can reload before its load event, so documents are counted, not loads.
   const docs = [];
@@ -193,13 +193,13 @@ test('C5: hovering the Race tab on race control fetches nothing ahead, so the re
   await page.addInitScript(() => { const real = performance; addEventListener('DOMContentLoaded', () => console.log(`tl-doc ${/** @type {any} */ (real.getEntriesByType('navigation')[0]).deliveryType || 'network'}`)); });
   page.on('console', (m) => { if (m.text().startsWith('tl-doc ')) docs.push([m.text().slice(7), clock.now]); });
   await page.clock.install({ time: clock.now });
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   const ahead = [];
   page.on('request', (r) => { if (/prefetch/i.test(r.headers()['sec-purpose'] ?? '')) ahead.push(new URL(r.url()).pathname); });
   // The tab for the page itself (aria-current="page") is left out of the speculation rules.
-  await page.getByRole('link', { name: 'Race' }).hover();
+  await page.getByRole('link', { name: 'Sessions' }).hover();
   await sleep(1500);
-  assert.deepEqual(ahead.filter((p) => p === '/personal/race'), [], 'the page itself is never fetched ahead');
+  assert.deepEqual(ahead.filter((p) => p === '/personal/sessions'), [], 'the page itself is never fetched ahead');
   await past(page, session.opensAt + 3000);
   await page.getByRole('heading', { name: 'Race, running' }).waitFor();
   await settle();
@@ -214,35 +214,37 @@ test('C5: hovering the Race tab on race control fetches nothing ahead, so the re
 
 test('C6: the answer to a POST never reloads', async (t) => {
   ticking(t);
-  const { page, errors, loads, requests } = await racePage(t);
+  const { page, errors, loads, requests } = await sessionsTab(t);
   await page.clock.install({ time: clock.now });
-  await page.goto('/personal/race');
-  await page.getByRole('button', { name: 'Start' }).waitFor();
+  await page.goto('/personal/sessions');
+  await page.getByRole('button', { name: 'Start', exact: true }).waitFor();
   const started = await app.form(member, '/personal/sessions', [['kind', 'race'], ['roster', roster[0]], ['duration', '1'], ['countdown', '2']]);
   assert.equal(started.status, 303);
   const session = app.store.runningSession(personal);
   t.after(() => { app.engine.abort(personal, session.id); });
+  // A failed form while the race runs: the tab comes back with the race's clock, in the answer to the POST.
+  await page.getByRole('checkbox', { name: 'Ana' }).uncheck();
   const answer = page.waitForResponse((r) => r.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Start' }).click();
-  assert.equal((await answer).status(), 409);
-  await page.getByText('A race is already running here.').waitFor();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  assert.equal((await answer).status(), 422);
+  await page.getByRole('alert').filter({ hasText: 'Pick 1 to 20 drivers.' }).waitFor();
   assert.equal(await page.locator('tl-countdown').count(), 1);
   assert.equal(await page.locator('tl-countdown[reload-on-phase]').count(), 0);
-  // The text shows before the 409 page's own load event and its last assets: count from a settled page.
+  // The text shows before the 422 page's own load event and its last assets: count from a settled page.
   await page.waitForLoadState('networkidle');
   const seen = [loads.length, requests.length];
   await past(page, session.opensAt + 2000);
   await settle();
   assert.deepEqual([loads.length, requests.length], seen, `no reload, no request: ${JSON.stringify(requests.slice(seen[1]))}`);
-  assert.deepEqual(errors.filter((e) => !/status of 409/.test(e)), [], 'nothing but the 409 itself');
+  assert.deepEqual(errors.filter((e) => !/status of 422/.test(e)), [], 'nothing but the 422 itself');
 });
 
-test('C7: time running out reloads race control once, which then says finishing the last lap', async (t) => {
+test('C7: time running out reloads the Sessions tab once, which then says finishing the last lap', async (t) => {
   // No ticker: this test moves the server and the page clock together.
   const session = race(t, { countdownMs: 0 });
-  const { page, errors, loads } = await racePage(t);
+  const { page, errors, loads } = await sessionsTab(t);
   await page.clock.install({ time: clock.now });
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   await page.getByRole('heading', { name: 'Race, running' }).waitFor();
   while (clock.now <= session.closesAt + 1000) {
     clock.offset += 10_000;
@@ -265,9 +267,9 @@ test('C7: time running out reloads race control once, which then says finishing 
 test('C8: a hidden page waits, and reloads once it shows', async (t) => {
   ticking(t);
   const session = race(t, { countdownMs: 2000 });
-  const { page, errors, loads } = await racePage(t);
+  const { page, errors, loads } = await sessionsTab(t);
   await page.clock.install({ time: clock.now });
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
   await past(page, session.opensAt + 3000);
   await settle();
@@ -283,12 +285,12 @@ test('C8: a hidden page waits, and reloads once it shows', async (t) => {
 
 test('C9: an element moved after it has decided still reloads', async (t) => {
   const session = race(t, { countdownMs: 10_000 });
-  const { page, errors } = await racePage(t);
+  const { page, errors } = await sessionsTab(t);
   const docs = [];
   await page.addInitScript(() => addEventListener('DOMContentLoaded', () => console.log('tl-doc')));
   page.on('console', (m) => { if (m.text() === 'tl-doc') docs.push(clock.now); });
   await page.clock.install({ time: clock.now });
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   await page.getByText('Starts in', { exact: true }).waitFor();
   // Just past the boundary on the element's own time (the paused page clock plus its skew),
   // not on Node's clock, which keeps running while the page loads.

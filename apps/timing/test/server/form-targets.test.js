@@ -28,7 +28,6 @@ const TARGETS = [
   ['track', 'setup#track'],
   ['decoders', 'setup#decoders'],
   ['watch-link', 'setup#watchers'],
-  ['sessions', 'race'],
 ];
 
 test('a GET on a form target goes to the page the form is on', async () => {

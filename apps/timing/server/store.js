@@ -59,6 +59,7 @@ CREATE INDEX IF NOT EXISTS passing_received ON passing (received_at);
 CREATE INDEX IF NOT EXISTS crossing_passing ON crossing (decoder_id, boot, transponder, t);
 CREATE INDEX IF NOT EXISTS crossing_transponder ON crossing (workspace_id, transponder, driver_id);
 CREATE INDEX IF NOT EXISTS session_track ON session (workspace_id, track_id, direction);
+CREATE INDEX IF NOT EXISTS session_created ON session (workspace_id, created_at);
 CREATE TABLE IF NOT EXISTS track_record (
   workspace_id TEXT NOT NULL, track_id TEXT NOT NULL, direction TEXT NOT NULL, crossing_seq INTEGER PRIMARY KEY,
   driver_id TEXT NOT NULL, lap_ms INTEGER NOT NULL, at INTEGER NOT NULL, session_id TEXT NOT NULL
@@ -191,6 +192,10 @@ export function openStore(path) {
     lastSession: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'),
     activeAll: q(`SELECT * FROM session WHERE state IN ${ACTIVE} ORDER BY created_at`),
     listSessions: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?'),
+    listSessionsBefore: q('SELECT * FROM session WHERE workspace_id = ? AND created_at < ? ORDER BY created_at DESC, rowid DESC LIMIT ?'),
+    // A session's counted laps only, through crossing_session: never a club's whole history.
+    sessionDrivers: q('SELECT COUNT(DISTINCT driver_id) AS n FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL'),
+    sessionBest: q('SELECT seq, driver_id, lap_ms FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL AND lap_ms IS NOT NULL ORDER BY lap_ms, seq LIMIT 1'),
     // Records and personal bests (records spec §4, §6): projections of the qualifying laps, written with each lap.
     personalBests: q(`SELECT driver_id, lap_ms, at, crossing_seq FROM personal_best
       WHERE workspace_id = ? AND track_id = ? AND direction = ? AND driver_id IN (SELECT value FROM json_each(?)) ORDER BY lap_ms, at, crossing_seq`),
@@ -407,7 +412,16 @@ export function openStore(path) {
       return session && (session.state === 'done' || session.state === 'aborted') ? session : null;
     },
     activeAll: () => s.activeAll.all().map(sessionOf),
-    listSessions: (ws, limit) => s.listSessions.all(ws, limit).map(sessionOf),
+    /** Sessions newest first; `before` (a createdAt) pages on to older ones. */
+    listSessions: (ws, limit, before = null) => (before === null ? s.listSessions.all(ws, limit) : s.listSessionsBefore.all(ws, before, limit)).map(sessionOf),
+    /** How many drivers a session counted, and its best lap. */
+    sessionSummary(sessionId) {
+      const best = s.sessionBest.get(sessionId);
+      return {
+        drivers: Number(s.sessionDrivers.get(sessionId)?.n ?? 0),
+        best: best ? { seq: Number(best.seq), driverId: String(best.driver_id), lapMs: Number(best.lap_ms) } : null,
+      };
+    },
 
     /** The personal bests on a track and direction of the drivers asked for, fastest first. */
     personalBests: (ws, trackId, direction, driverIds) => s.personalBests.all(ws, trackId, direction, JSON.stringify(driverIds))

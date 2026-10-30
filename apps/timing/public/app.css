@@ -9,6 +9,17 @@
  * The one loud thing is the clock: a dark slab with a hard accent shadow,
  * like the display at a track's start line. The table around it stays plain. */
 
+/* Record marks (records spec §4.2), in the colours a timing screen uses:
+ * purple for the fastest lap anyone has driven here, green for a driver's own
+ * best. The session's best lap tints its whole row. */
+:root {
+  --tl-record: var(--p-accent-2);
+  --tl-record-ink: var(--p-surface);
+  --tl-pb: var(--p-success);
+  --tl-pb-ink: var(--p-text);
+  --tl-session-best: color-mix(in srgb, var(--p-accent-3) 22%, var(--p-surface));
+}
+
 body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-text); font-family: var(--p-font); }
 
 .navbar { gap: var(--p-space-md); }
@@ -55,7 +66,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 }
 .board-clock-label { color: var(--p-accent-3); margin: 0; }
 .board-clock-time { font: 700 clamp(2.5rem, 9vw, 6rem) / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
-/* Race control's clock: one row, the label as palace's .stat-label. */
+/* The Sessions tab's clock: one row, the label as palace's .stat-label. */
 .race-clock { display: flex; align-items: baseline; gap: var(--p-space-sm); }
 .race-clock-time { font: 700 1.5rem / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
 
@@ -333,10 +344,45 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
   .inline-form:has(> .field > label:not(.visually-hidden)) > .btn { margin-top: 0; align-self: flex-start; }
 }
 
-/* Race control: choice groups are fieldsets; the length boxes sit in a row. */
+/* The start form: choice groups are fieldsets; the length boxes sit in a row. */
 .choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
 .choices-inline { display: flex; flex-wrap: wrap; gap: var(--p-space-lg); }
 .race-times { display: flex; flex-wrap: wrap; gap: var(--p-space-lg); align-items: flex-start; }
 .race-times input[type="number"] { width: 5.5rem; font-variant-numeric: tabular-nums; }
 .field-hint { margin: 0; color: var(--p-text-muted); font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdown) { opacity: 0.5; }
+
+/* Marks after a lap time: a slot one mark wide whether it holds one or not,
+ * so the times above and below stay aligned in their column. */
+.marks { display: inline-block; width: 2.4em; text-align: left; margin-left: var(--p-space-xs); vertical-align: middle; }
+.mark {
+  display: inline-block; padding: 0.15em 0.35em; text-decoration: none; cursor: help;
+  font: 700 0.7em/1 var(--p-font); letter-spacing: 0.04em; border: var(--p-border-thin) solid var(--p-text);
+}
+.mark-tr { background: var(--tl-record); color: var(--tl-record-ink); }
+.mark-pb { background: var(--tl-pb); color: var(--tl-pb-ink); }
+.crown { margin-left: var(--p-space-xs); }
+.board-table tr.is-best td { background: var(--tl-session-best); }
+
+/* "A car crossed the line…": prose with its button, not palace's upper-cased label. */
+.idle-notice { display: flex; flex-wrap: wrap; gap: var(--p-space-sm) var(--p-space-md); align-items: center; justify-content: space-between; text-transform: none; letter-spacing: 0; }
+.idle-notice p { margin: 0; font-weight: 600; }
+
+/* The Sessions tab, a session's page and the records: wider than a form page, for their tables. */
+.sessions-screen { max-width: 960px; }
+.sessions-screen h2 { margin: 0; }
+.sessions-screen .subtitle { margin: 0; }
+.start-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--p-space-lg); align-items: start; }
+.start-grid .h3 { margin: 0; }
+.history-table a { white-space: nowrap; }
+.session-facts { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-xl); margin: 0; }
+.session-facts dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
+.session-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.session-laps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--p-space-md); }
+.session-laps .h3 { margin: 0 0 var(--p-space-sm); }
+.lap-table td, .lap-table th { padding-block: var(--p-space-xs); }
+.lap-table .tag { font-size: 10px; padding: 1px 6px; }
+.lap-table tr.is-not-counted .num { color: var(--p-text-muted); }
+@media (max-width: 720px) {
+  .start-grid { grid-template-columns: 1fr; }
+}

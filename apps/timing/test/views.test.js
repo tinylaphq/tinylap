@@ -87,3 +87,24 @@ test('selectField without a hint or data-name renders as it always has', () => {
   assert.equal(String(selectField({ id: 'x', label: 'Direction', name: 'direction', options, value: 'cw', error: { field: 'direction', message: 'Pick one.' } })),
     '<div class="field">\n  <label for="x">Direction</label>\n  <select id="x" name="direction" aria-invalid="true" aria-describedby="x-error">\n    <option value="cw" selected>Clockwise</option><option value="ccw">Counter-clockwise</option>\n  </select>\n  <p class="field-error" id="x-error">Pick one.</p>\n</div>');
 });
+
+import { crown, idleNotice, marks } from '../server/views/marks.js';
+
+test('marks sit in one slot after a time, empty or not; a record lap shows TR, not PB too', () => {
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: false })), '<span class="marks"></span>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: true })), '<span class="marks"><abbr class="mark mark-pb" title="Personal best">PB</abbr></span>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isPb: true })), '<span class="marks"><abbr class="mark mark-tr" title="Track record">TR</abbr></span>');
+  assert.equal(String(marks({ lapMs: null, isRecord: true, isPb: true })), '<span class="marks"></span>', 'no lap, no mark');
+  assert.equal(crown(false), null);
+  assert.equal(String(crown(true)), '<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>');
+});
+
+test('the no-session notice names the car, and its driver when it has one', () => {
+  const request = { space: { base: '/personal' } };
+  const drivers = [{ id: 'h', name: '<b>Haris</b>' }];
+  assert.equal(idleNotice(request, null, drivers), null);
+  const named = String(idleNotice(request, { transponder: '21', driverId: 'h', at: 1 }, drivers));
+  assert.match(named, /<p>A car crossed the line \(21, &lt;b&gt;Haris&lt;\/b&gt;\)\. No session is running\.<\/p>/);
+  assert.match(named, /<form method="post" action="\/personal\/sessions"[^>]*>\s*<input type="hidden" name="kind" value="practice">\s*<button type="submit" class="btn btn-primary">Start practice<\/button>/);
+  assert.match(String(idleNotice(request, { transponder: '4711', driverId: null, at: 1 }, drivers)), /A car crossed the line \(4711\)\. No session is running\./);
+});

@@ -10,7 +10,7 @@ import { brand } from '@tinylap/design/html/brand.js';
 import { SPECULATION_RULES } from '@tinylap/design/html/speculation.js';
 import { html, safe } from './html.js';
 
-export const SCREENS = /** @type {const} */ ([['board', 'Board'], ['race', 'Race'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]);
+export const SCREENS = /** @type {const} */ ([['board', 'Board'], ['sessions', 'Sessions'], ['tap', 'Tap'], ['setup', 'Setup'], ['bridge', 'Bridge']]);
 
 /** An asset's URL: versioned under /v/<build>/ in production. @param {any} request @param {string} path without a leading slash */
 export const asset = (request, path) => (request.build && request.build !== 'dev' ? `/v/${request.build}/${path}` : `/${path}`);

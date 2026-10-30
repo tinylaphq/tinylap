@@ -1,0 +1,54 @@
+// SPDX-FileCopyrightText: 2026 The TinyLap contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// The record history of the track and direction (records spec §5.2): who
+// held it, with what lap, from when to when. The Sessions tab shows the five
+// latest; …/records all of them.
+import { localTime } from '@tinylap/design/html/local-time.js';
+import { formatLap } from '../../public/format.js';
+import { html, safe } from './html.js';
+import { layout } from './layout.js';
+import { chip, crown } from './marks.js';
+
+const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
+
+/** "Office loop, clockwise". @param {{ name: string }} track @param {string} direction */
+export const trackName = (track, direction) => `${track.name}, ${DIRECTION[direction]}`;
+
+/**
+ * Newest first. A row held the record until the row before it took it; the
+ * first is the record now, its holder crowned.
+ * @param {any} request @param {{ track: any, rows: { driverId: string, lapMs: number, at: number, sessionId: string }[], drivers: any[] }} model
+ */
+export function recordsTable(request, { track, rows, drivers }) {
+  const base = request.space.base;
+  if (!track) return html`<p class="empty">Set the track in <a href="${base}/setup#track">Setup</a> to keep its record.</p>`;
+  if (rows.length === 0) return html`<p class="empty">No record yet.</p>`;
+  return html`<div class="board-scroll"><table class="board-table records-table">
+  <thead><tr><th scope="col" class="num">Lap</th><th scope="col">Driver</th><th scope="col">Set</th><th scope="col">Held until</th></tr></thead>
+  <tbody>${rows.map((r, i) => html`<tr${i === 0 ? html` class="is-current"` : null}>
+    <td class="num">${formatLap(r.lapMs)}</td>
+    <td class="board-driver">${chip(drivers, r.driverId)}${crown(i === 0)}</td>
+    <td><a href="${base}/sessions/${r.sessionId}">${safe(localTime(r.at, 'datetime'))}</a></td>
+    <td>${i === 0 ? 'Now' : safe(localTime(rows[i - 1].at, 'datetime'))}</td>
+  </tr>`)}</tbody>
+</table></div>`;
+}
+
+/** @param {any} request @param {{ track: any, direction: string, rows: any[], drivers: any[] }} model */
+export function recordsPage(request, { track, direction, rows, drivers }) {
+  return layout(request, {
+    title: 'Track records',
+    screen: 'sessions',
+    modules: ['pkg/design/elements/local-time.js'],
+    body: html`<div class="container sessions-screen stack-lg screen">
+  <div class="stack-xs">
+    <h1>Track records</h1>
+    ${track ? html`<p class="subtitle">${trackName(track, direction)}</p>` : null}
+  </div>
+  ${recordsTable(request, { track, rows, drivers })}
+  <p><a href="${request.space.base}/sessions">Back to sessions</a></p>
+</div>`,
+  });
+}

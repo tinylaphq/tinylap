@@ -84,7 +84,7 @@ test('a click on a link or on Sign out is never swallowed', async (t) => {
   const opened = await pageAs(browser, app, who);
   t.after(() => opened.context.close());
   const { page } = opened;
-  await page.goto('/personal/race');
+  await page.goto('/personal/sessions');
   await summary(page).click();
   await page.locator('.nav-account-menu').getByRole('link', { name: 'Personal' }).click();
   await page.waitForURL('**/personal/board');

@@ -126,6 +126,22 @@ test('running sessions, of any kind', () => {
   assert.deepEqual(store.listSessions(W, 10).map((s) => s.id), ['r1', 's1']);
 });
 
+test('sessions page on by createdAt, and a summary reads one session\'s counted laps', () => {
+  const store = openStore(':memory:');
+  practice(store, 's1', { createdAt: 1 });
+  practice(store, 's2', { createdAt: 2 });
+  practice(store, 's3', { createdAt: 3 });
+  assert.deepEqual(store.listSessions(W, 2).map((s) => s.id), ['s3', 's2']);
+  assert.deepEqual(store.listSessions(W, 2, 2).map((s) => s.id), ['s1']);
+  assert.deepEqual(store.sessionSummary('s1'), { drivers: 0, best: null });
+  crossing(store, { t: 1, driverId: 'ana', counts: true });
+  crossing(store, { t: 2, driverId: 'ana', lapMs: 8000, counts: true });
+  const best = crossing(store, { t: 3, driverId: 'ben', lapMs: 7000, counts: true });
+  crossing(store, { t: 4, driverId: 'cem', lapMs: 6000, counts: false });
+  crossing(store, { t: 5, driverId: null, lapMs: 5000, counts: false });
+  assert.deepEqual(store.sessionSummary('s1'), { drivers: 2, best: { seq: best, driverId: 'ben', lapMs: 7000 } });
+});
+
 test('decoders are found by their token hash', () => {
   const store = openStore(':memory:');
   store.addDecoder(W, { id: 'd1', name: 'Gate', tokenHash: 'h1', createdAt: 1 });
