@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS personal_best (
   lap_ms INTEGER NOT NULL, at INTEGER NOT NULL, crossing_seq INTEGER NOT NULL,
   PRIMARY KEY (workspace_id, track_id, direction, driver_id)
 );
+CREATE INDEX IF NOT EXISTS personal_best_fastest ON personal_best (workspace_id, track_id, direction, lap_ms, at, crossing_seq);
 `;
 
 const ACTIVE = "('countdown', 'running', 'finishing')";
@@ -156,10 +157,17 @@ export const TRACK_SQL = {
   track: `${TRACK_WITH_LAYOUT} WHERE t.workspace_id = ? AND t.id = ?`,
   tracks: `${TRACK_WITH_LAYOUT} WHERE t.workspace_id = ? AND (t.archived_at IS NOT NULL) = ? ORDER BY t.name_key, t.id`,
 };
+// What the idle board reads up to four times a second per screen (named tracks spec §4): through an index
+// that starts with the club, the fastest in its order and with a limit, never a scan of a club's laps.
+export const IDLE_SQL = {
+  fastest: 'SELECT driver_id, lap_ms, at, crossing_seq FROM personal_best WHERE workspace_id = ? AND track_id = ? AND direction = ? ORDER BY lap_ms, at, crossing_seq LIMIT ?',
+  driven: 'SELECT 1 FROM crossing WHERE workspace_id = ? LIMIT 1',
+};
 /** SQLite's code for a broken UNIQUE constraint: a track name already in use. */
 const UNIQUE = 2067;
 const nameInUse = (error) => error?.errcode === UNIQUE;
 
+const bestOf = (r) => ({ driverId: String(r.driver_id), bestMs: Number(r.lap_ms), at: Number(r.at), seq: Number(r.crossing_seq) });
 const recordOf = (r) => ({ driverId: String(r.driver_id), lapMs: Number(r.lap_ms), at: Number(r.at), sessionId: String(r.session_id), seq: Number(r.crossing_seq) });
 const crossingOf = (r) => ({
   seq: Number(r.seq), sessionId: String(r.session_id), decoder: String(r.decoder_id), boot: String(r.boot), transponder: String(r.transponder),
@@ -243,6 +251,8 @@ export function openStore(path) {
     // Records and personal bests (records spec §4, §6): projections of the qualifying laps, written with each lap.
     personalBests: q(`SELECT driver_id, lap_ms, at, crossing_seq FROM personal_best
       WHERE workspace_id = ? AND track_id = ? AND direction = ? AND driver_id IN (SELECT value FROM json_each(?)) ORDER BY lap_ms, at, crossing_seq`),
+    fastest: q(IDLE_SQL.fastest),
+    driven: q(IDLE_SQL.driven),
     offerPersonalBest: q(`INSERT INTO personal_best (workspace_id, track_id, direction, driver_id, lap_ms, at, crossing_seq) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT DO UPDATE SET lap_ms = excluded.lap_ms, at = excluded.at, crossing_seq = excluded.crossing_seq
       WHERE (excluded.lap_ms, excluded.at, excluded.crossing_seq) < (lap_ms, at, crossing_seq)`),
@@ -551,7 +561,12 @@ export function openStore(path) {
 
     /** The personal bests on a track and direction of the drivers asked for, fastest first. */
     personalBests: (ws, trackId, direction, driverIds) => s.personalBests.all(ws, trackId, direction, JSON.stringify(driverIds))
-      .map((r) => ({ driverId: String(r.driver_id), bestMs: Number(r.lap_ms), at: Number(r.at), seq: Number(r.crossing_seq) })),
+      .map(bestOf),
+    /** Each driver's best on a track and direction, fastest first, the first `limit`. */
+    fastest: (ws, trackId, direction, limit) => s.fastest.all(ws, trackId, direction, limit)
+      .map(bestOf),
+    /** Whether a club has ever had a crossing. */
+    driven: (ws) => s.driven.get(ws) !== undefined,
     /** Keeps the faster lap as the driver's best, the earlier one on a tie. */
     offerPersonalBest(ws, trackId, direction, { driverId, lapMs, at, seq }) {
       s.offerPersonalBest.run(ws, trackId, direction, driverId, lapMs, at, seq);

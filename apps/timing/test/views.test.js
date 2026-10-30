@@ -89,6 +89,7 @@ test('selectField without a hint or data-name renders as it always has', () => {
 });
 
 import { crown, idleNotice, marks } from '../server/views/marks.js';
+import { directionIcon } from '../server/views/direction.js';
 
 test('marks sit in one slot after a time, empty or not; a record lap shows TR, not PB too', () => {
   assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: false })), '<span class="marks"></span>');
@@ -99,12 +100,18 @@ test('marks sit in one slot after a time, empty or not; a record lap shows TR, n
   assert.equal(String(crown(true)), '<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span>');
 });
 
-test('the no-session notice names the car, and its driver when it has one', () => {
-  const request = { space: { base: '/personal' } };
-  const drivers = [{ id: 'h', name: '<b>Haris</b>' }];
-  assert.equal(idleNotice(request, null, drivers), null);
-  const named = String(idleNotice(request, { transponder: '21', driverId: 'h', at: 1 }, drivers));
-  assert.match(named, /<p>A car crossed the line \(21, &lt;b&gt;Haris&lt;\/b&gt;\)\. No session is running\.<\/p>/);
-  assert.match(named, /<form method="post" action="\/personal\/sessions"[^>]*>\s*<input type="hidden" name="kind" value="practice">\s*<button type="submit" class="btn btn-primary">Start practice<\/button>/);
-  assert.match(String(idleNotice(request, { transponder: '4711', driverId: null, at: 1 }, drivers)), /A car crossed the line \(4711\)\. No session is running\./);
+test('a car with no session running is a live line, by its code', () => {
+  assert.equal(idleNotice(null), null);
+  assert.equal(String(idleNotice({ transponder: '23', driverId: 'h', at: 1 })), '<p class="board-on-track" role="status">Car 23 is on the track</p>');
+  assert.match(String(idleNotice({ transponder: '<b>', driverId: null, at: 1 })), /Car &lt;b&gt; is on the track/);
+});
+
+test('the direction icon: an open loop with one arrowhead, named by its own title', () => {
+  for (const [direction, name] of [['ccw', 'Anticlockwise'], ['cw', 'Clockwise']]) {
+    const svg = String(directionIcon(direction));
+    assert.match(svg, new RegExp(`^<svg class="direction-icon" width="40" height="22" viewBox="0 0 40 22" role="img"><title>${name}</title>`));
+    assert.equal(svg.match(/<path /g).length, 2, 'the loop and its arrowhead');
+    assert.match(svg, /stroke="var\(--p-accent-1\)"/);
+  }
+  assert.notEqual(String(directionIcon('cw')), String(directionIcon('ccw')));
 });

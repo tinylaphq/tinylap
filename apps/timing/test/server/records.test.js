@@ -54,6 +54,7 @@ test('the first lap on a track sets the record silently', () => {
   const snap = r.engine.snapshot(W);
   assert.equal(snap.record.lapMs, 8000);
   assert.equal(snap.record.driverId, 'ana');
+  assert.equal(snap.record.beat, null, 'the first record beat nothing');
   assert.equal(snap.recordNew, null);
   assert.deepEqual(recordEvents(r.events), []);
   assertProjection(r.store);
@@ -65,7 +66,7 @@ test('a faster lap takes the record, live, with what it beat', () => {
   laps(r.pass, '0A', 1000, 8000);
   laps(r.pass, '0B', 10_000, 7900);
   const snap = r.engine.snapshot(W);
-  assert.deepEqual(snap.record, { driverId: 'ben', lapMs: 7900, at: T0 + 17_900 });
+  assert.deepEqual(snap.record, { driverId: 'ben', lapMs: 7900, at: T0 + 17_900, beat: { driverId: 'ana', lapMs: 8000, at: T0 + 9000 } });
   assert.equal(snap.recordNew.beat.lapMs, 8000);
   assert.deepEqual(snap.recordNew, {
     seq: snap.crossings[0].seq, driverId: 'ben', lapMs: 7900, at: T0 + 17_900,
@@ -108,7 +109,7 @@ test('a late lap takes the record silently, at its own time in the history', () 
   laps(r.pass, '0A', 1000, 8000);
   late(r, 130_000, '0B', [10_000, 17_900]);
   const snap = r.engine.snapshot(W);
-  assert.deepEqual(snap.record, { driverId: 'ben', lapMs: 7900, at: T0 + 17_900 });
+  assert.deepEqual(snap.record, { driverId: 'ben', lapMs: 7900, at: T0 + 17_900, beat: { driverId: 'ana', lapMs: 8000, at: T0 + 9000 } });
   assert.equal(snap.recordNew, null);
   assert.deepEqual(recordEvents(r.events), []);
   assert.deepEqual(r.store.recordHistory(W, 'trk', 'cw').map((x) => [x.lapMs, x.at]), [[7900, T0 + 17_900], [8000, T0 + 9000]]);
@@ -124,7 +125,7 @@ test('a late lap that was a record at its time joins the history before the late
   const before = recordEvents(r.events).length;
   late(r, 310_000, '0D', [112_100, 120_000]);
   assert.deepEqual(history(r.store), [['ben', 7800], ['cy', 7900], ['ana', 8000]]);
-  assert.deepEqual(r.engine.snapshot(W).record, { driverId: 'ben', lapMs: 7800, at: T0 + 300_000 });
+  assert.deepEqual(r.engine.snapshot(W).record, { driverId: 'ben', lapMs: 7800, at: T0 + 300_000, beat: { driverId: 'cy', lapMs: 7900, at: T0 + 120_000 } });
   assert.equal(recordEvents(r.events).length, before);
   assertProjection(r.store);
 });
@@ -330,4 +331,25 @@ test('a record set in a race after the track changed shows only under its own tr
   const snap = r.engine.snapshot(W);
   assert.equal(snap.direction, 'ccw');
   assert.equal(snap.recordNew, null, 'not under the anticlockwise header');
+});
+
+test('the snapshot holds the fastest on the track and direction, top ten, and whether the club has driven', () => {
+  const r = rig();
+  useTrack(r.store, W, 'Office', 'cw', 'trk');
+  assert.deepEqual(r.engine.snapshot(W).fastest, []);
+  assert.equal(r.engine.snapshot(W).driven, false);
+  const practice = r.startPractice();
+  laps(r.pass, '0A', 1000, 8000, 7600);
+  laps(r.pass, '0B', 30_000, 7900);
+  assert.deepEqual(r.engine.snapshot(W).fastest, [], 'only while nobody is racing');
+  r.engine.end(W, practice.id);
+  for (let i = 0; i < 11; i += 1) r.store.offerPersonalBest(W, 'trk', 'cw', { driverId: `x${i}`, lapMs: 9000 + i, at: i, seq: i });
+  const snap = r.engine.snapshot(W);
+  assert.equal(snap.driven, true);
+  assert.equal(snap.fastest.length, 10);
+  assert.deepEqual(snap.fastest.slice(0, 3).map((b) => [b.driverId, b.bestMs]), [['ana', 7600], ['ben', 7900], ['x0', 9000]]);
+  assert.deepEqual(r.engine.snapshot(W, { watcher: true }).fastest, snap.fastest);
+  assert.equal('driven' in r.engine.snapshot(W, { watcher: true }), false, 'members only');
+  useTrack(r.store, W, 'Office', 'ccw', 'trk');
+  assert.deepEqual(r.engine.snapshot(W).fastest, [], 'per direction');
 });

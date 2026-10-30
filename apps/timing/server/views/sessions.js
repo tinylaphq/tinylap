@@ -138,7 +138,7 @@ export function sessionsPage(request, { session, drivers, idle = null, history, 
     body: html`<div class="container sessions-screen stack-xl screen">
   <h1>Sessions</h1>
   ${errorSummary(error, FIELD_ID[error?.field])}
-  ${idleNotice(request, idle, drivers)}
+  ${idleNotice(idle)}
   ${session ? runningPanel(request, session, drivers, { reload }) : null}
   <section class="stack-md" aria-labelledby="start-title">
     <h2 id="start-title">Start</h2>

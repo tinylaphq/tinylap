@@ -4,16 +4,18 @@
 
 // The board (spec §6.1), rendered on the server from engine.snapshot. All
 // that changes lives in #board-live, which the stream replaces whole; the
-// watchers board is the same without member parts.
+// watchers board is the same without member parts. While a session runs it
+// is the table and the last laps; while nobody races, the track record, the
+// fastest here and the last session (named tracks spec §4).
 import { clockAt, formatClock, formatLap } from '../../public/format.js';
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
+import { directionIcon } from './direction.js';
 import { chip as driverChip, crown, idleNotice, marks, startPracticeForm } from './marks.js';
 
 const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
-const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
 
 /** What the session clock shows at server time `now`. */
 export function clockOf(session, now) {
@@ -28,12 +30,14 @@ const chip = (snap, id) => driverChip(snap.drivers, id);
 const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by">· ${chip(snap, r.driverId)} · ${safe(localTime(r.at, 'date'))}</span>`;
 
 /**
- * The track and its record, above the session on every board (records spec
- * §5.1). While a record has just fallen it is in the record state (§4.3): the
- * new time and holder in the record colour, and the record it beat.
+ * The track, its direction as an icon, and its record, above every board
+ * (records spec §5.1, named tracks spec §4). While nobody races the record is
+ * the big thing below, so the header leaves it out. While a record has just
+ * fallen it is in the record state (§4.3): the new time and holder in the
+ * record colour, and the record it beat.
  */
 function trackHeader(snap) {
-  const where = html`<p class="board-track-name"><strong>${snap.track.name}</strong> ${DIRECTION[snap.direction]}</p>`;
+  const where = html`<p class="board-track-name"><strong>${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>`;
   const n = snap.recordNew;
   if (n) {
     return html`<header class="board-track is-record" data-record-new="${n.seq}">
@@ -44,9 +48,9 @@ function trackHeader(snap) {
   </div>
 </header>`;
   }
-  const record = snap.record
-    ? html`<p class="board-track-record"><span class="board-track-label">Track record</span> ${recordLine(snap, snap.record)}</p>`
-    : html`<p class="board-track-record"><span class="board-track-label">No record yet</span></p>`;
+  const record = !snap.session ? null
+    : snap.record ? html`<p class="board-track-record"><span class="board-track-label">Track record</span> ${recordLine(snap, snap.record)}</p>`
+      : html`<p class="board-track-record"><span class="board-track-label">No record yet</span></p>`;
   return html`<header class="board-track">
   ${where}
   ${record}
@@ -54,23 +58,12 @@ function trackHeader(snap) {
 }
 
 /**
- * The session's title and clock; with none running, the last session and when
- * it ended (records spec §5.3). A practice counts up under "Started 14:32",
- * written here alone: tl-countdown changes only the labels marked
+ * The running session's title and clock. A practice counts up under "Started
+ * 14:32", written here alone: tl-countdown changes only the labels marked
  * data-clock-label, so it leaves this one as it is.
  */
-function header(snap, start) {
+function header(snap) {
   const s = snap.session;
-  if (!s) {
-    const last = snap.lastResults?.session;
-    return html`<header class="board-head">
-  <div>
-    <h1 class="board-title">${last ? KIND[last.kind] : 'No session yet'}</h1>
-    ${last ? html`<p class="board-ended">Ended ${safe(localTime(last.endedAt ?? last.createdAt, 'time'))}${last.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}</p>` : null}
-  </div>
-  ${start}
-</header>`;
-  }
   const clock = clockOf(s, snap.now);
   const label = s.kind === 'practice'
     ? html`<span class="stat-label board-clock-label">${clock.label} ${safe(localTime(s.opensAt, 'time'))}</span>`
@@ -135,19 +128,6 @@ function standingsTable(snap) {
 </table></div>`;
 }
 
-/** With no session running: the last one's final table, under its "Ended" header. */
-function results(snap) {
-  const r = snap.lastResults;
-  const race = r.session.kind === 'race';
-  const m = markers(snap, r.session, r.standings);
-  return html`<section class="board-results" aria-label="Results">
-  ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<div class="board-scroll"><table class="board-table">
-    <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
-    <tbody>${r.standings.map((row) => html`<tr${m.isBest(row) ? html` class="is-best"` : null}><td class="pos">${row.position}</td><td class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}</td><td class="num">${row.laps}</td><td class="num">${m.best(row)}</td>${race ? html`<td class="num">${formatLap(row.elapsedMs)}</td>` : null}</tr>`)}</tbody>
-  </table></div>`}
-</section>`;
-}
-
 function feed(snap) {
   const laps = snap.crossings.filter((c) => c.lapMs !== null).slice(0, 12);
   return html`<aside class="board-feed" aria-label="Last laps">
@@ -156,37 +136,102 @@ function feed(snap) {
 </aside>`;
 }
 
-function steps(request, snap) {
-  const base = request.space.base;
-  const n = snap.drivers.length;
-  const step = (title, done, text, links) => html`<li class="board-step${done ? ' is-done' : ''}"><h3>${title}</h3><p>${done ?? text}</p>${links ? html`<p class="board-step-links">${links}</p>` : null}</li>`;
-  return html`<section class="board-steps" aria-labelledby="board-steps-title">
-  <h2 class="h3" id="board-steps-title">Get the track ready</h2>
-  <ol>
-    ${step('Add drivers', n ? `${n} ${n === 1 ? 'driver' : 'drivers'}` : null, 'Give everyone a name, then their car’s transponder once it has crossed the line.', n ? null : html`<a href="${base}/setup#drivers">Add drivers</a>`)}
-    ${step('Start timing', null, 'Connect the decoder by USB, or tap each crossing by hand.', html`<a href="${base}/bridge">Connect the decoder</a> <a href="${base}/tap">Tap laps by hand</a>`)}
-  </ol>
+/**
+ * The track record as the big thing (named tracks spec §4): the time, the
+ * holder with the crown, when it was set and what it beat. Beside it, for
+ * members on their own screen, Start practice: over it the line saying a car
+ * is on the track, under it the cars without a driver, quietly.
+ */
+function hero(request, snap, members) {
+  const r = snap.record;
+  return html`<section class="board-hero">
+  <div class="board-hero-record">
+    <h1 class="board-hero-label">Track record</h1>
+    ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
+    <p class="board-hero-by">${chip(snap, r.driverId)}${crown(true)} set ${safe(localTime(r.at, 'date'))}${r.beat ? html`, beat ${chip(snap, r.beat.driverId)}’s <span class="num">${formatLap(r.beat.lapMs)}</span>` : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
+  </div>
+  ${members ? go(request, snap) : null}
 </section>`;
+}
+
+/** Start practice, with the car on the track over it and the cars without a driver under it. */
+function go(request, snap) {
+  const base = request.space.base;
+  const n = snap.unknown.length;
+  const quiet = n
+    ? html`<p class="board-quiet board-unknown" role="status">${n === 1 ? '1 car has' : `${n} cars have`} no driver yet. <a href="${base}/setup#transponders">${n === 1 ? 'Assign it' : 'Assign them'}</a></p>`
+    : html`<p class="board-quiet">Or a <a href="${base}/sessions#start-title">qualifying or race</a>.</p>`;
+  return html`<div class="board-hero-go">
+    ${idleNotice(snap.idle)}
+    ${startPracticeForm(request)}
+    ${quiet}
+  </div>`;
+}
+
+/** Each driver's best on the current track and direction, fastest first. */
+function fastest(snap) {
+  if (!snap.fastest.length) return null;
+  return html`<section class="board-fastest" aria-labelledby="board-fastest-title">
+  <h2 class="h3" id="board-fastest-title">Fastest on this track</h2>
+  <ol class="board-ranks">${snap.fastest.map((b, i) => html`<li><span class="pos">${i + 1}</span><span class="board-driver">${chip(snap, b.driverId)}</span><span class="num">${formatLap(b.bestMs)}</span></li>`)}</ol>
+</section>`;
+}
+
+/** The last session's top three, with their marks, when it ended, and a link to its page for members. */
+function lastSession(request, snap, watcher) {
+  const r = snap.lastResults;
+  if (!r) return null;
+  const m = markers(snap, r.session, r.standings);
+  const ended = r.session.endedAt ?? r.session.createdAt;
+  return html`<section class="board-last" aria-labelledby="board-last-title">
+  <h2 class="h3" id="board-last-title">Last session</h2>
+  ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId)}${m.crown(row)}</span><span class="num">${m.best(row)}</span></li>`)}</ol>`}
+  <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'time'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${watcher ? null : html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>`}</p>
+</section>`;
+}
+
+/** A club that has never driven a lap: one card instead of an empty board. */
+function firstRun(request) {
+  const base = request.space.base;
+  return html`<section class="board-first" aria-labelledby="board-first-title">
+  <h1 id="board-first-title">Ready when your cars are</h1>
+  <p>Add your drivers, then connect the decoder. The first lap sets the track record.</p>
+  <p class="board-first-links">
+    <a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>
+    <a href="${base}/bridge">Connect the decoder</a>
+    <a href="${base}/tap">Tap laps by hand</a>
+  </p>
+</section>`;
+}
+
+/** The board while nobody races: the record and what is worth seeing, not warnings. */
+function idleBoard(request, snap, { watcher, big }) {
+  // The display (?big) and the watchers never get a member line or a button (records spec §5.3).
+  const members = !watcher && !big;
+  if (members && !snap.driven && !snap.idle) return firstRun(request);
+  const lists = [fastest(snap), lastSession(request, snap, watcher)].filter(Boolean);
+  return html`${hero(request, snap, members)}
+${lists.length ? html`<div class="board-idle">${lists}</div>` : null}`;
 }
 
 /** Everything on the board that changes, in one element the stream replaces. */
 export function boardLive(request, snap, { watcher = false, big = false, token = null } = {}) {
   const events = `${watcher ? `/watch/${token}` : `${request.space.base}/board`}/events${big ? '?big' : ''}`;
+  if (!snap.session) {
+    return html`<div id="board-live" class="board is-idle" data-events="${events}">
+${trackHeader(snap)}
+${idleBoard(request, snap, { watcher, big })}
+</div>`;
+  }
+  // A car without a driver loses its laps while a session runs: that is worth a warning.
   const unknown = !watcher && !big && snap.unknown?.length
     ? html`<p class="status status-warning board-unknown" role="status">Unknown ${snap.unknown.length === 1 ? 'car' : 'cars'}: ${snap.unknown.join(', ')}. <a href="${request.space.base}/setup#transponders">Assign in Setup</a></p>`
     : null;
-  // The display (?big) and the watchers never get a notice or a button (records spec §5.3).
-  const notice = !watcher && !big ? idleNotice(request, snap.idle, snap.drivers) : null;
-  const start = !watcher && !big && !snap.session && !notice ? startPracticeForm(request) : null;
-  const main = snap.session ? standingsTable(snap)
-    : snap.lastResults ? results(snap)
-      : watcher ? html`<p class="empty board-empty">No laps yet.</p>` : steps(request, snap);
   return html`<div id="board-live" class="board" data-events="${events}">
 ${trackHeader(snap)}
-${notice}
-${header(snap, start)}
+${header(snap)}
 ${unknown}
-<div class="board-main">${main}</div>
+<div class="board-main">${standingsTable(snap)}</div>
 ${feed(snap)}
 </div>`;
 }

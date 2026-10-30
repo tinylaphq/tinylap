@@ -430,15 +430,16 @@ test('the tab shows the five latest track records, /records all of them, newest 
   assert.match(page, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
 });
 
-test('a car with no session running shows the notice and Start practice on the tab', async () => {
+test('a car with no session running is a live line on the tab, over its Start practice', async () => {
   const ws = idle.id;
   await driversIn(ws, { Haris: '21' });
   pass(ws, 5000, '21');
   const body = await (await get(`/clubs/${ws}/sessions`)).text();
-  assert.match(body, /<div class="status status-warning idle-notice" role="status">\s*<p>A car crossed the line \(21, Haris\)\. No session is running\.<\/p>/);
-  assert.equal(body.match(/>Start practice<\/button>/g).length, 2, 'the notice has its own button');
+  assert.match(body, /<p class="board-on-track" role="status">Car 21 is on the track<\/p>/);
+  assert.doesNotMatch(body, /status-warning/);
+  assert.equal(body.match(/>Start practice<\/button>/g).length, 1);
   app.engine.start(ws, { kind: 'practice' });
-  assert.doesNotMatch(await (await get(`/clubs/${ws}/sessions`)).text(), /A car crossed the line/);
+  assert.doesNotMatch(await (await get(`/clubs/${ws}/sessions`)).text(), /is on the track/);
 });
 
 test('history rows and a session page name the track, or "a deleted track" once it is gone', async () => {

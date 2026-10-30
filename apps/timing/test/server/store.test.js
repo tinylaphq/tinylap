@@ -8,7 +8,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { TRACK_SQL, openStore } from '../../server/store.js';
+import { IDLE_SQL, TRACK_SQL, openStore } from '../../server/store.js';
 
 const W = 'ws-1';
 
@@ -394,4 +394,38 @@ test('a session’s last crossing is read through an index, not by scanning its 
   const plan = db.prepare("EXPLAIN QUERY PLAN SELECT MAX(at) AS at FROM crossing WHERE session_id = 'x'").all().map((r) => String(r.detail)).join(' ');
   db.close();
   assert.match(plan, /COVERING INDEX crossing_session_at/);
+});
+
+test('the fastest on a track are the best per driver, fastest first, the earlier on a tie, as many as asked', () => {
+  const store = openStore(':memory:');
+  const offer = (driverId, lapMs, at, direction = 'cw', trackId = 't1') => store.offerPersonalBest(W, trackId, direction, { driverId, lapMs, at, seq: at });
+  offer('ana', 8000, 1);
+  offer('ben', 7500, 2);
+  offer('cy', 8000, 0);
+  offer('ana', 7900, 3);
+  offer('dan', 7000, 4, 'ccw');
+  offer('eve', 6000, 5, 'cw', 't2');
+  store.offerPersonalBest('ws-2', 't1', 'cw', { driverId: 'fay', lapMs: 5000, at: 6, seq: 6 });
+  assert.deepEqual(store.fastest(W, 't1', 'cw', 10).map((b) => [b.driverId, b.bestMs]), [['ben', 7500], ['ana', 7900], ['cy', 8000]]);
+  assert.deepEqual(store.fastest(W, 't1', 'cw', 2).map((b) => b.driverId), ['ben', 'ana']);
+  assert.deepEqual(store.fastest(W, 't1', 'cw', 1)[0], { driverId: 'ben', bestMs: 7500, at: 2, seq: 2 });
+});
+
+test('whether a club has driven is one row of an index', () => {
+  const store = openStore(':memory:');
+  assert.equal(store.driven(W), false);
+  practice(store);
+  crossing(store, {});
+  assert.equal(store.driven(W), true);
+  assert.equal(store.driven('ws-2'), false);
+});
+
+test('the idle board reads the fastest and whether a club has driven through indexes that start with the club', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  openStore(path).close();
+  const db = new DatabaseSync(path);
+  const plan = (sql) => db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all().map((r) => String(r.detail)).join(' | ');
+  assert.match(plan(IDLE_SQL.fastest), /^SEARCH personal_best USING INDEX personal_best_fastest \(workspace_id=\? AND track_id=\? AND direction=\?\)$/, 'ordered by the index, no sort');
+  assert.match(plan(IDLE_SQL.driven), /^SEARCH crossing USING COVERING INDEX \w+ \(workspace_id=\?\)$/);
+  db.close();
 });

@@ -34,7 +34,7 @@ test('the board updates live and its clock ticks', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/board');
-  await page.getByRole('heading', { name: 'No session yet' }).waitFor();
+  await page.getByRole('heading', { name: 'Ready when your cars are' }).waitFor();
   app.engine.start((await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id, { kind: 'practice' });
   clock.offset += 10_000; // a practice starts clean: the lap begins after its start
   await postPassings(app, decoder, [{ transponder: '10', t: 1000 }, { transponder: '10', t: 9000 }]);
