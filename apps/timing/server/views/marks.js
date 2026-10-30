@@ -36,11 +36,12 @@ export function chip(drivers, id) {
   return html`<span class="driver" style="--driver: ${d.colour}">${d.name}</span>`;
 }
 
-/** Starts a practice: one button, no settings. @param {any} request */
-export function startPracticeForm(request) {
+/** Starts a practice: one button, no settings; from the Tap page, it leads back there. @param {any} request @param {{ from?: 'tap' }} [options] */
+export function startPracticeForm(request, { from } = {}) {
   return html`<form method="post" action="${request.space.base}/sessions" class="start-practice">
   <input type="hidden" name="kind" value="practice">
-  <button type="submit" class="btn btn-primary">Start practice</button>
+  ${from === 'tap' ? html`<input type="hidden" name="from" value="tap">
+  ` : null}<button type="submit" class="btn btn-primary">Start practice</button>
 </form>`;
 }
 

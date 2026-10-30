@@ -139,7 +139,7 @@ test('without a running session: no tiles, "No session is running." and Start pr
     const [driver] = quiet.store.drivers(club.id);
     const body = await (await quiet.api(login, 'GET', `${path}/tap`, undefined, { accept: 'text/html' })).text();
     assert.match(body, /No session is running\./);
-    assert.match(body, new RegExp(`<form method="post" action="${path}/sessions" class="start-practice">\\s*<input type="hidden" name="kind" value="practice">\\s*<button type="submit" class="btn btn-primary">Start practice</button>`));
+    assert.match(body, new RegExp(`<form method="post" action="${path}/sessions" class="start-practice">\\s*<input type="hidden" name="kind" value="practice">\\s*<input type="hidden" name="from" value="tap">\\s*<button type="submit" class="btn btn-primary">Start practice</button>`));
     assert.doesNotMatch(body, /tap-tile/);
     const posted = await quiet.form(login, `${path}/tap`, { driver: driver.id });
     assert.equal(posted.status, 409);

@@ -158,6 +158,43 @@ test('a confirmation ends only the session it named', async () => {
   app.engine.abort(office.id, fresh.id);
 });
 
+test('Start practice pressed twice starts one practice and lands on the board', async () => {
+  const first = await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
+  assert.equal(first.status, 303);
+  const started = app.store.runningSession(office.id);
+  clock.now += 2000;
+  const again = await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
+  assert.equal(again.status, 303);
+  assert.equal(again.headers.get('location'), `${base}/board`);
+  assert.equal(app.store.runningSession(office.id).id, started.id, 'one practice, the first one');
+  clock.now += 10_000;
+  const later = await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
+  assert.equal(later.status, 200, 'after 10 s it asks again');
+  assert.match(await later.text(), /Starting this practice ends it\./);
+  app.engine.end(office.id, started.id);
+});
+
+test('Start practice on the Tap page leads back to the Tap page', async () => {
+  const first = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['from', 'tap']]);
+  assert.equal(first.status, 303);
+  assert.equal(first.headers.get('location'), `${base}/tap`);
+  const started = app.store.runningSession(office.id);
+  clock.now += 2000;
+  const again = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['from', 'tap']]);
+  assert.equal(again.headers.get('location'), `${base}/tap`, 'pressed twice: back to Tap too');
+  clock.now += 10_000;
+  const ask = await (await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['from', 'tap']])).text();
+  const fields = [...ask.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(fields, [['kind', 'practice'], ['from', 'tap'], ['replace', started.id]], 'the confirmation keeps where it came from');
+  const replaced = await app.form(member, `${base}/sessions`, fields);
+  assert.equal(replaced.headers.get('location'), `${base}/tap`);
+  app.engine.end(office.id, app.store.runningSession(office.id).id);
+  clock.now += 20_000;
+  const forged = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['from', 'https://example.com/']]);
+  assert.equal(forged.headers.get('location'), `${base}/board`, 'only tap is a place to go back to');
+  app.engine.end(office.id, app.store.runningSession(office.id).id);
+});
+
 test('a practice\'s confirmation carries only its kind and the session it ends', async () => {
   const [a] = app.store.drivers(office.id);
   await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['roster', a.id], ['duration', '5']]);

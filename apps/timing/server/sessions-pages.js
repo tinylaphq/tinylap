@@ -90,7 +90,7 @@ function renderTab(request, status, { error = null, values = null } = {}) {
  * Starting while a session runs: say what runs, and send the same form again with
  * `replace` naming that session (records spec §5.2), so it ends only what it named.
  */
-function askReplace(request, values, running) {
+function askReplace(request, values, running, from = null) {
   const base = request.space.base;
   const minutes = Math.floor(Math.max(0, request.now() - (running.opensAt ?? running.createdAt)) / 60_000);
   const drivers = running.kind === 'practice' ? request.engine.driverCount(running) : (running.roster ?? []).length;
@@ -98,12 +98,13 @@ function askReplace(request, values, running) {
   const fields = values.kind === 'practice'
     ? [['kind', 'practice']]
     : [['kind', values.kind], ...values.roster.map((id) => ['roster', id]), ['duration', values.duration], ['countdown', values.countdown]];
+  if (from) fields.push(['from', from]);
   return page(request, 200, confirmPage(request, {
     title: what === 'qualifying' ? 'Start qualifying?' : `Start a ${what}?`,
     text: `A ${running.kind} is running (${minutes} min, ${drivers} ${drivers === 1 ? 'driver' : 'drivers'}). Starting this ${what} ends it.`,
     action: `${base}/sessions`,
     button: 'Start',
-    back: `${base}/sessions`,
+    back: from === 'tap' ? `${base}/tap` : `${base}/sessions`,
     screen: 'sessions',
     fields: [...fields, ['replace', running.id]],
   }));
@@ -121,23 +122,27 @@ async function start(request) {
     const { error } = ops.fail('invalid-request', 'A session lasts 1 to 60 minutes.', 'duration');
     return renderTab(request, error.status, { error, values });
   }
+  // Where a start leads: the board, or back to the Tap page its form came from (a fixed name, never a URL).
+  const from = form.get('from') === 'tap' ? 'tap' : null;
+  const done = `${request.space.base}/${from ?? 'board'}`;
   // A confirmation replaces only the session it named. From here to the start nothing awaits,
   // so what runs cannot change in between.
   const named = form.get('replace');
-  const running = named ? request.store.runningSession(request.workspaceId) : null;
+  const running = request.store.runningSession(request.workspaceId);
   if (running && running.id !== named) {
-    if (running.kind === values.kind && request.now() - running.createdAt < DOUBLE_SUBMIT_MS) return seeOther(`${request.space.base}/board`);
-    return askReplace(request, values, running);
+    // Sent twice (a double click, two members): the session running is the one the first send started.
+    if (running.kind === values.kind && request.now() - running.createdAt < DOUBLE_SUBMIT_MS) return seeOther(done);
+    if (named) return askReplace(request, values, running, from);
   }
   const result = ops.startSession(request, {
     kind: values.kind,
     roster: practice ? undefined : values.roster,
     durationSeconds: minutes === undefined ? undefined : minutes * 60,
     countdownSeconds: practice || values.countdown === '' ? undefined : values.countdown,
-    replace: running !== null,
+    replace: !!named && running !== null,
   });
-  if (!result.error) return seeOther(`${request.space.base}/board`);
-  if ('running' in result.error) return askReplace(request, values, result.error.running);
+  if (!result.error) return seeOther(done);
+  if ('running' in result.error) return askReplace(request, values, result.error.running, from);
   return renderTab(request, result.error.status, { error: result.error, values });
 }
 
