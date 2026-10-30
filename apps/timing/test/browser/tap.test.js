@@ -101,6 +101,8 @@ test('an expired session says to sign in again, with a link back to the page', a
   const user = await app.signUp('Ben');
   const who = await app.login(user);
   await app.form(who, '/personal/drivers', { name: 'Ben' });
+  const ben = await (await app.api(who, 'GET', '/auth/me')).json();
+  app.engine.start(ben.workspaces[0].id, { kind: 'practice' });
   const { context, page } = await pageAs(browser, app, who, { viewport: { width: 390, height: 844 } });
   t.after(() => context.close());
   await page.goto('/personal/tap');

@@ -7,6 +7,7 @@
 import { formatLap } from '../../public/format.js';
 import { html } from './html.js';
 import { layout } from './layout.js';
+import { startPracticeForm } from './marks.js';
 
 /** What a tap did, in words. @param {{ result: string, ms?: number | null }} result @param {{ name: string }} driver */
 export function tapResultText(result, driver) {
@@ -37,14 +38,14 @@ const tapTemplates = (request) => html`<template data-tap="result"><span class="
 <template data-tap="signed-out"><a href="${request.url.pathname + request.url.search}">Sign in again</a> to keep tapping.</template>
 `;
 
-/** @param {any} request @param {{ drivers: any[], result?: any, error?: any }} data */
-export function tapPage(request, { drivers, result = null, error = null }) {
+/** @param {any} request @param {{ drivers: any[], result?: any, error?: any, running?: boolean }} data */
+export function tapPage(request, { drivers, result = null, error = null, running = true }) {
   const base = request.space.base;
   return layout(request, {
     title: 'Tap',
     screen: 'tap',
-    scripts: drivers.length ? ['elements/tap.js'] : [],
-    body: drivers.length
+    scripts: drivers.length && running ? ['elements/tap.js'] : [],
+    body: drivers.length && running
       ? html`<tl-tap>
 <div class="tap-screen">
   <h1 class="visually-hidden">Tap</h1>
@@ -58,7 +59,9 @@ ${tapTemplates(request)}</tl-tap>`
       : html`<div class="container stack-lg screen">
   <h1>Tap</h1>
   ${error ? html`<p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text">${error.message}</span></p>` : null}
-  <div class="card-static stack-md"><p>Add drivers to tap their laps.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>
+  ${drivers.length
+    ? html`<div class="card-static stack-md"><p>No session is running.</p>${startPracticeForm(request)}</div>`
+    : html`<div class="card-static stack-md"><p>Add drivers to tap their laps.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>`}
 </div>`,
   });
 }

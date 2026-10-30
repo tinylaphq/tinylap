@@ -127,3 +127,27 @@ test('without drivers: a link to Setup and no tiles', async () => {
   assert.doesNotMatch(body, /<tl-tap>/);
   assert.doesNotMatch(body, /\/public\/elements\/tap.js/);
 });
+
+test('without a running session: no tiles, "No session is running." and Start practice', async () => {
+  const quiet = await startTiming({ clock });
+  try {
+    const user = await quiet.signUp('Quiet');
+    const club = quiet.club(user, 'Quiet club');
+    const login = await quiet.login(user);
+    const path = `/clubs/${club.id}`;
+    await quiet.form(login, `${path}/drivers`, { name: 'Quiet' });
+    const [driver] = quiet.store.drivers(club.id);
+    const body = await (await quiet.api(login, 'GET', `${path}/tap`, undefined, { accept: 'text/html' })).text();
+    assert.match(body, /No session is running\./);
+    assert.match(body, new RegExp(`<form method="post" action="${path}/sessions" class="start-practice">\\s*<input type="hidden" name="kind" value="practice">\\s*<button type="submit" class="btn btn-primary">Start practice</button>`));
+    assert.doesNotMatch(body, /tap-tile/);
+    const posted = await quiet.form(login, `${path}/tap`, { driver: driver.id });
+    assert.equal(posted.status, 409);
+    const page = await posted.text();
+    assert.match(page, /<p class="status status-error" role="alert">[\s\S]*?No session is running\. Start a practice first\./);
+    assert.match(page, /Start practice/);
+    const asJson = await quiet.form(login, `${path}/tap`, { driver: driver.id }, { accept: 'application/json' });
+    assert.equal(asJson.status, 409);
+    assert.match((await asJson.json()).error, /No session is running/);
+  } finally { await quiet.close(); }
+});
