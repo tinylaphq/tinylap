@@ -114,6 +114,12 @@ function publicTrack(request, track) {
     layout: layout && { plannerId: layout.plannerId, snapshotKey: layout.snapshotKey, attachedAt: layout.attachedAt, by: layout.by },
   };
 }
+/** A club's active tracks, then its archived ones when asked, each by name. */
+export function listTracks(request, { archived }) {
+  const ws = request.workspaceId;
+  const tracks = [...request.store.tracks(ws, { archived: false }), ...(archived ? request.store.tracks(ws, { archived: true }) : [])];
+  return { value: tracks.map((track) => publicTrack(request, track)) };
+}
 const trackName = (value) => nameOf(value) ?? invalid('A track name is 1 to 60 characters.', 'name');
 const nameInUse = (name) => fail('conflict', `A track named ${name} is already in use. Rename one of them first.`, 'name');
 /** The board's track header, after the current track's name or direction changed. */

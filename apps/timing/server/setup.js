@@ -5,7 +5,6 @@
 // A workspace's setup (spec §8 Setup): drivers, transponders, decoders and
 // pairing, the current track and the watchers link. Every route reads the
 // session cookie; deleting needs `timing.delete` (owners and admins).
-import { DIRECTIONS } from '@tinylap/track-format';
 import { NO_STORE, workspaceRoute } from './access.js';
 import { displayName } from './auth.js';
 import { readJson } from './body.js';
@@ -58,18 +57,47 @@ function deleteDecoder(request, match) {
   return r.error ? opProblem(request, r.error) : { status: 204, headers: NO_STORE };
 }
 
-// Until the API takes a track id: adds a track from a planner link and makes it current.
+const listTracks = (request) => json(200, { tracks: ops.listTracks(request, { archived: request.url.searchParams.get('archived') === '1' }).value }, NO_STORE);
+
+const byOf = async (request) => ({ userId: request.userId, name: await displayName(request) });
+
+async function addTrack(request) {
+  const { body, error } = await readJson(request);
+  if (error) return error;
+  const r = await ops.addTrack(request, { name: body.name, link: body.link, by: await byOf(request) });
+  return r.error ? opProblem(request, r.error) : json(201, r.value, NO_STORE);
+}
+
+async function updateTrack(request, match) {
+  const { body, error } = await readJson(request);
+  if (error) return error;
+  if (body.name === undefined && body.archived === undefined) return opProblem(request, { problem: 'invalid-request', message: 'Send a name, archived, or both.' });
+  if (body.archived !== undefined && typeof body.archived !== 'boolean') return opProblem(request, { problem: 'invalid-request', message: 'archived is true or false.' });
+  const id = match[2];
+  /** @type {any} */
+  let r = { value: null };
+  if (body.name !== undefined) r = ops.renameTrack(request, { id, name: body.name });
+  if (!r.error && body.archived !== undefined) r = (body.archived ? ops.archiveTrack : ops.restoreTrack)(request, { id });
+  return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
+}
+
+async function attachLayout(request, match) {
+  const { body, error } = await readJson(request);
+  if (error) return error;
+  const r = await ops.attachLayout(request, { id: match[2], link: body.link, confirm: body.confirm, by: await byOf(request) });
+  return r.error ? opProblem(request, r.error) : json(r.value.result === 'added' ? 201 : 200, r.value.track, NO_STORE);
+}
+
+function deleteTrack(request, match) {
+  const r = ops.deleteTrack(request, { id: match[2] });
+  return r.error ? opProblem(request, r.error) : { status: 204, headers: NO_STORE };
+}
+
 async function putTrack(request) {
   const { body, error } = await readJson(request);
   if (error) return error;
-  // The direction is checked first, so a bad one adds no track.
-  if (!DIRECTIONS.includes(body.direction)) return opProblem(request, ops.setCurrentTrack(request, { id: '', direction: body.direction }).error);
-  const by = { userId: request.userId, name: await displayName(request) };
-  const added = await ops.addTrack(request, { name: body.name ?? 'Track', link: body.link ?? '', by });
-  const r = added.error ? added : ops.setCurrentTrack(request, { id: added.value.id, direction: body.direction });
-  if (r.error) return opProblem(request, r.error);
-  const { id, name, layout } = added.value;
-  return json(200, { id, name, direction: body.direction, snapshotKey: layout?.snapshotKey }, NO_STORE);
+  const r = ops.setCurrentTrack(request, { id: body.trackId, direction: body.direction });
+  return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
 }
 
 const getWatchToken = (request) => json(200, { token: request.store.workspace(request.workspaceId).watchToken }, NO_STORE);
@@ -88,6 +116,9 @@ export const setupRoutes = [
   { pattern: path('transponders/([^/]+)'), credentials: true, methods: { PUT: workspaceRoute('timing.setup', putTransponder, write) } },
   { pattern: path('decoders'), credentials: true, methods: { GET: workspaceRoute('timing.run', listDecoders), POST: workspaceRoute('timing.setup', addDecoder, write) } },
   { pattern: path('decoders/([^/]+)'), credentials: true, methods: { DELETE: workspaceRoute('timing.delete', deleteDecoder, write) } },
+  { pattern: path('tracks'), credentials: true, methods: { GET: workspaceRoute('timing.run', listTracks), POST: workspaceRoute('timing.setup', addTrack, write) } },
+  { pattern: path('tracks/([^/]+)'), credentials: true, methods: { PATCH: workspaceRoute('timing.setup', updateTrack, write), DELETE: workspaceRoute('timing.delete', deleteTrack, write) } },
+  { pattern: path('tracks/([^/]+)/layouts'), credentials: true, methods: { POST: workspaceRoute('timing.setup', attachLayout, write) } },
   { pattern: path('track'), credentials: true, methods: { PUT: workspaceRoute('timing.setup', putTrack, write) } },
   { pattern: path('watch-token'), credentials: true, methods: { GET: workspaceRoute('timing.run', getWatchToken), POST: workspaceRoute('timing.setup', rotateWatchToken, write) } },
 ];

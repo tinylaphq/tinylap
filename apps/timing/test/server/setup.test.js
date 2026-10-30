@@ -6,7 +6,7 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from './helpers.js';
 import { tokenHash } from '../../server/setup.js';
-import { CLOSED, OPEN, closed, startPlannerStub } from './planner-stub.js';
+import { CLOSED, OPEN, OTHER, startPlannerStub } from './planner-stub.js';
 
 let app;
 let planner;
@@ -95,17 +95,73 @@ test('pairing is rate limited per member', async () => {
   assert.ok(Number(res.headers.get('retry-after')) > 0);
 });
 
-test('the current track comes from a planner link', async () => {
-  const res = await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name: 'Office loop', direction: 'cw' });
-  const { id, ...rest } = await res.json();
-  assert.deepEqual(rest, { name: 'Office loop', direction: 'cw', snapshotKey: CLOSED });
-  assert.equal(app.store.track(office.id, id).layout.plannerId, closed.track.id);
+test('members add, list, rename, archive and restore tracks', async () => {
+  const res = await app.api(member, 'POST', path('tracks'), { name: ' Home ', link: `${planner.url}/layouts/${CLOSED}` });
+  assert.equal(res.status, 201);
+  const home = await res.json();
+  assert.deepEqual([home.name, home.archived, home.current, home.layout.snapshotKey], ['Home', false, false, CLOSED]);
+  const bare = await (await app.api(member, 'POST', path('tracks'), { name: 'Bare' })).json();
+  assert.equal(bare.layout, null);
+  await problemOf(await app.api(member, 'POST', path('tracks'), { name: 'home' }), 409, 'conflict');
+  await problemOf(await app.api(member, 'POST', path('tracks'), { name: '' }), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'POST', path('tracks'), { name: 'Open', link: `${planner.url}/layouts/${OPEN}` }), 422, 'not-a-circuit');
+  const renamed = await (await app.api(member, 'PATCH', path(`tracks/${bare.id}`), { name: 'Garage' })).json();
+  assert.equal(renamed.name, 'Garage');
+  const archived = await (await app.api(member, 'PATCH', path(`tracks/${bare.id}`), { archived: true })).json();
+  assert.equal(archived.archived, true);
+  const names = async (query) => (await (await app.api(member, 'GET', path(`tracks${query}`))).json()).tracks.map((t) => t.name);
+  assert.ok(!(await names('')).includes('Garage'));
+  assert.ok((await names('?archived=1')).includes('Garage'));
+  assert.equal((await (await app.api(member, 'PATCH', path(`tracks/${bare.id}`), { archived: false })).json()).archived, false);
+  await problemOf(await app.api(member, 'PATCH', path('tracks/nope'), { name: 'X' }), 404, 'not-found');
+  await problemOf(await app.api(member, 'PATCH', path(`tracks/${bare.id}`), {}), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'PATCH', path(`tracks/${bare.id}`), { archived: 'yes' }), 422, 'invalid-request');
+});
+
+test('a layout is attached once, and a different planner track needs a confirmation', async () => {
+  const track = await (await app.api(member, 'POST', path('tracks'), { name: 'Attach' })).json();
+  const url = path(`tracks/${track.id}/layouts`);
+  const first = await app.api(member, 'POST', url, { link: `${planner.url}/layouts/${CLOSED}` });
+  assert.equal(first.status, 201);
+  assert.equal((await first.json()).layout.snapshotKey, CLOSED);
+  assert.equal((await app.api(member, 'POST', url, { link: `${planner.url}/layouts/${CLOSED}` })).status, 200);
+  const refused = await app.api(member, 'POST', url, { link: `${planner.url}/layouts/${OTHER}` });
+  await problemOf(refused.clone(), 409, 'conflict');
+  assert.equal((await refused.json()).current.snapshotKey, CLOSED);
+  const confirmed = await app.api(member, 'POST', url, { link: `${planner.url}/layouts/${OTHER}`, confirm: true });
+  assert.equal(confirmed.status, 201);
+  assert.equal((await confirmed.json()).layout.snapshotKey, OTHER);
+  await problemOf(await app.api(member, 'POST', url, { link: `${planner.url}/layouts/${OPEN}` }), 422, 'not-a-circuit');
+  await problemOf(await app.api(member, 'POST', path('tracks/nope/layouts'), { link: `${planner.url}/layouts/${CLOSED}` }), 404, 'not-found');
+});
+
+test('a track is deleted only when archived, and the current track is set by id', async () => {
+  const track = await (await app.api(member, 'POST', path('tracks'), { name: 'Doomed' })).json();
+  await problemOf(await app.api(admin, 'DELETE', path(`tracks/${track.id}`)), 409, 'conflict');
+  await app.api(member, 'PATCH', path(`tracks/${track.id}`), { archived: true });
+  await problemOf(await app.api(member, 'DELETE', path(`tracks/${track.id}`)), 403, 'forbidden');
+  assert.equal((await app.api(admin, 'DELETE', path(`tracks/${track.id}`))).status, 204);
+  await problemOf(await app.api(admin, 'DELETE', path(`tracks/${track.id}`)), 404, 'not-found');
+
+  const home = (await (await app.api(member, 'GET', path('tracks'))).json()).tracks.find((t) => t.name === 'Home');
+  const res = await app.api(member, 'PUT', path('track'), { trackId: home.id, direction: 'cw' });
+  assert.equal(res.status, 200);
+  const set = await res.json();
+  assert.deepEqual([set.track.id, set.track.current, set.direction], [home.id, true, 'cw']);
   const snapshot = await (await app.api(member, 'GET', `/workspaces/${office.id}`)).json();
-  assert.deepEqual([snapshot.track, snapshot.direction], [{ id, name: 'Office loop' }, 'cw']);
-  await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${OPEN}`, direction: 'cw' }), 422, 'not-a-circuit');
-  await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, direction: 'up' }), 422, 'invalid-request');
-  await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name: '', direction: 'cw' }), 422, 'invalid-request');
-  await problemOf(await app.api(member, 'PUT', path('track'), { link: 'https://elsewhere.example/layouts/x', direction: 'cw' }), 422, 'invalid-request');
+  assert.deepEqual([snapshot.track, snapshot.direction], [{ id: home.id, name: 'Home' }, 'cw']);
+  await problemOf(await app.api(admin, 'DELETE', path(`tracks/${home.id}`)), 409, 'conflict');
+  await problemOf(await app.api(member, 'PUT', path('track'), { trackId: home.id, direction: 'up' }), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'PUT', path('track'), { trackId: 'nope', direction: 'cw' }), 404, 'not-found');
+});
+
+test('strangers and cross-origin writes are refused on tracks', async () => {
+  const evil = { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' };
+  await problemOf(await app.api(stranger, 'GET', path('tracks')), 404, 'not-found');
+  await problemOf(await app.api(stranger, 'POST', path('tracks'), { name: 'Z' }), 404, 'not-found');
+  await problemOf(await app.api(stranger, 'PUT', path('track'), { trackId: 'x', direction: 'cw' }), 404, 'not-found');
+  await problemOf(await app.api(member, 'POST', path('tracks'), { name: 'Z' }, evil), 403, 'forbidden');
+  await problemOf(await app.api(admin, 'DELETE', path('tracks/x'), undefined, evil), 403, 'forbidden');
 });
 
 test('a new watchers token replaces the old one', async () => {
@@ -121,7 +177,7 @@ test('a new watchers token replaces the old one', async () => {
 test('names with control characters are refused for drivers, tracks and decoders', async () => {
   for (const name of ['A\rB', 'A\nB', 'A\u0000B', 'A\u007fB']) {
     await problemOf(await app.api(member, 'POST', path('drivers'), { name }), 422, 'invalid-request');
-    await problemOf(await app.api(member, 'PUT', path('track'), { link: `${planner.url}/layouts/${CLOSED}`, name, direction: 'cw' }), 422, 'invalid-request');
+    await problemOf(await app.api(member, 'POST', path('tracks'), { name }), 422, 'invalid-request');
   }
   const ok = await (await app.api(member, 'POST', path('drivers'), { name: 'Ctl' })).json();
   await problemOf(await app.api(member, 'PATCH', path(`drivers/${ok.id}`), { name: 'Ctl\r\nevent: x' }), 422, 'invalid-request');
