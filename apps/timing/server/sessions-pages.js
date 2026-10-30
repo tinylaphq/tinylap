@@ -127,22 +127,20 @@ async function start(request) {
   const done = `${request.space.base}/${from ?? 'board'}`;
   // A confirmation replaces only the session it named. From here to the start nothing awaits,
   // so what runs cannot change in between.
+  // Sent twice (a double click, two members): the session running is the one the first send started.
+  const twice = (running) => running.kind === values.kind && request.now() - running.createdAt < DOUBLE_SUBMIT_MS;
   const named = form.get('replace');
-  const running = request.store.runningSession(request.workspaceId);
-  if (running && running.id !== named) {
-    // Sent twice (a double click, two members): the session running is the one the first send started.
-    if (running.kind === values.kind && request.now() - running.createdAt < DOUBLE_SUBMIT_MS) return seeOther(done);
-    if (named) return askReplace(request, values, running, from);
-  }
+  const running = named ? request.store.runningSession(request.workspaceId) : null;
+  if (running && running.id !== named) return twice(running) ? seeOther(done) : askReplace(request, values, running, from);
   const result = ops.startSession(request, {
     kind: values.kind,
     roster: practice ? undefined : values.roster,
     durationSeconds: minutes === undefined ? undefined : minutes * 60,
     countdownSeconds: practice || values.countdown === '' ? undefined : values.countdown,
-    replace: !!named && running !== null,
+    replace: running !== null,
   });
   if (!result.error) return seeOther(done);
-  if ('running' in result.error) return askReplace(request, values, result.error.running, from);
+  if ('running' in result.error) return twice(result.error.running) ? seeOther(done) : askReplace(request, values, result.error.running, from);
   return renderTab(request, result.error.status, { error: result.error, values });
 }
 

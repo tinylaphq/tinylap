@@ -167,6 +167,8 @@ test('Start practice pressed twice starts one practice and lands on the board', 
   assert.equal(again.status, 303);
   assert.equal(again.headers.get('location'), `${base}/board`);
   assert.equal(app.store.runningSession(office.id).id, started.id, 'one practice, the first one');
+  const bad = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['duration', '2']]);
+  assert.equal(bad.status, 422, 'a form with a mistake still says so');
   clock.now += 10_000;
   const later = await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
   assert.equal(later.status, 200, 'after 10 s it asks again');
