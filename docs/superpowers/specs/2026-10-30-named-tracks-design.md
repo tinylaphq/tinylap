@@ -67,7 +67,7 @@ No migration. The deployed timing database holds no real club yet, so it starts 
   - each other track with Make current, Rename, Attach layout or Change layout, Archive;
   - Add track (a name, or a planner link);
   - Archived tracks, collapsed (`<details>`), each with Restore and Delete.
-- **A track's page**, `…/tracks/<id>`, members only: its name, the current layout drawn as today's track pictures are (or "No layout"), earlier layouts by date with who attached them, and its records per direction (the record history, as `…/records` shows it). `…/records` keeps showing the current track's and links here.
+- **A track's page**, `…/tracks/<id>`, members only: its name, the current layout drawn with `layoutToSvgString` from `@tinylap/track-format` (or "No layout"), earlier layouts by date with who attached them, and its records per direction (the record history, as `…/records` shows it). `…/records` keeps showing the current track's and links here.
 - **The board's track header** always has a track: "Track · counter-clockwise" and its record or "No record yet". "No track set" goes.
 - **The board's setup steps** lose "Choose the track"; they are Add drivers and Start timing.
 - The words follow the glossary: a *track* is what a club races on; a *layout* is the planner's drawing of it.
@@ -86,7 +86,7 @@ No migration. The deployed timing database holds no real club yet, so it starts 
 ## 7. Left to the builder
 
 - The look of the track list, the track page and the confirmation, within palace-ui and `@tinylap/design`, with the `frontend-design` skill.
-- How the track page draws earlier layouts (reuse today's track picture).
+- How large the track page draws earlier layouts.
 
 ## 8. Decisions
 
