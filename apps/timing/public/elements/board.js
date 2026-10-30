@@ -28,7 +28,9 @@
 //   click. It shows pressed only while wanted and granted, and blocked
 //   (data-state="blocked", disabled) once the browser denies it. The same
 //   swap that rings shows "New track record" with the header's text; its tag
-//   makes several open boards show one.
+//   makes several open boards show one. A browser that refuses to construct
+//   one (Android Chrome) shows nothing. The permission is read again when
+//   the page shows, since it can be revoked meanwhile.
 // Without EventSource there is no stream; without JavaScript the page
 // reloads every ten seconds (<noscript> refresh).
 
@@ -91,6 +93,7 @@ class TlBoard extends HTMLElement {
   disconnectedCallback() {
     this.sound?.removeEventListener('click', this);
     this.notify?.removeEventListener('click', this);
+    removeEventListener('visibilitychange', this);
     this.lock();
     this.audio?.close().catch(() => {});
     this.audio = null;
@@ -153,6 +156,7 @@ class TlBoard extends HTMLElement {
     this.showNotify();
     notify.hidden = false;
     notify.addEventListener('click', this);
+    addEventListener('visibilitychange', this); // it bubbles from document
   }
 
   /** Notifications can show: wanted, and granted. */
@@ -184,7 +188,10 @@ class TlBoard extends HTMLElement {
     const now = text('.board-track-new .board-track-time');
     const holder = text('.board-track-new .driver');
     const beat = text('.board-track-beat');
-    const note = new Notification('New track record', { body: `${now} · ${holder}${beat ? `\n${beat}` : ''}`, tag: `tinylap-record-${seq}` });
+    let note;
+    try {
+      note = new Notification('New track record', { body: `${now} · ${holder}${beat ? `\n${beat}` : ''}`, tag: `tinylap-record-${seq}` });
+    } catch { return; } // only a service worker may notify here
     note.addEventListener('click', () => {
       window.focus();
       note.close();
@@ -254,11 +261,15 @@ class TlBoard extends HTMLElement {
         const current = this.querySelector('#board-live');
         if (next && current) swap(current, next);
         const seq = this.recordSeq();
-        if (seq && seq !== this.seen && this.audio && this.soundOn) ring(this.audio);
-        if (seq && seq !== this.seen && this.notifyOn) this.notifyRecord(seq);
-        this.seen = seq ?? this.seen;
+        const fresh = seq !== null && seq !== this.seen;
+        this.seen = seq ?? this.seen; // first, so a failing bell or notification can't repeat
+        if (fresh && this.audio && this.soundOn) ring(this.audio);
+        if (fresh && this.notifyOn) this.notifyRecord(seq);
         break;
       }
+      case 'visibilitychange':
+        if (document.visibilityState === 'visible') this.showNotify();
+        break;
       case 'pagehide':
         this.close();
         break;

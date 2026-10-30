@@ -294,8 +294,8 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 }
 .navbar-right .btn { border-color: var(--p-border-dark); }
 .navbar-right .btn[hidden] { display: none; }
-/* The bell's switch, pressed: the filled button. */
-.navbar-right .btn[aria-pressed="true"] { background: var(--p-text); border-color: var(--p-text); color: var(--p-bg); }
+/* A switch, pressed (Sound on, Notify me): filled light on the dark bar, where off is the outline. */
+.navbar-right .btn[aria-pressed="true"], .navbar-right .btn[aria-pressed="true"]:hover { background: var(--p-surface); border-color: var(--p-surface); color: var(--p-dark); }
 /* Sound remembered on, but the browser waits for a tap before it plays: the
  * switch asks for one, with the amber lamp the stream uses while it waits. */
 #sound-switch:not([data-state="wanted"]) .sound-wanted, #sound-switch[data-state="wanted"] .sound-on { display: none; }
@@ -303,10 +303,10 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 #sound-switch[data-state="wanted"]::before { content: ''; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
 @media (prefers-reduced-motion: reduce) { #sound-switch[data-state="wanted"]::before { animation: none; } }
 body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
-/* Notifications the browser blocks for this site: palace's disabled button,
- * saying so, since only the browser's site settings can undo it. */
+/* Notifications the browser blocks for this site: a dimmed, dashed switch that
+ * says so, since only the browser's site settings can undo it. */
 #notify-switch:not([data-state="blocked"]) .notify-blocked, #notify-switch[data-state="blocked"] .notify-on { display: none; }
-.navbar-right .btn:disabled { background: transparent; border-color: var(--p-border-dark); color: var(--p-disabled-text); }
+.navbar-right .btn:disabled { background: transparent; border-style: dashed; border-color: var(--p-text-faint); color: var(--p-text-faint); }
 .nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
 .nav-tabs li { display: flex; }
 

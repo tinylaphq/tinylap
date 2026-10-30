@@ -8,6 +8,7 @@
 // sets its permission and what requestPermission answers.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { PARTIALS } from '../../public/bell.js';
 import { formatLap } from '../../public/format.js';
 import { startTiming } from '../server/helpers.js';
 import { openBrowser, pageAs } from './browser.js';
@@ -55,11 +56,28 @@ function newRecord() {
 
 /**
  * A page with Notification stubbed: `permission` to start with, `answer` for
- * requestPermission, or `notification: false` for a browser without it.
+ * requestPermission, or `notification: false` for a browser without it;
+ * `throws` makes its constructor throw, as Android Chrome's does. AudioContext
+ * counts the oscillators a ring starts.
  */
-async function boardPage(path = '/personal/board', { permission = 'default', answer = 'granted', notification = true, storage = true, who = member } = {}) {
+async function boardPage(path = '/personal/board', { permission = 'default', answer = 'granted', notification = true, storage = true, throws = false, who = member } = {}) {
   const { context, page, errors } = await pageAs(browser, app, who);
-  await page.addInitScript(({ permission, answer, notification, storage }) => {
+  await page.addInitScript(({ permission, answer, notification, storage, throws }) => {
+    window.oscillators = 0;
+    window.AudioContext = class {
+      currentTime = 0;
+      state = 'running';
+      destination = {};
+      resume() { return Promise.resolve(); }
+      close() { return Promise.resolve(); }
+      createGain() {
+        const param = { value: 1, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} };
+        return { gain: param, connect() {} };
+      }
+      createOscillator() {
+        return { frequency: { value: 0 }, type: 'sine', connect() {}, start() { window.oscillators += 1; }, stop() {} };
+      }
+    };
     if (!storage) Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } });
     window.notes = [];
     window.focused = 0;
@@ -75,17 +93,19 @@ async function boardPage(path = '/personal/board', { permission = 'default', ans
         return Promise.resolve(answer);
       }
       constructor(title, options) {
+        if (throws) throw new TypeError('Illegal constructor');
         this.listeners = [];
         window.notes.push({ title, body: options.body, tag: options.tag, note: this });
       }
       addEventListener(type, listener) { this.listeners.push({ type, listener }); }
       close() {}
     };
-  }, { permission, answer, notification, storage });
+  }, { permission, answer, notification, storage, throws });
   await page.goto(path);
   await page.locator('#live-status[data-state="live"]').waitFor({ state: 'attached' });
   const notes = () => page.evaluate(() => window.notes.map(({ title, body, tag }) => ({ title, body, tag })));
-  return { context, page, errors, notes };
+  const rings = async () => (await page.evaluate(() => window.oscillators)) / PARTIALS.length;
+  return { context, page, errors, notes, rings };
 }
 
 /** Turns Notify me on and waits for it to show pressed. */
@@ -208,5 +228,33 @@ test('the watch link has the switch too, and it works with storage blocked', asy
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     assert.deepEqual((await notes()).map((n) => n.tag), [`tinylap-record-${seq}`]);
     assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('a notification the browser refuses to construct leaves one ring of the bell and no page error', async () => {
+  const { context, page, errors, rings } = await boardPage('/personal/board', { throws: true });
+  try {
+    await page.getByRole('button', { name: 'Sound on' }).click();
+    await page.locator('#sound-switch[aria-pressed="true"]').waitFor();
+    await turnOn(page);
+    const seq = newRecord();
+    await page.locator(`[data-record-new="${seq}"]`).waitFor();
+    t += 12_300; // a slower lap, unlike any before: the board is swapped again, the same record still showing
+    passIn(t);
+    await page.locator('.board-feed', { hasText: '12.300' }).waitFor();
+    assert.equal(await rings(), 1);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('a permission revoked while the page was hidden unpresses the switch when it shows again', async () => {
+  const { context, page } = await boardPage();
+  try {
+    await turnOn(page);
+    await page.evaluate(() => {
+      window.Notification.permission = 'default';
+      document.dispatchEvent(new Event('visibilitychange', { bubbles: true })); // as the browser's does
+    });
+    await page.locator('#notify-switch[aria-pressed="false"]').waitFor();
   } finally { await context.close(); }
 });
