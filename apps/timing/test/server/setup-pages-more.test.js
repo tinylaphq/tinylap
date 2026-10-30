@@ -2,19 +2,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Setup forms, continued (spec §6.4): the track from a planner link,
-// pairing a decoder over Wi-Fi with its token shown once, unpairing, and
-// the watchers link.
+// Setup forms, continued (spec §6.4): pairing a decoder over Wi-Fi with its
+// token shown once, unpairing, and the watchers link.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { open, seal } from '@tinylap/auth';
 import { readFileSync } from 'node:fs';
 import { startTiming } from './helpers.js';
-import { CLOSED, OPEN, closed, startPlannerStub } from './planner-stub.js';
 
 let app;
-let planner;
 let owner;
 let member;
 let office;
@@ -25,8 +22,7 @@ const keys = [{ id: 'k1', key: randomBytes(32) }];
 const lines = [];
 
 before(async () => {
-  planner = await startPlannerStub();
-  app = await startTiming({ plannerUrl: planner.url, log: (line) => lines.push(line), keys });
+  app = await startTiming({ log: (line) => lines.push(line), keys });
   ana = await app.signUp('Ana');
   ben = await app.signUp('Ben');
   office = app.club(ana, 'Office');
@@ -35,30 +31,9 @@ before(async () => {
   member = await app.login(ben);
   base = `/clubs/${office.id}`;
 });
-after(async () => {
-  await app.close();
-  await planner.close();
-});
+after(() => app.close());
 
 const get = (who, path, cookie = '') => app.api(who, 'GET', path, undefined, { accept: 'text/html', ...(cookie ? { cookie: `${who.jar.header()}; ${cookie}` } : {}) });
-
-test('the track comes from a planner link; a bad one comes back with the link kept', async () => {
-  const ok = await app.form(member, `${base}/track`, { link: `${planner.url}/layouts/${CLOSED}`, name: 'Office loop', direction: 'cw' });
-  assert.equal(ok.status, 303);
-  assert.equal(ok.headers.get('location'), `${base}/setup#track`);
-  const added = app.store.track(office.id, app.store.workspace(office.id).trackId);
-  assert.deepEqual([added.name, added.layout.plannerId], ['Office loop', closed.track.id]);
-  assert.match(await (await get(member, `${base}/setup`)).text(), /Now: <strong>Office loop<\/strong>, clockwise\./);
-  const open = await app.form(member, `${base}/track`, { link: `${planner.url}/layouts/${OPEN}`, name: '', direction: 'cw' });
-  assert.equal(open.status, 422);
-  const body = await open.text();
-  assert.match(body, /not a closed circuit/);
-  assert.match(body, /<p class="status status-error" role="alert"><a href="#track-link">/);
-  assert.equal((body.match(/role="alert"/g) ?? []).length, 1, 'one page-level summary, none in the form');
-  assert.match(body, new RegExp(`id="track-link"[^>]*value="${planner.url}/layouts/${OPEN}"`));
-  const down = await app.form(member, `${base}/track`, { link: 'http://127.0.0.1:9/layouts/x', direction: 'cw' });
-  assert.equal(down.status, 422, 'a link from elsewhere is refused before anything is fetched');
-});
 
 test('pairing over Wi-Fi shows the token once, never in a URL or a log', async () => {
   const res = await app.form(member, `${base}/decoders`, { name: 'Start line' });

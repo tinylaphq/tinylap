@@ -2,10 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The setup page (spec §6.4): the track, drivers, transponders, decoders
+// The setup page (spec §6.4): the tracks, drivers, transponders, decoders
 // and the watchers link, each its own card-static section and forms.
 import { formatAgo } from '@tinylap/design/format-ago.js';
-import { html } from './html.js';
+import { localTime } from '@tinylap/design/html/local-time.js';
+import { html, safe } from './html.js';
 import { copyable, errorSummary, selectField, textField } from './form-parts.js';
 import { layout } from './layout.js';
 
@@ -15,19 +16,79 @@ const DIRECTION_NAME = { cw: 'clockwise', ccw: 'anticlockwise' };
 // The colour swatch only: the rename field beside it already carries the name.
 const driverChip = (d) => html`<span class="driver" style="--driver: ${d.colour}" aria-hidden="true"></span>`;
 
+// A track's rename and layout forms, folded away until wanted; open while one
+// of them has an error. The layout form loads a page: a new
+// layout may answer with its confirmation, which no card swap can show.
+function trackEdit(request, m, t) {
+  const base = request.space.base;
+  const rename = `track-rename:${t.id}`;
+  const attach = `track-layout:${t.id}`;
+  const open = m.errors[rename] || m.errors[attach];
+  return html`<details class="track-edit"${open ? html` open` : null}>
+    <summary>${t.layout ? 'Rename or change layout' : 'Rename or attach a layout'}</summary>
+    <form method="post" action="${base}/tracks/${t.id}" class="inline-form">
+      ${textField({ id: `track-name-${t.id}`, label: `New name for ${t.name}`, labelHidden: true, name: 'name', maxlength: 60, required: true, value: m.values[rename]?.name ?? t.name, error: m.errors[rename] ?? null })}
+      <button type="submit" class="btn btn-sm btn-outline">Rename</button>
+    </form>
+    <form method="post" action="${base}/tracks/${t.id}/layout" class="inline-form" data-frame="off">
+      ${textField({ id: `track-link-${t.id}`, label: `Planner link for ${t.name}`, labelHidden: true, name: 'link', type: 'url', required: true, placeholder: 'Planner link', value: m.values[attach]?.link ?? '', error: m.errors[attach] ?? null })}
+      <button type="submit" class="btn btn-sm btn-outline">${t.layout ? 'Change layout' : 'Attach layout'}</button>
+    </form>
+  </details>`;
+}
+
+/** A track's layout in a few words: since when, or none. */
+const layoutNote = (t) => html`<span class="meta">${t.layout ? html`Layout since ${safe(localTime(t.layout.attachedAt, 'date'))}` : 'No layout'}</span>`;
+
+// The track list (named tracks spec §4): the current track and direction with
+// the form to switch, the other active tracks, Add track, and the archive.
 function trackSection(request, m) {
   const base = request.space.base;
   const error = m.errors.track ?? null;
   const values = m.values.track ?? {};
+  const add = m.values['add-track'] ?? {};
+  const addError = m.errors['add-track'] ?? null;
+  const others = m.tracks.filter((t) => t.id !== m.track.id);
   return html`<tl-frame id="track"><section class="card-static stack-md" aria-labelledby="track-title">
   <h2 class="h3" id="track-title">Track</h2>
-  <p>${m.track ? html`Now: <strong>${m.track.name}</strong>, ${DIRECTION_NAME[m.direction]}.` : 'No track yet. Share a closed track from the planner and paste its link here.'}</p>
-  <form method="post" action="${base}/track" class="stack-sm">
-    ${textField({ id: 'track-link', label: 'Planner link', name: 'link', type: 'url', required: true, placeholder: 'https://…/layouts/…', value: values.link ?? '', error })}
-    ${textField({ id: 'track-name', label: 'Track name', name: 'name', maxlength: 60, value: values.name ?? m.track?.name ?? '', error })}
-    ${selectField({ id: 'track-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error })}
-    <button type="submit" class="btn btn-primary">Use this track</button>
+  <div class="track-now stack-sm">
+    <p class="track-head">Now: <a href="${base}/tracks/${m.track.id}"><strong>${m.track.name}</strong></a>, ${DIRECTION_NAME[m.direction]}. ${layoutNote(m.track)}</p>
+    <form method="post" action="${base}/track" class="inline-form">
+      ${selectField({ id: 'current-track', label: 'Track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: values.id ?? m.track.id, error })}
+      ${selectField({ id: 'current-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error })}
+      <button type="submit" class="btn btn-primary">Switch</button>
+    </form>
+    ${trackEdit(request, m, m.track)}
+  </div>
+  ${others.length ? html`<div class="stack-sm">
+    <h3 class="track-subhead" id="other-tracks-title">Other tracks</h3>
+    <ul class="setup-list" aria-labelledby="other-tracks-title">${others.map((t) => html`<li class="track-row">
+      <p class="track-head"><a href="${base}/tracks/${t.id}">${t.name}</a> ${layoutNote(t)}</p>
+      <div class="button-row">
+        <form method="post" action="${base}/track"><input type="hidden" name="id" value="${t.id}"><input type="hidden" name="direction" value="${m.direction}"><button type="submit" class="btn btn-sm btn-outline">Make current</button></form>
+        <form method="post" action="${base}/tracks/${t.id}/archive"><button type="submit" class="btn btn-sm btn-outline">Archive</button></form>
+      </div>
+      ${trackEdit(request, m, t)}
+    </li>`)}</ul>
+  </div>` : null}
+  <form method="post" action="${base}/tracks" class="stack-sm">
+    <h3 class="track-subhead">Add a track</h3>
+    <div class="inline-form">
+      ${textField({ id: 'add-track-name', label: 'Name', name: 'name', maxlength: 60, required: true, value: add.name ?? '', error: addError })}
+      ${textField({ id: 'add-track-link', label: 'Planner link', name: 'link', type: 'url', placeholder: 'Optional', value: add.link ?? '', error: addError })}
+      <button type="submit" class="btn btn-primary">Add track</button>
+    </div>
   </form>
+  ${m.archived.length ? html`<details class="track-archive"${m.archived.some((t) => m.errors[`track-restore:${t.id}`]) ? html` open` : null}>
+    <summary>Archived tracks (${m.archived.length})</summary>
+    <ul class="setup-list">${m.archived.map((t) => html`<li class="setup-row">
+      <a href="${base}/tracks/${t.id}">${t.name}</a>
+      <div class="button-row">
+        <form method="post" action="${base}/tracks/${t.id}/restore"><button type="submit" class="btn btn-sm btn-outline">Restore</button></form>
+        ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/tracks/${t.id}/delete">Delete</a>` : null}
+      </div>
+    </li>`)}</ul>
+  </details>` : null}
 </section></tl-frame>`;
 }
 
@@ -121,7 +182,7 @@ export function setupPage(request, model) {
   return layout(request, {
     title: 'Setup',
     screen: 'setup',
-    modules: ['pkg/design/elements/frame.js', 'pkg/design/elements/copy.js'],
+    modules: ['pkg/design/elements/frame.js', 'pkg/design/elements/copy.js', 'pkg/design/elements/local-time.js'],
     body: html`<div class="container stack-xl screen">
   <h1>Setup</h1>
   <div id="page-status">${m.failed ? errorSummary(m.failed.error, m.failed.fieldId) : null}</div>

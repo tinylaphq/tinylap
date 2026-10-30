@@ -376,6 +376,25 @@ body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
 .status > .copy + p { margin-top: var(--p-space-md); }
 .decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
 .decoder-info .meta { margin: 0; }
+/* The track list (named tracks spec §4). The current track is set like the
+   board's track strip, its edge in the record colour, so it reads as the
+   track the board shows. Rename and layout fold away under each track. */
+.track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border-left: 6px solid var(--tl-record); }
+.track-head { margin: 0; }
+.track-head .meta { color: var(--p-text-muted); font-size: 12px; margin-left: var(--p-space-xs); }
+.track-now .inline-form > .field { flex: 1 1 9rem; }
+.track-subhead { font-size: 12px; margin: 0; color: var(--p-text-muted); }
+.track-row { display: grid; gap: var(--p-space-xs); padding-block: var(--p-space-sm); }
+.track-row + .track-row { border-top: var(--p-border-thin) solid var(--p-border-light); }
+.track-row .button-row form, .track-archive form { margin: 0; }
+.track-edit > summary, .track-archive > summary { cursor: pointer; font-weight: 600; width: fit-content; }
+.track-edit > summary { font-size: 13px; color: var(--p-text-secondary); }
+.track-edit[open] > summary, .track-archive[open] > summary { margin-bottom: var(--p-space-sm); }
+.track-edit .inline-form + .inline-form { margin-top: var(--p-space-sm); }
+/* A field and its button stay on one line, even on a phone, as a driver's rename does. */
+.track-edit .inline-form { flex-wrap: nowrap; }
+.track-edit .inline-form > .field { flex: 1 1 0; }
+.track-archive .setup-row > .button-row { margin-left: auto; }
 @media (max-width: 520px) {
   /* The swatch stays beside the rename form; a delete link sits under it. */
   /* Swatch, rename form and delete stay on one row. */

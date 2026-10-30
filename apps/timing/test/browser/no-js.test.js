@@ -52,10 +52,13 @@ test('set the track and manage drivers', async (t) => {
   await page.getByRole('link', { name: 'Setup', exact: true }).click();
   assert.equal(pathOf(page), '/personal/setup');
 
-  await page.getByLabel('Planner link').fill(`${planner.url}/layouts/${CLOSED}`);
-  await page.getByLabel('Track name').fill('Office loop');
+  await page.getByLabel('Name', { exact: true }).fill('Office loop');
+  await page.getByLabel('Planner link', { exact: true }).fill(`${planner.url}/layouts/${CLOSED}`);
+  await page.getByRole('button', { name: 'Add track' }).click();
+  await page.getByRole('link', { name: 'Office loop' }).waitFor();
+  await page.getByRole('combobox', { name: 'Track', exact: true }).selectOption({ label: 'Office loop' });
   await page.getByLabel('Direction').selectOption('cw');
-  await page.getByRole('button', { name: 'Use this track' }).click();
+  await page.getByRole('button', { name: 'Switch' }).click();
   await page.getByText('Now: Office loop, clockwise.').waitFor();
 
   for (const name of ['Ana', 'Ben']) {

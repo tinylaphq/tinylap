@@ -6,7 +6,6 @@
 // URL and answers 303 to the setup section it changed; a failure renders the
 // page again with the error and what was typed.
 import { can, open, seal } from '@tinylap/auth';
-import { DIRECTIONS } from '@tinylap/track-format';
 import { displayName } from './auth.js';
 import * as ops from './operations.js';
 import { readForm } from './form.js';
@@ -14,7 +13,7 @@ import { pageRoute, toPage } from './page-access.js';
 import { page, seeOther } from './respond.js';
 import { retryHeaders } from './responses.js';
 import { spacePath } from './spaces.js';
-import { confirmPage } from './views/confirm.js';
+import { changeLayoutPage, confirmPage } from './views/confirm.js';
 import { setupPage } from './views/setup.js';
 
 /**
@@ -29,7 +28,9 @@ export function renderSetup(request, status, { headers = {}, ...extras } = {}) {
     drivers: request.store.drivers(ws),
     transponders: request.store.transponders(ws),
     decoders: request.store.decoders(ws),
-    track: workspace.trackId ? request.store.track(ws, workspace.trackId) : null,
+    track: request.store.track(ws, workspace.trackId),
+    tracks: request.store.tracks(ws, { archived: false }),
+    archived: request.store.tracks(ws, { archived: true }),
     direction: workspace.direction,
     watchToken: workspace.watchToken,
     mayDelete: can(request.session.claims, ws, 'timing.delete'),
@@ -107,18 +108,62 @@ function showSetup(request) {
   return renderSetup(request, 200, { paired, headers: { 'Set-Cookie': [clearPaired] } });
 }
 
-// Until Setup lists tracks: adds a track from the planner link and makes it current.
-const setTrack = withForm(async (request, form) => {
-  const values = { link: form.get('link') ?? '', name: form.get('name') ?? '', direction: form.get('direction') ?? '' };
-  // The direction is checked first, so a bad one adds no track.
-  let result = DIRECTIONS.includes(values.direction) ? null : ops.setCurrentTrack(request, { id: '', direction: values.direction });
-  if (!result) {
-    // A blank name is "use the default" on a form.
-    result = await ops.addTrack(request, { name: values.name || 'Track', link: values.link, by: { userId: request.userId, name: await displayName(request) } });
-    if (!result.error) result = ops.setCurrentTrack(request, { id: result.value.id, direction: values.direction });
-  }
-  return afterForm(request, result, { key: 'track', values, section: 'track', fieldId: result.error?.field ? `track-${result.error.field}` : null });
+// The track list (named tracks spec §3.3–3.5). A name in use is a mistake in
+// the form, so it answers 422 like any other bad input, not the API's 409.
+const asForm = (result) => (result.error?.problem === 'conflict' && result.error.field ? { error: { ...result.error, status: 422 } } : result);
+const trackForm = (request, result, key, values, fieldIds = {}) => afterForm(request, asForm(result), { key, values, section: 'track', fieldId: fieldIds[result.error?.field] ?? null });
+const by = async (request) => ({ userId: request.userId, name: await displayName(request) });
+
+const addTrack = withForm(async (request, form) => {
+  const values = { name: form.get('name') ?? '', link: form.get('link') ?? '' };
+  // An empty link is no layout; the name is always the member's.
+  const result = await ops.addTrack(request, { name: values.name, link: values.link.trim() === '' ? undefined : values.link, by: await by(request) });
+  return trackForm(request, result, 'add-track', values, { name: 'add-track-name', link: 'add-track-link' });
 });
+
+const renameTrack = withForm((request, form, match) => {
+  const values = { name: form.get('name') ?? '' };
+  return trackForm(request, ops.renameTrack(request, { id: match[2], name: values.name }), `track-rename:${match[2]}`, values, { name: `track-name-${match[2]}` });
+});
+
+// A different layout answers with the confirmation (§3.4), its link carried in both of its forms.
+const attachLayout = withForm(async (request, form, match) => {
+  const values = { link: form.get('link') ?? '' };
+  const result = await ops.attachLayout(request, { id: match[2], link: values.link, confirm: form.get('confirm') === '1', by: await by(request) });
+  if (result.error?.problem === 'conflict' && result.error.current) {
+    const track = request.store.track(request.workspaceId, match[2]);
+    return page(request, 200, changeLayoutPage(request, { track, link: values.link, back: `${request.space.base}/setup#track` }));
+  }
+  return trackForm(request, result, `track-layout:${match[2]}`, values, { link: `track-link-${match[2]}` });
+});
+
+// Make current, from the switch form or a track's own button.
+const setTrack = withForm((request, form) => {
+  const values = { id: form.get('id') ?? '', direction: form.get('direction') ?? '' };
+  return trackForm(request, ops.setCurrentTrack(request, values), 'track', values, { direction: 'current-direction' });
+});
+
+const archiveTrack = withForm((request, _form, match) => trackForm(request, ops.archiveTrack(request, { id: match[2] }), 'track', {}));
+
+const restoreTrack = withForm((request, _form, match) => trackForm(request, ops.restoreTrack(request, { id: match[2] }), `track-restore:${match[2]}`, {}));
+
+function askDeleteTrack(request, match) {
+  const track = request.store.track(request.workspaceId, match[2]);
+  if (!track) return renderSetup(request, 404, { failed: { error: { message: 'There is no such track here.' } } });
+  if (track.archivedAt === null) return renderSetup(request, 409, { failed: { error: { message: `Archive ${track.name} before deleting it.` } } });
+  const base = request.space.base;
+  const n = request.store.sessionCount(request.workspaceId, track.id);
+  const sessions = n === 0 ? 'It has no sessions.' : n === 1 ? 'Its 1 session stays in the history, without a track.' : `Its ${n} sessions stay in the history, without a track.`;
+  return page(request, 200, confirmPage(request, {
+    title: `Delete ${track.name}?`,
+    text: `Its records and layouts are removed. ${sessions}`,
+    action: `${base}/tracks/${track.id}/delete`,
+    button: 'Delete',
+    back: `${base}/setup#track`,
+  }));
+}
+
+const deleteTrack = withForm((request, _form, match) => trackForm(request, ops.deleteTrack(request, { id: match[2] }), 'track', {}));
 
 const pairDecoder = withForm((request, form) => {
   const values = { name: form.get('name') ?? '' };
@@ -169,6 +214,12 @@ export const setupPageRoutes = [
   { pattern: spacePath('drivers/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteDriver), POST: pageRoute('timing.delete', deleteDriver, write) } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { GET: toPage('setup#transponders'), POST: pageRoute('timing.setup', assignTransponder, write) } },
   { pattern: spacePath('track'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', setTrack, write) } },
+  { pattern: spacePath('tracks'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', addTrack, write) } },
+  { pattern: spacePath('tracks/([^/]+)'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', renameTrack, write) } },
+  { pattern: spacePath('tracks/([^/]+)/layout'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', attachLayout, write) } },
+  { pattern: spacePath('tracks/([^/]+)/archive'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', archiveTrack, write) } },
+  { pattern: spacePath('tracks/([^/]+)/restore'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', restoreTrack, write) } },
+  { pattern: spacePath('tracks/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteTrack), POST: pageRoute('timing.delete', deleteTrack, write) } },
   { pattern: spacePath('decoders'), credentials: true, methods: { GET: toPage('setup#decoders'), POST: pageRoute('timing.setup', pairDecoder, write) } },
   { pattern: spacePath('decoders/([^/]+)/unpair'), credentials: true, methods: { GET: pageRoute('timing.delete', askUnpair), POST: pageRoute('timing.delete', unpair, write) } },
   { pattern: spacePath('watch-link'), credentials: true, methods: { GET: toPage('setup#watchers'), POST: pageRoute('timing.setup', makeWatchLink, write) } },

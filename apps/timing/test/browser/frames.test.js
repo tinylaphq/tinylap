@@ -86,13 +86,28 @@ test('a bad rename swaps in the error: summary, marked field, the input kept, fo
 test('a planner outage (502) swaps in its message, with the link kept', async (t) => {
   const { page, posts, loads } = await openSetup(t);
   const link = `${PLANNER}/layouts/${'A'.repeat(22)}`;
-  await page.locator('#track-link').fill(link);
-  await page.getByRole('button', { name: 'Use this track' }).click();
+  await page.locator('#add-track-name').fill('Yard');
+  await page.locator('#add-track-link').fill(link);
+  await page.getByRole('button', { name: 'Add track' }).click();
   await page.locator('#page-status [role="alert"]').filter({ hasText: 'planner' }).waitFor();
-  assert.equal(await page.locator('#track-link').inputValue(), link);
-  assert.equal(await activeId(page), 'track-link');
+  assert.equal(await page.locator('#add-track-link').inputValue(), link);
+  assert.equal(await page.locator('#add-track-name').inputValue(), 'Yard');
+  assert.equal(await activeId(page), 'add-track-link');
   assert.equal(posts.length, 1);
   assert.equal(loads(), 0);
+});
+
+test('a layout form loads a page, since a new layout may answer with its confirmation', async (t) => {
+  const { page, posts, loads } = await openSetup(t);
+  const link = `${PLANNER}/layouts/${'A'.repeat(22)}`;
+  const field = page.locator('[id^="track-link-"]').first();
+  await field.locator('xpath=ancestor::details/summary').click();
+  await field.fill(link);
+  await field.locator('xpath=ancestor::form').getByRole('button', { name: 'Attach layout' }).click();
+  await page.locator('#page-status [role="alert"]').filter({ hasText: 'planner' }).waitFor();
+  assert.equal(await page.locator('[id^="track-link-"]').first().inputValue(), link);
+  assert.equal(posts.length, 1);
+  assert.equal(loads(), 1);
 });
 
 test('an unsaved choice in the transponders card survives a driver swap', async (t) => {
@@ -165,13 +180,13 @@ test('while a save is in flight every card’s buttons are disabled, and a submi
   assert.equal(await page.locator('#drivers').getAttribute('aria-busy'), 'true');
   const assign = page.locator('#transponder-0A').locator('xpath=ancestor::form');
   assert.equal(await assign.getByRole('button', { name: 'Assign' }).isDisabled(), true, 'another card shows it can’t save yet');
-  assert.equal(await page.getByRole('button', { name: 'Use this track' }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Add track' }).isDisabled(), true);
   await assign.evaluate((form) => /** @type {HTMLFormElement} */ (form).requestSubmit());
   await saved(page, 'Still saving. Try again in a moment.');
   release();
   await saved(page, 'Drivers saved');
   assert.equal(await assign.getByRole('button', { name: 'Assign' }).isDisabled(), false, 'and every button comes back');
-  assert.equal(await page.getByRole('button', { name: 'Use this track' }).isDisabled(), false);
+  assert.equal(await page.getByRole('button', { name: 'Add track' }).isDisabled(), false);
   assert.deepEqual(posts, ['/personal/drivers']);
 });
 
