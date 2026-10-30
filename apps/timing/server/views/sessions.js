@@ -18,8 +18,11 @@ const STATE = { countdown: 'counting down', running: 'running', finishing: 'fini
 // The summary links to the first control of the field an error names.
 const FIELD_ID = { kind: 'race-kind', roster: 'race-roster', duration: 'race-duration', countdown: 'race-countdown' };
 
-/** A length short enough for a table cell: "18 s", "12 min". @param {number} ms */
-export const shortLength = (ms) => (ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.floor(ms / 60_000)} min`);
+/** A length short enough for a table cell: "18 s", "12 min"; 59.6 s is "1 min", never "60 s". @param {number} ms */
+export const shortLength = (ms) => {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min`;
+};
 
 /** How long an ended session was driven: from its start (after any countdown) to its end. */
 export const drivenMs = (session) => Math.max(0, (session.endedAt ?? session.opensAt ?? 0) - (session.opensAt ?? session.createdAt));
@@ -66,7 +69,7 @@ function runningPanel(request, session, drivers, { reload }) {
   if (session.kind === 'practice') {
     // The clock counts up from the start; the label says when that was (records spec §5.3).
     return html`<div class="card-static stack-md running-panel">
-  <h2 class="h3">Practice, running</h2>
+  <h2>Practice, running</h2>
   <tl-countdown class="race-clock"${reload ? html` reload-on-phase` : null}><span class="stat-label">Started ${safe(localTime(session.opensAt, 'time'))}</span> ${time}</tl-countdown>
   <div class="button-row">
     <a class="btn btn-outline" href="${base}/board">Show the board</a>
@@ -76,7 +79,7 @@ function runningPanel(request, session, drivers, { reload }) {
   }
   const names = (session.roster ?? []).map((id) => drivers.find((d) => d.id === id)?.name ?? 'Former driver');
   return html`<div class="card-static stack-md running-panel">
-  <h2 class="h3">${KIND[session.kind]}, ${STATE[session.state] ?? session.state}</h2>
+  <h2>${KIND[session.kind]}, ${STATE[session.state] ?? session.state}</h2>
   <p>${names.join(', ')}. ${formatLength(session.durationMs ?? 0)}.</p>
   <tl-countdown class="race-clock"${reload ? html` reload-on-phase` : null}><span class="stat-label" data-clock-label>${clock.label}</span> ${time}</tl-countdown>
   <div class="button-row">
@@ -88,27 +91,31 @@ function runningPanel(request, session, drivers, { reload }) {
 
 /**
  * Past sessions, newest first, 20 a page. The columns have fixed widths
- * (app.css); the track and the fastest driver share what is left.
- * @param {any} request @param {{ rows: any[], older: number | null, newer: boolean }} history @param {any[]} drivers
+ * (app.css); the track and the fastest driver share what is left. On a phone
+ * Track, Length and Drivers go, and the track is a second line under the
+ * session, so who was fastest and how fast stay in view.
+ * @param {any} request @param {{ rows: any[], older: string | null, newer: string | null }} history @param {any[]} drivers
  */
 function historySection(request, { rows, older, newer }, drivers) {
   const base = request.space.base;
   const table = rows.length === 0 ? html`<p class="empty">No sessions yet.</p>` : html`<div class="board-scroll"><table class="board-table history-table">
-  <colgroup><col class="col-started"><col class="col-kind"><col><col class="col-count"><col class="col-count"><col><col class="col-time"><col class="col-mark"></colgroup>
-  <thead><tr><th scope="col">Started</th><th scope="col">Session</th><th scope="col">Track</th><th scope="col" class="num">Length</th><th scope="col" class="num">Drivers</th><th scope="col">Fastest</th><th scope="col" class="num">Best</th>${marksHead}</tr></thead>
+  <colgroup><col class="col-started"><col class="col-kind"><col class="history-wide"><col class="col-count history-wide"><col class="col-count history-wide"><col><col class="col-time"><col class="col-mark"></colgroup>
+  <thead><tr><th scope="col">Started</th><th scope="col">Session</th><th scope="col" class="history-wide">Track</th><th scope="col" class="num history-wide">Length</th><th scope="col" class="num history-wide">Drivers</th><th scope="col">Fastest</th><th scope="col" class="num">Best</th>${marksHead}</tr></thead>
   <tbody>${rows.map(({ session, track, drivers: count, best }) => html`<tr class="history-row">
-    <td><a href="${base}/sessions/${session.id}">${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</a></td>
-    <td>${KIND[session.kind]}${session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}</td>
-    <td>${trackName(track, session.direction)}</td>
-    <td class="num">${shortLength(drivenMs(session))}</td>
-    <td class="num">${count}</td>
+    <td class="history-started"><a href="${base}/sessions/${session.id}">${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</a></td>
+    <td class="history-session"><span class="history-kind">${KIND[session.kind]}</span>${session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}<span class="history-track">${trackName(track, session.direction)}</span></td>
+    <td class="history-wide">${trackName(track, session.direction)}</td>
+    <td class="num history-wide">${shortLength(drivenMs(session))}</td>
+    <td class="num history-wide">${count}</td>
     <td class="board-driver">${best ? html`${chip(drivers, best.driverId)}${crown(best.isHolder)}` : null}</td>
     <td class="num">${formatLap(best?.lapMs)}</td>
     ${marks({ lapMs: best?.lapMs, isRecord: Boolean(best?.isRecord), isPb: Boolean(best?.isPb) })}
   </tr>`)}</tbody>
 </table></div>`;
+  // A step at a time either way, and back to the newest from deep in the history.
   const links = [
     newer ? html`<a class="btn btn-outline btn-sm" href="${base}/sessions#history">Newest sessions</a>` : null,
+    newer !== null ? html`<a class="btn btn-outline btn-sm" href="${base}/sessions${newer ? `?before=${newer}` : ''}#history">Newer sessions</a>` : null,
     older !== null ? html`<a class="btn btn-outline btn-sm" href="${base}/sessions?before=${older}#history">Older sessions</a>` : null,
   ].filter(Boolean);
   return html`<section id="history" class="stack-md" aria-labelledby="history-title">

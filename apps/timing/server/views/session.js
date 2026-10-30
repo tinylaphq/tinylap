@@ -38,7 +38,9 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
   const order = [...standings.map((r) => r.driverId), ...[...laps.keys()].filter((id) => !standings.some((r) => r.driverId === id))];
   const ended = session.state === 'done' || session.state === 'aborted';
 
-  const table = standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<div class="board-scroll"><table class="board-table standings-table${race ? ' is-race' : ''}">
+  // One empty state for a session nobody drove in; "not counted" only where laps were driven.
+  const table = order.length === 0 ? html`<p class="empty">No laps were driven.</p>`
+    : standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<div class="board-scroll"><table class="board-table standings-table${race ? ' is-race' : ''}">
   <colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark">${race ? html`<col class="col-total">` : null}</colgroup>
   <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${marksHead}${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
   <tbody>${standings.map((row) => { const isBest = best?.driverId === row.driverId; return html`<tr${isBest ? html` class="is-best"` : null}>
@@ -49,22 +51,29 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
     ${markOf(bestOf(row), isBest ? html`<span class="visually-hidden">Session best</span>` : null)}
     ${race ? html`<td class="num">${formatLap(row.elapsedMs)}</td>` : null}
   </tr>`; })}</tbody>
-</table></div>`;
+</table></div>${best ? html`
+<p class="table-key" aria-hidden="true"><span class="table-key-swatch"></span>Session best lap</p>` : null}`;
 
-  const lapLists = order.map((id) => html`<div class="card-static session-laps">
+  const lapLists = order.map((id) => {
+    const own = laps.get(id) ?? [];
+    // A driver none of whose laps counted (not on the roster) says so once, not on every row.
+    const noneCounted = own.length > 0 && own.every((c) => !c.counts);
+    return html`<div class="card-static session-laps">
   <h3 class="h3">${chip(drivers, id)}</h3>
+  ${noneCounted ? html`<p class="session-laps-note">None of these laps counted.</p>` : null}
   <table class="lap-table">
     <colgroup><col class="col-lap"><col class="col-time"><col class="col-mark"><col></colgroup>
     <thead><tr><th scope="col" class="num">Lap</th><th scope="col" class="num">Time</th>${marksHead}<th scope="col"><span class="visually-hidden">Notes</span></th></tr></thead>
-    <tbody>${(laps.get(id) ?? []).map((c, i) => html`<tr${c.counts ? null : html` class="is-not-counted"`}>
+    <tbody>${own.map((c, i) => html`<tr${c.counts ? null : html` class="is-not-counted"`}>
       <td class="num">${i + 1}</td>
       <td class="num">${formatLap(c.lapMs)}</td>
       ${markOf(c)}
-      <td>${c.via === 'tap' ? html`<span class="tag">tap</span>` : null}${c.counts ? null : html`<span class="tag">not counted</span>`}</td>
+      <td>${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${c.counts || noneCounted ? null : html`<span class="tag">Not counted</span>`}</td>
     </tr>`)}</tbody>
   </table>
-  ${laps.get(id) ? null : html`<p class="empty">No laps.</p>`}
-</div>`);
+  ${own.length ? null : html`<p class="empty">No laps.</p>`}
+</div>`;
+  });
 
   return layout(request, {
     title: KIND[session.kind],
@@ -84,10 +93,10 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
     <h2 id="standings-title">${ended ? 'Final table' : 'Table so far'}</h2>
     ${table}
   </section>
-  <section class="stack-md" aria-labelledby="laps-title">
+  ${order.length === 0 ? null : html`<section class="stack-md" aria-labelledby="laps-title">
     <h2 id="laps-title">Laps</h2>
-    ${order.length === 0 ? html`<p class="empty">No laps.</p>` : html`<div class="session-laps-grid">${lapLists}</div>`}
-  </section>
+    <div class="session-laps-grid">${lapLists}</div>
+  </section>`}
 </div>`,
   });
 }

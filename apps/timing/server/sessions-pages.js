@@ -61,7 +61,18 @@ function historyOf(request, before) {
     }
   }
   const last = sessions[PAGE - 1];
-  return { rows, older: ended.length > PAGE ? `${last.createdAt}.${last.id}` : null, newer: before !== null };
+  return { rows, older: ended.length > PAGE ? `${last.createdAt}.${last.id}` : null, newer: before === null ? null : newerOf(request, sessions[0]) };
+}
+
+/**
+ * The cursor of the page just newer than one starting at `first`: the session
+ * after the PAGE ended ones that come next, or '' when those reach the newest.
+ * @param {any} request @param {{ createdAt: number, id: string } | undefined} first
+ */
+function newerOf(request, first) {
+  if (!first) return '';
+  const next = request.store.listSessionsAfter(request.workspaceId, PAGE + 2, first).filter((s) => s.state === 'done' || s.state === 'aborted');
+  return next.length > PAGE ? `${next[PAGE].createdAt}.${next[PAGE].id}` : '';
 }
 
 /** The record history of the current track and direction; `limit` -1 for all of it. */
@@ -91,6 +102,13 @@ function renderTab(request, status, { error = null, errors = error ? [error] : [
   }));
 }
 
+/** "A practice has been running for 12 min, with 3 drivers.", or "…for under a minute, with no drivers yet." */
+function runningFor(kind, minutes, drivers) {
+  const length = minutes < 1 ? 'under a minute' : `${minutes} min`;
+  const who = drivers === 0 ? 'no drivers yet' : `${drivers} ${drivers === 1 ? 'driver' : 'drivers'}`;
+  return `A ${kind} has been running for ${length}, with ${who}.`;
+}
+
 /**
  * Starting while a session runs: say what runs, and send the same form again with
  * `replace` naming that session (records spec §5.2), so it ends only what it named.
@@ -106,7 +124,7 @@ function askReplace(request, values, running, from = null) {
   if (from) fields.push(['from', from]);
   return page(request, 200, confirmPage(request, {
     title: what === 'qualifying' ? 'Start qualifying?' : `Start a ${what}?`,
-    text: `A ${running.kind} is running (${minutes} min, ${drivers} ${drivers === 1 ? 'driver' : 'drivers'}). Starting this ${what} ends it.`,
+    text: `${runningFor(running.kind, minutes, drivers)} Starting this ${what} ends it.`,
     action: `${base}/sessions`,
     button: 'Start',
     back: from === 'tap' ? `${base}/tap` : `${base}/sessions`,
@@ -165,7 +183,7 @@ function askAbort(request, match) {
   const base = request.space.base;
   return page(request, 200, confirmPage(request, {
     title: `Abort the ${session.kind === 'race' ? 'race' : 'qualifying'}?`,
-    text: 'The session ends now. Laps already driven stay on the board.',
+    text: `The ${session.kind === 'race' ? 'race' : 'qualifying'} ends now. Its laps stay in the history.`,
     action: `${base}/sessions/${session.id}/abort`,
     button: 'Abort',
     back: `${base}/sessions`,

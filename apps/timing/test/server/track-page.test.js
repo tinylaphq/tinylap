@@ -107,6 +107,15 @@ test('a track without a layout says so', async () => {
   assert.doesNotMatch(body, /<svg xmlns/);
 });
 
+test('an archived track without a layout sends nobody to Setup to attach one', async () => {
+  assert.match(await (await get(`${base}/tracks/bare`)).text(), /No layout\. Attach one in <a href="[^"]*\/setup#track">Setup<\/a>\./);
+  app.store.addTrack(ws, { id: 'old', name: 'Old' });
+  app.store.setArchived(ws, 'old', T0);
+  const body = await (await get(`${base}/tracks/old`)).text();
+  assert.match(body, /<p class="empty">No layout\.<\/p>/);
+  assert.doesNotMatch(body, /Attach one/);
+});
+
 test('an unknown track, or another club\'s, is a 404', async () => {
   assert.equal((await get(`${base}/tracks/nope`)).status, 404);
   assert.equal((await get(`${base}/tracks/theirs`)).status, 404);
@@ -122,7 +131,7 @@ test('the records page links to the track page and names each record\'s layout',
   const body = await (await get(`${base}/records`)).text();
   assert.match(body, new RegExp(`<a href="${base}/tracks/office">Office</a>, anticlockwise`));
   assert.match(body, new RegExp(`<a href="${base}/tracks/office#layout-${T0 + 25_000}"><tl-local-time format="datetime-year">`));
-  assert.match(body, /<th scope="col">Layout<\/th>/);
+  assert.match(body, /<th scope="col" class="records-wide">Layout<\/th>/, 'a phone lets it go');
 });
 
 test('the records page has no Layout column for a track without layouts', async () => {

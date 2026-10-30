@@ -61,7 +61,9 @@ export function trackPage(request, { track, layouts, current, direction, records
   </div>
   <section class="stack-md" aria-labelledby="layout-title">
     <h2 id="layout-title">Layout</h2>
-    ${now ? figure(now, track.name, true) : html`<p class="empty">No layout. Attach one in <a href="${base}/setup#track">Setup</a>.</p>`}
+    ${now ? figure(now, track.name, true)
+    : track.archivedAt !== null ? html`<p class="empty">No layout.</p>`
+      : html`<p class="empty">No layout. Attach one in <a href="${base}/setup#track">Setup</a>.</p>`}
   </section>
   ${earlier.length > 0 ? html`<section class="stack-md" aria-labelledby="earlier-title">
     <h2 id="earlier-title">Earlier layouts</h2>

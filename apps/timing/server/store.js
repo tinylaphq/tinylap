@@ -246,6 +246,7 @@ export function openStore(path) {
     activeAll: q(`SELECT * FROM session WHERE state IN ${ACTIVE} ORDER BY created_at`),
     listSessions: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, id DESC LIMIT ?'),
     listSessionsBefore: q('SELECT * FROM session WHERE workspace_id = ? AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?'),
+    listSessionsAfter: q('SELECT * FROM session WHERE workspace_id = ? AND (created_at, id) > (?, ?) ORDER BY created_at, id LIMIT ?'),
     // A session's counted laps only, through crossing_session: never a club's whole history.
     sessionDrivers: q('SELECT COUNT(DISTINCT driver_id) AS n FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL'),
     sessionBest: q('SELECT seq, driver_id, lap_ms FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL AND lap_ms IS NOT NULL ORDER BY lap_ms, seq LIMIT 1'),
@@ -553,6 +554,8 @@ export function openStore(path) {
     activeAll: () => s.activeAll.all().map(sessionOf),
     /** Sessions newest first; `before`, the last row of a page, pages on to older ones. @param {string} ws @param {number} limit @param {{ createdAt: number, id: string } | null} [before] */
     listSessions: (ws, limit, before = null) => (before === null ? s.listSessions.all(ws, limit) : s.listSessionsBefore.all(ws, before.createdAt, before.id, limit)).map(sessionOf),
+    /** The sessions just after `after`, oldest first: what a page of the history steps back to. */
+    listSessionsAfter: (ws, limit, after) => s.listSessionsAfter.all(ws, after.createdAt, after.id, limit).map(sessionOf),
     /** How many drivers a session counted, and its best lap. */
     sessionSummary(sessionId) {
       const best = s.sessionBest.get(sessionId);

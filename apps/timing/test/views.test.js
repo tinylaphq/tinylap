@@ -119,3 +119,13 @@ test('the direction icon: an open loop with one arrowhead, named by its own titl
   }
   assert.notEqual(String(directionIcon('cw')), String(directionIcon('ccw')));
 });
+
+import { shortLength } from '../server/views/sessions.js';
+
+test('a short length rounds to whole seconds first, so 59.6 s reads "1 min", never "60 s"', () => {
+  assert.equal(shortLength(18_400), '18 s');
+  assert.equal(shortLength(59_400), '59 s');
+  assert.equal(shortLength(59_600), '1 min');
+  assert.equal(shortLength(60_000), '1 min');
+  assert.equal(shortLength(12 * 60_000 + 59_000), '12 min');
+});
