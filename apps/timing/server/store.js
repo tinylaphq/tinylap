@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS crossing (
 );
 CREATE INDEX IF NOT EXISTS crossing_session ON crossing (session_id, seq);
 CREATE INDEX IF NOT EXISTS crossing_reference ON crossing (decoder_id, transponder, ref, seq);
+CREATE INDEX IF NOT EXISTS passing_received ON passing (received_at);
+CREATE INDEX IF NOT EXISTS crossing_passing ON crossing (decoder_id, boot, transponder, t);
 CREATE INDEX IF NOT EXISTS crossing_transponder ON crossing (workspace_id, transponder, driver_id);
 `;
 
@@ -154,6 +156,9 @@ export function openStore(path) {
     touchDecoder: q('UPDATE decoder SET last_seen_at = ? WHERE id = ?'),
     insertPassing: q(`INSERT INTO passing (decoder_id, boot, transponder, t, received_at, via, workspace_id)
       VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`),
+    deleteLoosePassings: q(`DELETE FROM passing WHERE received_at < ? AND NOT EXISTS (SELECT 1 FROM crossing c
+      WHERE c.decoder_id = passing.decoder_id AND c.boot = passing.boot AND c.transponder = passing.transponder AND c.t = passing.t)`),
+    countPassings: q('SELECT COUNT(*) AS n FROM passing WHERE workspace_id = ?'),
     through: q('SELECT MAX(t) AS t FROM passing WHERE decoder_id = ? AND boot = ?'),
     lastReference: q('SELECT boot, t FROM crossing WHERE decoder_id = ? AND transponder = ? AND ref = 1 ORDER BY seq DESC LIMIT 1'),
     addCrossing: q(`INSERT INTO crossing (workspace_id, session_id, decoder_id, boot, transponder, t, driver_id, at, lap_ms, counts, ref, via, flag)
@@ -303,6 +308,9 @@ export function openStore(path) {
 
     insertPassing: ({ decoder, boot, transponder, t, receivedAt, via, workspaceId }) =>
       s.insertPassing.run(decoder, boot, transponder, t, receivedAt, via, workspaceId).changes === 1,
+    /** Deletes passings received before `before` that no crossing was made from; returns how many. */
+    deleteLoosePassings: (before) => Number(s.deleteLoosePassings.run(before).changes),
+    countPassings: (workspaceId) => num(s.countPassings.get(workspaceId)?.n),
     through: (decoder, boot) => num(s.through.get(decoder, boot)?.t),
     lastReference(decoder, transponder) {
       const r = s.lastReference.get(decoder, transponder);

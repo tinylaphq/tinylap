@@ -11,6 +11,9 @@ import { randomUUID } from 'node:crypto';
 import { MAX_LAP_MS, MIN_LAP_MS, applyCrossing, emptyState, isComplete, nextLap, standings } from '@tinylap/timing';
 
 export const PRACTICE_IDLE_MS = 60 * 60_000;
+/** Passings outside any session are deleted after this long. */
+export const LOOSE_PASSING_MS = 24 * 60 * 60_000;
+const LOOSE_SWEEP_MS = 10 * 60_000;
 /** Offsets older than this don't count for mapping decoder time (spec §6). */
 const OFFSET_WINDOW_MS = 60_000;
 const ACTIVE = new Set(['countdown', 'running', 'finishing']);
@@ -42,6 +45,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const states = new Map();
   /** Workspace id → the latest passing that fell outside any session. */
   const idles = new Map();
+  let lastSweep = -Infinity;
 
   const rulesOf = (s) => ({ kind: s.kind, roster: s.roster, opensAt: s.opensAt, closesAt: s.closesAt });
   function replay(session) {
@@ -199,6 +203,10 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   /** Moves sessions along their states as time passes. */
   function tick() {
     const t = now();
+    if (t - lastSweep >= LOOSE_SWEEP_MS) {
+      lastSweep = t;
+      store.deleteLoosePassings(t - LOOSE_PASSING_MS);
+    }
     for (let session of store.activeAll()) {
       if (session.kind === 'practice') {
         const last = store.lastCrossingAt(session.id) ?? session.opensAt;

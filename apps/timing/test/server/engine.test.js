@@ -153,3 +153,16 @@ test('publishUnknown announces the transponders without a driver', () => {
   engine.publishUnknown(W);
   assert.deepEqual(events.filter((e) => e.type === 'setup').map((e) => e.data), [{ unknown: ['0C'] }]);
 });
+
+test('loose passings older than a day are deleted; passings of a session and transponders stay', () => {
+  const { store, engine, clock, pass } = rig();
+  pass(1000); // loose
+  clock.now = T0 + 2000;
+  engine.start(W, { kind: 'practice' });
+  pass(9000); // in the practice
+  clock.now = T0 + 1000 + 24 * 60 * 60_000 + 1;
+  engine.tick();
+  assert.equal(store.through('d1', BOOT), 9000);
+  assert.equal(store.countPassings(W), 1);
+  assert.ok(store.transponders(W).some((t) => t.code === '0A'));
+});
