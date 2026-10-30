@@ -177,7 +177,7 @@ function steps(request, snap) {
 export function boardLive(request, snap, { watcher = false, big = false, token = null } = {}) {
   const events = `${watcher ? `/watch/${token}` : `${request.space.base}/board`}/events${big ? '?big' : ''}`;
   const unknown = !watcher && !big && snap.unknown?.length
-    ? html`<p class="status status-warning board-unknown" role="status">Unknown ${snap.unknown.length === 1 ? 'car' : 'cars'}: ${snap.unknown.join(', ')}. <a href="${request.space.base}/setup#transponders">Assign in Setup</a></p>`
+    ? html`<p class="status status-warning flag board-unknown" role="status">Unknown ${snap.unknown.length === 1 ? 'car' : 'cars'}: ${snap.unknown.join(', ')}. <a href="${request.space.base}/setup#transponders">Assign in Setup</a></p>`
     : null;
   // The display (?big) and the watchers never get a notice or a button (records spec §5.3).
   const notice = !watcher && !big ? idleNotice(request, snap.idle, snap.drivers) : null;

@@ -434,7 +434,7 @@ test('a car with no session running shows the notice and Start practice on the t
   await driversIn(ws, { Haris: '21' });
   pass(ws, 5000, '21');
   const body = await (await get(`/clubs/${ws}/sessions`)).text();
-  assert.match(body, /<div class="status status-warning idle-notice" role="status">\s*<p>A car crossed the line \(21, Haris\)\. No session is running\.<\/p>/);
+  assert.match(body, /<div class="status status-warning flag idle-notice" role="status">\s*<p>A car crossed the line \(21, Haris\)\. No session is running\.<\/p>/);
   assert.equal(body.match(/>Start practice<\/button>/g).length, 2, 'the notice has its own button');
   app.engine.start(ws, { kind: 'practice' });
   assert.doesNotMatch(await (await get(`/clubs/${ws}/sessions`)).text(), /A car crossed the line/);
