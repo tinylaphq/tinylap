@@ -616,3 +616,13 @@ test('a confirmation over a practice just started reads "under a minute" and "no
   assert.match(abort, /The race ends now\. Its laps stay in the history\./, 'End and Abort say the same of the laps');
   app.engine.abort(office.id, race.id);
 });
+
+test('a confirmation over a race in its countdown says it is counting down, not how long it has run', async () => {
+  if (!app.store.drivers(office.id).length) await app.form(member, `${base}/drivers`, { name: 'Cid' });
+  const [a] = app.store.drivers(office.id);
+  const race = app.engine.start(office.id, { kind: 'race', roster: [a.id], durationMs: 60_000, countdownMs: 30_000 }).session;
+  const ask = await (await app.form(member, `${base}/sessions`, [['kind', 'practice']])).text();
+  assert.match(ask, /A race is counting down to its start, with 1 driver\. Starting this practice ends it\./);
+  assert.doesNotMatch(ask, /running for/);
+  app.engine.abort(office.id, race.id);
+});

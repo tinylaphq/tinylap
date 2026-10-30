@@ -5,7 +5,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Html, html, safe } from '../server/views/html.js';
-import { selectField } from '../server/views/form-parts.js';
+import { copyable, selectField, textField } from '../server/views/form-parts.js';
+import { clockOf } from '../server/views/board.js';
+import { notFoundPage, startPage } from '../server/views/notice.js';
+import { crown, idleNotice, marks, marksHead, timeWidths } from '../server/views/marks.js';
+import { directionIcon } from '../server/views/direction.js';
+import { shortLength } from '../server/views/sessions.js';
 
 test('interpolations are escaped', () => {
   const name = `<b>Ana</b> & "Ben" 'C'`;
@@ -33,9 +38,6 @@ test('made markup cannot be changed afterwards', () => {
     assert.equal(String(made), '<p>x</p>');
   }
 });
-
-import { copyable, textField } from '../server/views/form-parts.js';
-import { clockOf } from '../server/views/board.js';
 
 test('fields escape their values and mark their errors', () => {
   const out = String(textField({ id: 'n', label: 'Name', name: 'name', value: '"><script>', error: { field: 'name', message: 'Too <long>' } }));
@@ -69,8 +71,6 @@ test('a copyable field wraps its input, not its label', () => {
   assert.match(out, /<label for="w">Link<\/label>\s*<tl-copy class="copy"><input type="text" id="w"[^>]*readonly>/);
 });
 
-import { notFoundPage, startPage } from '../server/views/notice.js';
-
 test('signed out, the start page has one Sign in, in its card; other pages keep the navbar one', () => {
   const signedOut = (path) => ({ session: null, url: new URL(path, 'https://timing.example') });
   const start = String(startPage(signedOut('/')));
@@ -87,9 +87,6 @@ test('selectField without a hint or data-name renders as it always has', () => {
   assert.equal(String(selectField({ id: 'x', label: 'Direction', name: 'direction', options, value: 'cw', error: { field: 'direction', message: 'Pick one.' } })),
     '<div class="field">\n  <label for="x">Direction</label>\n  <select id="x" name="direction" aria-invalid="true" aria-describedby="x-error">\n    <option value="cw" selected>Clockwise</option><option value="ccw">Counter-clockwise</option>\n  </select>\n  <p class="field-error" id="x-error">Pick one.</p>\n</div>');
 });
-
-import { crown, idleNotice, marks, marksHead, timeWidths } from '../server/views/marks.js';
-import { directionIcon } from '../server/views/direction.js';
 
 test('a mark is a cell of its own after the time, empty or not; a record lap shows TR, not PB too', () => {
   assert.equal(String(marks({ lapMs: 7000, isRecord: false, isPb: false })), '<td class="mark-cell"></td>');
@@ -126,8 +123,6 @@ test('the direction icon: an open loop with one arrowhead, named by its own titl
   }
   assert.notEqual(String(directionIcon('cw')), String(directionIcon('ccw')));
 });
-
-import { shortLength } from '../server/views/sessions.js';
 
 test('a short length rounds to whole seconds first, so 59.6 s reads "1 min", never "60 s"', () => {
   assert.equal(shortLength(18_400), '18 s');

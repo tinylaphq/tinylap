@@ -220,7 +220,9 @@ body.big .navbar-right .btn { font-size: 16px; min-height: 44px; padding-inline:
 .field { display: grid; gap: var(--p-space-xs); font-weight: 600; }
 .choice { display: flex; align-items: center; gap: var(--p-space-xs); }
 .inline-form { display: flex; gap: var(--p-space-sm); align-items: flex-start; flex-wrap: wrap; }
-ul.setup-list { list-style: none; margin: 0; padding: 0; } /* the element selector outweighs palace's ul padding */
+ul.setup-list { list-style: none; padding: 0; } /* the element selector outweighs palace's ul padding */
+/* No margin of its own, at no weight, so a stack's gap above the list wins. */
+:where(ul.setup-list) { margin: 0; }
 .setup-row { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); align-items: center; padding-block: var(--p-space-xs); }
 .setup-row .meta { color: var(--p-text-muted); font-size: 12px; margin-left: auto; }
 fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
@@ -293,11 +295,15 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 /* The bridge screen: the status strip is the loud part, like the lamp on a decoder. */
 .bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-surface); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
 .bridge-state p { margin: 0; }
+/* A failure sits at the top, above the card it is about. */
+#bridge > [data-bridge-error] { margin: 0 0 var(--p-space-md); }
 .bridge-state [data-bridge-status] { overflow-wrap: anywhere; min-width: 0; }
 .bridge-state.is-offline { box-shadow: var(--p-shadow-lg) var(--p-warning); }
 /* A stat: the label small, the count under it, at the right of the strip. */
 .bridge-stat { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.bridge-stat-label { font-size: 0.8125rem; opacity: 0.8; }
+/* At the strip's right, also when the status wraps it onto a line of its own. */
+.bridge-state .bridge-stat { margin-left: auto; }
+.bridge-stat-label { font-size: 0.8125rem; opacity: 0.8; white-space: nowrap; }
 .bridge-outbox { font: 700 1.5rem/1 var(--p-font-mono); }
 /* The preview shares the strip's edges; the strip's shadow hangs outside both. */
 .bridge-preview { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-xs) var(--p-space-md); }
@@ -406,20 +412,20 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 #sound-switch .sound-waves { display: none; }
 #sound-switch[aria-pressed="true"] .sound-speaker { fill: currentColor; }
 #sound-switch[aria-pressed="true"] .sound-waves { display: inline; }
-#sound-switch[aria-pressed="true"] .sound-strike, #sound-switch[data-state="wanted"] .sound-strike { display: none; }
+#sound-switch[aria-pressed="true"] .sound-strike { display: none; }
 /* Sound remembered on, but the browser waits for a tap before it plays: the
- * speaker, with the amber lamp the stream uses while it waits at its corner. */
+ * speaker still struck through (it is silent), with the amber lamp the stream
+ * uses while it waits at its corner. The lamp blinks three times, then stays lit. */
 #sound-switch[data-state="wanted"] { border-color: var(--p-warning); }
-#sound-switch[data-state="wanted"]::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
+#sound-switch[data-state="wanted"]::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) 3; }
 @media (prefers-reduced-motion: reduce) { #sound-switch[data-state="wanted"]::after { animation: none; } }
 body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
 body.big .navbar-right .btn-icon { padding-inline: 12px; }
 
-/* Notifications in the account menu: a setting with its state ("Notifications:
- * On"), or, once the browser blocks them, a note on how to allow them again. */
-.nav-account-setting { display: block; }
+/* Notifications in the account menu: palace's setting in a group of its own,
+ * its switch on or off, or, once the browser blocks them, a note on how to
+ * allow them again. */
 .nav-account-setting[hidden] { display: none; }
-.nav-account-setting button[aria-pressed="true"] .notify-off, .nav-account-setting button[aria-pressed="false"] .notify-on { display: none; }
 .nav-account-blocked { display: none; margin: 0; padding: var(--p-space-sm) var(--p-space-md); font: 600 13px/1.4 var(--p-font); color: var(--p-text); }
 .nav-account-hint { display: block; margin-top: 2px; font-weight: 400; font-size: 12px; color: var(--p-text-faint); }
 .nav-account-setting[data-state="blocked"] button { display: none; }
@@ -450,14 +456,22 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .field label { line-height: var(--label-line); }
 /* A button sits at the input's height and top; a visible label (--label-line plus the field's gap) pushes it down to the input. */
 .inline-form .btn, .inline-form input, .inline-form select { box-sizing: border-box; height: 3rem; }
-.inline-form .btn { margin: 0; }
+.inline-form .btn { margin: 0; flex: none; white-space: nowrap; }
 .inline-form > .field:has(> label:not(.visually-hidden)) ~ .btn { margin-top: calc(var(--label-line) + var(--p-space-xs)); }
+/* A form with visible labels keeps its button beside the fields, so that offset always lines up; on a phone they stack (below). */
+.inline-form:has(> .field > label:not(.visually-hidden)) { flex-wrap: nowrap; }
 .button-row { display: flex; gap: var(--p-space-sm); flex-wrap: wrap; align-items: center; }
-/* A driver's colour: a square swatch in palace's border, focused like its inputs. Its
-   field steps aside (display: contents) so an error under it takes a line of its own. */
-.driver-form > .field:has(> input[type="color"]) { display: contents; }
-.setup-row:has(> .driver-form) { align-items: start; }
-.driver-form > .field > .field-error { order: 1; flex-basis: 100%; }
+/* A driver's row, in one grid: colour, name, Save and Delete on a line, an
+   error under them at the row's width. The form and its fields step aside
+   (display: contents), so their parts take the row's cells. */
+.setup-row:has(> .driver-form) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: var(--p-space-xs) var(--p-space-sm); align-items: start; }
+.setup-row:has(> .driver-form):not(:has(> .btn)) { grid-template-columns: auto minmax(0, 1fr) auto; }
+.setup-row > .driver-form, .driver-form > .field { display: contents; }
+.driver-form input[type="color"] { grid-column: 1; grid-row: 1; }
+.driver-form input[name="name"] { grid-column: 2; grid-row: 1; }
+.driver-form > .btn { grid-column: 3; grid-row: 1; }
+.setup-row > .driver-form ~ .btn { grid-column: 4; grid-row: 1; }
+.driver-form .field-error { grid-column: 1 / -1; grid-row: 2; }
 .driver-form input[type="color"] {
   flex: 0 0 auto; width: 3rem; padding: 4px; cursor: pointer;
   border: var(--p-border-width) solid var(--p-text); border-radius: var(--p-radius);
@@ -468,14 +482,17 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .driver-form input[type="color"]::-moz-color-swatch { border: var(--p-border-thin) solid var(--p-text); border-radius: 0; }
 .driver-form input[type="color"]:focus-visible { outline: none; border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); transform: var(--p-lift-sm); }
 .driver-form input[type="color"][aria-invalid="true"] { border-color: var(--p-error); }
-/* A link-button in a row stands as tall as the inline form's buttons. */
-.setup-row > .btn { box-sizing: border-box; height: 3rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
+/* Every action in a row (a list's, a track's, a transponder's) stands as tall
+   as the inline form's buttons and fields: one height on the whole page. */
+.setup-row .btn, .track-row .btn, .setup-table .btn { box-sizing: border-box; height: 3rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
 .setup-row > .inline-form { flex: 1 1 18rem; }
 .setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
 .setup-table { width: 100%; border-collapse: collapse; }
 .setup-table th, .setup-table td { padding: var(--p-space-xs) var(--p-space-sm) var(--p-space-xs) 0; text-align: left; vertical-align: middle; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
 .setup-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
 .setup-table th.num, .setup-table td.num { text-align: left; padding-right: var(--p-space-md); width: 1%; }
+/* The last cell ends at the section's edge, as every other section's actions do. */
+.setup-table th:last-child, .setup-table td:last-child { padding-right: 0; }
 /* The marker is the first cell's inset shadow; the code keeps its place under the header. */
 .setup-table tr.is-unknown td:first-child { box-shadow: -8px 0 0 var(--p-warning); font-weight: 700; }
 .setup-table tr.is-unknown td { background: transparent; }
@@ -483,7 +500,7 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .setup-table .inline-form > .field { flex: 1 1 8rem; }
 .setup-table select { width: 100%; min-width: 0; }
 .setup-row > .inline-form > .field { flex: 1 1 8rem; }
-.token { display: block; overflow-wrap: anywhere; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
+.token { display: block; word-break: break-all; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
 /* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
 .token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
 /* Every status line here is prose, not a label. */
@@ -512,24 +529,33 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .track-head { margin: 0; }
 .track-head .meta { color: var(--p-text-muted); font-size: 12px; margin-left: var(--p-space-xs); }
 .track-now .inline-form > .field { flex: 1 1 9rem; }
-.track-subhead { font-size: 12px; margin: 0; color: var(--p-text-muted); }
-.track-row { display: grid; gap: var(--p-space-xs); padding-block: var(--p-space-sm); }
+.track-subhead { margin: 0; }
+/* A row: the name and its note on the left, the actions on the right, the fold under both. */
+.track-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--p-space-xs) var(--p-space-sm); padding-block: var(--p-space-sm); }
+.track-row > .track-edit { grid-column: 1 / -1; }
 .track-row + .track-row { border-top: var(--p-border-thin) solid var(--p-border-light); }
 .track-row .button-row form, .track-archive form { margin: 0; }
 .track-edit > summary, .track-archive > summary { cursor: pointer; font-weight: 600; width: fit-content; }
 .track-edit > summary { font-size: 13px; color: var(--p-text-secondary); }
 .track-edit[open] > summary, .track-archive[open] > summary { margin-bottom: var(--p-space-sm); }
-.track-edit .inline-form + .inline-form { margin-top: var(--p-space-sm); }
-/* A field and its button stay on one line, even on a phone, as a driver's rename does. */
-.track-edit .inline-form { flex-wrap: nowrap; }
-.track-edit .inline-form > .field { flex: 1 1 0; }
+/* The fold's two forms share one grid (subgrid): the fields end at one edge
+   above buttons of one width, each on one line even on a phone, and an error
+   takes the fold's width under its field. */
+.track-edit-forms { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-xs) var(--p-space-sm); }
+.track-edit-forms > .inline-form { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: var(--p-space-xs); }
+.track-edit-forms > .inline-form + .inline-form { margin-top: var(--p-space-xs); }
+.track-edit-forms .field { display: contents; }
+.track-edit-forms input { grid-column: 1; grid-row: 1; min-width: 0; width: 100%; }
+.track-edit-forms .btn { grid-column: 2; grid-row: 1; }
+.track-edit-forms .field-error { grid-column: 1 / -1; grid-row: 2; }
 .track-archive .setup-row > .button-row { margin-left: auto; }
 @media (max-width: 520px) {
-  /* Colour, name, Save and Delete stay on one row. */
-  .setup-row:has(> .driver-form) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-xs); }
-  .setup-row > .driver-form { flex: none; min-width: 0; gap: var(--p-space-xs); }
-  .setup-row > .driver-form > .field { flex: 1 1 0; }
-  .setup-row > .driver-form .btn, .setup-row > .driver-form ~ .btn { padding-inline: var(--p-space-sm); }
+  /* A track's actions on a line under its name, at the right, as a driver's are. */
+  .track-row { grid-template-columns: minmax(0, 1fr); }
+  .track-row > .button-row { justify-self: end; }
+  /* The colour and the whole name on a line, Save and Delete on the next, at the right. */
+  .driver-form input[name="name"] { grid-column: 2 / -1; }
+  .driver-form > .btn, .setup-row > .driver-form ~ .btn { grid-row: 3; }
   /* A labelled field and its button stack, so the button needs no offset. */
   .inline-form:has(> .field > label:not(.visually-hidden)) { flex-direction: column; align-items: stretch; }
   .inline-form:has(> .field > label:not(.visually-hidden)) > .field { flex: 0 0 auto; }
@@ -572,7 +598,9 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 
 /* The Sessions tab, a session's page and the records: wider than a form page, for their tables.
  * 1120px leaves the history's fastest driver room for a long name and its crown beside eight columns. */
-.sessions-screen { max-width: 1120px; }
+.sessions-screen { max-width: 960px; }
+/* The history needs the room for its eight columns; a session's page, the records and a track's page don't. */
+.sessions-screen:has(.history-table) { max-width: 1120px; }
 .sessions-screen h2 { margin: 0; }
 .sessions-screen .subtitle { margin: 0; }
 .start-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--p-space-lg); align-items: start; }
