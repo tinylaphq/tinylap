@@ -258,7 +258,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const t = now();
     if (t - lastSweep >= LOOSE_SWEEP_MS) {
       lastSweep = t;
-      store.deleteLoosePassings(t - LOOSE_PASSING_MS);
+      // The first sweep looks a day back from the cutoff, not at every passing ever kept.
+      store.deleteLoosePassings(t - LOOSE_PASSING_MS, t - 2 * LOOSE_PASSING_MS);
     }
     for (const workspaceId of recordNews.keys()) {
       if (!recordNewOf(workspaceId, t)) clearRecord(workspaceId);

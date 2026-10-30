@@ -229,12 +229,13 @@ test('deleteLoosePassings deletes passings without a crossing once, and only bef
   store.insertPassing(p);
   store.insertPassing({ ...p, t: 2000 });
   store.insertPassing({ ...p, t: 3000, receivedAt: 500 });
+  store.insertPassing({ ...p, t: 500, receivedAt: 2 }); // before the first sweep's start: it stays
   crossing(store, { t: 1000 });
-  assert.equal(store.deleteLoosePassings(100), 1);
+  assert.equal(store.deleteLoosePassings(100, 5), 1, 'the first sweep starts at `since`, not at 0');
+  assert.equal(store.countPassings(W), 3);
+  assert.equal(store.deleteLoosePassings(100, 5), 0);
+  assert.equal(store.deleteLoosePassings(1000, 5), 1);
   assert.equal(store.countPassings(W), 2);
-  assert.equal(store.deleteLoosePassings(100), 0);
-  assert.equal(store.deleteLoosePassings(1000), 1);
-  assert.equal(store.countPassings(W), 1);
 });
 
 test('a session’s last crossing is read through an index, not by scanning its laps', () => {

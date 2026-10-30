@@ -364,9 +364,13 @@ export function openStore(path) {
 
     insertPassing: ({ decoder, boot, transponder, t, receivedAt, via, workspaceId }) =>
       s.insertPassing.run(decoder, boot, transponder, t, receivedAt, via, workspaceId).changes === 1,
-    /** Deletes passings received before `before` that no crossing was made from; returns how many. Each call judges only what the last one did not (a watermark in feed_cursor). */
-    deleteLoosePassings: (before) => transaction(() => {
-      const from = Number(s.selectCursor.get('loose-passings')?.seq ?? 0);
+    /**
+     * Deletes passings received before `before` that no crossing was made from; returns how many. Each call judges only what
+     * the last one did not (a watermark in feed_cursor); the first starts at `since`, not at the oldest passing.
+     * @param {number} before @param {number} since
+     */
+    deleteLoosePassings: (before, since) => transaction(() => {
+      const from = Number(s.selectCursor.get('loose-passings')?.seq ?? since);
       const deleted = Number(s.deleteLoosePassings.run(from, before).changes);
       if (before > from) s.upsertCursor.run('loose-passings', before);
       return deleted;
