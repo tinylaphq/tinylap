@@ -166,6 +166,6 @@ test('setup on a phone: a fold’s error spans the fold, and Rename and Change l
     return { errorW: e.width, foldW: f.width, inputs: [a, b] };
   });
   assert.ok(m.errorW >= m.foldW - 1, `the error spans the fold (${m.errorW} of ${m.foldW})`);
-  assert.equal(Math.round(m.inputs[0]), Math.round(m.inputs[1]), 'both inputs end at one edge');
+  assert.ok(Math.abs(m.inputs[0] - m.inputs[1]) <= 1, `both inputs end at one edge (${m.inputs})`);
   assert.deepEqual(errors.filter((e) => !/status of 422/.test(e)), [], 'nothing but the refused form');
 });
