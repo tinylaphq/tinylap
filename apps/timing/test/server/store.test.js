@@ -128,7 +128,7 @@ test('the same layout again adds nothing; a new snapshot adds an entry', () => {
   assert.equal(store.attachLayout(W, 't1', LAYOUT, { ...BY, at: 2000 }), 'same');
   assert.equal(store.attachLayout(W, 't1', { ...LAYOUT, snapshotKey: 'n'.repeat(22) }, { ...BY, at: 3000 }), 'added');
   assert.deepEqual(store.layouts(W, 't1').map((l) => [l.attachedAt, l.snapshotKey]), [[3000, 'n'.repeat(22)], [1000, 'k'.repeat(22)]]);
-  assert.deepEqual(store.track(W, 't1').layout, { attachedAt: 3000, plannerId: 'p1', shape: 'c30:1:x', snapshotKey: 'n'.repeat(22), layout: '{}', by: 'Ana Admin' });
+  assert.deepEqual(store.track(W, 't1').layout, { attachedAt: 3000, plannerId: 'p1', shape: 'c30:1:x', snapshotKey: 'n'.repeat(22), layout: '{}', by: 'Ana Admin', byMember: true });
   assert.deepEqual(store.tracks(W, { archived: false }).find((t) => t.id === 't1').layout, store.track(W, 't1').layout);
 });
 

@@ -34,7 +34,7 @@ const figure = (entry, trackName, current) => {
   const art = drawing(entry.layout);
   return html`<figure class="track-drawing${current ? ' is-current' : ''}" id="layout-${entry.attachedAt}">
   ${art ? html`<div class="track-drawing-art" role="img" aria-label="Layout of ${trackName}">${art}</div>` : null}
-  <figcaption>${current ? 'Since ' : null}${safe(localTime(entry.attachedAt, 'datetime-year'))}, by ${entry.by ?? 'former member'}</figcaption>
+  <figcaption>${current ? 'Since ' : null}${safe(localTime(entry.attachedAt, 'datetime-year'))}, by ${entry.by ?? (entry.byMember ? 'a member' : 'former member')}</figcaption>
 </figure>`;
 };
 

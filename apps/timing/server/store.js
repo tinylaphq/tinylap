@@ -137,19 +137,20 @@ const sessionOf = (r) => ({
 });
 const layoutOf = (r) => ({
   attachedAt: Number(r.attached_at), plannerId: String(r.planner_id), shape: String(r.shape), snapshotKey: String(r.snapshot_key),
-  layout: String(r.layout), by: str(r.attached_by_name),
+  // A member whose name was unknown still attached it; both null is a forgotten one (named tracks spec §3.4).
+  layout: String(r.layout), by: str(r.attached_by_name), byMember: r.attached_by_user !== null && r.attached_by_user !== undefined,
 });
 // A track row joined with its newest layout entry (columns prefixed l_), or none.
 const trackOf = (r) => ({
   id: String(r.id), name: String(r.name), archivedAt: num(r.archived_at),
   layout: r.l_attached_at === null ? null : layoutOf({
-    attached_at: r.l_attached_at, planner_id: r.l_planner_id, shape: r.l_shape, snapshot_key: r.l_snapshot_key, layout: r.l_layout, attached_by_name: r.l_attached_by_name,
+    attached_at: r.l_attached_at, planner_id: r.l_planner_id, shape: r.l_shape, snapshot_key: r.l_snapshot_key, layout: r.l_layout, attached_by_name: r.l_attached_by_name, attached_by_user: r.l_attached_by_user,
   }),
 });
 /** What makes two track names the same, in any script: SQLite's NOCASE folds ASCII only. @param {string} name */
 export const nameKey = (name) => name.normalize('NFKC').toLowerCase();
 const TRACK_WITH_LAYOUT = `SELECT t.id, t.name, t.archived_at, l.attached_at AS l_attached_at, l.planner_id AS l_planner_id, l.shape AS l_shape,
-    l.snapshot_key AS l_snapshot_key, l.layout AS l_layout, l.attached_by_name AS l_attached_by_name
+    l.snapshot_key AS l_snapshot_key, l.layout AS l_layout, l.attached_by_name AS l_attached_by_name, l.attached_by_user AS l_attached_by_user
   FROM track t LEFT JOIN track_layout l ON l.workspace_id = t.workspace_id AND l.track_id = t.id
     AND l.attached_at = (SELECT MAX(attached_at) FROM track_layout WHERE workspace_id = t.workspace_id AND track_id = t.id)`;
 /** The board's reads of a track and a club's tracks, each with its newest layout (planned in the store tests). */

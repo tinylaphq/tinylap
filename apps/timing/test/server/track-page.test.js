@@ -76,6 +76,16 @@ test('a track with layouts shows them all drawn, newest first, with who attached
   assert.doesNotMatch(body, /format="(date|datetime)"/);
 });
 
+test('a layout from a member whose name was unknown says "a member", not "former member"', async () => {
+  app.store.addTrack(ws, { id: 'nameless', name: 'Nameless' });
+  app.store.attachLayout(ws, 'nameless', {
+    plannerId: closed.track.id, shape: closed.track.shape, snapshotKey: 'n'.repeat(22), layout: canonicalJson(closed),
+  }, { userId: 'u-quiet', name: null, at: T0 + 30_000 });
+  const body = await (await get(`${base}/tracks/nameless`)).text();
+  assert.match(body, /<\/tl-local-time>, by a member<\/figcaption>/);
+  assert.doesNotMatch(body, /former member/);
+});
+
 test('each record names the layout it was driven on, or none', async () => {
   const body = await (await get(`${base}/tracks/office`)).text();
   const ccw = /<section[^>]*aria-labelledby="records-ccw"[\s\S]*?<\/section>/.exec(body)?.[0] ?? '';
