@@ -112,6 +112,7 @@ const STATE_TEXT = {
   connecting: 'Talking to the decoder.',
   listening: 'Connected. Nothing from the device yet.',
   unpaired: 'The decoder is not paired yet.',
+  unknown: "This decoder's pairing isn't known here. Pair it again.",
   choose: 'Choose which decoder this is.',
   disconnected: 'Decoder disconnected.',
 };
@@ -215,9 +216,10 @@ class TlBridge extends HTMLElement {
     error.textContent = '';
     this.$(run, '[data-bridge-earlier]').hidden = true;
     this.$(run, '[data-bridge-live]').textContent = '';
-    const form = /** @type {HTMLFormElement} */ (this.$(run, '[data-bridge-pair]'));
-    /** @type {HTMLInputElement} */ (form.elements.namedItem('name')).readOnly = false;
-    /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]')).disabled = false;
+    for (const form of /** @type {NodeListOf<HTMLFormElement>} */ (run.root.querySelectorAll('[data-bridge-pair], [data-bridge-repair]'))) {
+      /** @type {HTMLInputElement} */ (form.elements.namedItem('name')).readOnly = false;
+      /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]')).disabled = false;
+    }
     for (const which of ['serial', 'hid']) {
       this.$(run, `[data-bridge-connect="${which}"]`).hidden = false;
       this.$(run, `[data-bridge-missing="${which}"]`).hidden = true;
@@ -263,7 +265,8 @@ class TlBridge extends HTMLElement {
       }
     } else if (event.type === 'submit') {
       const form = event.target;
-      if (form instanceof HTMLFormElement && form.matches('[data-bridge-pair]') && this.contains(form)) {
+      // Pair again, for a decoder whose pairing the server doesn't know, is the same pairing without Wi-Fi.
+      if (form instanceof HTMLFormElement && form.matches('[data-bridge-pair], [data-bridge-repair]') && this.contains(form)) {
         event.preventDefault();
         void this.pair(run, form);
       } else if (form instanceof HTMLFormElement && form.matches('[data-bridge-choose]') && this.contains(form)) {
@@ -599,7 +602,9 @@ class TlBridge extends HTMLElement {
   /** Forgets the decoder made for another device; it stays on the server, unpaired. @param {Run} run */
   forget(run) {
     run.made = null;
-    /** @type {HTMLInputElement} */ (/** @type {HTMLFormElement} */ (this.$(run, '[data-bridge-pair]')).elements.namedItem('name')).readOnly = false;
+    for (const form of /** @type {NodeListOf<HTMLFormElement>} */ (run.root.querySelectorAll('[data-bridge-pair], [data-bridge-repair]'))) {
+      /** @type {HTMLInputElement} */ (form.elements.namedItem('name')).readOnly = false;
+    }
   }
 
   /**

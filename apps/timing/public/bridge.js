@@ -93,6 +93,8 @@ export class Bridge extends EventTarget {
   #againAlone = false;
   /** A normal flush was asked for while one was in flight: the rerun is a normal one, so no passing waits for the log timer. */
   #againFull = false;
+  /** The decoder id the server answered 404 for: its %TLID means 'unknown' until the decoder is paired again. @type {string | null} */
+  #unknown = null;
   /** @type {any} */ transport;
   /** @type {any} */ protocol;
   /** @type {any} */ device;
@@ -399,8 +401,9 @@ export class Bridge extends EventTarget {
     this.decoder = decoder;
     this.boot = boot;
     for (const p of this.#held) p.boot ??= boot;
-    this.#set(decoder ? 'ready' : 'unpaired');
-    if (!decoder) {
+    const known = decoder !== null && decoder !== this.#unknown;
+    this.#set(known ? 'ready' : decoder ? 'unknown' : 'unpaired');
+    if (!known) {
       this.#held = [];
       this.#dropHeldLines();
       return;
@@ -453,7 +456,7 @@ export class Bridge extends EventTarget {
     /** @type {Held} */
     const held = { boot: this.kind === 'tinylap' && this.state !== 'ready' ? null : this.boot, transponder, t, hits, strength };
     if (this.state === 'ready') return this.#stamp(held);
-    if (this.kind === 'tinylap' && this.state === 'unpaired') return undefined;
+    if (this.kind === 'tinylap' && (this.state === 'unpaired' || this.state === 'unknown')) return undefined;
     this.#held.push(held);
     if (this.#held.length > HELD_MAX) this.#held.shift();
     return undefined;
@@ -466,7 +469,7 @@ export class Bridge extends EventTarget {
    */
   async #onLog({ line, boot }, afterBootChange) {
     if (boot) await this.#bootLine(afterBootChange);
-    if (this.#closed || this.state === 'unpaired' || BROWSER_ASSIGNED.has(this.kind)) return;
+    if (this.#closed || this.state === 'unpaired' || this.state === 'unknown' || BROWSER_ASSIGNED.has(this.kind)) return;
     const ready = this.state === 'ready';
     this.#logs.push({ decoder: ready ? this.decoder : null, boot: ready ? this.boot : null, line });
     if (this.#logs.length > LOGS_MAX) this.#logs.shift();
@@ -503,6 +506,18 @@ export class Bridge extends EventTarget {
     clearTimeout(this.#logTimer);
     this.#timers.delete(this.#logTimer);
     this.#logTimer = null;
+  }
+
+  /**
+   * A 404 for this TinyLap decoder's own id: the server doesn't know its pairing (deleted, or paired elsewhere). Forwarding
+   * stops, and what it sends is dropped as while unpaired, until it is paired again. @param {Set<string> | undefined} missing
+   */
+  #checkKnown(missing) {
+    if (this.kind !== 'tinylap' || !this.decoder || !missing?.has(this.decoder)) return;
+    this.#unknown = this.decoder;
+    this.#held = [];
+    this.#logs = this.#logs.filter((entry) => entry.decoder !== this.#unknown);
+    this.#set('unknown');
   }
 
   /** @param {LogEntry[]} sent */
@@ -608,15 +623,17 @@ export class Bridge extends EventTarget {
       let rearm = alone;
       try {
         // A batch taken or refused for good: either way the server answered, and the outbox changed.
-        const { refusal, dropped, blocked, sentLines } = await sendOutbox(this.outbox, this.post, () => {
+        const { refusal, dropped, blocked, sentLines, missing } = await sendOutbox(this.outbox, this.post, () => {
           this.#setOnline(true);
           this.dispatchEvent(new Event('outbox'));
         }, { lines, alone });
         this.#forgetLines(sentLines);
         this.blocked = blocked;
         if (refusal) Object.assign(this, { lastError: refusal, dropped });
+        this.#checkKnown(missing);
       } catch (error) {
         this.#forgetLines(/** @type {any} */ (error)?.sentLines ?? []);
+        this.#checkKnown(/** @type {any} */ (error)?.missing);
         rearm &&= keepsLines(/** @type {any} */ (error)?.status);
         this.#setOnline(false, error);
         clearTimeout(this.#retryTimer);
@@ -662,12 +679,12 @@ const utf8 = new TextEncoder();
 /**
  * Sends an outbox one decoder and boot at a time (spec §5), and drops the passings it sent, up to
  * the server's `through`. What the other answers do, so each flush sends what can be sent:
- * - a 404 or 422 (FINAL): the batch is dropped, and the others go on;
+ * - a 404 or 422 (FINAL): the batch is dropped, and the others go on; a 404's decoder is in `missing`;
  * - a 403, no access to that decoder's club: its passings wait, and the other decoders go on;
  * - a 401, signed out: every batch would fail the same way, so it throws and keeps everything;
  * - a 413, 429, 5xx or network error throws too, keeping the rest for a retry.
  * It returns the last refusal and how many passings were dropped, and the last 403 and how many
- * passings it holds back. A thrown error carries `dropped`, `refusal`, `blocked` and `sentLines` from before it.
+ * passings it holds back. A thrown error carries `dropped`, `refusal`, `blocked`, `sentLines` and `missing` from before it.
  *
  * %TLLOG lines (spec §2.6) ride along: each group carries up to MAX_LOG_LINES (MAX_LOG_BYTES) of its own
  * decoder and boot, in queue order. Only when no group is left, and `alone` is set, do the rest go in
@@ -678,7 +695,7 @@ const utf8 = new TextEncoder();
  * @param {(decoderId: string, batch: Batch) => Promise<{ through: number | null }>} post
  * @param {() => void} [onSent] called after each batch of passings the server answered with a 2xx, 403, 404 or 422
  * @param {{ lines?: LogEntry[], alone?: boolean }} [logs]
- * @returns {Promise<{ refusal: any, dropped: number, forbidden: any, blocked: number, sentLines: LogEntry[] }>}
+ * @returns {Promise<{ refusal: any, dropped: number, forbidden: any, blocked: number, sentLines: LogEntry[], missing: Set<string> }>}
  */
 export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], alone = false } = {}) {
   let refusal = null;
@@ -686,6 +703,8 @@ export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], 
   let forbidden = null;
   let blocked = 0;
   const skipped = new Set();
+  /** The decoders a 404 answered: the server doesn't know them. @type {Set<string>} */
+  const missing = new Set();
   /** @type {LogEntry[]} */
   const sentLines = [];
   const done = new Set();
@@ -735,9 +754,10 @@ export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], 
         continue;
       }
       if (!FINAL.has(status)) {
-        if (error && typeof error === 'object') Object.assign(error, { dropped, refusal, blocked, sentLines });
+        if (error && typeof error === 'object') Object.assign(error, { dropped, refusal, blocked, sentLines, missing });
         throw error;
       }
+      if (status === 404) missing.add(first.decoder);
       await outbox.remove(group);
       dropped += group.length;
       refusal = error;
@@ -777,5 +797,5 @@ export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], 
     }
     finish(carried);
   }
-  return { refusal, dropped, forbidden, blocked, sentLines };
+  return { refusal, dropped, forbidden, blocked, sentLines, missing };
 }
