@@ -4,8 +4,9 @@
 
 // Passings become crossings (spec §4–§6). The engine stores each passing
 // once, computes its lap from the transponder's previous reference passing,
-// puts it in the running session, and publishes what changed. Session state lives in memory as a cache over the stored
-// crossings, so a restart only replays them.
+// puts it in the running session, and publishes what changed. Session state
+// lives in memory as a cache over the stored crossings, so a restart only
+// replays them.
 import { randomUUID } from 'node:crypto';
 import { MAX_LAP_MS, MIN_LAP_MS, applyCrossing, emptyState, isComplete, nextLap, standings } from '@tinylap/timing';
 

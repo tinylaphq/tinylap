@@ -18,6 +18,8 @@ before(async () => {
   const user = await app.signUp('Ana');
   member = await app.login(user);
   await app.form(member, '/personal/drivers', { name: 'Ana' });
+  const me = await (await app.api(member, 'GET', '/auth/me')).json();
+  app.engine.start(me.workspaces[0].id, { kind: 'practice' });
 });
 after(async () => {
   await browser?.close();

@@ -27,6 +27,7 @@ export function setup() {
 export async function fresh(t, options = {}) {
   const member = await app.login(await app.signUp('Ana'));
   const space = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
+  app.engine.start(space, { kind: 'practice' });
   const who = await pageAs(browser, app, member, options);
   t.after(() => who.context.close());
   return { ...who, member, space };

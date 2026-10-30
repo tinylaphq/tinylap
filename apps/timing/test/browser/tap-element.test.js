@@ -21,6 +21,8 @@ before(async () => {
   browser = await openBrowser();
   member = await app.login(await app.signUp('Ana'));
   for (const name of ['Ana', 'Ben']) await app.form(member, '/personal/drivers', { name });
+  const me = await (await app.api(member, 'GET', '/auth/me')).json();
+  app.engine.start(me.workspaces[0].id, { kind: 'practice' });
 });
 after(async () => {
   await browser?.close();

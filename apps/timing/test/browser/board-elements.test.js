@@ -37,6 +37,7 @@ before(async () => {
   await app.form(member, '/personal/drivers', { name: 'Ana' });
   personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
   app.engine.assign(personal, '10', app.store.drivers(personal)[0].id);
+  app.engine.start(personal, { kind: 'practice' });
   ticker = setInterval(() => app.engine.tick(), 100);
 });
 after(async () => {

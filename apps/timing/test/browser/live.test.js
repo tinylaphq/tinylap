@@ -33,6 +33,7 @@ test('the board updates live and its clock ticks', async (t) => {
   t.after(() => context.close());
   await page.goto('/personal/board');
   await page.getByRole('heading', { name: 'Waiting for the first car' }).waitFor();
+  app.engine.start((await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id, { kind: 'practice' });
   await postPassings(app, decoder, [{ transponder: '10', t: 1000 }, { transponder: '10', t: 9000 }]);
   await page.getByRole('heading', { name: 'Practice' }).waitFor();
   await page.locator('.board-table').getByText('Ana').waitFor();
