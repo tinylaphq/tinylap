@@ -228,7 +228,7 @@ ${idleBoard(request, snap, { watcher, big })}
   }
   // A car without a driver loses its laps while a session runs: that is worth a warning.
   const unknown = !watcher && !big && snap.unknown?.length
-    ? html`<p class="status status-warning board-unknown" role="status">Unknown ${snap.unknown.length === 1 ? 'car' : 'cars'}: ${snap.unknown.join(', ')}. <a href="${request.space.base}/setup#transponders">Assign in Setup</a></p>`
+    ? html`<p class="status status-warning flag board-unknown" role="status">Unknown ${snap.unknown.length === 1 ? 'car' : 'cars'}: ${snap.unknown.join(', ')}. <a href="${request.space.base}/setup#transponders">Assign in Setup</a></p>`
     : null;
   return html`<div id="board-live" class="board" data-events="${events}">
 ${trackHeader(snap)}

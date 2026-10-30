@@ -66,8 +66,13 @@ test('set the track and manage drivers', async (t) => {
     await page.getByRole('button', { name: 'Add driver' }).click();
   }
   await page.getByLabel('New name for Ben').fill('Benji');
-  await page.locator('form', { has: page.getByLabel('New name for Ben') }).getByRole('button', { name: 'Rename' }).click();
+  await page.locator('form', { has: page.getByLabel('New name for Ben') }).getByRole('button', { name: 'Save' }).click();
   await page.getByLabel('New name for Benji').waitFor();
+  await page.getByLabel('Colour for Ana').fill('#1e90a0');
+  await page.locator('form', { has: page.getByLabel('Colour for Ana') }).getByRole('button', { name: 'Save' }).click();
+  await page.locator('#drivers').waitFor();
+  assert.equal(await page.getByLabel('Colour for Ana').inputValue(), '#1e90a0');
+  assert.equal(app.store.drivers(personal).find((d) => d.name === 'Ana').colour, '#1e90a0');
 
   await page.locator('#drivers li', { has: page.getByLabel('New name for Benji') }).getByRole('link', { name: 'Delete' }).click();
   await page.getByRole('heading', { name: 'Delete Benji?' }).waitFor();

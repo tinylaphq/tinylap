@@ -80,7 +80,7 @@ test('laps, a personal best and an unknown car', async () => {
   assert.match(body, /&lt;i&gt;Ana&lt;\/i&gt;/);
   assert.doesNotMatch(body, /<i>Ana<\/i>/);
   assert.match(body, /<td class="num">8\.000<span class="marks"><abbr class="mark mark-tr"/);
-  assert.match(body, new RegExp(`Unknown car: 4711\\. <a href="${base}/setup#transponders">Assign in Setup</a>`));
+  assert.match(body, new RegExp(`<p class="status status-warning flag board-unknown" role="status">Unknown car: 4711\\. <a href="${base}/setup#transponders">Assign in Setup</a>`));
   assert.match(body, /<time class="board-clock-time" data-clock data-kind="practice" data-state="running" data-opens="\d+" data-closes="" data-now="\d+">0:09<\/time>/);
 });
 

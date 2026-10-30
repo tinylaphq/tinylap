@@ -49,10 +49,24 @@ test('members add, rename and list drivers', async () => {
   assert.deepEqual(drivers.map((d) => d.name), ['Ana P.', 'Ben']);
 });
 
+test('a member changes a driver\'s colour; anything but #rrggbb is refused and nothing saved', async () => {
+  const cy = await (await app.api(member, 'POST', path('drivers'), { name: 'Cy' })).json();
+  const recoloured = await app.api(member, 'PATCH', path(`drivers/${cy.id}`), { colour: '#0A0B0C' });
+  assert.equal(recoloured.status, 200);
+  assert.deepEqual(await recoloured.json(), { id: cy.id, name: 'Cy', colour: '#0a0b0c' });
+  for (const colour of ['red; background: url(x)', 'red', '#0a0b0', '#0a0b0c ', 7, null]) {
+    await problemOf(await app.api(member, 'PATCH', path(`drivers/${cy.id}`), { colour }), 422, 'invalid-request');
+  }
+  const { drivers } = await (await app.api(member, 'GET', path('drivers'))).json();
+  assert.equal(drivers.find((d) => d.id === cy.id).colour, '#0a0b0c');
+  assert.equal((await app.api(admin, 'DELETE', path(`drivers/${cy.id}`))).status, 204);
+});
+
 test('bad driver input, strangers and cross-origin writes are refused', async () => {
   await problemOf(await app.api(member, 'POST', path('drivers'), { name: '' }), 422, 'invalid-request');
   await problemOf(await app.api(member, 'POST', path('drivers'), { name: 'x'.repeat(61) }), 422, 'invalid-request');
   await problemOf(await app.api(member, 'POST', path('drivers'), { name: 'C', colour: 'red' }), 422, 'invalid-request');
+  await problemOf(await app.api(member, 'POST', path('drivers'), { name: 'C', colour: 'red; background: url(x)' }), 422, 'invalid-request');
   await problemOf(await app.api(member, 'PATCH', path('drivers/nope'), { name: 'X' }), 404, 'not-found');
   await problemOf(await app.api(stranger, 'POST', path('drivers'), { name: 'Z' }), 404, 'not-found');
   await problemOf(await app.api(member, 'POST', path('drivers'), { name: 'Z' }, { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }), 403, 'forbidden');

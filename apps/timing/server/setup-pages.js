@@ -62,8 +62,10 @@ const addDriver = withForm((request, form) => {
 });
 
 const renameDriver = withForm((request, form, match) => {
-  const values = { name: form.get('name') ?? '' };
-  return afterForm(request, ops.renameDriver(request, { id: match[2], name: values.name }), { key: `rename:${match[2]}`, values, section: 'drivers', fieldId: `rename-${match[2]}` });
+  const values = { name: form.get('name') ?? '', colour: form.get('colour') ?? undefined };
+  const result = ops.renameDriver(request, { id: match[2], name: values.name, colour: values.colour });
+  const fieldId = result.error?.field === 'colour' ? `colour-${match[2]}` : `rename-${match[2]}`;
+  return afterForm(request, result, { key: `rename:${match[2]}`, values, section: 'drivers', fieldId });
 });
 
 function askDeleteDriver(request, match) {

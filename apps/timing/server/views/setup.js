@@ -13,9 +13,6 @@ import { layout } from './layout.js';
 const DIRECTIONS = [{ value: 'ccw', label: 'Anticlockwise' }, { value: 'cw', label: 'Clockwise' }];
 const DIRECTION_NAME = { cw: 'clockwise', ccw: 'anticlockwise' };
 
-// The colour swatch only: the rename field beside it already carries the name.
-const driverChip = (d) => html`<span class="driver" style="--driver: ${d.colour}" aria-hidden="true"></span>`;
-
 // A track's rename and layout forms, folded away until wanted; open while one
 // of them has an error. The layout form loads a page: a new
 // layout may answer with its confirmation, which no card swap can show.
@@ -99,11 +96,12 @@ function driversSection(request, m) {
   <h2 class="h3" id="drivers-title">Drivers</h2>
   ${m.drivers.length ? html`<ul class="setup-list">${m.drivers.map((d) => {
     const error = m.errors[`rename:${d.id}`] ?? null;
+    const kept = m.values[`rename:${d.id}`] ?? {};
     return html`<li class="setup-row">
-    ${driverChip(d)}
-    <form method="post" action="${base}/drivers/${d.id}" class="inline-form">
-      ${textField({ id: `rename-${d.id}`, label: `New name for ${d.name}`, labelHidden: true, name: 'name', maxlength: 60, required: true, value: m.values[`rename:${d.id}`]?.name ?? d.name, error })}
-      <button type="submit" class="btn btn-sm btn-outline">Rename</button>
+    <form method="post" action="${base}/drivers/${d.id}" class="inline-form driver-form">
+      ${textField({ id: `colour-${d.id}`, label: `Colour for ${d.name}`, labelHidden: true, name: 'colour', type: 'color', value: kept.colour ?? d.colour, error })}
+      ${textField({ id: `rename-${d.id}`, label: `New name for ${d.name}`, labelHidden: true, name: 'name', maxlength: 60, required: true, value: kept.name ?? d.name, error })}
+      <button type="submit" class="btn btn-sm btn-outline">Save</button>
     </form>
     ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/drivers/${d.id}/delete">Delete</a>` : null}
   </li>`;

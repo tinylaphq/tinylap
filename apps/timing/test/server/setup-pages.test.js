@@ -89,6 +89,38 @@ test('renaming a driver', async () => {
   assert.equal(drivers()[0].name, 'Dan');
 });
 
+test('the rename form carries a colour picker with the driver\'s colour', async () => {
+  const [dan] = drivers();
+  const body = await (await get(member, `${base}/setup`)).text();
+  assert.match(body, new RegExp(`<label for="colour-${dan.id}" class="visually-hidden">Colour for Dan</label>`));
+  assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="${dan.colour}"`));
+});
+
+test('changing a driver\'s colour saves it with the name, and the page shows it', async () => {
+  const [dan] = drivers();
+  const res = await app.form(member, `${base}/drivers/${dan.id}`, { name: 'Dan', colour: '#12AB9F' });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), `${base}/setup#drivers`);
+  assert.deepEqual([drivers()[0].name, drivers()[0].colour], ['Dan', '#12ab9f']);
+  const body = await (await get(member, `${base}/setup`)).text();
+  assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="#12ab9f"`));
+});
+
+test('a colour that is not #rrggbb is a 422, the input kept and nothing saved', async () => {
+  const [dan] = drivers();
+  for (const colour of ['red; background: url(x)', 'red', '#12ab9', '#12ab9f; x', '']) {
+    const res = await app.form(member, `${base}/drivers/${dan.id}`, { name: 'Danny', colour });
+    assert.equal(res.status, 422, colour);
+    const body = await res.text();
+    assert.match(body, new RegExp(`<p class="status status-error" role="alert"><a href="#colour-${dan.id}">A colour is #rrggbb\\.</a></p>`));
+    const kept = colour.replace(/[()]/g, '\\$&');
+    assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="${kept}"[^>]*aria-invalid="true"`), colour);
+    assert.match(body, new RegExp(`<input[^>]*id="rename-${dan.id}"[^>]*value="Danny"`));
+    assert.doesNotMatch(body, /--driver: red/);
+  }
+  assert.deepEqual([drivers()[0].name, drivers()[0].colour], ['Dan', '#12ab9f']);
+});
+
 test('deleting asks first, needs an admin, and unassigns the transponder', async () => {
   const [dan] = drivers();
   app.engine.assign(office.id, '4711', dan.id);
