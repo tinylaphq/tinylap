@@ -11,33 +11,41 @@ import { html, safe } from './html.js';
 import { layout } from './layout.js';
 import { chip, crown } from './marks.js';
 
-const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
+export const DIRECTION = { cw: 'clockwise', ccw: 'anticlockwise' };
 
 /** "Office loop, clockwise". @param {{ name: string }} track @param {string} direction */
 export const trackName = (track, direction) => `${track.name}, ${DIRECTION[direction]}`;
 
+/** A layout by its date, linking to it on its track's page; nothing without one. */
+const layoutLink = (entry, href) => entry ? html`<a href="${href}#layout-${entry.attachedAt}">${safe(localTime(entry.attachedAt, 'date'))}</a>` : null;
+
 /**
  * Newest first. A row held the record until the row before it took it; the
- * first is the record now, its holder crowned.
- * @param {any} request @param {{ track: any, rows: { driverId: string, lapMs: number, at: number, sessionId: string }[], drivers: any[] }} model
+ * first is the record now, its holder crowned. With `layoutOf`, a column names
+ * the layout each was driven on, by its date, linking to it under `layouts`.
+ * @param {any} request
+ * @param {{ track: any, rows: { driverId: string, lapMs: number, at: number, sessionId: string }[], drivers: any[],
+ *   layoutOf?: ((at: number) => { attachedAt: number } | null) | null, layouts?: string }} model
  */
-export function recordsTable(request, { track, rows, drivers }) {
+export function recordsTable(request, { track, rows, drivers, layoutOf = null, layouts = '' }) {
   const base = request.space.base;
   if (!track) return html`<p class="empty">Set the track in <a href="${base}/setup#track">Setup</a> to keep its record.</p>`;
   if (rows.length === 0) return html`<p class="empty">No record yet.</p>`;
   return html`<div class="board-scroll"><table class="board-table records-table">
-  <thead><tr><th scope="col" class="num">Lap</th><th scope="col">Driver</th><th scope="col">Set</th><th scope="col">Held until</th></tr></thead>
+  <thead><tr><th scope="col" class="num">Lap</th><th scope="col">Driver</th><th scope="col">Set</th><th scope="col">Held until</th>${layoutOf ? html`<th scope="col">Layout</th>` : null}</tr></thead>
   <tbody>${rows.map((r, i) => html`<tr${i === 0 ? html` class="is-current"` : null}>
     <td class="num">${formatLap(r.lapMs)}</td>
     <td class="board-driver">${chip(drivers, r.driverId)}${crown(i === 0)}</td>
     <td><a href="${base}/sessions/${r.sessionId}">${safe(localTime(r.at, 'datetime'))}</a></td>
     <td>${i === 0 ? 'Now' : safe(localTime(rows[i - 1].at, 'datetime'))}</td>
+    ${layoutOf ? html`<td>${layoutLink(layoutOf(r.at), layouts)}</td>` : null}
   </tr>`)}</tbody>
 </table></div>`;
 }
 
-/** @param {any} request @param {{ track: any, direction: string, rows: any[], drivers: any[] }} model */
-export function recordsPage(request, { track, direction, rows, drivers }) {
+/** @param {any} request @param {{ track: any, direction: string, rows: any[], drivers: any[], layoutOf: ((at: number) => any) | null }} model */
+export function recordsPage(request, { track, direction, rows, drivers, layoutOf }) {
+  const href = track ? `${request.space.base}/tracks/${track.id}` : '';
   return layout(request, {
     title: 'Track records',
     screen: 'sessions',
@@ -45,9 +53,9 @@ export function recordsPage(request, { track, direction, rows, drivers }) {
     body: html`<div class="container sessions-screen stack-lg screen">
   <div class="stack-xs">
     <h1>Track records</h1>
-    ${track ? html`<p class="subtitle">${trackName(track, direction)}</p>` : null}
+    ${track ? html`<p class="subtitle"><a href="${href}">${track.name}</a>, ${DIRECTION[direction]}</p>` : null}
   </div>
-  ${recordsTable(request, { track, rows, drivers })}
+  ${recordsTable(request, { track, rows, drivers, layoutOf, layouts: href })}
   <p><a href="${request.space.base}/sessions">Back to sessions</a></p>
 </div>`,
   });

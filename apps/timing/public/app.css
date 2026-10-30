@@ -447,6 +447,17 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .lap-table td, .lap-table th { padding-block: var(--p-space-xs); }
 .lap-table .tag { font-size: 10px; padding: 1px 6px; }
 .lap-table tr.is-not-counted .num { color: var(--p-text-muted); }
+/* A track's page: each layout drawn on the track's dark floor, the current one large. */
+.track-drawing { margin: 0; display: grid; gap: var(--p-space-xs); }
+.track-drawing-art { background: var(--tl-track-bg); padding: var(--p-space-md); display: grid; place-items: center; }
+.track-drawing-art svg { display: block; width: 100%; height: auto; max-height: 26rem; }
+.track-drawing figcaption { font-size: 13px; color: var(--p-text-secondary); }
+.track-drawing.is-current figcaption { font-weight: 600; color: var(--p-text); }
+.track-drawings { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--p-space-md); }
+.track-drawings .track-drawing-art { padding: var(--p-space-sm); }
+.track-drawings .track-drawing-art svg { max-height: 9rem; }
+.track-drawing:target .track-drawing-art { outline: 3px solid var(--tl-record); outline-offset: 2px; }
+.track-page h3 { margin: 0; }
 @media (max-width: 720px) {
   .start-grid { grid-template-columns: 1fr; }
 }

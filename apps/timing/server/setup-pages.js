@@ -14,7 +14,9 @@ import { page, seeOther } from './respond.js';
 import { retryHeaders } from './responses.js';
 import { spacePath } from './spaces.js';
 import { changeLayoutPage, confirmPage } from './views/confirm.js';
+import { notFoundPage } from './views/notice.js';
 import { setupPage } from './views/setup.js';
+import { trackPage } from './views/track.js';
 
 /**
  * The setup page from the store, with any errors and kept values.
@@ -214,6 +216,24 @@ function askNewWatchLink(request) {
   }));
 }
 
+/** A track's page: its layouts and its records in both directions. */
+function showTrack(request, match) {
+  const { store, workspaceId: ws } = request;
+  const track = store.track(ws, match[2]);
+  if (!track) return page(request, 404, notFoundPage(request));
+  const workspace = store.workspace(ws);
+  const records = Object.fromEntries(['ccw', 'cw'].map((d) => [d, store.recordHistory(ws, track.id, d)]));
+  return page(request, 200, trackPage(request, {
+    track,
+    layouts: store.layouts(ws, track.id),
+    current: workspace.trackId === track.id,
+    direction: workspace.direction,
+    records,
+    drivers: store.drivers(ws),
+    layoutOf: (at) => store.layoutAt(ws, track.id, at),
+  }));
+}
+
 const write = { write: true };
 
 export const setupPageRoutes = [
@@ -224,7 +244,7 @@ export const setupPageRoutes = [
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { GET: toPage('setup#transponders'), POST: pageRoute('timing.setup', assignTransponder, write) } },
   { pattern: spacePath('track'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', setTrack, write) } },
   { pattern: spacePath('tracks'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', addTrack, write) } },
-  { pattern: spacePath('tracks/([^/]+)'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', renameTrack, write) } },
+  { pattern: spacePath('tracks/([^/]+)'), credentials: true, methods: { GET: pageRoute('timing.run', showTrack), POST: pageRoute('timing.setup', renameTrack, write) } },
   { pattern: spacePath('tracks/([^/]+)/layout'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', attachLayout, write) } },
   { pattern: spacePath('tracks/([^/]+)/archive'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', archiveTrack, write) } },
   { pattern: spacePath('tracks/([^/]+)/restore'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', restoreTrack, write) } },

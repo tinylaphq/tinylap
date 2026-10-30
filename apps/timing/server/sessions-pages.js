@@ -204,7 +204,12 @@ function showSession(request, match) {
   return page(request, 200, sessionPage(request, { session, standings, crossings, drivers: store.drivers(ws), track, record, bests }));
 }
 
-const showRecords = (request) => page(request, 200, recordsPage(request, { ...recordsOf(request, -1), drivers: request.store.drivers(request.workspaceId) }));
+function showRecords(request) {
+  const { store, workspaceId: ws } = request;
+  const records = recordsOf(request, -1);
+  const layoutOf = records.track ? (at) => store.layoutAt(ws, records.track.id, at) : null;
+  return page(request, 200, recordsPage(request, { ...records, drivers: store.drivers(ws), layoutOf }));
+}
 
 const write = { write: true };
 
