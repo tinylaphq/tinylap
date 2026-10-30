@@ -1,6 +1,6 @@
 # TinyLap Timing
 
-Lap timing for a club's track: decoders post passings over USB (through the bridge tab) and Wi-Fi, the server turns them into practice, qualifying and race results, and every screen shows them live. A member starts each session by hand; the Sessions tab keeps their history and the track record. Design: `docs/superpowers/specs/2026-10-15-timing-core-design.md`, sessions and records: `docs/superpowers/specs/2026-10-29-sessions-and-records-design.md`. Decoder builders: `docs/timing.md`.
+Lap timing for a club's track: decoders post passings over USB (through the bridge tab) and Wi-Fi, the server turns them into practice, qualifying and race results, and every screen shows them live. A member starts each session by hand; the Sessions tab keeps their history and the track record. A club has named tracks (the first is "Track"); a planner layout is optional, and Setup lists the tracks. Tracks: `docs/superpowers/specs/2026-10-30-named-tracks-design.md`. Design: `docs/superpowers/specs/2026-10-15-timing-core-design.md`, sessions and records: `docs/superpowers/specs/2026-10-29-sessions-and-records-design.md`. Decoder builders: `docs/timing.md`.
 
 ## Development
 

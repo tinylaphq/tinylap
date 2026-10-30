@@ -38,7 +38,7 @@ decoder firmware and hardware.
 | Race and qualifying format | **The RC norm: time windows.** Qualifying: laps anytime within X minutes, best lap ranks. Race: X minutes, most laps wins, ties broken by total time; when time is up each driver finishes their current lap. |
 | Race start | **A grid behind the line** and an on-screen countdown. Each driver's first crossing after "go" starts their race. |
 | Cars and drivers | A transponder belongs to a **driver**; a driver can own several. Drivers are records, not accounts (identity spec). |
-| Tracks | The workspace has a **current track and direction**, imported from a planner link. Everything inherits them until changed. |
+| Tracks | The workspace has a **current track and direction**. Everything inherits them until changed. Tracks are named and a planner layout is optional: see `2026-10-30-named-tracks-design.md`. |
 | One app or part of the planner? | **A new `apps/timing`** with its own Node server and Fly app, the same pattern as the planner. |
 | Decoder credentials | **Issued by the timing app**, one token per decoder, scoped to posting passings. Not an `accounts` device principal; see §9. |
 
@@ -268,8 +268,8 @@ bundler, like the planner. Screens:
 - **Sessions:** start practice, qualifying or a race (drivers, duration), end
   or abort; the history, a page per session and the track record history.
 - **Tap entry:** a tile per driver; a tap is a passing.
-- **Setup:** drivers, transponders, decoders and pairing, the current track
-  (paste a planner link) and direction, the watchers link.
+- **Setup:** drivers, transponders, decoders and pairing, the tracks (a name, an
+  optional planner layout), the current track and direction, the watchers link.
 - **Bridge:** serial connection status, outbox, local preview.
 - **Watchers view:** the live board, read-only, without setup.
 
