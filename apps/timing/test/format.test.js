@@ -32,8 +32,8 @@ test('clockAt: the clock and the phase that time alone decides', () => {
   assert.deepEqual(clockAt({ ...race, state: 'done' }, 400_000), { phase: 'done', label: 'Finished', ms: 0 });
   assert.deepEqual(clockAt({ ...race, state: 'aborted' }, 400_000), { phase: 'aborted', label: 'Aborted', ms: 0 });
   assert.equal(clockAt({ kind: 'qualifying', state: 'running', opensAt: 0, closesAt: 1000 }, 1000).phase, 'finishing');
-  assert.deepEqual(clockAt({ kind: 'practice', state: 'running', opensAt: 1000, closesAt: null }, 61_000), { phase: 'running', label: 'Practice', ms: 60_000 });
-  assert.deepEqual(clockAt({ kind: 'practice', state: 'done', opensAt: 1000, closesAt: null }, 61_000), { phase: 'done', label: 'Practice ended', ms: 0 });
+  assert.deepEqual(clockAt({ kind: 'practice', state: 'running', opensAt: 1000, closesAt: null }, 61_000), { phase: 'running', label: 'Started', ms: 60_000 });
+  assert.deepEqual(clockAt({ kind: 'practice', state: 'done', opensAt: 1000, closesAt: null }, 61_000), { phase: 'done', label: 'Ended', ms: 0 });
 });
 
 test('formatLength says seconds under a minute, and minutes plus seconds when not whole', () => {

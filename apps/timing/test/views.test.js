@@ -47,8 +47,8 @@ test('fields escape their values and mark their errors', () => {
 test('the clock for each state, on the server', () => {
   const race = { kind: 'race', opensAt: 10_000, closesAt: 310_000 };
   assert.equal(clockOf(null, 0), null);
-  assert.deepEqual(clockOf({ kind: 'practice', state: 'running', opensAt: 1000 }, 61_000), { label: 'Practice', ms: 60_000 });
-  assert.deepEqual(clockOf({ kind: 'practice', state: 'done', opensAt: 1000 }, 61_000), { label: 'Practice ended', ms: 0 });
+  assert.deepEqual(clockOf({ kind: 'practice', state: 'running', opensAt: 1000 }, 61_000), { label: 'Started', ms: 60_000 });
+  assert.deepEqual(clockOf({ kind: 'practice', state: 'done', opensAt: 1000 }, 61_000), { label: 'Ended', ms: 0 });
   assert.deepEqual(clockOf({ ...race, state: 'countdown' }, 5000), { label: 'Starts in', ms: 5000 });
   assert.deepEqual(clockOf({ ...race, state: 'running' }, 70_000), { label: 'Remaining', ms: 240_000 });
   assert.deepEqual(clockOf({ ...race, state: 'finishing' }, 400_000), { label: 'Last lap', ms: 0 });

@@ -52,12 +52,42 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   max-width: 1400px;
   margin-inline: auto;
 }
-.board-head, .board-unknown { grid-column: 1 / -1; }
-.board-unknown { margin: 0; }
+.board-track, .board-head, .board-unknown, .board > .idle-notice { grid-column: 1 / -1; }
+.board-unknown, .board > .idle-notice { margin: 0; }
+/* The track and its record (records spec §5.1): a quiet strip, its edge in the
+ * record colour. When a record falls it fills with that colour and stands out
+ * like the clock (§4.3); that is the board's one moment of colour. */
+.board-track {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--p-space-xs) var(--p-space-lg);
+  padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface);
+  border: var(--p-border-width) solid var(--p-text); border-left: 6px solid var(--tl-record);
+}
+.board-track p { margin: 0; }
+.board-track-name { color: var(--p-text-secondary); }
+.board-track-name strong { color: var(--p-text); font-size: 1.15em; margin-right: var(--p-space-xs); }
+.board-track-record { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
+.board-track-label { font-weight: 700; }
+.board-track-time { font-weight: 700; font-size: 1.15em; }
+.board-track-by { color: var(--p-text-secondary); }
+.board-track-by .driver { color: var(--p-text); }
+.board-track.is-record {
+  background: var(--tl-record); color: var(--tl-record-ink); border-left-width: var(--p-border-width);
+  box-shadow: var(--p-shadow-lg) var(--p-text); padding-block: var(--p-space-md);
+}
+.board-track.is-record .board-track-name, .board-track.is-record .board-track-name strong,
+.board-track.is-record .board-track-by, .board-track.is-record .board-track-by .driver { color: inherit; }
+.board-track.is-record .board-track-record { display: grid; justify-items: end; gap: var(--p-space-xs); }
+.board-track-new { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
+.board-track-new .board-track-label { font-size: 1.4em; letter-spacing: -0.01em; }
+.board-track-new .board-track-time { font-size: 1.8em; line-height: 1.1; }
+.board-track-beat { opacity: 0.85; }
 .board-head {
   display: flex; justify-content: space-between; align-items: stretch; gap: var(--p-space-md); flex-wrap: wrap;
 }
-.board-head .eyebrow { margin: 0 0 var(--p-space-xs); color: var(--p-text-secondary); }
+/* With no session running: when the last one ended, and Start practice. */
+.board-ended { margin: var(--p-space-xs) 0 0; color: var(--p-text-secondary); }
+.board-head .start-practice { align-self: center; }
+.board-ended .tag { font-size: 10px; padding: 1px 6px; vertical-align: middle; }
 .board-title { margin: 0; font-size: clamp(1.75rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -0.02em; }
 .board-clock {
   display: grid; justify-items: end; align-content: center; gap: var(--p-space-xs);
@@ -73,8 +103,6 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 /* Wide tables scroll inside the board, not the page; the padding keeps the hard shadow in view. */
 .board-scroll { overflow-x: auto; padding: 0 4px 4px 0; }
 .board-main { display: grid; gap: var(--p-space-lg); align-content: start; min-width: 0; }
-.board-results-title { display: flex; gap: var(--p-space-sm); align-items: baseline; margin: 0 0 var(--p-space-sm); }
-.board-results-title .tag { font-size: 10px; padding: 1px 6px; }
 .board-results .empty { margin: 0; }
 .board-table { font-size: 1em; width: 100%; border-collapse: collapse; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
 .board-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-surface); background: var(--p-dark); }
@@ -97,7 +125,6 @@ tl-bridge { display: block; }
 .board-ago time { white-space: nowrap; }
 .num { text-align: right; font-family: var(--p-font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .is-finished td { color: var(--p-text-muted); }
-.pb { margin-left: var(--p-space-xs); background: var(--p-accent-1); vertical-align: middle; }
 .board-empty { margin: 0; padding: var(--p-space-xl) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) dashed var(--p-border-dashed); text-align: center; }
 
 .driver { font-weight: 600; }
@@ -125,7 +152,11 @@ body.big .board {
   /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
   padding-top: calc(0.5rem + 44px + var(--p-space-md));
 }
-body.big .board-head .eyebrow, body.big .board-clock-label { font-size: 0.6em; }
+body.big .board-clock-label, body.big .board-ended { font-size: 0.6em; }
+body.big .board-track { font-size: 0.75em; }
+@media (max-width: 600px) {
+  .board-track.is-record .board-track-record { justify-items: start; }
+}
 body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
 body.big .board-table th, body.big .board-table td { padding-block: 0.6em; }

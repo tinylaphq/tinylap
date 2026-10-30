@@ -305,6 +305,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const recent = session ? store.recentCrossings(session.id, 30) : [];
     const ended = session ? null : store.lastEnded(workspaceId);
     const rows = session ? standingsOf(session) : [];
+    const endedRows = ended ? standingsOf(ended) : [];
     const record = track ? store.currentRecord(workspaceId, track.id, ws.direction) : null;
     return {
       now: now(),
@@ -314,10 +315,10 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       standings: rows,
       crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),
       drivers: store.drivers(workspaceId),
-      bests: track ? store.personalBests(workspaceId, track.id, ws.direction, rows.map((r) => r.driverId)) : [],
+      bests: track ? store.personalBests(workspaceId, track.id, ws.direction, [...rows, ...endedRows].map((r) => r.driverId)) : [],
       record: record && { driverId: record.driverId, lapMs: record.lapMs, at: record.at },
       recordNew: recordNewOf(workspaceId),
-      lastResults: ended && { session: publicSession(ended), standings: standingsOf(ended) },
+      lastResults: ended && { session: publicSession(ended), standings: endedRows },
       ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idles.get(workspaceId) ?? null }),
     };
   }

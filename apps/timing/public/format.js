@@ -19,7 +19,8 @@ export function formatClock(ms) {
 /**
  * What a session clock shows at server time `now`, and the phase time alone decides:
  * a countdown past opensAt is running; a race or qualifying past closesAt is finishing.
- * done and aborted are never derived. opensAt/closesAt may be null.
+ * done and aborted are never derived. opensAt/closesAt may be null. A practice
+ * counts up under "Started" or "Ended"; the server writes the time of day after it.
  * @param {{ kind: string, state: string, opensAt: number | null, closesAt: number | null }} session @param {number} now
  * @returns {{ phase: string, label: string, ms: number }}
  */
@@ -28,7 +29,7 @@ export function clockAt({ kind, state, opensAt, closesAt }, now) {
   if (phase === 'countdown' && opensAt !== null && now >= opensAt) phase = 'running';
   if (phase === 'running' && kind !== 'practice' && closesAt !== null && now >= closesAt) phase = 'finishing';
   if (phase === 'countdown') return { phase, label: 'Starts in', ms: opensAt - now };
-  if (kind === 'practice') return phase === 'done' || phase === 'aborted' ? { phase, label: 'Practice ended', ms: 0 } : { phase, label: 'Practice', ms: now - opensAt };
+  if (kind === 'practice') return phase === 'done' || phase === 'aborted' ? { phase, label: 'Ended', ms: 0 } : { phase, label: 'Started', ms: now - opensAt };
   if (phase === 'running') return { phase, label: 'Remaining', ms: Math.max(0, closesAt - now) };
   if (phase === 'finishing') return { phase, label: 'Last lap', ms: 0 };
   return { phase, label: phase === 'aborted' ? 'Aborted' : 'Finished', ms: 0 };

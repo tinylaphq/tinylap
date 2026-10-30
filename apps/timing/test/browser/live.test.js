@@ -32,7 +32,7 @@ test('the board updates live and its clock ticks', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/board');
-  await page.getByRole('heading', { name: 'Waiting for the first car' }).waitFor();
+  await page.getByRole('heading', { name: 'No session yet' }).waitFor();
   app.engine.start((await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id, { kind: 'practice' });
   await postPassings(app, decoder, [{ transponder: '10', t: 1000 }, { transponder: '10', t: 9000 }]);
   await page.getByRole('heading', { name: 'Practice' }).waitFor();
