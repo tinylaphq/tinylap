@@ -341,7 +341,9 @@ test('archiving needs no confirmation; the current track stays; restore brings i
   assert.doesNotMatch(body, new RegExp(`<option value="${office.id}"`), 'an archived track is not a choice');
   const current = await app.form(member, `${pitsBase}/tracks/${trackNamed('Garage').id}/archive`, {});
   assert.equal(current.status, 409);
-  assert.match(await current.text(), /Garage is the current track\. Make another track current first\./);
+  const refused = await current.text();
+  assert.match(refused, /Garage is the current track\. Make another track current first\./);
+  assert.doesNotMatch(refused, /aria-invalid/, 'the current track and direction are not the mistake');
   assert.equal((await app.form(member, `${pitsBase}/tracks/${office.id}/restore`, {})).status, 303);
   assert.equal(app.store.track(pits.id, office.id).archivedAt, null);
 });
@@ -377,6 +379,20 @@ test('deleting an archived track asks first, with its sessions counted, and need
   assert.equal(done.status, 303);
   assert.equal(done.headers.get('location'), `${pitsBase}/setup#track`);
   assert.equal(app.store.track(pits.id, office.id), null);
+});
+
+test('a refused delete opens the archive, not the current-track form', async () => {
+  await app.form(member, `${pitsBase}/tracks`, { name: 'Busy' });
+  const busy = trackNamed('Busy');
+  await app.form(member, `${pitsBase}/tracks/${busy.id}/archive`, {});
+  app.store.addSession({ id: 'pits-busy', workspaceId: pits.id, kind: 'race', trackId: busy.id, direction: 'ccw', state: 'running', createdAt: 5, opensAt: 5, closesAt: 10, endedAt: null, roster: [], durationMs: 5 });
+  const res = await app.form(owner, `${pitsBase}/tracks/${busy.id}/delete`, {});
+  assert.equal(res.status, 409);
+  const body = await res.text();
+  assert.match(body, /Busy is in use by the running session\./);
+  assert.doesNotMatch(body, /aria-invalid/);
+  assert.match(body, /<details class="track-archive" open>/);
+  app.store.updateSession('pits-busy', { state: 'aborted', endedAt: 6 });
 });
 
 test('an active track has no delete page; a missing one is 404', async () => {

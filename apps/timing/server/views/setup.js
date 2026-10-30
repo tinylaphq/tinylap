@@ -79,7 +79,7 @@ function trackSection(request, m) {
       <button type="submit" class="btn btn-outline">Add track</button>
     </div>
   </form>
-  ${m.archived.length ? html`<details class="track-archive"${m.archived.some((t) => m.errors[`track-restore:${t.id}`]) ? html` open` : null}>
+  ${m.archived.length ? html`<details class="track-archive"${m.archived.some((t) => m.errors[`track-restore:${t.id}`] || m.errors[`track-delete:${t.id}`]) ? html` open` : null}>
     <summary>Archived tracks (${m.archived.length})</summary>
     <ul class="setup-list">${m.archived.map((t) => html`<li class="setup-row">
       <a href="${base}/tracks/${t.id}">${t.name}</a>

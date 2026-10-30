@@ -154,7 +154,7 @@ const setTrack = withForm((request, form) => {
   return trackForm(request, ops.setCurrentTrack(request, values), 'track', values, { direction: 'current-direction' });
 });
 
-const archiveTrack = withForm((request, _form, match) => trackForm(request, ops.archiveTrack(request, { id: match[2] }), 'track', {}));
+const archiveTrack = withForm((request, _form, match) => trackForm(request, ops.archiveTrack(request, { id: match[2] }), `track-archive:${match[2]}`, {}));
 
 const restoreTrack = withForm((request, _form, match) => trackForm(request, ops.restoreTrack(request, { id: match[2] }), `track-restore:${match[2]}`, {}));
 
@@ -174,7 +174,7 @@ function askDeleteTrack(request, match) {
   }));
 }
 
-const deleteTrack = withForm((request, _form, match) => trackForm(request, ops.deleteTrack(request, { id: match[2] }), 'track', {}));
+const deleteTrack = withForm((request, _form, match) => trackForm(request, ops.deleteTrack(request, { id: match[2] }), `track-delete:${match[2]}`, {}));
 
 const pairDecoder = withForm((request, form) => {
   const values = { name: form.get('name') ?? '' };
