@@ -42,7 +42,7 @@ Set both in `platformio.ini` (env `attiny45`) to the real board and programmer *
 | Setting | Default | What |
 | --- | --- | --- |
 | `TL_LED_PIN` (in `build_flags`, as `-DTL_LED_PIN=PBn`) | `PB0` | The ATtiny pin that drives the transistor. PB0 is right for the boards in the cars (see "Hardware"). For another board, set the pin its driver is on; with the wrong pin the LED stays dark. |
-| `upload_protocol` | `usbasp` | The programmer, for `-t fuses`. Any avrdude programmer works, such as `avrispmkII`, `arduino_as_isp` (ArduinoISP) or `linuxspi`; add `upload_port` for one that needs a port. |
+| `upload_protocol` | `usbasp` | The programmer, for `-t fuses`. Any avrdude programmer works, such as `avrispmkII`, `avrisp` (ArduinoISP, with `upload_speed = 19200`) or `linuxspi`; add `upload_port` for one that needs a port. |
 
 The same programmer goes to `tools/flash.py` as `--programmer`, with `--port` for a serial one.
 
@@ -111,9 +111,11 @@ Python 3.9 or later. The script runs avrdude through PlatformIO, so build first 
 | Programmer | Options |
 | --- | --- |
 | USBasp | none (the default) |
-| ArduinoISP on an Arduino | `--programmer arduino_as_isp --port /dev/ttyACM0` (the Arduino's serial port). This entry talks at the sketch's 19200 baud; plain `arduino` defaults to 115200, and the script has no option for the baud rate. |
+| ArduinoISP on an Arduino | Needs 19200 baud, the sketch's rate, which the script can't set: see below. |
 | A Raspberry Pi's SPI pins | `--programmer linuxspi --port /dev/spidev0.0` |
 | A Raspberry Pi's GPIO pins, bit-banged | `--programmer linuxgpio`, with the pins set in a `linuxgpio` entry of the avrdude config |
+
+**ArduinoISP** talks at 19200 baud. Every avrdude has the programmer `avrisp` (an STK500v1), but it needs `-b 19200`, and the script has no option for the baud rate. So with ArduinoISP, use avrdude directly as below, with `-c avrisp -P /dev/ttyACM0 -b 19200` (the Arduino's serial port), and for the fuses set `upload_protocol = avrisp`, `upload_port` and `upload_speed = 19200` in `platformio.ini`. avrdude 8.0 and later also have `arduino_as_isp`, which sets 19200 itself and so works with `--programmer arduino_as_isp --port …`; PlatformIO's default avrdude for this platform is older and doesn't have it.
 
 The script runs PlatformIO's avrdude with PlatformIO's `avrdude.conf` (`~/.platformio/packages/tool-avrdude/`), so a `linuxgpio` entry with your pins goes in that file. `linuxspi` and `linuxgpio` work only on Linux.
 
