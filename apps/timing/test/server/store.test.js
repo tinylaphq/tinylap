@@ -4,6 +4,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { openStore } from '../../server/store.js';
 
 const W = 'ws-1';
@@ -79,11 +83,32 @@ test('personal bests: counted, decoder-timed, per track and direction', () => {
   practice(store);
   practice(store, 'cw', { direction: 'cw' });
   crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
-  crossing(store, { driverId: 'ana', lapMs: 7000, counts: true, at: 20 });
+  const seq = crossing(store, { driverId: 'ana', lapMs: 7000, counts: true, at: 20 });
   crossing(store, { driverId: 'ana', lapMs: 6000, counts: false, at: 30 });
   crossing(store, { driverId: 'ana', lapMs: 5000, counts: true, at: 40, via: 'tap' });
   crossing(store, { sessionId: 'cw', driverId: 'ana', lapMs: 4000, counts: true, at: 50 });
-  assert.deepEqual(store.personalBests(W, 't1', 'ccw'), [{ driverId: 'ana', bestMs: 7000, at: 20 }]);
+  store.rebuildRecords(W, 't1', 'ccw');
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ana']), [{ driverId: 'ana', bestMs: 7000, at: 20, seq }]);
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ben']), []);
+});
+
+test('a database from before records gets them filled from its laps on open', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  const store = openStore(path);
+  practice(store);
+  practice(store, 'cw', { direction: 'cw' });
+  crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
+  crossing(store, { driverId: 'ben', lapMs: 7000, counts: true, at: 20 });
+  crossing(store, { sessionId: 'cw', driverId: 'ana', lapMs: 6000, counts: true, at: 30 });
+  store.close();
+  const db = new DatabaseSync(path);
+  db.exec('DROP TABLE track_record; DROP TABLE personal_best;');
+  db.close();
+  const reopened = openStore(path);
+  assert.deepEqual(reopened.recordHistory(W, 't1', 'ccw').map((r) => [r.driverId, r.lapMs]), [['ben', 7000], ['ana', 8000]]);
+  assert.deepEqual(reopened.recordHistory(W, 't1', 'cw').map((r) => [r.driverId, r.lapMs]), [['ana', 6000]]);
+  assert.deepEqual(reopened.personalBests(W, 't1', 'ccw', ['ana', 'ben']).map((b) => [b.driverId, b.bestMs]), [['ben', 7000], ['ana', 8000]]);
+  reopened.close();
 });
 
 test('running sessions, of any kind', () => {
@@ -127,8 +152,12 @@ test('deleting a workspace removes all of its rows', () => {
   store.addDriver(W, { id: 'ana', name: 'Ana', colour: '#ff2d9b' });
   store.addDecoder(W, { id: 'd1', name: 'Gate', tokenHash: 'h1', createdAt: 1 });
   store.insertPassing({ decoder: 'd1', boot: 'b00tb00t', transponder: '0A', t: 1, receivedAt: 1, via: 'net', workspaceId: W });
-  crossing(store, {});
+  crossing(store, { driverId: 'ana', lapMs: 8000, counts: true, at: 10 });
+  store.rebuildRecords(W, 't1', 'ccw');
+  assert.equal(store.currentRecord(W, 't1', 'ccw').lapMs, 8000);
   store.deleteWorkspaceData(W);
+  assert.equal(store.currentRecord(W, 't1', 'ccw'), null);
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ana']), []);
   assert.equal(store.workspace(W), null);
   assert.deepEqual(store.drivers(W), []);
   assert.equal(store.decoder('d1'), null);

@@ -136,7 +136,7 @@ test('tap entry makes tap laps that never count as personal bests', () => {
   const row = engine.tap(W, 'ben');
   assert.deepEqual([row.lapMs, row.counts, row.via], [8000, true, 'tap']);
   assert.equal(engine.tap(W, 'ben'), null, 'same millisecond');
-  assert.deepEqual(store.personalBests(W, 't1', 'ccw'), []);
+  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ben']), []);
 });
 
 test('a tap with no session is refused and stores nothing', () => {

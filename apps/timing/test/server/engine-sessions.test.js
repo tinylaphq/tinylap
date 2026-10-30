@@ -125,7 +125,7 @@ test('the snapshot: members get setup, watchers do not', () => {
   assert.deepEqual(member.standings.map((s) => s.driverId), ['ana']);
   assert.equal(member.crossings[0].transponder, '0C', 'newest first');
   assert.deepEqual(member.unknown, ['0C']);
-  assert.deepEqual(member.bests, [{ driverId: 'ana', bestMs: 8000, at: member.crossings[1].at }]);
+  assert.deepEqual(member.bests, [{ driverId: 'ana', bestMs: 8000, at: member.crossings[1].at, seq: member.crossings[1].seq }]);
   assert.deepEqual(member.drivers.map((d) => d.id), ['ana', 'ben']);
   const watcher = engine.snapshot(W, { watcher: true });
   assert.equal('unknown' in watcher, false);

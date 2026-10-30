@@ -14,6 +14,10 @@ export const PRACTICE_IDLE_MS = 60 * 60_000;
 /** Passings outside any session are deleted after this long. */
 export const LOOSE_PASSING_MS = 24 * 60 * 60_000;
 const LOOSE_SWEEP_MS = 10 * 60_000;
+/** A new record shows this long, or until its holder's next crossing if later (records spec §4.3). */
+export const RECORD_SHOW_MS = 30_000;
+/** A record lap driven longer than this before it arrived falls silently. */
+export const RECORD_FRESH_MS = 60_000;
 /** Offsets older than this don't count for mapping decoder time (spec §6). */
 const OFFSET_WINDOW_MS = 60_000;
 const ACTIVE = new Set(['countdown', 'running', 'finishing']);
@@ -45,6 +49,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const states = new Map();
   /** Workspace id → the latest passing that fell outside any session. */
   const idles = new Map();
+  /** Workspace id → the record that fell live, and whether its holder has crossed since. */
+  const recordNews = new Map();
   let lastSweep = -Infinity;
 
   const rulesOf = (s) => ({ kind: s.kind, roster: s.roster, opensAt: s.opensAt, closesAt: s.closesAt });
@@ -109,10 +115,35 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       flag: step.kind === 'backwards' || step.kind === 'double' ? step.kind : null,
     };
     row.seq = store.addCrossing(row);
+    const shown = recordNews.get(workspaceId);
+    if (shown && driverId === shown.recordNew.driverId) shown.crossedAgain = true;
+    if (counts && via !== 'tap' && driverId !== null && lapMs !== null && session.trackId !== null) noteLap(session, row);
     hub.publish(workspaceId, 'crossing', memberCrossing(row), watcherCrossing(row));
     if (counts) publishStandings(session);
     if (session.state === 'finishing' && isComplete(rulesOf(session), stateOf(session), now(), maxLap)) endSession(session, now());
     return row;
+  }
+
+  /** A qualifying lap updates its driver's best and, if faster than the record when it was driven, the record (records spec §4). */
+  function noteLap({ workspaceId, trackId, direction }, { seq, driverId, lapMs, at, sessionId }) {
+    store.offerPersonalBest(workspaceId, trackId, direction, { driverId, lapMs, at, seq });
+    const before = store.recordAt(workspaceId, trackId, direction, at);
+    if (before && lapMs >= before.lapMs) return;
+    const latest = store.currentRecord(workspaceId, trackId, direction);
+    if (latest && at < latest.at) {
+      store.rebuildRecords(workspaceId, trackId, direction);
+      return;
+    }
+    store.addRecord({ workspaceId, trackId, direction, seq, driverId, lapMs, at, sessionId });
+    if (!before || now() - at >= RECORD_FRESH_MS) return;
+    const recordNew = { seq, driverId, lapMs, at, beat: { driverId: before.driverId, lapMs: before.lapMs, at: before.at } };
+    recordNews.set(workspaceId, { recordNew, crossedAgain: false });
+    hub.publish(workspaceId, 'record', recordNew);
+  }
+  /** The live record while it shows. */
+  function recordNewOf(workspaceId, t = now()) {
+    const shown = recordNews.get(workspaceId);
+    return shown && (t - shown.recordNew.at < RECORD_SHOW_MS || !shown.crossedAgain) ? shown.recordNew : null;
   }
 
   /** A passing with no session running makes no crossing; members are told (spec §3.2). */
@@ -207,6 +238,11 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       lastSweep = t;
       store.deleteLoosePassings(t - LOOSE_PASSING_MS);
     }
+    for (const workspaceId of recordNews.keys()) {
+      if (recordNewOf(workspaceId, t)) continue;
+      recordNews.delete(workspaceId);
+      hub.publish(workspaceId, 'record', null);
+    }
     for (let session of store.activeAll()) {
       if (session.kind === 'practice') {
         const last = store.lastCrossingAt(session.id) ?? session.opensAt;
@@ -236,7 +272,14 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   function assign(workspaceId, code, driverId) {
     store.transaction(() => {
       store.assignTransponder(workspaceId, code, driverId, now());
-      if (driverId !== null) for (const id of store.assignCrossings(workspaceId, code, driverId)) rebuild(id);
+      if (driverId === null) return;
+      const tracks = new Map();
+      for (const id of store.assignCrossings(workspaceId, code, driverId)) {
+        rebuild(id);
+        const { trackId, direction } = store.session(id);
+        if (trackId !== null) tracks.set(`${trackId} ${direction}`, { trackId, direction });
+      }
+      for (const { trackId, direction } of tracks.values()) store.rebuildRecords(workspaceId, trackId, direction);
     });
     publishUnknown(workspaceId);
   }
@@ -253,15 +296,19 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const track = ws.trackId ? store.track(workspaceId, ws.trackId) : null;
     const recent = session ? store.recentCrossings(session.id, 30) : [];
     const ended = session ? null : store.lastEnded(workspaceId);
+    const rows = session ? standingsOf(session) : [];
+    const record = track ? store.currentRecord(workspaceId, track.id, ws.direction) : null;
     return {
       now: now(),
       track: track && { id: track.id, name: track.name },
       direction: ws.direction,
       session: session && publicSession(session),
-      standings: session ? standingsOf(session) : [],
+      standings: rows,
       crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),
       drivers: store.drivers(workspaceId),
-      bests: track ? store.personalBests(workspaceId, track.id, ws.direction) : [],
+      bests: track ? store.personalBests(workspaceId, track.id, ws.direction, rows.map((r) => r.driverId)) : [],
+      record: record && { driverId: record.driverId, lapMs: record.lapMs, at: record.at },
+      recordNew: recordNewOf(workspaceId),
       lastResults: ended && { session: publicSession(ended), standings: standingsOf(ended) },
       ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idles.get(workspaceId) ?? null }),
     };

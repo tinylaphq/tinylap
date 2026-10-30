@@ -118,7 +118,7 @@ export async function setTrack(request, { link, name: rawName, direction }) {
   const ws = request.workspaceId;
   request.store.setTrack(ws, { ...track, name }, direction);
   request.engine.endPractice(ws);
-  request.hub.publish(ws, 'track', { track: { id: track.id, name }, direction, bests: request.store.personalBests(ws, track.id, direction) });
+  request.hub.publish(ws, 'track', { track: { id: track.id, name }, direction, bests: request.engine.snapshot(ws).bests });
   return { value: { id: track.id, name, direction, snapshotKey: track.snapshotKey } };
 }
 
