@@ -58,13 +58,14 @@ async function boardPage(path = '/personal/board') {
   await page.addInitScript(() => {
     window.contexts = 0;
     window.oscillators = 0;
+    window.closes = 0;
     window.AudioContext = class {
       currentTime = 0;
       state = 'running';
       destination = {};
       constructor() { window.contexts += 1; }
       resume() { return Promise.resolve(); }
-      close() { return Promise.resolve(); }
+      close() { window.closes += 1; return Promise.resolve(); }
       createGain() {
         const param = { value: 1, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} };
         return { gain: param, connect() {} };
@@ -113,7 +114,7 @@ test('with sound on a new record rings once, and the same record in a later swap
     assert.equal(await rings(), 1);
     t += 12_000; // a slower lap: the board is swapped again, the same record still showing
     passIn(t);
-    await page.waitForTimeout(500);
+    await page.locator('.board-feed', { hasText: '12.000' }).waitFor(); // the swap that carries the lap
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     assert.equal(await rings(), 1);
     const next = newRecord();
@@ -148,6 +149,17 @@ test('a reload with sound remembered on shows the switch pressed, and the contex
     const seq = newRecord();
     await page.locator(`[data-record-new="${seq}"]`).waitFor();
     assert.equal(await rings(), 1);
+  } finally { await context.close(); }
+});
+
+test('the context is closed when tl-board is disconnected', async () => {
+  const { context, page } = await boardPage();
+  try {
+    await page.getByRole('button', { name: 'Sound on' }).click();
+    assert.equal(await page.evaluate(() => window.contexts), 1);
+    assert.equal(await page.evaluate(() => window.closes), 0);
+    await page.evaluate(() => document.querySelector('tl-board').remove());
+    assert.equal(await page.evaluate(() => window.closes), 1);
   } finally { await context.close(); }
 });
 

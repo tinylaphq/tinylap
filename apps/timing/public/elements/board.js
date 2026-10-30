@@ -29,6 +29,8 @@ const STATES = { live: 'Live', reconnecting: 'Reconnecting…', off: 'Disconnect
 // Once the stream gives up, reload: the server then answers the board, sign-in or the gone page.
 const RELOAD_MS = 10_000;
 const SOUND_KEY = 'tinylap-sound';
+// What Safari and iOS accept as a gesture that unlocks audio.
+const GESTURES = ['click', 'touchend', 'keydown'];
 
 /** The focused element's counterpart in `next`, by href or id. @param {Element} next @param {Element | null} focused */
 function counterpart(next, focused) {
@@ -71,8 +73,7 @@ class TlBoard extends HTMLElement {
 
   disconnectedCallback() {
     this.sound?.removeEventListener('click', this);
-    removeEventListener('pointerdown', this);
-    removeEventListener('keydown', this);
+    this.lock();
     this.audio?.close().catch(() => {});
     this.audio = null;
     this.close();
@@ -94,19 +95,23 @@ class TlBoard extends HTMLElement {
     this.sound.setAttribute('aria-pressed', String(on));
     this.sound.hidden = false;
     this.sound.addEventListener('click', this);
-    addEventListener('pointerdown', this);
-    addEventListener('keydown', this);
+    for (const type of GESTURES) addEventListener(type, this);
+  }
+
+  /** Stops waiting for a gesture. */
+  lock() {
+    for (const type of GESTURES) removeEventListener(type, this);
   }
 
   get soundOn() {
     return this.sound?.getAttribute('aria-pressed') === 'true';
   }
 
-  /** Makes the context once a gesture allows it, while sound is on. */
+  /** On a gesture, while sound is on: makes the context and resumes it; once it runs, the gestures are no longer needed. */
   wake() {
-    if (!this.soundOn || this.audio) return;
-    this.audio = new AudioContext();
-    this.audio.resume().catch(() => {});
+    if (!this.soundOn) return;
+    const audio = this.audio ??= new AudioContext();
+    audio.resume().then(() => { if (audio.state === 'running') this.lock(); }, () => {});
   }
 
   open() {
@@ -135,16 +140,19 @@ class TlBoard extends HTMLElement {
   /** @param {Event} event */
   handleEvent(event) {
     switch (event.type) {
-      case 'click': {
-        const on = !this.soundOn;
-        this.sound?.setAttribute('aria-pressed', String(on));
-        try { localStorage.setItem(SOUND_KEY, on ? 'on' : 'off'); } catch { /* storage blocked: the choice lasts this page */ }
+      case 'click': // the switch's own click toggles; any click is a gesture
+        if (event.currentTarget === this.sound) {
+          const on = !this.soundOn;
+          this.sound?.setAttribute('aria-pressed', String(on));
+          try { localStorage.setItem(SOUND_KEY, on ? 'on' : 'off'); } catch { /* storage blocked: the choice lasts this page */ }
+        }
         this.wake();
         break;
-      }
-      case 'pointerdown':
-      case 'keydown':
+      case 'touchend':
         this.wake();
+        break;
+      case 'keydown': // only an activating key unlocks audio on Safari
+        if (/** @type {KeyboardEvent} */ (event).key === 'Enter' || /** @type {KeyboardEvent} */ (event).key === ' ') this.wake();
         break;
       case 'open':
         this.setStatus('live');
