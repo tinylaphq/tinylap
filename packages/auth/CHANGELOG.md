@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/tinylaphq/tinylap/compare/auth-v0.2.0...auth-v0.3.0) (2026-10-30)
+
+
+### Features
+
+* member streams end at once on sign-out and membership changes ([#46](https://github.com/tinylaphq/tinylap/issues/46)) ([bbce207](https://github.com/tinylaphq/tinylap/commit/bbce207d4d9cfc4636b7ccc9e4b1a98c14040c4c))
+
+
+### Bug Fixes
+
+* follow-ups from the timing reviews ([#41](https://github.com/tinylaphq/tinylap/issues/41)) ([93ee8a9](https://github.com/tinylaphq/tinylap/commit/93ee8a9524dcd74d3b08e1d5b200a323abeb8d6e))
+
 ## [0.2.0](https://github.com/tinylaphq/tinylap/compare/auth-v0.1.0...auth-v0.2.0) (2026-10-20)
 
 
