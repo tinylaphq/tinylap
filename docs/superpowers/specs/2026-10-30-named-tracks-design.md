@@ -37,7 +37,7 @@ Anti-goals (a failure even if it works):
 
 ### 3.2 The default track
 
-- A new club gets one track named "Track", with no layout, as its current track, direction counter-clockwise (today's default). It is an ordinary track: it can be renamed, given a layout, archived once another track is current.
+- A new club gets one track named "Track", with no layout, as its current track, direction anticlockwise (today's default). It is an ordinary track: it can be renamed, given a layout, archived once another track is current.
 
 ### 3.3 Adding a track
 

@@ -360,6 +360,7 @@ export function openStore(path) {
     },
     // The only user names timing keeps are on layout entries (named tracks spec §3.4): they keep their date, not who.
     forgetUser(userId) {
+      // A scan of track_layout, not an index: it is keyed by user across clubs, runs once per account deletion, and the column order skips the layout blobs.
       s.forgetLayoutsBy.run(userId);
     },
 
