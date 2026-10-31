@@ -3,8 +3,16 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from unittest import mock
 
-from flash import avrdude_args, conf_path, eeprom_hex, main, osccal_correction
+from flash import (
+    avrdude_args,
+    conf_path,
+    eeprom_hex,
+    link_args,
+    main,
+    osccal_correction,
+)
 
 
 class EepromHex(unittest.TestCase):
@@ -62,6 +70,30 @@ class AvrdudeArgs(unittest.TestCase):
         self.assertEqual(args[6:8], ["-P", "usb"])
         self.assertEqual(args[8:], ["-U", "flash:w:f.hex:i", "-U", "eeprom:w:e.hex:i"])
 
+    def test_with_baud(self):
+        self.assertEqual(
+            avrdude_args("a.conf", "stk500v1", "/dev/ttyUSB0", "f.hex", "e.hex", 57600),
+            ["-C", "a.conf", "-c", "stk500v1", "-p", "t45", "-P", "/dev/ttyUSB0", "-b", "57600",
+             "-U", "flash:w:f.hex:i", "-U", "eeprom:w:e.hex:i"],
+        )
+
+
+class LinkArgs(unittest.TestCase):
+    def test_no_baud_by_default(self):
+        self.assertNotIn("-b", link_args("a.conf", "usbasp", None))
+
+    def test_avrisp_defaults_to_19200(self):
+        self.assertEqual(
+            link_args("a.conf", "avrisp", "/dev/ttyACM0"),
+            ["-C", "a.conf", "-c", "avrisp", "-p", "t45", "-P", "/dev/ttyACM0", "-b", "19200"],
+        )
+
+    def test_baud_overrides_default(self):
+        self.assertEqual(
+            link_args("a.conf", "avrisp", "/dev/ttyACM0", 9600),
+            ["-C", "a.conf", "-c", "avrisp", "-p", "t45", "-P", "/dev/ttyACM0", "-b", "9600"],
+        )
+
 
 class ConfPath(unittest.TestCase):
     def test_env_override(self):
@@ -91,6 +123,23 @@ class Parsing(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             main(["osccal", "--current", "100", "--start-us", "2040"])
         self.assertEqual(out.getvalue(), "102\n")
+
+    def test_baud_reaches_avrdude(self):
+        with mock.patch("flash.conf_path", return_value="a.conf"), mock.patch("flash.run_avrdude", return_value=0) as run:
+            main(["flash", "--id", "12", "--programmer", "avrisp", "--port", "/dev/ttyACM0", "--baud", "9600"])
+            main(["read-cal", "--programmer", "avrisp", "--port", "/dev/ttyACM0"])
+        flash_args, cal_args = (c.args[0] for c in run.call_args_list)
+        link = ["-C", "a.conf", "-c", "avrisp", "-p", "t45", "-P", "/dev/ttyACM0"]
+        self.assertEqual(flash_args[:10], link + ["-b", "9600"])
+        self.assertEqual(cal_args, link + ["-b", "19200", "-U", "calibration:r:-:h"])
+
+    def test_baud_must_be_positive(self):
+        import contextlib
+        import io
+
+        for bad in ("0", "-5", "fast"):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                main(["read-cal", "--programmer", "avrisp", "--baud", bad])
 
     def test_flash_rejects_bad_id_before_running(self):
         with self.assertRaises(SystemExit):

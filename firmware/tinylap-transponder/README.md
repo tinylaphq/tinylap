@@ -104,24 +104,24 @@ Python 3.9 or later. The script runs avrdude through PlatformIO, so build first 
 
    Repeat the check from step 3 until the start period is within ±1.5%.
 
-`flash` and `read-cal` take `--programmer` (default `usbasp`) and `--port`; `flash` also takes `--hex` (default `.pio/build/attiny45/firmware.hex`).
+`flash` and `read-cal` take `--programmer` (default `usbasp`), `--port` and `--baud`; `flash` also takes `--hex` (default `.pio/build/attiny45/firmware.hex`).
 
-`--programmer` takes any avrdude programmer name, passed on as `-c`, and `--port` is passed on as `-P`. For example:
+`--programmer` takes any avrdude programmer name, passed on as `-c`, `--port` is passed on as `-P`, and `--baud` as `-b`. With `--programmer avrisp` the baud rate is 19200 unless `--baud` says otherwise. For example:
 
 | Programmer | Options |
 | --- | --- |
 | USBasp | none (the default) |
-| ArduinoISP on an Arduino | Needs 19200 baud, the sketch's rate, which the script can't set: see below. |
+| ArduinoISP on an Arduino | `--programmer avrisp --port /dev/ttyACM0` (the Arduino's serial port; 19200 baud, the sketch's rate, is set for you) |
 | A Raspberry Pi's SPI pins | `--programmer linuxspi --port /dev/spidev0.0` |
 | A Raspberry Pi's GPIO pins, bit-banged | `--programmer linuxgpio`, with the pins set in a `linuxgpio` entry of the avrdude config |
 
-**ArduinoISP** talks at 19200 baud. Every avrdude has the programmer `avrisp` (an STK500v1), but it needs `-b 19200`, and the script has no option for the baud rate. So with ArduinoISP, use avrdude directly as below, with `-c avrisp -P /dev/ttyACM0 -b 19200` (the Arduino's serial port), and for the fuses set `upload_protocol = avrisp`, `upload_port` and `upload_speed = 19200` in `platformio.ini`. avrdude 8.0 and later also have `arduino_as_isp`, which sets 19200 itself and so works with `--programmer arduino_as_isp --port …`; PlatformIO's default avrdude for this platform is older and doesn't have it.
+**ArduinoISP** talks at 19200 baud. Every avrdude has the programmer `avrisp` (an STK500v1), and the script passes `-b 19200` with it, so `--programmer avrisp --port …` is all it needs. A sketch changed to another rate takes `--baud`. For the fuses, set `upload_protocol = avrisp`, `upload_port` and `upload_speed = 19200` in `platformio.ini`. avrdude 8.0 and later also have `arduino_as_isp`, which sets 19200 itself; PlatformIO's default avrdude for this platform is older and doesn't have it.
 
 The script runs PlatformIO's avrdude with PlatformIO's `avrdude.conf` (`~/.platformio/packages/tool-avrdude/`), so a `linuxgpio` entry with your pins goes in that file. `linuxspi` and `linuxgpio` work only on Linux.
 
 For the fuses in step 1 with another programmer, set `upload_protocol` (and `upload_port`) in `platformio.ini` to the same values, or write them with avrdude as below.
 
-To flash without PlatformIO, use avrdude directly, with `-C` (config file), `-c` (programmer), `-P` (port, when the programmer needs one) and `-p t45`. The examples use a USBasp; put your programmer in `-c`. The fuses first, once per chip:
+To flash without PlatformIO, use avrdude directly, with `-C` (config file), `-c` (programmer), `-P` (port, when the programmer needs one), `-b` (baud rate, 19200 for ArduinoISP) and `-p t45`. The examples use a USBasp; put your programmer in `-c`. The fuses first, once per chip:
 
 ```sh
 avrdude -C avrdude.conf -c usbasp -p t45 -U lfuse:w:0xE2:m -U hfuse:w:0xD5:m

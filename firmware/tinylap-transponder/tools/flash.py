@@ -8,6 +8,8 @@ import tempfile
 
 PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NOMINAL_US = 2000
+# Programmers that only talk at one rate, used when --baud is not given. ArduinoISP's sketch runs at 19200.
+DEFAULT_BAUD = {"avrisp": 19200}
 
 
 def record(addr: int, kind: int, data: list[int]) -> str:
@@ -33,11 +35,21 @@ def osccal_correction(current: int, measured_start_us: float) -> int:
     return max(lo, min(hi, current + round(off * 100)))
 
 
-def avrdude_args(conf: str, programmer: str, port: str | None, flash_hex: str, eeprom_hex_path: str) -> list[str]:
+def link_args(conf: str, programmer: str, port: str | None, baud: int | None = None) -> list[str]:
     args = ["-C", conf, "-c", programmer, "-p", "t45"]
     if port:
         args += ["-P", port]
-    return args + ["-U", f"flash:w:{flash_hex}:i", "-U", f"eeprom:w:{eeprom_hex_path}:i"]
+    baud = baud if baud is not None else DEFAULT_BAUD.get(programmer)
+    if baud:
+        args += ["-b", str(baud)]
+    return args
+
+
+def avrdude_args(
+    conf: str, programmer: str, port: str | None, flash_hex: str, eeprom_hex_path: str, baud: int | None = None
+) -> list[str]:
+    link = link_args(conf, programmer, port, baud)
+    return link + ["-U", f"flash:w:{flash_hex}:i", "-U", f"eeprom:w:{eeprom_hex_path}:i"]
 
 
 def conf_path(env: dict[str, str] | os._Environ = os.environ, check: bool = True) -> str:
@@ -46,6 +58,13 @@ def conf_path(env: dict[str, str] | os._Environ = os.environ, check: bool = True
     if check and not os.path.isfile(conf):
         sys.exit(f"{conf} is missing; run `pio run -e attiny45 -t fuses` once, which installs avrdude")
     return conf
+
+
+def positive_int(text: str) -> int:
+    value = int(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"{text} is not a positive number")
+    return value
 
 
 def run_avrdude(args: list[str]) -> int:
@@ -63,14 +82,11 @@ def flash(a: argparse.Namespace) -> int:
         path = os.path.join(tmp, "eeprom.hex")
         with open(path, "w") as f:
             f.write(image)
-        return run_avrdude(avrdude_args(conf, a.programmer, a.port, a.hex, path))
+        return run_avrdude(avrdude_args(conf, a.programmer, a.port, a.hex, path, a.baud))
 
 
 def read_cal(a: argparse.Namespace) -> int:
-    args = ["-C", conf_path(), "-c", a.programmer, "-p", "t45"]
-    if a.port:
-        args += ["-P", a.port]
-    return run_avrdude(args + ["-U", "calibration:r:-:h"])
+    return run_avrdude(link_args(conf_path(), a.programmer, a.port, a.baud) + ["-U", "calibration:r:-:h"])
 
 
 def osccal(a: argparse.Namespace) -> int:
@@ -88,6 +104,11 @@ def main(argv: list[str] | None = None) -> int:
     def link(s: argparse.ArgumentParser) -> None:
         s.add_argument("--programmer", default="usbasp")
         s.add_argument("--port")
+        s.add_argument(
+            "--baud",
+            type=positive_int,
+            help="passed on as -b: the serial baud rate, or the SPI clock in Hz for linuxspi (19200 by default for avrisp)",
+        )
 
     s = sub.add_parser("flash", help="write the program, the id and optionally OSCCAL")
     s.add_argument("--id", type=int, required=True)
