@@ -54,7 +54,7 @@ test('a club that has never driven gets one card to get ready, under its track',
   const res = await get(member, `${base}/board`);
   assert.equal(res.status, 200);
   const body = await res.text();
-  assert.match(body, /<header class="board-track">\s*<p class="board-track-name"><strong>Track<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Anticlockwise<\/title>/, 'a new club starts on its "Track"');
+  assert.match(body, /<header class="board-track">\s*<p class="board-track-name cut-words"><strong>Track<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Anticlockwise<\/title>/, 'a new club starts on its "Track"');
   assert.match(body, /<section class="board-first" aria-labelledby="board-first-title">\s*<h1 id="board-first-title">Ready when your cars are<\/h1>/);
   assert.match(body, new RegExp(`<a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>\\s*<a href="${base}/bridge">Connect the decoder</a>\\s*<a href="${base}/tap">Tap laps by hand</a>`));
   assert.doesNotMatch(body, /No track set|No session yet|Last laps|board-steps|board-hero|status-warning/);
@@ -361,7 +361,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   // Never driven: the card to get ready for members; the display and the watchers show the record's place.
   let s = await screens();
   for (const body of Object.values(s)) {
-    assert.match(body, /<header class="board-track">\s*<p class="board-track-name"><strong>Ring<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Clockwise<\/title>/);
+    assert.match(body, /<header class="board-track">\s*<p class="board-track-name cut-words"><strong>Ring<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Clockwise<\/title>/);
     assert.doesNotMatch(body, /class="eyebrow"|No session yet|Last laps|status-warning/);
   }
   assert.match(s.board, /Ready when your cars are/);
@@ -406,7 +406,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   assert.match(s.board, /Track record/);
   assert.doesNotMatch(s.board, /data-record-new/);
   // The record's time, holder and date apart by the line's gap, with no literal dots.
-  assert.match(s.board, /<p class="board-track-record"><span class="board-track-label">Track record<\/span> <span class="num board-track-time">8\.000<\/span> <span class="board-track-by"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span> <span class="board-track-by"><tl-local-time format="date">/);
+  assert.match(s.board, /<p class="board-track-record"><span class="board-track-label">Track record<\/span> <span class="num board-track-time">8\.000<\/span> <span class="board-track-by cut-words"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span> <span class="board-track-by cut-words"><tl-local-time format="date">/);
   passIn(club.id, 5_116_500, '61');
   const recordNew = app.engine.snapshot(club.id).recordNew;
   assert.equal(recordNew?.lapMs, 7500);
@@ -444,7 +444,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.doesNotMatch(head, /Track record|7\.500/, 'the record is below, once');
     const hero = part(body, '<section class="board-hero"');
     assert.match(hero, /<h1 class="board-hero-label">Track record<\/h1>\s*<p class="num board-hero-time">7\.500<\/p>/);
-    assert.match(hero, /<p class="board-hero-by"><span [^>]+><span class="crown"[^>]*>👑<\/span><span class="driver-name" title="Haris">Haris<\/span><\/span> set <tl-local-time format="datetime-short">[\s\S]*?, beat their own <span class="num">8\.000<\/span><\/p>/, 'his own record: their own, not his name');
+    assert.match(hero, /<p class="board-hero-by cut-words"><span [^>]+><span class="crown"[^>]*>👑<\/span><span class="driver-name" title="Haris">Haris<\/span><\/span> set <tl-local-time format="datetime-short">[\s\S]*?, beat their own <span class="num">8\.000<\/span><\/p>/, 'his own record: their own, not his name');
     const fastest = part(body, '<section class="board-fastest"');
     assert.match(fastest, /<h2 class="h3" id="board-fastest-title">Fastest on this track<\/h2>/);
     assert.deepEqual([...fastest.matchAll(/>(Haris|Mia)<\/span>[\s\S]*?(\d+\.\d{3})/g)].map((m) => [m[1], m[2]]), [['Haris', '7.500'], ['Mia', '9.000']]);

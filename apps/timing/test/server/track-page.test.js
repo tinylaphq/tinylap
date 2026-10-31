@@ -62,7 +62,7 @@ test('a track with layouts shows them all drawn, newest first, with who attached
   const res = await get(`${base}/tracks/office`);
   assert.equal(res.status, 200);
   const body = await res.text();
-  assert.match(body, /<h1>Office<\/h1>/);
+  assert.match(body, /<h1 class="cut-words" title="Office">Office<\/h1>/);
   assert.equal(body.match(/<svg xmlns="http:\/\/www.w3.org\/2000\/svg"/g)?.length, 2, 'both layouts are drawn');
   const ben = body.indexOf('by Ben');
   const former = body.indexOf('by former member');
@@ -102,7 +102,7 @@ test('each record names the layout it was driven on, or none', async () => {
 
 test('a track without a layout says so', async () => {
   const body = await (await get(`${base}/tracks/bare`)).text();
-  assert.match(body, /<h1>Bare<\/h1>/);
+  assert.match(body, /<h1 class="cut-words" title="Bare">Bare<\/h1>/);
   assert.match(body, /No layout/);
   assert.doesNotMatch(body, /<svg xmlns/);
 });

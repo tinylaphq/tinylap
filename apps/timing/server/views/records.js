@@ -58,7 +58,7 @@ export function recordsPage(request, { track, direction, rows, drivers, layoutOf
     body: html`<div class="container sessions-screen stack-lg screen">
   <div class="stack-xs">
     <h1>Track records</h1>
-    ${track ? html`<p class="subtitle"><a href="${href}">${track.name}</a>, ${DIRECTION[direction]}</p>` : null}
+    ${track ? html`<p class="subtitle cut-words"><a href="${href}">${track.name}</a>, ${DIRECTION[direction]}</p>` : null}
   </div>
   ${recordsTable(request, { track, rows, drivers, layoutOf, layouts: href })}
   <p><a href="${request.space.base}/sessions">Back to sessions</a></p>

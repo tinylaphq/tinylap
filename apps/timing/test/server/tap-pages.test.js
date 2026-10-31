@@ -29,7 +29,7 @@ const get = (path) => app.api(member, 'GET', path, undefined, { accept: 'text/ht
 
 test('a tile per driver, each its own form', async () => {
   const body = await (await get(`${base}/tap`)).text();
-  assert.match(body, new RegExp(`<form method="post" action="${base}/tap" class="tap-form">\\s*<input type="hidden" name="driver" value="${ana.id}">\\s*<button type="submit" class="tap-tile" style="--driver: [^;"]+; --word: 3">Ana</button>`));
+  assert.match(body, new RegExp(`<form method="post" action="${base}/tap" class="tap-form">\\s*<input type="hidden" name="driver" value="${ana.id}">\\s*<button type="submit" class="tap-tile" style="--driver: [^;"]+; --word: 3"><span class="tap-tile-name" title="Ana">Ana</span></button>`));
   assert.match(body, /<script type="module" src="\/public\/elements\/tap.js"><\/script>/);
 });
 
