@@ -105,6 +105,8 @@ test('a layout form loads a page, since a new layout may answer with its confirm
   await field.fill(link);
   await field.locator('xpath=ancestor::form').getByRole('button', { name: 'Attach layout' }).click();
   await page.locator('#page-status [role="alert"]').filter({ hasText: 'planner' }).waitFor();
+  // The new page's text shows before its load event fires; count the load once it has.
+  await page.waitForLoadState('load');
   assert.equal(await page.locator('[id^="track-link-"]').first().inputValue(), link);
   assert.equal(posts.length, 1);
   assert.equal(loads(), 1);
