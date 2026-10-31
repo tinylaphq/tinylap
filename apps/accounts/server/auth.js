@@ -12,6 +12,8 @@ import { APIError, createAuthEndpoint, createAuthMiddleware, getSessionFromCtx }
 import { setSessionCookie } from 'better-auth/cookies';
 import { jwt } from 'better-auth/plugins';
 import { oauthProvider } from '@better-auth/oauth-provider';
+import { cimd } from '@better-auth/cimd';
+import { fetchClientMetadataResource } from '@better-auth/cimd/node';
 import { passkey } from '@better-auth/passkey';
 import { spendRecoveryCode } from './recovery.js';
 import { createPersonalWorkspace, listMemberships } from './workspaces.js';
@@ -39,6 +41,36 @@ export function displayNameOf(value) {
 }
 
 const refuse = (message) => new APIError('BAD_REQUEST', { message });
+
+/** The scope an MCP client asks for to run timing as the member; no first-party client has it. */
+export const TIMING_SCOPE = 'timing';
+const FIRST_PARTY_SCOPES = ['openid', 'profile', 'offline_access'];
+
+/**
+ * MCP clients (Client ID Metadata Documents, spec 2026-10-31 §4.3): a
+ * client is the HTTPS URL of its metadata document. It may ask for the
+ * timing MCP resource only, and for `timing` and `offline_access` only.
+ * The fetch is the plugin's own: resolve-once DNS, public addresses only,
+ * connection pinning, no redirects. Tests pass their own.
+ * @param {import('./config.js').Config} config
+ * @param {import('@better-auth/oauth-provider').ClientMetadataResourceFetch} fetchMetadata
+ */
+function mcpOptions(config, fetchMetadata) {
+  if (!config.mcpResource) return { scopes: FIRST_PARTY_SCOPES, provider: {}, plugins: [] };
+  return {
+    scopes: [...FIRST_PARTY_SCOPES, TIMING_SCOPE],
+    provider: {
+      clientRegistrationDefaultScopes: [TIMING_SCOPE, 'offline_access'],
+      clientRegistrationDefaultResources: [config.mcpResource],
+    },
+    plugins: [cimd({
+      fetchClientMetadataResource: fetchMetadata,
+      metadataProfile: /** @type {const} */ ('mcp-2026-07-28'),
+      // A document's Cache-Control is honoured up to a day.
+      metadataRevalidationInterval: '24h',
+    })],
+  };
+}
 
 /**
  * Passkeys only (spec §6): discoverable credentials with user verification,
@@ -160,7 +192,8 @@ function recoveryPlugin(db) {
  * @param {import('./config.js').Config} config
  * @param {import('node:sqlite').DatabaseSync | null} [db]
  */
-export function authOptions(config, db = null) {
+export function authOptions(config, db = null, { fetchMetadata = fetchClientMetadataResource } = {}) {
+  const mcp = mcpOptions(config, fetchMetadata);
   // One live signing key at a time. Better Auth creates a key whenever it
   // finds no live one, without a lock, so concurrent first token issues each
   // stored their own, and a verifier that had fetched the JWKS in between met
@@ -244,22 +277,29 @@ export function authOptions(config, db = null) {
       oauthProvider({
         loginPage: '/sign-in',
         consentPage: '/consent',
-        scopes: ['openid', 'profile', 'offline_access'],
+        scopes: mcp.scopes,
         grantTypes: ['authorization_code', 'refresh_token'],
         accessTokenExpiresIn: config.accessTtlSeconds,
         refreshTokenExpiresIn: 30 * DAY,
         refreshTokenReuseInterval: 0,
-        resources: config.clients.map((c) => ({ identifier: c.resource, name: c.clientId })),
+        resources: [
+          ...config.clients.map((c) => ({ identifier: c.resource, name: c.clientId })),
+          ...(config.mcpResource ? [{ identifier: config.mcpResource, name: 'timing-mcp' }] : []),
+        ],
         resourceSeedMode: 'overwrite',
         enforcePerClientResources: true,
         storeClientSecret: { hash: hashClientSecret },
         rateLimit: { token: false, revoke: false, userinfo: false },
         // Every workspace the user is in, read live at each issuance, so
-        // a refresh picks up role changes (spec §3).
+        // a refresh picks up role changes (spec §3). The name too, so an
+        // MCP token (no openid, so no userinfo) still says who acted.
         customAccessTokenClaims: ({ user }) => ({
           workspaces: user && db ? listMemberships(db, user.id).map(({ id, role, name, kind }) => ({ id, role, name, kind })) : [],
+          ...(user?.name ? { name: user.name } : {}),
         }),
+        ...mcp.provider,
       }),
+      ...mcp.plugins,
       passkeyPlugin(config, db),
       passkeyNamePlugin(),
       recoveryPlugin(db),
@@ -271,8 +311,8 @@ export function authOptions(config, db = null) {
  * @param {import('./config.js').Config} config
  * @param {import('node:sqlite').DatabaseSync} db
  */
-export function createAuth(config, db) {
-  return betterAuth({ ...authOptions(config, db), database: db });
+export function createAuth(config, db, extras = {}) {
+  return betterAuth({ ...authOptions(config, db, extras), database: db });
 }
 
 /**
@@ -301,7 +341,7 @@ export async function seedClients(auth, clients) {
       grantTypes: ['authorization_code', 'refresh_token'],
       responseTypes: ['code'],
       applicationType: 'web',
-      scopes: ['openid', 'profile', 'offline_access'],
+      scopes: FIRST_PARTY_SCOPES,
       requirePKCE: true,
       skipConsent: c.trusted,
       enableEndSession: true,
@@ -327,7 +367,9 @@ export async function seedClients(auth, clients) {
   }
   const configured = new Set(clients.map((c) => c.clientId));
   for (const row of await adapter.findMany({ model: 'oauthClient', where: [{ field: 'disabled', value: false }] })) {
-    const { clientId } = /** @type {{ clientId: string }} */ (row);
+    const { clientId, clientDiscoveryId } = /** @type {{ clientId: string, clientDiscoveryId?: string | null }} */ (row);
+    // MCP clients come from their metadata documents, never the configuration.
+    if (clientDiscoveryId) continue;
     if (!configured.has(clientId)) {
       await adapter.update({ model: 'oauthClient', where: [{ field: 'clientId', value: clientId }], update: { disabled: true, updatedAt: new Date() } });
     }
