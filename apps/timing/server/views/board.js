@@ -37,7 +37,7 @@ const recordLine = (snap, r) => html`<span class="num board-track-time">${format
  * record colour, and the record it beat.
  */
 function trackHeader(snap) {
-  const where = html`<p class="board-track-name cut-words"><strong>${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>`;
+  const where = html`<p class="board-track-name"><strong class="cut-words">${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>`;
   const n = snap.recordNew;
   if (n) {
     return html`<header class="board-track is-record" data-record-new="${n.seq}">

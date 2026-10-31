@@ -64,7 +64,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   border: var(--p-border-width) solid var(--p-text); border-left: 6px solid var(--tl-record);
 }
 .board-track p { margin: 0; }
-.board-track-name { color: var(--p-text-secondary); }
+.board-track-name { color: var(--p-text-secondary); display: flex; align-items: center; min-width: 0; }
+.board-track-name > .direction-icon { flex: none; }
 .board-track-name strong { color: var(--p-text); font-size: 1.15em; margin-right: var(--p-space-xs); }
 /* The direction as an open loop with one accent arrowhead (named tracks spec §4); its <title> says which. */
 .direction-icon { width: 2.5em; height: auto; vertical-align: -0.35em; color: var(--p-text); overflow: visible; }
@@ -156,6 +157,11 @@ tl-bridge { display: block; }
 .board-driver .driver, .board-laps .driver { display: flex; align-items: baseline; min-width: 0; }
 .board-driver .driver::before, .board-driver .crown, .board-laps .driver::before { flex: none; }
 .board-driver .driver-name, .board-laps .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A name alone in a heading that cuts long words keeps its colour beside it:
+ * it wraps between words, and a word too long for the line ends in "…". */
+.cut-words > .driver:only-child { display: flex; align-items: baseline; }
+.cut-words > .driver:only-child::before, .cut-words > .driver:only-child > .crown { flex: none; }
+.cut-words > .driver:only-child > .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .board-feed { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-md); align-self: start; }
 .board-feed h2 { margin: 0 0 var(--p-space-sm); }
@@ -250,12 +256,14 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .tap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--p-space-md); }
 /* On a phone, a narrower gap gives each of the two tiles the room for a long surname at 1rem. */
 @media (max-width: 480px) { .tap-grid { gap: var(--p-space-sm); } }
+/* Below 380px two tiles can't hold a long surname at 1rem; down to 0.875rem it stays whole instead of being cut. */
+@media (max-width: 379px) { .tap-form > .tap-tile { font-size: clamp(0.875rem, (100cqi - 2 * var(--p-space-sm)) / (var(--word, 8) * 0.6), 1.5rem); } }
 .tap-tile {
   min-height: 7rem;
   /* A name as it is written (upper case turns Müßig into MÜSSIG), as big as
    * the tile allows for its longest word (--word, in letters, at about 0.6em
-   * a letter), never under 1rem; it breaks between words only, and a word
-   * still too long at 1rem ends in "…" (.tap-tile-name). */
+   * a letter), never under 1rem (0.875rem on a small phone); it breaks
+   * between words only, and a word still too long ends in "…" (.tap-tile-name). */
   font: 700 clamp(1rem, (100cqi - 2 * var(--p-space-sm)) / (var(--word, 8) * 0.6), 1.5rem)/1.15 var(--p-font);
   text-transform: none;
   letter-spacing: 0;
@@ -534,6 +542,8 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .status > .copy + p { margin-top: var(--p-space-md); }
 .decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
 .decoder-info .meta { margin: 0; }
+/* On a line of its own, under a long name, Unpair keeps the right edge, as every row's actions do. */
+.decoder-info + .btn { margin-left: auto; }
 /* The track list (named tracks spec §4). The current track is set like the
    board's track strip, its edge in the record colour, so it reads as the
    track the board shows. Rename and layout fold away under each track. */

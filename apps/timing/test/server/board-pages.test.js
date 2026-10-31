@@ -54,7 +54,7 @@ test('a club that has never driven gets one card to get ready, under its track',
   const res = await get(member, `${base}/board`);
   assert.equal(res.status, 200);
   const body = await res.text();
-  assert.match(body, /<header class="board-track">\s*<p class="board-track-name cut-words"><strong>Track<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Anticlockwise<\/title>/, 'a new club starts on its "Track"');
+  assert.match(body, /<header class="board-track">\s*<p class="board-track-name"><strong class="cut-words">Track<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Anticlockwise<\/title>/, 'a new club starts on its "Track"');
   assert.match(body, /<section class="board-first" aria-labelledby="board-first-title">\s*<h1 id="board-first-title">Ready when your cars are<\/h1>/);
   assert.match(body, new RegExp(`<a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>\\s*<a href="${base}/bridge">Connect the decoder</a>\\s*<a href="${base}/tap">Tap laps by hand</a>`));
   assert.doesNotMatch(body, /No track set|No session yet|Last laps|board-steps|board-hero|status-warning/);
@@ -361,7 +361,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   // Never driven: the card to get ready for members; the display and the watchers show the record's place.
   let s = await screens();
   for (const body of Object.values(s)) {
-    assert.match(body, /<header class="board-track">\s*<p class="board-track-name cut-words"><strong>Ring<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Clockwise<\/title>/);
+    assert.match(body, /<header class="board-track">\s*<p class="board-track-name"><strong class="cut-words">Ring<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Clockwise<\/title>/);
     assert.doesNotMatch(body, /class="eyebrow"|No session yet|Last laps|status-warning/);
   }
   assert.match(s.board, /Ready when your cars are/);
