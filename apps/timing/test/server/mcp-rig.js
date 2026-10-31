@@ -14,7 +14,7 @@ import { startTiming } from './helpers.js';
 export const CLIENT = 'https://assistant.example/oauth/client.json';
 const REDIRECT = 'http://127.0.0.1:53111/callback';
 
-/** @type {import('@better-auth/oauth-provider').ClientMetadataResourceFetch} */
+/** @type {(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>} */
 const fetchMetadata = async (input) => {
   const url = String(input instanceof Request ? input.url : input);
   if (url !== CLIENT) return new Response('not found', { status: 404 });

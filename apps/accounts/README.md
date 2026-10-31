@@ -24,6 +24,7 @@ what it means for users: [docs/identity.md](../../docs/identity.md).
 | `TINYLAP_CLIENT_IP_HEADER` | none | Header carrying the client IP behind a proxy (`Fly-Client-IP` on Fly), for rate limits |
 | `TINYLAP_DEV` | off | `1` for local development and CI: http issuer, loopback redirect URIs, listens on `127.0.0.1` only. Refused with an https issuer |
 | `TINYLAP_ACCESS_TTL` | `600` | Access token seconds. Tests only: needs `TINYLAP_DEV=1` |
+| `TINYLAP_MCP_RESOURCE` | none | Timing's MCP endpoint (`https://…/mcp`). Set, MCP clients may sign in with a Client ID Metadata Document, for this resource and the `timing` scope only, after the member allows them on `/consent` |
 
 ```sh
 docker build -f apps/accounts/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEAD) -t tinylap-accounts .
@@ -31,6 +32,21 @@ docker build -f apps/accounts/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEA
 
 `fly.toml` sets the non-secret variables. The secrets are Fly secrets and are
 never written to a file in this repository.
+
+## MCP clients
+
+With `TINYLAP_MCP_RESOURCE` set, an MCP client (an assistant) signs in with
+the HTTPS URL of its Client ID Metadata Document as its `client_id`. Accounts
+fetches and caches the document (`@better-auth/cimd`: public addresses only,
+no redirects, 5 KB, at most a day). The client may ask only for that resource
+and for `timing` and `offline_access`, never `openid`, so its access token works
+at timing's `/mcp` and nowhere else. The member allows it on `/consent`, which
+shows the document's host above the name the client gives itself. The account
+page lists connected apps, and Disconnect deletes the consent and the app's
+tokens and sends the clients with a `noticeUri` a membership notice, so timing
+refuses the app's last access token at once. Authorize requests from MCP
+clients are limited to 60 an hour per client address. Design:
+`docs/superpowers/specs/2026-10-31-timing-mcp-design.md`.
 
 ## First deploy (maintainer, once)
 

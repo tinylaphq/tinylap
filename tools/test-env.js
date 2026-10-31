@@ -20,7 +20,7 @@ export { driveAuthorize, Jar, navigate };
  * `fetchMetadata` serves MCP clients' metadata documents (set
  * TINYLAP_MCP_RESOURCE in `env` too).
  * @param {{ plannerPort: number, env?: Record<string, string>, hostname?: string, notice?: { uri: string, token: string },
- *   fetchMetadata?: import('@better-auth/oauth-provider').ClientMetadataResourceFetch }} options
+ *   fetchMetadata?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> }} options
  */
 export async function startSuite({ plannerPort, env = {}, hostname, notice, fetchMetadata }) {
   const accounts = await startAccounts({ plannerPort, env, hostname, notice, fetchMetadata });

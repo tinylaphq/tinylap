@@ -20,6 +20,12 @@ With a real decoder on USB, `pnpm --filter @tinylap/timing-app bench` is quicker
 
 Tests: `pnpm --filter @tinylap/timing-app test`; in Chrome, `pnpm --filter @tinylap/timing-app test:browser`.
 
+## Assistants (MCP)
+
+`POST /mcp` offers the member operations as MCP tools (Streamable HTTP, stateless), so an assistant can run timing as the signed-in member, with their role in each club. Tap entry and pairing are left out. Tools that lose data or interrupt a session answer with a question and a confirmation token first. Sign-in is OAuth through accounts: `/mcp` needs an access token for itself with the `timing` scope, and `/.well-known/oauth-protected-resource/mcp` (RFC 9728) tells a client where to get one. Clients register by Client ID Metadata Document, so a member adds `https://<timing>/mcp` as a custom connector and allows it on accounts' consent page. Design: `docs/superpowers/specs/2026-10-31-timing-mcp-design.md`.
+
+To turn it on, set `TINYLAP_MCP_RESOURCE` on accounts to timing's `/mcp` URL (in development `http://localhost:8100/mcp`). Set membership notices up too (below): they are what cuts off an app at once when a member disconnects it, instead of within the 10-minute token lifetime.
+
 ## First deploy (maintainer)
 
 1. Create the app and its volume: `fly apps create tinylap-timing`, then `fly volumes create timing_data --app tinylap-timing --region fra --size 1`.
@@ -29,6 +35,8 @@ Tests: `pnpm --filter @tinylap/timing-app test`; in Chrome, `pnpm --filter @tiny
 5. Sign in at https://tinylap-timing.fly.dev and check the board loads.
 6. Let CI deploy from now on: `gh variable set TIMING_DEPLOY_ENABLED --body true`.
 
-Membership notices (optional): generate `openssl rand -base64 32`, set it on timing with `fly secrets set --app tinylap-timing TINYLAP_NOTICE_TOKEN=<token>`, and add `"noticeUri": "https://tinylap-timing.fly.dev/notices/membership", "noticeToken": "<token>"` to timing's entry in `TINYLAP_CLIENTS`. The route (`POST /notices/membership`, `docs/identity.md`) answers 204, 401 for a wrong or missing bearer, 422 for a bad body, and 404 while `TINYLAP_NOTICE_TOKEN` is unset. A notice ends nothing by itself: timing re-reads the users' claims and ends only the open streams they no longer allow.
+Assistants: `fly secrets set --app tinylap-accounts TINYLAP_MCP_RESOURCE=https://tinylap-timing.fly.dev/mcp`. Accounts then fetches MCP clients' metadata documents from the internet, so it needs outbound HTTPS.
+
+Membership notices (optional, needed for disconnecting assistants at once): generate `openssl rand -base64 32`, set it on timing with `fly secrets set --app tinylap-timing TINYLAP_NOTICE_TOKEN=<token>`, and add `"noticeUri": "https://tinylap-timing.fly.dev/notices/membership", "noticeToken": "<token>"` to timing's entry in `TINYLAP_CLIENTS`. The route (`POST /notices/membership`, `docs/identity.md`) answers 204, 401 for a wrong or missing bearer, 422 for a bad body, and 404 while `TINYLAP_NOTICE_TOKEN` is unset. A notice ends nothing by itself: timing re-reads the users' claims and ends only the open streams they no longer allow.
 
 Key rotation and backups work as for the planner (`apps/accounts/README.md`): `TINYLAP_TOKEN_KEYS` takes the new key first and the old ones after it; Fly snapshots the volume daily.

@@ -51,7 +51,7 @@ export async function startServer(options = {}) {
  * `mcp` makes accounts let MCP clients sign in for this server's /mcp, their
  * metadata documents served by `fetchMetadata`.
  * @param {{ clock?: { now: number }, hostname?: string, env?: Record<string, string>,
- *   mcp?: { fetchMetadata: import('@better-auth/oauth-provider').ClientMetadataResourceFetch }, [key: string]: any }} [options]
+ *   mcp?: { fetchMetadata: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> }, [key: string]: any }} [options]
  */
 export async function startTiming(options = {}) {
   const { clock, hostname, env, simulate = null, noticeToken, mcp, ...rest } = options;
