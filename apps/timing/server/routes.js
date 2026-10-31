@@ -7,6 +7,7 @@ import { authRoutes } from './auth.js';
 import { controlRoutes } from './control.js';
 import { discoveryRoutes } from './discovery.js';
 import { ingestRoutes } from './ingest.js';
+import { mcpRoutes } from './mcp/endpoint.js';
 import { noticeRoutes } from './notices.js';
 import { pageRoutes } from './page-routes.js';
 import { setupRoutes } from './setup.js';
@@ -23,6 +24,7 @@ export const routes = [
   ...noticeRoutes,
   ...streamRoutes,
   ...discoveryRoutes,
+  ...mcpRoutes,
   // Anything else under the API answers a problem, not the static 404.
   { pattern: /^\/(?:workspaces|decoders|watch)(?:\/.*)?$/, credentials: true, unknown: true, methods: {} },
 ];
