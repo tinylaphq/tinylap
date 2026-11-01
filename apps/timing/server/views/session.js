@@ -61,7 +61,7 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
     // A driver none of whose laps counted (not on the roster) says so once, not on every row.
     const noneCounted = own.length > 0 && own.every((c) => !c.counts);
     return html`<div class="card-static session-laps">
-  <h3 class="h3">${chip(drivers, id)}</h3>
+  <h3 class="h3 cut-words">${chip(drivers, id)}</h3>
   ${noneCounted ? html`<p class="session-laps-note">None of these laps counted.</p>` : null}
   <table class="lap-table${cardWidths}">
     <colgroup><col class="col-lap"><col class="col-time"><col class="col-mark"><col></colgroup>
@@ -88,7 +88,7 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
     <dl class="session-facts">
       <div><dt>Started</dt><dd>${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</dd></div>
       <div><dt>Ended</dt><dd>${ended ? safe(localTime(session.endedAt, 'time')) : 'Still running'}</dd></div>
-      <div><dt>Track</dt><dd>${trackName(track, session.direction)}</dd></div>
+      <div><dt>Track</dt><dd class="cut-words">${trackName(track, session.direction)}</dd></div>
     </dl>
   </div>
   <section class="stack-md" aria-labelledby="standings-title">

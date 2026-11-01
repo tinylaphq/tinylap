@@ -53,7 +53,7 @@ function trackSection(request, m) {
   return html`<tl-frame id="track"><section class="card-static stack-md" aria-labelledby="track-title">
   <h2 id="track-title">Track</h2>
   <div class="track-now stack-sm">
-    <p class="track-head">Now: <a href="${base}/tracks/${m.track.id}"><strong>${m.track.name}</strong></a>, ${DIRECTION_NAME[m.direction]}. ${layoutNote(m.track)}</p>
+    <p class="track-head cut-words">Now: <a href="${base}/tracks/${m.track.id}"><strong>${m.track.name}</strong></a>, ${DIRECTION_NAME[m.direction]}. ${layoutNote(m.track)}</p>
     <form method="post" action="${base}/track" class="inline-form">
       ${selectField({ id: 'current-track', label: 'Current track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: chosen, error })}
       ${selectField({ id: 'current-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error })}
@@ -64,7 +64,7 @@ function trackSection(request, m) {
   ${others.length ? html`<div class="stack-sm">
     <h3 class="track-subhead" id="other-tracks-title">Other tracks</h3>
     <ul class="setup-list" aria-labelledby="other-tracks-title">${others.map((t) => html`<li class="track-row">
-      <p class="track-head"><a href="${base}/tracks/${t.id}">${t.name}</a> ${layoutNote(t)}</p>
+      <p class="track-head cut-words"><a href="${base}/tracks/${t.id}">${t.name}</a> ${layoutNote(t)}</p>
       <div class="button-row">
         <form method="post" action="${base}/track"><input type="hidden" name="id" value="${t.id}"><input type="hidden" name="direction" value="${m.direction}"><button type="submit" class="btn btn-sm btn-outline">Make current</button></form>
         <form method="post" action="${base}/tracks/${t.id}/archive"><button type="submit" class="btn btn-sm btn-outline">Archive</button></form>
@@ -83,7 +83,7 @@ function trackSection(request, m) {
   ${m.archived.length ? html`<details class="track-archive"${m.archived.some((t) => m.errors[`track-restore:${t.id}`] || m.errors[`track-delete:${t.id}`]) ? html` open` : null}>
     <summary>Archived tracks (${m.archived.length})</summary>
     <ul class="setup-list">${m.archived.map((t) => html`<li class="setup-row">
-      <a href="${base}/tracks/${t.id}">${t.name}</a>
+      <a class="cut-words" href="${base}/tracks/${t.id}" title="${t.name}">${t.name}</a>
       <div class="button-row">
         <form method="post" action="${base}/tracks/${t.id}/restore"><button type="submit" class="btn btn-sm btn-outline">Restore</button></form>
         ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/tracks/${t.id}/delete">Delete</a>` : null}
@@ -147,7 +147,7 @@ function decodersSection(request, m) {
   return html`<section class="card-static stack-md" id="decoders" aria-labelledby="decoders-title">
   <h2 id="decoders-title">Decoders</h2>
   ${m.paired ? html`<div class="status status-info">
-    <p>${m.paired.name} is paired. Its token is shown only this once:</p>
+    <p class="cut-words">${m.paired.name} is paired. Its token is shown only this once:</p>
     ${copyable(html`<code class="token">${m.paired.token}</code>`)}
     <p>Decoder id:</p>
     ${copyable(html`<code class="token token-id">${m.paired.id}</code>`)}
@@ -155,7 +155,7 @@ function decodersSection(request, m) {
   </div>` : null}
   ${m.decoders.length ? html`<ul class="setup-list">${m.decoders.map((d) => html`<li class="setup-row">
     <div class="decoder-info">
-      <span>${d.name}</span>
+      <span class="cut-words" title="${d.name}">${d.name}</span>
       <span class="meta">${d.lastSeenAt ? html`seen <time datetime="${new Date(d.lastSeenAt).toISOString()}">${formatAgo(d.lastSeenAt, request.now())}</time>` : 'never seen'}</span>
     </div>
     ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/decoders/${d.id}/unpair">Unpair</a>` : null}

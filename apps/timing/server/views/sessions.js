@@ -46,7 +46,7 @@ function startForm(request, { drivers, errors, values }) {
   </fieldset>
   <fieldset${rosterError ? html` aria-describedby="race-roster-error"` : null}>
     <legend>Drivers</legend>
-    <div class="choices">${drivers.map((d, i) => html`<label class="choice"><input type="checkbox" name="roster" value="${d.id}"${i === 0 ? html` id="race-roster"` : null}${roster.has(d.id) ? html` checked` : null}> ${d.name}</label>`)}</div>
+    <div class="choices">${drivers.map((d, i) => html`<label class="choice"><input type="checkbox" name="roster" value="${d.id}"${i === 0 ? html` id="race-roster"` : null}${roster.has(d.id) ? html` checked` : null}> <span class="cut-words" title="${d.name}">${d.name}</span></label>`)}</div>
     ${rosterError ? html`<p class="field-error" id="race-roster-error">${rosterError}</p>` : null}
   </fieldset>
   <fieldset>
@@ -104,7 +104,7 @@ function historySection(request, { rows, older, newer }, drivers) {
   <tbody>${rows.map(({ session, track, drivers: count, best }) => html`<tr class="history-row">
     <td class="history-started"><a href="${base}/sessions/${session.id}">${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</a></td>
     <td class="history-session"><span class="history-kind">${KIND[session.kind]}</span>${session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}<span class="history-track">${trackName(track, session.direction)}</span></td>
-    <td class="history-wide">${trackName(track, session.direction)}</td>
+    <td class="history-wide cut-words">${trackName(track, session.direction)}</td>
     <td class="num history-wide">${shortLength(drivenMs(session))}</td>
     <td class="num history-wide">${count}</td>
     <td class="board-driver">${best ? chip(drivers, best.driverId, { holder: best.isHolder }) : null}</td>
@@ -129,7 +129,7 @@ function recordsSection(request, { track, direction, rows }, drivers) {
   return html`<section class="stack-md" aria-labelledby="records-title">
   <div class="stack-xs">
     <h2 id="records-title">Track record</h2>
-    ${track ? html`<p class="subtitle">${trackName(track, direction)}</p>` : null}
+    ${track ? html`<p class="subtitle cut-words">${trackName(track, direction)}</p>` : null}
   </div>
   ${recordsTable(request, { track, rows, drivers })}
   ${rows.length ? html`<p><a href="${request.space.base}/records">All track records</a></p>` : null}

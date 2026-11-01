@@ -69,7 +69,7 @@ export function tapPage(request, { drivers, result = null, error = null, running
   ${resultBar(result, error)}
   <div class="tap-grid">${drivers.map((d) => html`<form method="post" action="${base}/tap" class="tap-form">
     <input type="hidden" name="driver" value="${d.id}">
-    <button type="submit" class="tap-tile" style="--driver: ${d.colour}; --word: ${longestWord(d.name)}">${d.name}</button>
+    <button type="submit" class="tap-tile" style="--driver: ${d.colour}; --word: ${longestWord(d.name)}"><span class="tap-tile-name" title="${d.name}">${d.name}</span></button>
   </form>`)}</div>
 </div>
 ${tapTemplates(request)}</tl-tap>`

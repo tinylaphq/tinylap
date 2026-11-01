@@ -73,7 +73,7 @@ test('unpairing asks first and needs an admin', async () => {
   const [decoder] = app.store.decoders(office.id);
   assert.equal((await get(member, `${base}/decoders/${decoder.id}/unpair`)).status, 403);
   const ask = await (await get(owner, `${base}/decoders/${decoder.id}/unpair`)).text();
-  assert.match(ask, /<h1>Unpair Start line\?<\/h1>/);
+  assert.match(ask, /<h1 class="cut-words" title="Unpair Start line\?">Unpair Start line\?<\/h1>/);
   const done = await app.form(owner, `${base}/decoders/${decoder.id}/unpair`, {});
   assert.equal(done.status, 303);
   assert.deepEqual(app.store.decoders(office.id), []);
@@ -89,7 +89,7 @@ test('too many pairings come back as one page-level message with Retry-After', a
   assert.equal(last.status, 429);
   assert.ok(Number(last.headers.get('retry-after')) > 0);
   const body = await last.text();
-  assert.match(body, /<p class="status status-error" role="alert">You paired a lot/);
+  assert.match(body, /<p class="status status-error cut-words" role="alert">You paired a lot/);
   assert.equal((body.match(/role="alert"/g) ?? []).length, 1);
 });
 

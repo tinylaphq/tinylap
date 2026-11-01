@@ -45,7 +45,7 @@ export function selectField({ label, name, options, value = '', error = null, la
  * the field when the error names one. @param {{ field?: string, message: string } | null | undefined} error @param {string | null} [fieldId]
  */
 export const errorSummary = (error, fieldId = null) => (error
-  ? html`<p class="status status-error" role="alert">${error.field && fieldId ? html`<a href="#${fieldId}">${error.message}</a>` : error.message}</p>`
+  ? html`<p class="status status-error cut-words" role="alert">${error.field && fieldId ? html`<a href="#${fieldId}">${error.message}</a>` : error.message}</p>`
   : null);
 
 /**
@@ -56,5 +56,5 @@ export const errorSummary = (error, fieldId = null) => (error
 export function errorsSummary(errors, fieldIdOf) {
   if (errors.length <= 1) return errorSummary(errors[0], fieldIdOf(errors[0]?.field));
   const item = (e) => { const id = fieldIdOf(e.field); return html`<li>${e.field && id ? html`<a href="#${id}">${e.message}</a>` : e.message}</li>`; };
-  return html`<div class="status status-error" role="alert"><ul class="error-list">${errors.map(item)}</ul></div>`;
+  return html`<div class="status status-error cut-words" role="alert"><ul class="error-list">${errors.map(item)}</ul></div>`;
 }

@@ -232,7 +232,7 @@ test('a bad form comes back with one summary and what was chosen', async () => {
   const none = await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['duration', '5'], ['countdown', '10']]);
   assert.equal(none.status, 422);
   const body = await none.text();
-  assert.match(body, /<p class="status status-error" role="alert"><a href="#race-roster">Pick 1 to 20 drivers\.<\/a><\/p>/);
+  assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#race-roster">Pick 1 to 20 drivers\.<\/a><\/p>/);
   assert.equal(body.match(/role="alert"/g).length, 1);
   assert.match(body, /<input type="radio" name="kind" value="qualifying"[^>]* checked/);
   assert.doesNotMatch(body, new RegExp(`value="${a.id}"[^>]* checked`), 'unticked stays unticked');
@@ -248,7 +248,7 @@ test('a form wrong in several fields names every error at once, in the form\'s o
   assert.equal(res.status, 422);
   const body = await res.text();
   assert.equal(body.match(/role="alert"/g).length, 1);
-  assert.match(body, /<div class="status status-error" role="alert"><ul class="error-list"><li><a href="#race-roster">Pick 1 to 20 drivers\.<\/a><\/li><li><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/li><li><a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a><\/li><\/ul><\/div>/);
+  assert.match(body, /<div class="status status-error cut-words" role="alert"><ul class="error-list"><li><a href="#race-roster">Pick 1 to 20 drivers\.<\/a><\/li><li><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/li><li><a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a><\/li><\/ul><\/div>/);
   assert.match(body, /<fieldset aria-describedby="race-roster-error">/);
   assert.match(body, /id="race-duration"[^>]*value="90"[^>]*aria-invalid="true"/);
   assert.match(body, /id="race-countdown"[^>]*value="45"[^>]*aria-invalid="true"/);
@@ -261,7 +261,7 @@ test('a bad minutes or countdown value says what is allowed and keeps the input'
     const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', duration], ['countdown', '10']]);
     assert.equal(res.status, 422, duration);
     const body = await res.text();
-    assert.match(body, /<p class="status status-error" role="alert"><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/p>/, duration);
+    assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/p>/, duration);
     assert.match(body, /id="race-duration"[^>]*aria-invalid="true"/, duration);
     if (duration !== 'abc') assert.match(body, new RegExp(`id="race-duration"[^>]*value="${duration}"`), duration);
   }
@@ -369,7 +369,7 @@ test('history: newest first, with kind, length, drivers and the best lap with it
   const [newest] = rows;
   assert.match(newest, new RegExp(`<a href="${hbase}/sessions/${session.id}"><tl-local-time format="datetime"><time datetime="2001-09-09T02:46:40.000Z">9 Sep, 02:46</time></tl-local-time></a>`));
   assert.match(newest, /<td class="history-session"><span class="history-kind">Practice<\/span><span class="history-track">Office loop, clockwise<\/span><\/td>/, 'the track again, for a phone');
-  assert.match(newest, /<td class="history-wide">Office loop, clockwise<\/td>/);
+  assert.match(newest, /<td class="history-wide cut-words">Office loop, clockwise<\/td>/);
   assert.match(newest, /<td class="num history-wide">18 s<\/td>/, 'from its start to its last passing');
   assert.match(newest, /<td class="num history-wide">2<\/td>/);
   assert.match(newest, /<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><span class="driver-name" title="Ana">Ana<\/span>/);
@@ -573,11 +573,11 @@ test('history rows and a session page name the track, or "Deleted track" once it
   assert.match(body, /<th scope="col" class="history-wide">Track<\/th>/);
   const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
   assert.equal(rows.length, 2);
-  assert.match(rows[0], /<td class="history-wide">Track, anticlockwise<\/td>/);
-  assert.match(rows[1], /<td class="history-wide">Deleted track<\/td>/);
+  assert.match(rows[0], /<td class="history-wide cut-words">Track, anticlockwise<\/td>/);
+  assert.match(rows[1], /<td class="history-wide cut-words">Deleted track<\/td>/);
   const page = await (await get(`/clubs/${ws}/sessions/${old.id}`)).text();
-  assert.match(page, /<div><dt>Track<\/dt><dd>Deleted track<\/dd><\/div>/);
-  assert.match(await (await get(`/clubs/${ws}/sessions/${kept.id}`)).text(), /<div><dt>Track<\/dt><dd>Track, anticlockwise<\/dd><\/div>/);
+  assert.match(page, /<div><dt>Track<\/dt><dd class="cut-words">Deleted track<\/dd><\/div>/);
+  assert.match(await (await get(`/clubs/${ws}/sessions/${kept.id}`)).text(), /<div><dt>Track<\/dt><dd class="cut-words">Track, anticlockwise<\/dd><\/div>/);
 });
 
 test('assigning a transponder after its track was deleted brings back no record, best or crown', async () => {
@@ -598,7 +598,7 @@ test('assigning a transponder after its track was deleted brings back no record,
   const body = await (await get(`/clubs/${ws}/sessions`)).text();
   const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
   assert.equal(rows.length, 3);
-  assert.match(rows[0], /<td class="history-wide">Deleted track<\/td>/);
+  assert.match(rows[0], /<td class="history-wide cut-words">Deleted track<\/td>/);
   assert.match(rows[0], />Ana</, 'the laps are Ana\'s now');
   assert.doesNotMatch(rows[0], /class="crown"/);
 });
@@ -624,5 +624,16 @@ test('a confirmation over a race in its countdown says it is counting down, not 
   const ask = await (await app.form(member, `${base}/sessions`, [['kind', 'practice']])).text();
   assert.match(ask, /A race is counting down to its start, with 1 driver\. Starting this practice ends it\./);
   assert.doesNotMatch(ask, /running for/);
+  app.engine.abort(office.id, race.id);
+});
+
+test('a confirmation just after the countdown, before the engine’s next tick, says the race is running', async () => {
+  const [a] = app.store.drivers(office.id);
+  const race = app.engine.start(office.id, { kind: 'race', roster: [a.id], durationMs: 60_000, countdownMs: 5000 }).session;
+  clock.now += 5500;
+  assert.equal(app.store.runningSession(office.id).state, 'countdown', 'no tick yet: the engine still has it counting down');
+  const ask = await (await app.form(member, `${base}/sessions`, [['kind', 'practice']])).text();
+  assert.match(ask, /A race has been running for under a minute, with 1 driver\. Starting this practice ends it\./);
+  assert.doesNotMatch(ask, /counting down/);
   app.engine.abort(office.id, race.id);
 });

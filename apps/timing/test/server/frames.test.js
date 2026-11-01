@@ -35,7 +35,7 @@ test('the status slots are always there, the summary fills the first on a 422', 
   assert.match(await setup(), /<h1>Setup<\/h1>\s*<div id="page-status"><\/div>\s*<p class="visually-hidden" role="status" id="frame-status"><\/p>/);
   const res = await app.form(owner, `${base}/drivers`, { name: '   ' });
   assert.equal(res.status, 422);
-  assert.match(await res.text(), /<div id="page-status"><p class="status status-error" role="alert">/);
+  assert.match(await res.text(), /<div id="page-status"><p class="status status-error cut-words" role="alert">/);
 });
 
 test('setup loads the two element modules', async () => {

@@ -27,7 +27,7 @@ export function clockOf(session, now) {
 const chip = (snap, id, options) => driverChip(snap.drivers, id, options);
 
 /** A record's time, holder and date, apart by their line's gap, not by dots: "7.412  Haris  12 Oct". */
-const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by">${chip(snap, r.driverId)}</span> <span class="board-track-by">${safe(localTime(r.at, 'date'))}</span>`;
+const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by cut-words">${chip(snap, r.driverId)}</span> <span class="board-track-by cut-words">${safe(localTime(r.at, 'date'))}</span>`;
 
 /**
  * The track, its direction as an icon, and its record, above every board
@@ -37,14 +37,14 @@ const recordLine = (snap, r) => html`<span class="num board-track-time">${format
  * record colour, and the record it beat.
  */
 function trackHeader(snap) {
-  const where = html`<p class="board-track-name"><strong>${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>`;
+  const where = html`<p class="board-track-name"><strong class="cut-words">${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>`;
   const n = snap.recordNew;
   if (n) {
     return html`<header class="board-track is-record" data-record-new="${n.seq}">
   ${where}
   <div class="board-track-record">
-    <p class="board-track-new"><strong class="board-track-label">New track record</strong> <span class="num board-track-time">${formatLap(n.lapMs)}</span> ${chip(snap, n.driverId)}</p>
-    ${n.beat ? html`<p class="board-track-beat">Beat ${recordLine(snap, n.beat)}</p>` : null}
+    <p class="board-track-new cut-words"><strong class="board-track-label">New track record</strong> <span class="num board-track-time">${formatLap(n.lapMs)}</span> ${chip(snap, n.driverId)}</p>
+    ${n.beat ? html`<p class="board-track-beat cut-words">Beat ${recordLine(snap, n.beat)}</p>` : null}
   </div>
 </header>`;
   }
@@ -163,7 +163,7 @@ function hero(request, snap, members) {
   <div class="board-hero-record">
     <h1 class="board-hero-label">Track record</h1>
     ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
-    <p class="board-hero-by">${chip(snap, r.driverId, { holder: true })} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? beaten(snap, r) : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
+    <p class="board-hero-by cut-words">${chip(snap, r.driverId, { holder: true })} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? beaten(snap, r) : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
   </div>
   ${members ? go(request, snap) : null}
 </section>`;

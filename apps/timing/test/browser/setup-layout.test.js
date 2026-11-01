@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Tap and Setup in the browser, at a phone's and a laptop's width: a long
-// name stays inside its tile, unbroken inside its words, and the result bar
-// keeps its height after a tap; on Setup a section's heading keeps its gap
-// to what follows, every action in a row has one height, the row's actions
-// end at the section's edge, and a fold's error takes the fold's width.
+// name stays inside its tile, unbroken inside its words, never under 16px,
+// and the result bar keeps its height after a tap; on Setup a section's
+// heading keeps its gap to what follows, actions beside a field stand as tall
+// as the field and actions in a row of text one lighter height, the row's
+// actions end at the section's edge, and a fold's error takes the fold's width.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
@@ -41,19 +42,20 @@ after(async () => {
   await app?.close();
 });
 
-for (const [size, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
-  test(`tap at ${size} width: every name stays inside its tile, broken only between words, in its own case`, async (t) => {
+for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['phone', PHONE], ['desktop', DESKTOP]]) {
+  test(`tap at ${size} width: every name stays inside its tile, broken only between words, in its own case, at 16px or more`, async (t) => {
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());
     await page.goto('/personal/tap');
     const tiles = await page.locator('.tap-tile').evaluateAll((els) => els.map((el) => {
       const box = el.getBoundingClientRect();
       const range = document.createRange();
-      range.selectNodeContents(el);
+      const name = el.querySelector('.tap-tile-name');
+      range.selectNodeContents(name);
       const text = range.getBoundingClientRect();
       // Each word's own boxes: a word broken inside itself has more than one line box.
       const words = [];
-      const node = el.firstChild;
+      const node = name.firstChild;
       let at = 0;
       for (const word of el.textContent.split(' ')) {
         const r = document.createRange();
@@ -63,11 +65,12 @@ for (const [size, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
         words.push({ word, lines: lines.size });
         at += word.length + 1;
       }
-      return { name: el.textContent, transform: getComputedStyle(el).textTransform, inside: text.left >= box.left && text.right <= box.right + 0.5 && el.scrollWidth <= el.clientWidth, words };
+      return { name: el.textContent, transform: getComputedStyle(el).textTransform, size: parseFloat(getComputedStyle(el).fontSize), inside: text.left >= box.left && text.right <= box.right + 0.5 && el.scrollWidth <= el.clientWidth && name.scrollWidth <= name.clientWidth, words };
     }));
     for (const tile of tiles) {
       assert.ok(tile.inside, `${tile.name} inside its tile`);
       assert.equal(tile.transform, 'none', `${tile.name} keeps its case`);
+      assert.ok(tile.size >= 16, `${tile.name}: ${tile.size}px, not under 16px`);
       for (const w of tile.words) assert.equal(w.lines, 1, `${tile.name}: "${w.word}" on one line`);
     }
     assert.deepEqual(errors, []);
@@ -99,7 +102,7 @@ for (const [size, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
     assert.deepEqual(errors, []);
   });
 
-  test(`setup at ${size} width: a heading keeps its gap, row actions share one height and the section's edge`, async (t) => {
+  test(`setup at ${size} width: a heading keeps its gap, row actions take a field's height or a text row's, and end at the section's edge`, async (t) => {
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());
     await page.goto('/personal/setup');
@@ -112,7 +115,12 @@ for (const [size, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
       };
       const actions = [...document.querySelectorAll('.setup-row .btn, .track-row .button-row .btn, .setup-table .btn')]
         .filter((el) => el.getClientRects().length)
-        .map((el) => ({ text: el.textContent.trim(), h: Math.round(el.getBoundingClientRect().height) }));
+        .map((el) => {
+          // Beside a field: a field in the action's row, not in a fold under it.
+          const row = el.closest('.setup-row, .track-row, tr');
+          const field = [...row.querySelectorAll('input:not([type="hidden"]), select')].find((f) => !f.closest('details'));
+          return { text: el.textContent.trim(), h: Math.round(el.getBoundingClientRect().height), field: field ? Math.round(field.getBoundingClientRect().height) : null };
+        });
       const edge = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().right);
       const content = (sel) => { const s = document.querySelector(sel); return Math.round(s.getBoundingClientRect().right - parseFloat(getComputedStyle(s).paddingRight) - parseFloat(getComputedStyle(s).borderRightWidth)); };
       return {
@@ -124,8 +132,11 @@ for (const [size, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
       };
     });
     for (const [id, gap] of m.gaps) assert.equal(gap, 16, `${id}: 16px to what follows`);
-    const heights = new Set(m.actions.map((a) => a.h));
-    assert.equal(heights.size, 1, `one action height: ${JSON.stringify(m.actions)}`);
+    const besideField = m.actions.filter((a) => a.field !== null);
+    const inText = m.actions.filter((a) => a.field === null);
+    assert.ok(besideField.length && inText.length, `both kinds of row: ${JSON.stringify(m.actions)}`);
+    for (const a of besideField) assert.equal(a.h, a.field, `${a.text}: as tall as its field`);
+    assert.deepEqual([...new Set(inText.map((a) => a.h))], [36], `actions in a row of text: one lighter height, ${JSON.stringify(inText)}`);
     assert.equal(m.assign, 0, 'Assign ends at the section edge');
     assert.equal(m.unpair, 0, 'Unpair ends at the section edge');
     assert.ok(m.docW <= viewport.width, 'no sideways scroll');
@@ -133,19 +144,38 @@ for (const [size, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   });
 }
 
-test('setup on a phone: a driver row keeps the whole name in view, its actions on a line of their own', async (t) => {
+test('setup on a phone: a driver row keeps the whole name in view, its actions on a line of their own, one row gap under the name', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member, { viewport: PHONE });
   t.after(() => context.close());
   await page.goto('/personal/setup');
-  const row = page.locator('#drivers .setup-row', { has: page.locator(`input[value="${LONG}"]`) });
-  const m = await row.evaluate((el) => {
+  const measure = (el) => {
     const input = el.querySelector('input[name="name"]');
     const save = el.querySelector('button[type="submit"]');
-    return { fits: input.scrollWidth <= input.clientWidth, inputBottom: input.getBoundingClientRect().bottom, saveTop: save.getBoundingClientRect().top };
-  });
+    const error = el.querySelector('.field-error')?.getBoundingClientRect();
+    return {
+      fits: input.scrollWidth <= input.clientWidth,
+      gap: parseFloat(getComputedStyle(el).rowGap),
+      inputBottom: input.getBoundingClientRect().bottom,
+      saveTop: save.getBoundingClientRect().top,
+      error: error ? { top: error.top, bottom: error.bottom } : null,
+    };
+  };
+  const row = page.locator('#drivers .setup-row', { has: page.locator(`input[value="${LONG}"]`) });
+  const m = await row.evaluate(measure);
   assert.ok(m.fits, 'the whole name shows');
-  assert.ok(m.saveTop >= m.inputBottom, 'Save is below the name');
-  assert.deepEqual(errors, []);
+  assert.equal(m.error, null);
+  // Within a pixel: rows can land on half pixels. An empty error row would add a whole row gap.
+  const near = (px, gap, what) => assert.ok(Math.abs(px - gap) <= 1, `${what}: ${px}px, not ${gap}px`);
+  near(m.saveTop - m.inputBottom, m.gap, 'Save is below the name, one row gap away: no empty error row between');
+  // A refused rename: the error takes the row between, a row gap on each side.
+  await row.locator('input[name="name"]').evaluate((input) => { input.form.noValidate = true; input.value = ''; });
+  await row.locator('button[type="submit"]').click();
+  const refused = page.locator('#drivers .setup-row', { has: page.locator('.field-error') });
+  await refused.waitFor();
+  const e = await refused.evaluate(measure);
+  // The error's box is as tall as its font makes it, so only the order is measured here.
+  assert.ok(e.error.top >= e.inputBottom - 1 && e.saveTop > e.error.top, `the error between the name and Save: ${JSON.stringify(e)}`);
+  assert.deepEqual(errors.filter((x) => !/status of 422/.test(x)), [], 'nothing but the refused form');
 });
 
 test('setup on a phone: a fold’s error spans the fold, and Rename and Change layout end at one edge', async (t) => {

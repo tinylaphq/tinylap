@@ -112,7 +112,7 @@ test('a colour that is not #rrggbb is a 422 in plain words, the name kept, the s
     const res = await app.form(member, `${base}/drivers/${dan.id}`, { name: 'Danny', colour });
     assert.equal(res.status, 422, colour);
     const body = await res.text();
-    assert.match(body, new RegExp(`<p class="status status-error" role="alert"><a href="#colour-${dan.id}">Choose a colour with the swatch\\.</a></p>`));
+    assert.match(body, new RegExp(`<p class="status status-error cut-words" role="alert"><a href="#colour-${dan.id}">Choose a colour with the swatch\\.</a></p>`));
     // A colour input can't show a refused value (it would turn black), so it shows the saved one.
     assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="#12ab9f"[^>]*aria-invalid="true"`), colour);
     assert.match(body, new RegExp(`<input[^>]*id="rename-${dan.id}"[^>]*value="Danny"`));
@@ -128,7 +128,7 @@ test('deleting asks first, needs an admin, and unassigns the transponder', async
   const ask = await get(owner, `${base}/drivers/${dan.id}/delete`);
   assert.equal(ask.status, 200);
   const body = await ask.text();
-  assert.match(body, /<h1>Delete Dan\?<\/h1>/);
+  assert.match(body, /<h1 class="cut-words" title="Delete Dan\?">Delete Dan\?<\/h1>/);
   assert.match(body, new RegExp(`<form method="post" action="${base}/drivers/${dan.id}/delete"`));
   assert.match(body, new RegExp(`<a[^>]*href="${base}/setup#drivers"[^>]*>Cancel</a>`));
   assert.equal((await app.form(member, `${base}/drivers/${dan.id}/delete`, {})).status, 403);
@@ -187,7 +187,7 @@ test('a blank rename is a 422 with the summary linking the field, and the input 
   const res = await app.form(member, `${base}/drivers/${fay.id}`, { name: '   ' });
   assert.equal(res.status, 422);
   const body = await res.text();
-  assert.match(body, new RegExp(`<p class="status status-error" role="alert"><a href="#rename-${fay.id}">Give the driver a name of 1 to 60 characters\\.</a></p>`));
+  assert.match(body, new RegExp(`<p class="status status-error cut-words" role="alert"><a href="#rename-${fay.id}">Give the driver a name of 1 to 60 characters\\.</a></p>`));
   assert.match(body, new RegExp(`<input[^>]*id="rename-${fay.id}"[^>]*value="   "[^>]*aria-invalid="true"`));
   assert.equal(drivers().find((d) => d.id === fay.id).name, 'Fay');
 });
@@ -197,11 +197,11 @@ test('an error without a field shows in the summary, also for a vanished driver\
   assert.equal((await app.form(owner, `${base}/drivers/${gone.id}/delete`, {})).status, 303);
   const rename = await app.form(member, `${base}/drivers/${gone.id}`, { name: 'Fay again' });
   assert.equal(rename.status, 404);
-  assert.match(await rename.text(), /<p class="status status-error" role="alert">There is no such driver here\.<\/p>/);
+  assert.match(await rename.text(), /<p class="status status-error cut-words" role="alert">There is no such driver here\.<\/p>/);
   const del = await app.form(owner, `${base}/drivers/${gone.id}/delete`, {});
   assert.equal(del.status, 404);
   const body = await del.text();
-  assert.match(body, /<p class="status status-error" role="alert">There is no such driver here\.<\/p>/);
+  assert.match(body, /<p class="status status-error cut-words" role="alert">There is no such driver here\.<\/p>/);
   assert.doesNotMatch(body, /aria-invalid/);
   const ask = await get(owner, `${base}/drivers/${gone.id}/delete`);
   assert.equal(ask.status, 404);
@@ -257,7 +257,7 @@ test('adding fails with 422 and the input kept: no name, a name in use, a bad li
     assert.equal(res.status, 422, fieldId);
     const body = await res.text();
     assert.match(body, message);
-    assert.match(body, new RegExp(`<p class="status status-error" role="alert"><a href="#${fieldId}">`));
+    assert.match(body, new RegExp(`<p class="status status-error cut-words" role="alert"><a href="#${fieldId}">`));
     assert.match(body, new RegExp(`<input[^>]*id="${fieldId}"[^>]*aria-invalid="true"`));
     assert.match(body, new RegExp(`id="add-track-name"[^>]*value="${fields.name}"`));
     assert.match(body, new RegExp(`id="add-track-link"[^>]*value="${fields.link}"`));
@@ -299,7 +299,7 @@ test('a different layout asks first, on a page that carries the link to both cho
   const res = await app.form(member, `${pitsBase}/tracks/${office.id}/layout`, { link: link(OTHER) });
   assert.equal(res.status, 200);
   const body = await res.text();
-  assert.match(body, /<h1>Change the layout of Office loop\?<\/h1>/);
+  assert.match(body, /<h1 class="cut-words" title="Change the layout of Office loop\?">Change the layout of Office loop\?<\/h1>/);
   assert.match(body, /Records on Office loop stay and are compared with laps on the new layout\. If the track itself changed, add it as a new track instead\./);
   const change = new RegExp(`<form method="post" action="${pitsBase}/tracks/${office.id}/layout"[^>]*>\\s*<input type="hidden" name="link" value="${link(OTHER)}">\\s*<input type="hidden" name="confirm" value="1">\\s*<button type="submit" class="btn btn-primary">Change the layout</button>`);
   assert.match(body, change);
@@ -325,9 +325,9 @@ test('a failed new track on the layout confirmation comes back to the confirmati
   const res = await app.form(member, `${pitsBase}/tracks/${office.id}/layout`, { as: 'new', name: 'garage', link: link(OTHER) });
   assert.equal(res.status, 422);
   const body = await res.text();
-  assert.match(body, /<h1>Change the layout of Office loop\?<\/h1>/);
+  assert.match(body, /<h1 class="cut-words" title="Change the layout of Office loop\?">Change the layout of Office loop\?<\/h1>/);
   assert.match(body, /Records on Office loop stay and are compared with laps on the new layout\./);
-  assert.match(body, /<p class="status status-error" role="alert"><a href="#new-track-name">A track named garage is already in use\. Rename one of them first\.<\/a><\/p>/);
+  assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#new-track-name">A track named garage is already in use\. Rename one of them first\.<\/a><\/p>/);
   assert.match(body, /<input type="text" id="new-track-name" name="name" value="garage" required maxlength="60" aria-invalid="true"/);
   assert.equal(body.match(new RegExp(`<input type="hidden" name="link" value="${link(OTHER)}">`, 'g'))?.length, 2);
   assert.equal(tracks().length, before);
@@ -400,7 +400,7 @@ test('deleting an archived track asks first, with its sessions counted, and need
   const ask = await get(owner, `${pitsBase}/tracks/${office.id}/delete`);
   assert.equal(ask.status, 200);
   const body = await ask.text();
-  assert.match(body, /<h1>Delete Office two\?<\/h1>/);
+  assert.match(body, /<h1 class="cut-words" title="Delete Office two\?">Delete Office two\?<\/h1>/);
   assert.match(body, /<p>Its records and layouts are removed\. Its 2 sessions stay in the history, without a track\.<\/p>/);
   assert.match(body, new RegExp(`<form method="post" action="${pitsBase}/tracks/${office.id}/delete"`));
   assert.match(body, new RegExp(`<a[^>]*href="${pitsBase}/setup#track"[^>]*>Cancel</a>`));

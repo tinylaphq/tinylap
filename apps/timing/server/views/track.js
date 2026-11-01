@@ -55,7 +55,7 @@ export function trackPage(request, { track, layouts, current, direction, records
     body: html`<div class="container sessions-screen track-page stack-xl screen">
   <div class="stack-sm">
     <p><a href="${base}/setup#track">Setup</a></p>
-    <h1>${track.name}</h1>
+    <h1 class="cut-words" title="${track.name}">${track.name}</h1>
     ${current ? html`<p class="subtitle">The current track, ${direction === 'cw' ? 'clockwise' : 'anticlockwise'}.</p>` : null}
     ${track.archivedAt !== null ? html`<p class="subtitle">Archived ${safe(localTime(track.archivedAt, 'datetime-year'))}.</p>` : null}
   </div>

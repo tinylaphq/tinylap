@@ -127,7 +127,8 @@ function askReplace(request, values, running, from = null) {
   if (from) fields.push(['from', from]);
   return page(request, 200, confirmPage(request, {
     title: what === 'qualifying' ? 'Start qualifying?' : `Start a ${what}?`,
-    text: `${runningFor(running.kind, minutes, drivers, running.state === 'countdown')} Starting this ${what} ends it.`,
+    // The engine moves a race out of its countdown on its next tick, up to a second late; the clock says it has started.
+    text: `${runningFor(running.kind, minutes, drivers, running.state === 'countdown' && request.now() < running.opensAt)} Starting this ${what} ends it.`,
     action: `${base}/sessions`,
     button: 'Start',
     back: from === 'tap' ? `${base}/tap` : `${base}/sessions`,
