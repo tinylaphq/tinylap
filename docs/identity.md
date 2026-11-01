@@ -161,12 +161,30 @@ shorten that wait, `accounts` can tell a client at once. Add `noticeUri` and
 `noticeUri` is checked like `resource`. `noticeToken` is a random string of
 its own, never the client secret.
 
-After a removal, role change, leaving, ownership transfer, club deletion or
-account deletion, `accounts` posts `{ "users": [...] }` to `noticeUri` with
-`Authorization: Bearer <noticeToken>`. It does not wait for the answer, gives
+After a removal, role change, leaving, ownership transfer, club deletion,
+account deletion or disconnecting an app, `accounts` posts
+`{ "users": [...] }` to `noticeUri` with `Authorization: Bearer <noticeToken>`. It does not wait for the answer, gives
 up after 5 s, does not retry and logs one warning per failure. A missed
 notice costs nothing: the token expires as before. The app treats a notice as
 a hint to re-read the users' claims, never as proof.
+
+## Connecting an assistant
+
+A member can let an assistant run timing for them. In the assistant, add
+timing's MCP address (`https://<timing>/mcp`) as a custom connector. The
+assistant sends the member to TinyLap Accounts, which asks: "Allow
+*name* to run timing as you?" The website shown in large type is the one that
+asks; the name is the one it gives itself.
+
+Once allowed, the assistant can see which clubs the member is in and their role
+in each, and read and change timing there as the member can: drivers,
+transponders, tracks, decoders, sessions and the watchers link. It can't change
+the account or the clubs, record a lap by hand or pair a decoder. Anything that
+deletes, unpairs, aborts, ends or replaces is asked first, and the assistant must
+come back with the confirmation timing gave it.
+
+The account page lists connected apps. Disconnect stops one at once: its tokens
+are deleted and timing is told, through the membership notice above.
 
 ## Data protection
 
@@ -177,3 +195,5 @@ library and, per sign-in session, the tokens, encrypted. The account page offers
 an export of the account data with a link to the planner's export of every
 track and version, and deletion. The privacy page of `accounts` says the same
 in plain words. Nothing is third-party: no analytics, fonts or sign-in providers.
+An assistant the member connects is the one exception they choose: it sees their
+name, their clubs and roles, and the timing it reads, until they disconnect it.

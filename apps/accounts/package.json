@@ -13,6 +13,7 @@
     "test:browser": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 'test/browser/*.test.js'"
   },
   "dependencies": {
+    "@better-auth/cimd": "1.7.7",
     "@better-auth/oauth-provider": "1.7.7",
     "@better-auth/passkey": "1.7.7",
     "@tinylap/auth": "workspace:*",

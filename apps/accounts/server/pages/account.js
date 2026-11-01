@@ -21,9 +21,11 @@ const quoteList = (names) => names.map((n) => `"${escapeHtml(n)}"`).join(', ');
  *   codesLeft: number,
  *   owned: string[],
  *   plannerExport: string | null,
+ *   connections?: { clientId: string, name: string, host: string, allowedAt: string, lastUsedAt: string | null }[],
+ *   disconnected?: string | null,
  * }} view
  */
-export function accountPage({ user, passkeys, codesLeft, owned, plannerExport }) {
+export function accountPage({ user, passkeys, codesLeft, owned, plannerExport, connections = [], disconnected = null }) {
   const only = passkeys.length <= 1;
   const passkeyRows = passkeys.map((k, i) => `
     <li class="accounts-row" data-passkey="${escapeHtml(k.id)}" data-label="${escapeHtml(k.name ?? `Passkey ${i + 1}`)}">
@@ -34,6 +36,24 @@ export function accountPage({ user, passkeys, codesLeft, owned, plannerExport })
   const codesNote = codesLeft === 0
     ? '<p class="status status-warning" role="note">You have no recovery codes left. Make a new set now, or losing your passkeys loses the account.</p>'
     : `<p class="accounts-gauge-row">${codeGauge(codesLeft)}<span><strong>${codesLeft} of 10</strong> codes unused</span></p>`;
+
+  // Plain forms (POST, then a 303 back here): no script needed to disconnect.
+  const appRows = connections.map((c) => `
+    <li class="accounts-row">
+      <span class="accounts-row-main">${escapeHtml(c.name)}<span class="accounts-row-sub">${escapeHtml(c.host)} · allowed <time datetime="${escapeHtml(c.allowedAt)}">${escapeHtml(day(c.allowedAt))}</time>${c.lastUsedAt ? `, last used <time datetime="${escapeHtml(c.lastUsedAt)}">${escapeHtml(day(c.lastUsedAt))}</time>` : ''}</span></span>
+      <span class="accounts-row-actions"><form method="post" action="/account/apps/disconnect"><input type="hidden" name="client" value="${escapeHtml(c.clientId)}"><button type="submit" class="btn btn-sm btn-outline">Disconnect</button></form></span>
+    </li>`).join('');
+  const apps = `
+<section class="stack-md" id="apps" aria-labelledby="apps-heading">
+  <h2 class="h3" id="apps-heading">Connected apps <span class="accounts-count">${connections.length}</span></h2>
+  ${disconnected ? `<p class="status status-success" role="status">${escapeHtml(disconnected)} is disconnected. It can't use your account any more.</p>` : ''}
+  ${connections.length
+    ? `<ul class="accounts-list">${appRows}
+  </ul>
+  <p class="accounts-hint">Assistants and other apps you allowed to run timing as you. Disconnecting one stops it at once.</p>`
+    : '<p>No apps are connected to your account.</p>'}
+</section>
+<hr class="divider">`;
 
   return layout({
     title: 'Your account',
@@ -79,7 +99,7 @@ ${NOSCRIPT}
     <p class="status" id="codes-status" role="status" hidden></p>
   </div>
 </section>
-<hr class="divider">
+<hr class="divider">${apps}
 <section class="stack-md" aria-labelledby="sessions-heading">
   <h2 class="h3" id="sessions-heading">Signed-in devices</h2>
   <p>Signs you out of TinyLap on every device and in every app, this one included. Use it if you lost a device or signed in on a computer that is not yours.</p>

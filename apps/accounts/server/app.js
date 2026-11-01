@@ -11,6 +11,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isAPIError } from 'better-auth/api';
+import { verifyOAuthQueryParams } from '@better-auth/oauth-provider';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import { can, clientBucket, rateLimiter } from '@tinylap/auth';
 import { SPECULATION_HASH } from '@tinylap/design/html/speculation.js';
@@ -32,6 +33,8 @@ import { accountPage } from './pages/account.js';
 import { privacyPage } from './pages/privacy.js';
 import { signedOutPage } from './pages/signed-out.js';
 import { listPasskeys, ownedClubs, recoveryCodesLeft } from './account.js';
+import { clientHost, clientName, disconnect, listConnections } from './connections.js';
+import { consentGonePage, consentPage } from './pages/consent.js';
 import { createNotifier } from './notices.js';
 
 const APP_DIR = fileURLToPath(new URL('..', import.meta.url));
@@ -60,7 +63,9 @@ const TYPES = {
 const isFile = (path) => stat(path).then((s) => s.isFile(), () => false);
 
 // Spec §9: per client (IPv6 per /64), an hour each.
-const LIMITS = { signUp: 10, signIn: 30, recovery: 10, recoveryLookup: 5, invite: 20 };
+// mcpAuthorize: authorize requests from MCP clients, whose client id makes
+// accounts fetch a metadata document (timing MCP spec §4.3).
+const LIMITS = { signUp: 10, signIn: 30, recovery: 10, recoveryLookup: 5, invite: 20, mcpAuthorize: 60 };
 
 // What a recovery session may still do (spec §6): add a passkey, manage its
 // recovery codes, see the recovery page, or sign out. Everything else,
@@ -123,8 +128,6 @@ const PROBLEMS = {
   'rate-limited': { status: 429, title: 'Too many requests' },
 };
 
-const consentPage = () => layout({ title: 'Allow access', lede: 'No other apps can ask for access to your account yet.', body: '' });
-
 /** Better Auth sends its errors here (onAPIError.errorURL). */
 const errorPage = (url) => layout({
   title: 'That request did not work',
@@ -163,8 +166,28 @@ function send(req, res, status, headers, body) {
   res.end(req.method === 'HEAD' ? undefined : body);
 }
 
-const html = (req, res, body, status = 200) =>
-  send(req, res, status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, 'Cache-Control': 'no-store' }, body);
+const html = (req, res, body, status = 200, csp = PAGE_CSP) =>
+  send(req, res, status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp, 'Cache-Control': 'no-store' }, body);
+
+/**
+ * The consent page's policy: its forms post here, and the answer redirects
+ * to the app. Browsers apply form-action to that redirect too, so the app's
+ * redirect target is allowed as well: its origin, or its scheme for a
+ * private-use URI (RFC 8252 §7.1). Only the one the signed request names.
+ * @param {string} redirectUri
+ */
+export function consentCsp(redirectUri) {
+  let source = '';
+  try {
+    const url = new URL(redirectUri);
+    source = url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : url.protocol;
+  } catch {
+    // no extra source: the provider checked the URI, and a broken one goes nowhere
+  }
+  return source && /^[a-z][a-z0-9+.-]*:(\/\/[^\s;,'"]+)?$/i.test(source)
+    ? PAGE_CSP.replace("form-action 'self'", `form-action 'self' ${source}`)
+    : PAGE_CSP;
+}
 
 const json = (req, res, status, value, headers = {}) => (status === 204
   ? send(req, res, 204, { 'Cache-Control': 'no-store', ...headers }, undefined)
@@ -186,6 +209,22 @@ const toSignIn = (req, res, pathname) =>
   send(req, res, 303, { Location: `/sign-in?next=${encodeURIComponent(pathname)}`, 'Cache-Control': 'no-store' }, '');
 
 const sha256 = (text) => createHash('sha256').update(text).digest();
+
+/** A small form body (application/x-www-form-urlencoded), or undefined if it is too big or not a form. */
+async function readForm(req, max = 8192) {
+  if (!/^application\/x-www-form-urlencoded\b/.test(req.headers['content-type'] ?? '')) {
+    req.resume();
+    return undefined;
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > max) return undefined;
+    chunks.push(chunk);
+  }
+  return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+}
 
 /** A small JSON body, or undefined if it is missing, too big or not JSON. */
 async function readJson(req, max = 4096) {
@@ -233,10 +272,12 @@ export function servedPackages() {
 
 /**
  * @param {import('./config.js').Config} config
+ * @param {{ fetchMetadata?: import('@better-auth/oauth-provider').ClientMetadataResourceFetch }} [extras]
+ *   tests only: how MCP clients' metadata documents are fetched
  */
-export async function createAccounts(config) {
-  const db = await openDb(config.dbPath, authOptions(config));
-  const auth = createAuth(config, db);
+export async function createAccounts(config, extras = {}) {
+  const db = await openDb(config.dbPath, authOptions(config, null, extras));
+  const auth = createAuth(config, db, extras);
   await seedClients(auth, config.clients);
   const betterAuth = toNodeHandler(auth);
   const roots = servedPackages();
@@ -284,7 +325,8 @@ export async function createAccounts(config) {
   }
 
   /** The signed-in pages: /, /clubs, /clubs/:id, /invite/:token, /account. Null if none of them. */
-  function page(req, res, pathname, session) {
+  function page(req, res, url, session) {
+    const { pathname } = url;
     // The site's address is the account page, as account sites do: there
     // when signed in, else through sign-in. It depends on the session, so
     // it is a 303 nothing may keep.
@@ -302,6 +344,8 @@ export async function createAccounts(config) {
         codesLeft: recoveryCodesLeft(db, id),
         owned: ownedClubs(db, id),
         plannerExport: planner && `${planner}/library/export`,
+        connections: listConnections(db, id),
+        disconnected: url.searchParams.get('disconnected'),
       }));
     }
     const invite = /^\/invite\/([^/]+)$/.exec(pathname);
@@ -413,6 +457,77 @@ export async function createAccounts(config) {
     return send(req, res, response.status, headers, Buffer.from(await response.arrayBuffer()));
   }
 
+  /**
+   * The consent request in `query` (the provider's signed query, no "?"),
+   * or null when its signature or time is gone or its client is not an MCP
+   * client: first-party clients never ask.
+   */
+  async function consentRequest(query) {
+    if (!query || !(await verifyOAuthQueryParams(query, config.secret))) return null;
+    const params = new URLSearchParams(query);
+    const clientId = params.get('client_id') ?? '';
+    const row = db.prepare('SELECT name FROM oauthClient WHERE clientId = ? AND clientDiscoveryId IS NOT NULL AND (disabled IS NULL OR disabled = 0)').get(clientId);
+    if (!row) return null;
+    return {
+      query,
+      client: { name: clientName(row.name, clientId), host: clientHost(clientId) },
+      redirectUri: params.get('redirect_uri') ?? '',
+      scopes: (params.get('scope') ?? '').split(' ').filter(Boolean),
+    };
+  }
+
+  /** GET /consent (timing MCP spec §4.4). */
+  async function consent(req, res, url, session) {
+    // The provider sends only signed-in people here; anyone else signs in first, the request carried along.
+    if (!session) return send(req, res, 303, { Location: `/sign-in${url.search}`, 'Cache-Control': 'no-store' }, '');
+    const found = await consentRequest(url.search.slice(1));
+    if (!found) return html(req, res, consentGonePage(), 410);
+    return html(req, res, consentPage(found), 200, consentCsp(found.redirectUri));
+  }
+
+  /** POST /consent: Allow or Cancel, answered by the provider, then a 303 back to the app. */
+  async function answerConsent(req, res, session) {
+    if (!sameOrigin(req)) {
+      req.resume();
+      return problem(req, res, issuer, 'cross-site', 'Answer from the consent page.');
+    }
+    const form = await readForm(req);
+    if (!form) return problem(req, res, issuer, 'bad-request', 'Send the consent form.');
+    if (!session) return send(req, res, 303, { Location: `/sign-in?${form.get('oauth_query') ?? ''}`, 'Cache-Control': 'no-store' }, '');
+    const found = await consentRequest(form.get('oauth_query') ?? '');
+    if (!found) return html(req, res, consentGonePage(), 410);
+    const accept = form.get('accept') === '1';
+    // The provider's endpoint needs a whole request; it isn't on the HTTP router.
+    const response = await auth.handler(new Request(`${issuer}/oauth2/consent`, {
+      method: 'POST',
+      headers: { cookie: req.headers.cookie ?? '', 'content-type': 'application/json', origin: issuer },
+      body: JSON.stringify({ accept, oauth_query: found.query }),
+    }));
+    const body = await response.json().catch(() => null);
+    const location = typeof body?.url === 'string' ? body.url : typeof body?.redirect_uri === 'string' ? body.redirect_uri : null;
+    if (!response.ok || !location) {
+      const error = typeof body?.error_description === 'string' ? body.error_description : 'That did not work.';
+      return html(req, res, consentPage({ ...found, error: `${error} Try again, or go back to the app and connect again.` }), 422, consentCsp(found.redirectUri));
+    }
+    return send(req, res, 303, { Location: location, 'Cache-Control': 'no-store' }, '');
+  }
+
+  /** POST /account/apps/disconnect: the consent and the app's tokens go, and timing is told (spec §4.5). */
+  async function disconnectApp(req, res, session) {
+    if (!sameOrigin(req)) {
+      req.resume();
+      return problem(req, res, issuer, 'cross-site', 'Disconnect apps from your account page.');
+    }
+    const form = await readForm(req);
+    if (!form) return problem(req, res, issuer, 'bad-request', 'Send the disconnect form.');
+    if (!session) return toSignIn(req, res, '/account');
+    const clientId = form.get('client') ?? '';
+    const name = listConnections(db, session.user.id).find((c) => c.clientId === clientId)?.name;
+    if (disconnect(db, session.user.id, clientId)) notify([session.user.id]);
+    const done = name ? `?disconnected=${encodeURIComponent(name)}` : '';
+    return send(req, res, 303, { Location: `/account${done}#apps`, 'Cache-Control': 'no-store' }, '');
+  }
+
   /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res */
   async function route(req, res) {
     // One plain origin-form target ("/path"), so the recovery gate and
@@ -461,11 +576,11 @@ export async function createAccounts(config) {
 
     if (readOnly) {
       if (pathname === '/deletions') return deletions(req, res, url);
-      if (page(req, res, pathname, session) !== null) return;
+      if (page(req, res, url, session) !== null) return;
       if (pathname === '/sign-in') return html(req, res, signInPage(url));
       if (pathname === '/sign-up') return html(req, res, signUpPage(url, session && { name: session.user.name }));
       if (pathname === '/recover') return html(req, res, recoverPage(url, session?.session.recovery ? { name: session.user.name } : null));
-      if (pathname === '/consent') return html(req, res, consentPage());
+      if (pathname === '/consent') return consent(req, res, url, session);
       if (pathname === '/privacy') return html(req, res, privacyPage({ plannerExport: planner && `${planner}/library/export` }));
       if (pathname === '/signed-out') return html(req, res, signedOutPage({ user: session && { name: session.user.name }, deleted: url.searchParams.has('deleted') }));
       if (pathname === '/error') return html(req, res, errorPage(url));
@@ -474,8 +589,11 @@ export async function createAccounts(config) {
     } else if (req.method === 'POST') {
       if (pathname === '/recover') return redeem(req, res);
       if (pathname === '/recovery-codes') return newCodes(req, res, session);
+      if (pathname === '/consent') return answerConsent(req, res, session);
+      if (pathname === '/account/apps/disconnect') return disconnectApp(req, res, session);
     }
 
+    if (pathname === '/oauth2/authorize' && /^https:/i.test(url.searchParams.get('client_id') ?? '') && !allow(req, res, 'mcpAuthorize', clientOf(req))) return;
     if (!BETTER_AUTH_ROUTES.has(pathname)) {
       req.resume();
       return problem(req, res, issuer, 'not-found', 'There is nothing here.');

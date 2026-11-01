@@ -48,10 +48,13 @@ export async function startServer(options = {}) {
 /**
  * The timing app with log-in on, against a real accounts (tools/test-env.js).
  * The server listens first, so accounts can register its port.
- * @param {{ clock?: { now: number }, hostname?: string, env?: Record<string, string>, [key: string]: any }} [options]
+ * `mcp` makes accounts let MCP clients sign in for this server's /mcp, their
+ * metadata documents served by `fetchMetadata`.
+ * @param {{ clock?: { now: number }, hostname?: string, env?: Record<string, string>,
+ *   mcp?: { fetchMetadata: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> }, [key: string]: any }} [options]
  */
 export async function startTiming(options = {}) {
-  const { clock, hostname, env, simulate = null, noticeToken, ...rest } = options;
+  const { clock, hostname, env, simulate = null, noticeToken, mcp, ...rest } = options;
   const settings = { simulate: readSimulate(simulate) };
   const now = clock ? () => clock.now : Date.now;
   const store = openStore(':memory:');
@@ -61,7 +64,12 @@ export async function startTiming(options = {}) {
   const server = createServer((req, res) => handler(req, res));
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const suite = await startSuite({ plannerPort: server.address().port, hostname, env, notice: noticeToken ? { uri: `${base}/notices/membership`, token: noticeToken } : undefined });
+  const suite = await startSuite({
+    plannerPort: server.address().port, hostname,
+    env: mcp ? { ...env, TINYLAP_MCP_RESOURCE: `${base}/mcp` } : env,
+    notice: noticeToken ? { uri: `${base}/notices/membership`, token: noticeToken } : undefined,
+    fetchMetadata: mcp?.fetchMetadata,
+  });
   const keys = [{ id: 'k1', key: randomBytes(32) }];
   const auth = createAuth({
     issuer: suite.issuer, clientId: suite.clientId, clientSecret: suite.clientSecret,

@@ -12,7 +12,7 @@ export function privacyPage({ plannerExport }) {
   return layout({
     title: 'Privacy',
     heading: 'What TinyLap keeps',
-    lede: 'As little as an account needs. No email address, no password, no tracking, nothing third-party.',
+    lede: 'As little as an account needs. No email address, no password, no tracking, nothing third-party unless you connect it.',
     wide: true,
     body: `
 <section class="stack-md" aria-labelledby="stored-heading">
@@ -23,6 +23,7 @@ export function privacyPage({ plannerExport }) {
     <li class="accounts-row"><span class="accounts-row-main">Recovery codes<span class="accounts-row-sub">Only a hash of each, and whether it has been used.</span></span></li>
     <li class="accounts-row"><span class="accounts-row-main">Memberships<span class="accounts-row-sub">Your personal space, the clubs you are in, your role in each, and the invite links you made.</span></span></li>
     <li class="accounts-row"><span class="accounts-row-main">Sign-in sessions<span class="accounts-row-sub">One per device you signed in on, with its address and browser, for up to 30 days.</span></span></li>
+    <li class="accounts-row"><span class="accounts-row-main">Connected apps<span class="accounts-row-sub">Assistants you allowed to run timing as you: the app, when you allowed it, and its tokens. An app you connect sees your name, your clubs and your role in each, and the timing it reads. Disconnect it on your account page.</span></span></li>
     <li class="accounts-row"><span class="accounts-row-main">Private tracks, in the planner<span class="accounts-row-sub">The tracks and versions you save to your personal space and your clubs. Tracks you share publicly contain no personal data and stay public.</span></span></li>
   </ul>
 </section>

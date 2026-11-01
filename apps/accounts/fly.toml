@@ -8,6 +8,8 @@ primary_region = 'fra'
 [env]
   TINYLAP_ISSUER = 'https://tinylap-accounts.fly.dev'
   TINYLAP_CLIENT_IP_HEADER = 'Fly-Client-IP'
+  # Timing's MCP endpoint: MCP clients (assistants) may sign in for it.
+  TINYLAP_MCP_RESOURCE = 'https://tinylap-timing.fly.dev/mcp'
 
 # SQLite on one volume means exactly one machine. Fly snapshots the volume
 # daily; that is the only backup during the proof of concept. Create it once:

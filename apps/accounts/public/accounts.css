@@ -363,3 +363,16 @@ a.accounts-workspace-name {
    hand on to another site, where a transition can't follow and Chrome
    reports the aborted one as a page error. */
 @view-transition { navigation: none; }
+
+/* The consent page: the client's verified host stands out over its own name. */
+.accounts-consent-host {
+  margin: 0;
+  font-family: var(--p-font-mono);
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+
+/* A row's action that is a plain form. */
+.accounts-row-actions form {
+  margin: 0;
+}

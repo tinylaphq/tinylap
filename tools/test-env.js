@@ -17,10 +17,13 @@ export { driveAuthorize, Jar, navigate };
  * pass the port it got. `hostname` names the issuer's host (a browser test
  * needs `localhost`: a passkey's RP ID cannot be an IP address). `notice`
  * registers the app's membership notice endpoint with accounts.
- * @param {{ plannerPort: number, env?: Record<string, string>, hostname?: string, notice?: { uri: string, token: string } }} options
+ * `fetchMetadata` serves MCP clients' metadata documents (set
+ * TINYLAP_MCP_RESOURCE in `env` too).
+ * @param {{ plannerPort: number, env?: Record<string, string>, hostname?: string, notice?: { uri: string, token: string },
+ *   fetchMetadata?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> }} options
  */
-export async function startSuite({ plannerPort, env = {}, hostname, notice }) {
-  const accounts = await startAccounts({ plannerPort, env, hostname, notice });
+export async function startSuite({ plannerPort, env = {}, hostname, notice, fetchMetadata }) {
+  const accounts = await startAccounts({ plannerPort, env, hostname, notice, fetchMetadata });
   const { client } = accounts;
   /** @type {Promise<void> | undefined} */
   let closing;

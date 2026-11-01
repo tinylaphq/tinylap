@@ -36,6 +36,8 @@ async function notice(request) {
     return problem(request, 'invalid-request', `users must list 1 to ${MAX_USERS} user ids.`);
   }
   for (const user of users) request.auth.bff.stale(user);
+  // MCP tokens issued before now are refused, so their clients refresh (timing MCP spec §4.2).
+  request.store?.stale.mark(users, request.now());
   request.streams.recheck(users);
   return { status: 204, headers: { 'Cache-Control': 'no-store' } };
 }

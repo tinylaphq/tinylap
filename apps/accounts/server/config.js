@@ -17,6 +17,9 @@
 //   TINYLAP_ACCESS_TTL  access token seconds, dev mode only (tests)
 //   TINYLAP_CLIENT_IP_HEADER  the header a trusted proxy puts the client's
 //                       address in (Fly-Client-IP on Fly), for rate limits
+//   TINYLAP_MCP_RESOURCE  the timing MCP endpoint (https://…/mcp). Set, MCP
+//                       clients may sign in with Client ID Metadata Documents,
+//                       for that one resource and the `timing` scope only
 //   PORT                default 4100
 
 /**
@@ -25,7 +28,7 @@
  *   trusted: true }} ClientConfig
  * @typedef {{ issuer: string, dev: boolean, dbPath: string, secret: string, port: number,
  *   clients: ClientConfig[], feedTokens: string[], accessTtlSeconds: number,
- *   clientIpHeader: string | null }} Config
+ *   clientIpHeader: string | null, mcpResource: string | null }} Config
  */
 
 const isLoopback = (hostname) =>
@@ -95,6 +98,21 @@ function readClients(text, dev) {
 }
 
 /**
+ * The MCP resource: an absolute URL with a path and no trailing slash, query
+ * or fragment, compared exactly with the `resource` a client asks for.
+ * @param {string | undefined} text @param {boolean} dev
+ */
+function readMcpResource(text, dev) {
+  if (text === undefined || text === '') return null;
+  checkRedirect(text, 'TINYLAP_MCP_RESOURCE', dev);
+  const url = new URL(text);
+  if (url.pathname === '/' || url.pathname.endsWith('/') || url.search || text !== `${url.origin}${url.pathname}`) {
+    throw new Error(`TINYLAP_MCP_RESOURCE must be the MCP endpoint's URL, with a path and no trailing slash or query; got "${text}".`);
+  }
+  return text;
+}
+
+/**
  * @param {Record<string, string | undefined>} env
  * @returns {Config}
  */
@@ -122,6 +140,7 @@ export function readConfig(env) {
   }
 
   return {
+    mcpResource: readMcpResource(env.TINYLAP_MCP_RESOURCE, dev),
     issuer: issuerUrl.origin,
     dev,
     dbPath: env.TINYLAP_DB || (dev ? ':memory:' : '/data/accounts.sqlite'),
