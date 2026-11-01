@@ -35,7 +35,7 @@ To turn it on, set `TINYLAP_MCP_RESOURCE` on accounts to timing's `/mcp` URL (in
 5. Sign in at https://tinylap-timing.fly.dev and check the board loads.
 6. Let CI deploy from now on: `gh variable set TIMING_DEPLOY_ENABLED --body true`.
 
-Assistants: `fly secrets set --app tinylap-accounts TINYLAP_MCP_RESOURCE=https://tinylap-timing.fly.dev/mcp`. Accounts then fetches MCP clients' metadata documents from the internet, so it needs outbound HTTPS.
+Assistants: accounts' `fly.toml` sets `TINYLAP_MCP_RESOURCE=https://tinylap-timing.fly.dev/mcp`. Accounts then fetches MCP clients' metadata documents from the internet, so it needs outbound HTTPS.
 
 Membership notices (optional, needed for disconnecting assistants at once): generate `openssl rand -base64 32`, set it on timing with `fly secrets set --app tinylap-timing TINYLAP_NOTICE_TOKEN=<token>`, and add `"noticeUri": "https://tinylap-timing.fly.dev/notices/membership", "noticeToken": "<token>"` to timing's entry in `TINYLAP_CLIENTS`. The route (`POST /notices/membership`, `docs/identity.md`) answers 204, 401 for a wrong or missing bearer, 422 for a bad body, and 404 while `TINYLAP_NOTICE_TOKEN` is unset. A notice ends nothing by itself: timing re-reads the users' claims and ends only the open streams they no longer allow.
 

@@ -166,8 +166,28 @@ function send(req, res, status, headers, body) {
   res.end(req.method === 'HEAD' ? undefined : body);
 }
 
-const html = (req, res, body, status = 200) =>
-  send(req, res, status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, 'Cache-Control': 'no-store' }, body);
+const html = (req, res, body, status = 200, csp = PAGE_CSP) =>
+  send(req, res, status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp, 'Cache-Control': 'no-store' }, body);
+
+/**
+ * The consent page's policy: its forms post here, and the answer redirects
+ * to the app. Browsers apply form-action to that redirect too, so the app's
+ * redirect target is allowed as well: its origin, or its scheme for a
+ * private-use URI (RFC 8252 §7.1). Only the one the signed request names.
+ * @param {string} redirectUri
+ */
+export function consentCsp(redirectUri) {
+  let source = '';
+  try {
+    const url = new URL(redirectUri);
+    source = url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : url.protocol;
+  } catch {
+    // no extra source: the provider checked the URI, and a broken one goes nowhere
+  }
+  return source && /^[a-z][a-z0-9+.-]*:(\/\/[^\s;,'"]+)?$/i.test(source)
+    ? PAGE_CSP.replace("form-action 'self'", `form-action 'self' ${source}`)
+    : PAGE_CSP;
+}
 
 const json = (req, res, status, value, headers = {}) => (status === 204
   ? send(req, res, 204, { 'Cache-Control': 'no-store', ...headers }, undefined)
@@ -462,7 +482,7 @@ export async function createAccounts(config, extras = {}) {
     if (!session) return send(req, res, 303, { Location: `/sign-in${url.search}`, 'Cache-Control': 'no-store' }, '');
     const found = await consentRequest(url.search.slice(1));
     if (!found) return html(req, res, consentGonePage(), 410);
-    return html(req, res, consentPage(found));
+    return html(req, res, consentPage(found), 200, consentCsp(found.redirectUri));
   }
 
   /** POST /consent: Allow or Cancel, answered by the provider, then a 303 back to the app. */
@@ -487,7 +507,7 @@ export async function createAccounts(config, extras = {}) {
     const location = typeof body?.url === 'string' ? body.url : typeof body?.redirect_uri === 'string' ? body.redirect_uri : null;
     if (!response.ok || !location) {
       const error = typeof body?.error_description === 'string' ? body.error_description : 'That did not work.';
-      return html(req, res, consentPage({ ...found, error: `${error} Try again, or go back to the app and connect again.` }), 422);
+      return html(req, res, consentPage({ ...found, error: `${error} Try again, or go back to the app and connect again.` }), 422, consentCsp(found.redirectUri));
     }
     return send(req, res, 303, { Location: location, 'Cache-Control': 'no-store' }, '');
   }

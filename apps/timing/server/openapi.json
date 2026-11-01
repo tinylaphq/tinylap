@@ -66,6 +66,7 @@
       "get": { "summary": "Not served: there is no server-to-client stream", "security": [{ "mcpToken": [] }], "responses": { "405": { "description": "Method not allowed." } } },
       "delete": { "summary": "Not served: there are no MCP sessions to end", "security": [{ "mcpToken": [] }], "responses": { "405": { "description": "Method not allowed." } } }
     },
+    "/.well-known/oauth-protected-resource": { "get": { "summary": "The same metadata at the root, for clients that look there", "responses": { "200": { "description": "The metadata.", "content": { "application/json": {} } } } } },
     "/.well-known/oauth-protected-resource/mcp": { "get": { "summary": "RFC 9728 protected resource metadata for /mcp: its authorization server and scopes", "responses": { "200": { "description": "The metadata.", "content": { "application/json": {} } } } } }
   },
   "components": {

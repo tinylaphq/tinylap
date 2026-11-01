@@ -6,8 +6,9 @@
 // opened with its signed query. Only MCP clients see it: first-party clients
 // skip consent. The client's verified identity is the host of its client id
 // URL, so that is what stands out; its own name is plain text and its logo
-// is never shown (timing MCP spec §4.4). Allow and Cancel are plain forms
-// that post the signed query back to /consent.
+// is never shown (timing MCP spec §4.4). An app that returns to a loopback
+// address gets a warning: any local program could listen there. Allow and
+// Cancel are plain forms that post the signed query back to /consent.
 import { escapeHtml, layout } from './layout.js';
 
 const isLoopbackHost = (host) => host === 'localhost' || host === '[::1]' || /^127\./.test(host);
@@ -23,9 +24,11 @@ const isLoopbackHost = (host) => host === 'localhost' || host === '[::1]' || /^1
  */
 export function consentPage({ client, query, redirectUri, scopes, error }) {
   let redirectHost = '';
+  let local = false;
   try {
     const url = new URL(redirectUri);
-    if (!isLoopbackHost(url.hostname) && url.host !== client.host) redirectHost = url.host;
+    local = url.protocol === 'http:' && isLoopbackHost(url.hostname);
+    if (!local && url.host !== client.host) redirectHost = url.host;
   } catch {
     // the provider checked it; nothing to add
   }
@@ -42,6 +45,7 @@ export function consentPage({ client, query, redirectUri, scopes, error }) {
 <div class="card-static stack-md">
   <p class="accounts-consent-host"><strong>${escapeHtml(client.host)}</strong></p>
   <p class="accounts-hint">This is the website that asks. The name above is the one it gives itself.${redirectHost ? ` It will send you back to <strong>${escapeHtml(redirectHost)}</strong>.` : ''}</p>
+  ${local ? '<p class="status status-warning" role="note">This app runs on this computer: it gets the answer on a local address, which any program here could listen on. Allow it only if you just started it yourself.</p>' : ''}
   ${error ? `<p class="status status-error" role="alert">${escapeHtml(error)}</p>` : ''}
   <p>It can see which clubs you're in and your role in each, and read and change timing there as you can: drivers, transponders, tracks, decoders, sessions and the watchers link.</p>
   <p>It can't change your account or your clubs.</p>

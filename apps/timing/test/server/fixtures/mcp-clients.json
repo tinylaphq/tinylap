@@ -1,0 +1,39 @@
+{
+  "//": "Client ID Metadata Documents of real MCP clients, as their URLs served them on 2026-11-01. Tests serve these copies; refresh them when a client changes its document.",
+  "documents": [
+    {
+      "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata",
+      "client_name": "Claude",
+      "client_uri": "https://claude.ai",
+      "redirect_uris": [
+        "https://claude.ai/api/mcp/auth_callback"
+      ],
+      "grant_types": [
+        "authorization_code",
+        "refresh_token",
+        "urn:ietf:params:oauth:grant-type:jwt-bearer"
+      ],
+      "response_types": [
+        "code"
+      ],
+      "token_endpoint_auth_method": "none"
+    },
+    {
+      "client_id": "https://claude.ai/oauth/claude-code-client-metadata",
+      "client_name": "Claude Code",
+      "client_uri": "https://claude.ai",
+      "redirect_uris": [
+        "http://localhost/callback",
+        "http://127.0.0.1/callback"
+      ],
+      "grant_types": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "response_types": [
+        "code"
+      ],
+      "token_endpoint_auth_method": "none"
+    }
+  ]
+}

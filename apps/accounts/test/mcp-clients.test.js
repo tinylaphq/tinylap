@@ -261,6 +261,19 @@ test('metadata documents are cached, not fetched on every sign-in', async () => 
   assert.equal(fetched.filter((u) => u === CLIENT).length, before);
 });
 
+test('the consent page lets its form redirect to the app it names, and nowhere else', async () => {
+  const { consentCsp, PAGE_CSP } = await import('../server/app.js');
+  assert.match(consentCsp('http://127.0.0.1:53111/callback'), /form-action 'self' http:\/\/127\.0\.0\.1:53111;/);
+  assert.match(consentCsp('https://assistant.example/back?x=1'), /form-action 'self' https:\/\/assistant\.example;/);
+  assert.match(consentCsp('com.example.app:/oauth'), /form-action 'self' com\.example\.app:;/);
+  assert.equal(consentCsp('not a uri'), PAGE_CSP);
+  const { jar } = await member();
+  const { location } = await authorize(jar, { redirectUri: 'http://127.0.0.1:53999/callback' });
+  const page = await navigate(location, { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() });
+  assert.match(page.headers.get('content-security-policy'), /form-action 'self' http:\/\/127\.0\.0\.1:53999;/);
+});
+
+
 test('authorize requests from MCP clients are limited per client address', async () => {
   const { jar } = await member();
   // The earlier tests spent some of the hour's 60; spend the rest.

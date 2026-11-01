@@ -10,15 +10,25 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { driveAuthorize } from '../../../../tools/test-env.js';
 import { testSession } from '../../../accounts/test/helpers.js';
 import { startTiming } from './helpers.js';
+import real from './fixtures/mcp-clients.json' with { type: 'json' };
 
 export const CLIENT = 'https://assistant.example/oauth/client.json';
 const REDIRECT = 'http://127.0.0.1:53111/callback';
 
+/** The real clients whose documents the fixtures hold. */
+export const CLAUDE = 'https://claude.ai/oauth/mcp-oauth-client-metadata';
+export const CLAUDE_CODE = 'https://claude.ai/oauth/claude-code-client-metadata';
+
+/** Every metadata document the fake fetch serves: the test client's, and real clients' as fetched. */
+const DOCUMENTS = new Map([
+  [CLIENT, { client_id: CLIENT, client_name: 'Example Assistant', redirect_uris: ['http://127.0.0.1/callback'], token_endpoint_auth_method: 'none' }],
+  ...real.documents.map((doc) => /** @type {[string, any]} */ ([doc.client_id, doc])),
+]);
+
 /** @type {(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>} */
 const fetchMetadata = async (input) => {
-  const url = String(input instanceof Request ? input.url : input);
-  if (url !== CLIENT) return new Response('not found', { status: 404 });
-  const doc = { client_id: CLIENT, client_name: 'Example Assistant', redirect_uris: ['http://127.0.0.1/callback'], token_endpoint_auth_method: 'none' };
+  const doc = DOCUMENTS.get(String(input instanceof Request ? input.url : input));
+  if (!doc) return new Response('not found', { status: 404 });
   return new Response(JSON.stringify(doc), { headers: { 'content-type': 'application/json' } });
 };
 
@@ -28,15 +38,14 @@ export async function startMcpTiming(options = {}) {
   const token = (body) => fetch(`${t.suite.issuer}/oauth2/token`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) })
     .then(async (res) => ({ status: res.status, body: await res.json() }));
 
-  /** Signs `user` in as the MCP client and allows it: their tokens. Memberships must exist first. @param {any} user */
-  async function connect(user, { scope = 'timing offline_access' } = {}) {
+  /**
+   * Signs `user` in through the authorize URL `url` and allows it, as the browser would: where
+   * the provider sends the browser back to the client, with the code. Memberships must exist first.
+   * @param {any} user @param {URL | string} url
+   */
+  async function authorize(user, url) {
     const jar = await testSession(t.suite.accounts.auth, user.id);
-    const verifier = randomBytes(32).toString('base64url');
-    const query = new URLSearchParams({
-      response_type: 'code', client_id: CLIENT, redirect_uri: REDIRECT, scope, state: 's',
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', resource: `${t.base}/mcp`,
-    });
-    let location = new URL(/** @type {string} */ ((await driveAuthorize(`${t.suite.issuer}/oauth2/authorize?${query}`, jar)).headers.get('location')), t.suite.issuer);
+    let location = new URL(/** @type {string} */ ((await driveAuthorize(url, jar)).headers.get('location')), t.suite.issuer);
     if (location.pathname === '/consent') {
       const allowed = await fetch(`${t.suite.issuer}/consent`, {
         method: 'POST', redirect: 'manual',
@@ -45,9 +54,20 @@ export async function startMcpTiming(options = {}) {
       });
       location = new URL(/** @type {string} */ (allowed.headers.get('location')));
     }
+    return { jar, location };
+  }
+
+  /** Signs `user` in as an MCP client and allows it: their tokens. Memberships must exist first. @param {any} user */
+  async function connect(user, { scope = 'timing offline_access', client = CLIENT, redirect = REDIRECT } = {}) {
+    const verifier = randomBytes(32).toString('base64url');
+    const query = new URLSearchParams({
+      response_type: 'code', client_id: client, redirect_uri: redirect, scope, state: 's',
+      code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', resource: `${t.base}/mcp`,
+    });
+    const { jar, location } = await authorize(user, `${t.suite.issuer}/oauth2/authorize?${query}`);
     const code = location.searchParams.get('code');
     if (!code) throw new Error(`no code: ${location.href}`);
-    const { status, body } = await token({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: CLIENT, code_verifier: verifier, resource: `${t.base}/mcp` });
+    const { status, body } = await token({ grant_type: 'authorization_code', code, redirect_uri: redirect, client_id: client, code_verifier: verifier, resource: `${t.base}/mcp` });
     if (status !== 200) throw new Error(`token ${status} ${JSON.stringify(body)}`);
     return { jar, accessToken: body.access_token, refreshToken: body.refresh_token };
   }
@@ -75,5 +95,5 @@ export async function startMcpTiming(options = {}) {
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
 
-  return { ...t, connect, refresh, client, call, post };
+  return { ...t, authorize, connect, refresh, client, call, post };
 }

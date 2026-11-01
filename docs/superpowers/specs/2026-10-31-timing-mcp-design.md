@@ -47,7 +47,7 @@ Anti-goals (a failure even if it works):
 
 ### 4.1 Timing as a protected resource
 
-- The MCP resource is `${TIMING_PUBLIC_URL}/mcp`. Its metadata (RFC 9728) is served at `/.well-known/oauth-protected-resource/mcp`: `{ resource, authorization_servers: [issuer], bearer_methods_supported: ["header"], scopes_supported: ["timing", "offline_access"], resource_name: "TinyLap Timing" }`. Both routes are in `openapi.json`, so the contract test covers them.
+- The MCP resource is `${TIMING_PUBLIC_URL}/mcp`. Its metadata (RFC 9728) is served at `/.well-known/oauth-protected-resource/mcp`: `{ resource, authorization_servers: [issuer], bearer_methods_supported: ["header"], scopes_supported: ["timing", "offline_access"], resource_name: "TinyLap Timing" }`. It is served at the root `/.well-known/oauth-protected-resource` too, for clients that probe there. All three routes are in `openapi.json`, so the contract test covers them.
 - Without a token, or with one that fails, `/mcp` answers 401 with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp", scope="timing offline_access"`. When the token is expired, invalid or stale (below), the header also carries `error="invalid_token"`. A valid token without the `timing` scope gets 403 with `error="insufficient_scope"`.
 - Tokens are checked with `verifyAccessToken` from `@tinylap/auth`, with the audience set to the MCP resource, and must carry the `timing` scope. A token issued for the timing app's BFF (audience: the timing origin) fails the check. An MCP token can't pass as a BFF session, since the BFF never reads bearer tokens. When the issuer's keys can't be reached, `/mcp` answers 503.
 - **The member's name** is a `name` claim in the access token, added in accounts' `customAccessTokenClaims` next to `workspaces`. MCP tokens are issued without `openid`, so their only audience is the MCP resource and they can't call accounts' userinfo. The audience of an `openid` token also includes `/oauth2/userinfo`.
@@ -83,8 +83,10 @@ Today `/consent` says no other apps can ask for access. It becomes a real page, 
 - **Heading:** "Allow *{client_name}* to run timing as you?"
 - **Below it, larger than the name:** the host of the `client_id` URL (for example `claude.ai`). This is the only identity accounts has verified. When the redirect URI's host is different, and isn't loopback, the page also says "It will send you back to *{host}*." The client's logo is not shown, and the name is plain text, cut to 60 characters.
 - **What it can do, in the member's words:** "See which clubs you're in and your role in each, and read and change timing there as you can: drivers, transponders, tracks, decoders, sessions and the watchers link. It can't change your account or your clubs."
+- **An app on this computer is flagged.** When the redirect is a loopback address, as with command-line and desktop clients, the page warns that any local program could listen there. The member should allow it only if they just started it themselves. The MCP spec asks for this warning.
 - **"Stay connected"** is shown when `offline_access` is asked for: "Until you disconnect it on your account page."
 - **Two plain forms:** Allow and Cancel. Each POSTs the signed query back to accounts' own `/consent`, from the same origin. Accounts checks the signature, then passes the answer on to the provider's `/oauth2/consent` as a whole request (that endpoint isn't on the HTTP router, and it needs a request object). Then it answers 303 to the redirect the provider gives. A failed form comes back as the same page with status 422. A request whose signature or time has run out, or whose client isn't an MCP client, gets a 410 page that sends the member back to the app.
+- **The page's policy allows that one redirect.** Browsers apply `form-action` to the redirect that follows a form post. The consent page's CSP therefore adds the redirect URI's origin, or its scheme for a private-use URI, to `form-action 'self'`. It allows only the one target the signed request names. Without this, Chrome blocks the way back to the app after Allow.
 - Consent is remembered per client, so the next sign-in skips the page, until the member disconnects the client.
 
 ### 4.5 Connected apps on the account page
@@ -227,7 +229,8 @@ Notes:
   - the consent page: render, the redirect host shown, Allow, Cancel, 422;
   - connected apps: list, Disconnect revokes refresh tokens and sends the notice, first-party clients hidden.
 - **End to end, in Node:** accounts and timing run together (`test/server/mcp-rig.js`). The test client's metadata document comes from a fake fetch. It signs in through a test helper that sets a session, consents on the real consent form, gets a token, and drives the tools with the official MCP client. It then disconnects on the account page and is refused at once.
-- **Browser:** none yet. The passkey ceremony in front of consent is the one accounts' browser suite already covers, and every step after it runs in Node.
+- **Real clients:** `test/server/fixtures/mcp-clients.json` holds the metadata documents of Claude's hosted apps and of Claude Code, as their URLs served them. Each signs in with its own redirect: `https://claude.ai/api/mcp/auth_callback`, and loopback on `localhost` and `127.0.0.1` on any port. The official client SDK starts from a bare 401 and finds the authorization server through discovery alone. It identifies itself by its metadata document, finishes after consent, and calls a tool.
+- **Browser:** `apps/accounts/test/browser/mcp.test.js` runs in Chrome with a virtual authenticator. A signed-out member signs up with a passkey from the sign-in page the authorize request led to, and lands on consent. Allow sends the code back to the app's loopback callback. A returning member signs in with their passkey and cancels. Disconnect on the account page removes the app, and the next sign-in asks again.
 
 ## 10. Left to the builder
 

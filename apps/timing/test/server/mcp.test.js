@@ -42,6 +42,11 @@ test('the protected resource metadata names accounts and the timing scope', asyn
   });
 });
 
+test('the metadata is at the root too, for clients that look there', async () => {
+  const root = await (await fetch(`${t.base}/.well-known/oauth-protected-resource`)).json();
+  assert.equal(root.resource, `${t.base}/mcp`);
+});
+
 test('without a token: 401 with a challenge that leads to sign-in', async () => {
   const res = await t.post(INIT);
   assert.equal(res.status, 401);
