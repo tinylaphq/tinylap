@@ -164,15 +164,17 @@ test('setup on a phone: a driver row keeps the whole name in view, its actions o
   const m = await row.evaluate(measure);
   assert.ok(m.fits, 'the whole name shows');
   assert.equal(m.error, null);
-  assert.equal(Math.round(m.saveTop - m.inputBottom), m.gap, 'Save is below the name, one row gap away: no empty error row between');
+  // Within a pixel: rows can land on half pixels. An empty error row would add a whole row gap.
+  const near = (px, gap, what) => assert.ok(Math.abs(px - gap) <= 1, `${what}: ${px}px, not ${gap}px`);
+  near(m.saveTop - m.inputBottom, m.gap, 'Save is below the name, one row gap away: no empty error row between');
   // A refused rename: the error takes the row between, a row gap on each side.
   await row.locator('input[name="name"]').evaluate((input) => { input.form.noValidate = true; input.value = ''; });
   await row.locator('button[type="submit"]').click();
   const refused = page.locator('#drivers .setup-row', { has: page.locator('.field-error') });
   await refused.waitFor();
   const e = await refused.evaluate(measure);
-  assert.equal(Math.round(e.error.top - e.inputBottom), e.gap, 'the error under the name');
-  assert.equal(Math.round(e.saveTop - e.error.bottom), e.gap, 'Save under the error');
+  near(e.error.top - e.inputBottom, e.gap, 'the error under the name');
+  near(e.saveTop - e.error.bottom, e.gap, 'Save under the error');
   assert.deepEqual(errors.filter((x) => !/status of 422/.test(x)), [], 'nothing but the refused form');
 });
 
