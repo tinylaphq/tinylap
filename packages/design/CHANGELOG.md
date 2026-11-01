@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/tinylaphq/tinylap/compare/design-v0.3.0...design-v0.4.0) (2026-11-01)
+
+
+### Features
+
+* **timing-app:** sound as an icon switch, notifications in the account menu ([#60](https://github.com/tinylaphq/tinylap/issues/60)) ([56d3c7e](https://github.com/tinylaphq/tinylap/commit/56d3c7e91cb718eaedabc31952a3def2486ee693))
+* **timing:** named tracks, optional layouts and the idle board ([#57](https://github.com/tinylaphq/tinylap/issues/57)) ([2d451e5](https://github.com/tinylaphq/tinylap/commit/2d451e5c74671ae748fe4c1692374dca0b00fc39))
+* **timing:** sessions started by hand, history and track records ([#54](https://github.com/tinylaphq/tinylap/issues/54)) ([afbdc92](https://github.com/tinylaphq/tinylap/commit/afbdc92be981728b5c509331023fb6796ee8f0ec))
+
+
+### Bug Fixes
+
+* **timing-app:** aligned columns, long names and phone layouts from the UI review ([#61](https://github.com/tinylaphq/tinylap/issues/61)) ([3942147](https://github.com/tinylaphq/tinylap/commit/3942147235436c24c30bc60949575803123afecb))
+
 ## [0.3.0](https://github.com/tinylaphq/tinylap/compare/design-v0.2.0...design-v0.3.0) (2026-10-20)
 
 
