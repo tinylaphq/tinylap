@@ -256,14 +256,19 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .tap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--p-space-md); }
 /* On a phone, a narrower gap gives each of the two tiles the room for a long surname at 1rem. */
 @media (max-width: 480px) { .tap-grid { gap: var(--p-space-sm); } }
-/* Below 380px two tiles can't hold a long surname at 1rem; down to 0.875rem it stays whole instead of being cut. */
-@media (max-width: 379px) { .tap-form > .tap-tile { font-size: clamp(0.875rem, (100cqi - 2 * var(--p-space-sm)) / (var(--word, 8) * 0.6), 1.5rem); } }
+/* Below 380px the screen, the gap and the tiles give up some padding, so two
+   tiles still hold a long surname such as Featherstonehaugh whole at 1rem. */
+@media (max-width: 379px) {
+  .tap-screen { padding-inline: var(--p-space-sm); }
+  .tap-grid { gap: var(--p-space-xs); }
+  .tap-form > .tap-tile { padding-inline: var(--p-space-xs); }
+}
 .tap-tile {
   min-height: 7rem;
   /* A name as it is written (upper case turns Müßig into MÜSSIG), as big as
    * the tile allows for its longest word (--word, in letters, at about 0.6em
-   * a letter), never under 1rem (0.875rem on a small phone); it breaks
-   * between words only, and a word still too long ends in "…" (.tap-tile-name). */
+   * a letter), never under 1rem; it breaks between words only, and a word
+   * still too long at 1rem ends in "…" (.tap-tile-name). */
   font: 700 clamp(1rem, (100cqi - 2 * var(--p-space-sm)) / (var(--word, 8) * 0.6), 1.5rem)/1.15 var(--p-font);
   text-transform: none;
   letter-spacing: 0;

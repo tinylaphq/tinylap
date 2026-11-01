@@ -138,7 +138,7 @@ test('while a session runs (Tap, the start form, the board\'s track strip), the 
       const grid = el.closest('.tap-grid').getBoundingClientRect();
       return { cut: name.scrollWidth > name.clientWidth, overflow: getComputedStyle(name).textOverflow, size: parseFloat(getComputedStyle(el).fontSize), inGrid: el.getBoundingClientRect().right <= grid.right + 0.5, title: name.title };
     });
-    assert.deepEqual(tile, { cut: true, overflow: 'ellipsis', size: width < 380 ? 14 : 16, inGrid: true, title: WORD });
+    assert.deepEqual(tile, { cut: true, overflow: 'ellipsis', size: 16, inGrid: true, title: WORD });
     // A screen reader hears the whole name on the button.
     assert.equal(await page.getByRole('button', { name: WORD }).count(), 1);
     await context.close();

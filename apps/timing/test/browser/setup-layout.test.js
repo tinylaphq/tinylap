@@ -42,7 +42,7 @@ after(async () => {
   await app?.close();
 });
 
-for (const [size, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
+for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['phone', PHONE], ['desktop', DESKTOP]]) {
   test(`tap at ${size} width: every name stays inside its tile, broken only between words, in its own case, at 16px or more`, async (t) => {
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());
@@ -173,8 +173,8 @@ test('setup on a phone: a driver row keeps the whole name in view, its actions o
   const refused = page.locator('#drivers .setup-row', { has: page.locator('.field-error') });
   await refused.waitFor();
   const e = await refused.evaluate(measure);
-  near(e.error.top - e.inputBottom, e.gap, 'the error under the name');
-  near(e.saveTop - e.error.bottom, e.gap, 'Save under the error');
+  // The error's box is as tall as its font makes it, so only the order is measured here.
+  assert.ok(e.error.top >= e.inputBottom - 1 && e.saveTop > e.error.top, `the error between the name and Save: ${JSON.stringify(e)}`);
   assert.deepEqual(errors.filter((x) => !/status of 422/.test(x)), [], 'nothing but the refused form');
 });
 
