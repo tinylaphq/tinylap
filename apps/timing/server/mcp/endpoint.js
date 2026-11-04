@@ -186,9 +186,9 @@ const handler = createMcpHandler(({ authInfo }) => {
 /**
  * The body as text, or null as soon as it passes `max` bytes: reading stops
  * there, and the caller answers with Connection: close so the rest is never read.
- * @param {import('node:http').IncomingMessage} req @param {number} max @returns {Promise<string | null>}
+ * @param {import('node:stream').Readable} req @param {number} max @returns {Promise<string | null>}
  */
-function readCapped(req, max) {
+export function readCapped(req, max) {
   return new Promise((resolve, reject) => {
     /** @type {Buffer[]} */
     const chunks = [];

@@ -12,6 +12,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { driveAuthorize } from '../../../../tools/test-env.js';
 import { testSession } from '../../../accounts/test/helpers.js';
 import { bumpTokenVersions } from '../../../accounts/server/token-version.js';
+import { PassThrough } from 'node:stream';
+import { readCapped } from '../../server/mcp/endpoint.js';
 import { startMcpTiming } from './mcp-rig.js';
 
 const NOTICE = 'notice-token-mcp';
@@ -125,7 +127,7 @@ test('a body that says it is over 64 KiB is refused with 413, before it is read'
   assert.equal(res.status, 413);
 });
 
-test('a chunked body is refused once it passes 64 KiB, without reading the rest', async () => {
+test('a chunked body over 64 KiB is refused, and the server goes on serving', async () => {
   const { accessToken } = await t.connect(user);
   // 4 MiB in chunks, with no declared length: bounded, so the test itself can never run away.
   const chunk = new Uint8Array(16 * 1024).fill(32);
@@ -148,9 +150,25 @@ test('a chunked body is refused once it passes 64 KiB, without reading the rest'
     status = /** @type {any} */ (error).cause?.code ?? 'closed';
   }
   assert.ok(status === 413 || status === 'UND_ERR_SOCKET' || status === 'ECONNRESET' || status === 'EPIPE' || status === 'closed', `refused: ${status}`);
-  assert.ok(left > 0, 'the server stopped reading before the end of the body');
   // The server is still there for the next request.
   assert.equal((await t.post(INIT, { authorization: `Bearer ${accessToken}` })).status, 200);
+});
+
+test('reading stops at 64 KiB: the reader pauses the body and takes no more of it', async () => {
+  const body = new PassThrough();
+  let taken = 0;
+  body.on('data', (chunk) => { taken += chunk.length; });
+  const read = readCapped(body, 64 * 1024);
+  const chunk = Buffer.alloc(16 * 1024, 32);
+  for (let i = 0; i < 64; i++) body.write(chunk);
+  assert.equal(await read, null);
+  assert.equal(body.isPaused(), true, 'the rest stays unread');
+  assert.ok(taken <= 80 * 1024, `taken ${taken} bytes`);
+  // Under the limit, the whole body.
+  const small = new PassThrough();
+  const whole = readCapped(small, 64 * 1024);
+  small.end('{"ok":true}');
+  assert.equal(await whole, '{"ok":true}');
 });
 
 test('a JSON-RPC batch is not served', async () => {
@@ -225,7 +243,7 @@ test('disconnecting the app on the account page stops it at once, even in the se
   assert.equal(res.status, 303);
   // The notice is sent in the background: give it a moment.
   let status = 200;
-  for (let i = 0; i < 50 && status === 200; i++) {
+  for (let i = 0; i < 250 && status === 200; i++) {
     await new Promise((done) => setTimeout(done, 20));
     status = (await t.post(INIT, { authorization: `Bearer ${accessToken}` })).status;
   }

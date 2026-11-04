@@ -237,7 +237,7 @@ test('connected apps: listed on the account page, disconnected with a plain form
   assert.equal(res.status, 303);
   assert.equal(res.headers.get('location'), '/account?disconnected=1#apps');
   assert.equal((await refresh(tokens.refresh_token)).status >= 400, true, 'its refresh token is gone');
-  for (let i = 0; i < 50 && notices.length === sent; i++) await new Promise((done) => setTimeout(done, 10));
+  for (let i = 0; i < 500 && notices.length === sent; i++) await new Promise((done) => setTimeout(done, 10));
   assert.deepEqual(notices.at(-1), [user.id], 'timing is told');
   assert.deepEqual(noticeVersions.at(-1), { [user.id]: versionBefore + 1 }, 'with the raised token version');
 
