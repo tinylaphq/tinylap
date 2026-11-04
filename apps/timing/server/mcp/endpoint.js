@@ -73,13 +73,14 @@ async function authenticate(request) {
     return { refused: challenge(request, 401, 'invalid_token', 'The access token is not valid for this server.') };
   }
   // A notice since the token was issued (a membership changed, the app was disconnected): its claims are stale.
-  // Refused if older than the newest version a notice named, or issued before a notice without one (to the second).
+  // Refused if older than the newest version a notice named, or issued before a notice without one, or in its second:
+  // accounts sends that notice after deleting the account, so no token for the member can be newer.
   const stale = request.store?.stale.of(claims.sub);
   const tv = /** @type {any} */ (claims).tv;
   const tokenVersion = Number.isSafeInteger(tv) ? Number(tv) : 0;
   const outdated = Boolean(stale) && (
     (stale.version !== null && tokenVersion < stale.version)
-    || (stale.plainSince !== null && typeof claims.iat === 'number' && claims.iat < Math.floor(stale.plainSince / 1000)));
+    || (stale.plainSince !== null && typeof claims.iat === 'number' && claims.iat <= Math.floor(stale.plainSince / 1000)));
   if (outdated) return { refused: challenge(request, 401, 'invalid_token', 'The access token is out of date. Refresh it.') };
   const scopes = typeof claims.scope === 'string' ? claims.scope.split(' ') : [];
   if (!scopes.includes(SCOPE)) return { refused: challenge(request, 403, 'insufficient_scope', 'This token may not run timing.') };

@@ -179,8 +179,8 @@ test('a notice without versions still counts after a versioned one, as after an 
   assert.equal((await t.post(INIT, { authorization: `Bearer ${first}` })).status, 401);
   const fresh = await t.refresh(refreshToken);
   assert.equal((await t.post(INIT, { authorization: `Bearer ${fresh.body.access_token}` })).status, 200, 'the new version passes');
-  await new Promise((done) => setTimeout(done, 1100));
-  // Accounts deleted the account: its notice can't name a version any more.
+  // Accounts deleted the account: its notice can't name a version any more. No new token can follow it,
+  // so even one issued in the same second is refused.
   assert.equal((await notice({ users: [someone.id] })).status, 204);
   assert.equal((await t.post(INIT, { authorization: `Bearer ${fresh.body.access_token}` })).status, 401, 'refused by the time, whatever its version');
 });
