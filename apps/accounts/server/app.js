@@ -33,7 +33,7 @@ import { accountPage } from './pages/account.js';
 import { privacyPage } from './pages/privacy.js';
 import { signedOutPage } from './pages/signed-out.js';
 import { listPasskeys, ownedClubs, recoveryCodesLeft } from './account.js';
-import { clientHost, clientName, disconnect, disconnectedName, listConnections } from './connections.js';
+import { clientHost, clientName, disconnect, listConnections } from './connections.js';
 import { consentGonePage, consentPage } from './pages/consent.js';
 import { createNotifier } from './notices.js';
 import { bumpTokenVersions } from './token-version.js';
@@ -348,7 +348,8 @@ export async function createAccounts(config, extras = {}) {
         owned: ownedClubs(db, id),
         plannerExport: planner && `${planner}/library/export`,
         connections: listConnections(db, id),
-        disconnected: disconnectedName(db, id, url.searchParams.get('disconnected')),
+        // A fixed message: nothing from the URL (or from a client's own document) reaches the page.
+        disconnected: url.searchParams.get('disconnected') === '1',
       }));
     }
     const invite = /^\/invite\/([^/]+)$/.exec(pathname);
@@ -531,7 +532,7 @@ export async function createAccounts(config, extras = {}) {
     const clientId = form.get('client') ?? '';
     const done = disconnect(db, session.user.id, clientId);
     if (done) notify([session.user.id]);
-    const query = done ? `?disconnected=${encodeURIComponent(clientId)}` : '';
+    const query = done ? '?disconnected=1' : '';
     return send(req, res, 303, { Location: `/account${query}#apps`, 'Cache-Control': 'no-store' }, '');
   }
 

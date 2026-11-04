@@ -235,14 +235,14 @@ test('connected apps: listed on the account page, disconnected with a plain form
     body: new URLSearchParams({ client: CLIENT }),
   });
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), `/account?disconnected=${encodeURIComponent(CLIENT)}#apps`);
+  assert.equal(res.headers.get('location'), '/account?disconnected=1#apps');
   assert.equal((await refresh(tokens.refresh_token)).status >= 400, true, 'its refresh token is gone');
   for (let i = 0; i < 50 && notices.length === sent; i++) await new Promise((done) => setTimeout(done, 10));
   assert.deepEqual(notices.at(-1), [user.id], 'timing is told');
   assert.deepEqual(noticeVersions.at(-1), { [user.id]: versionBefore + 1 }, 'with the raised token version');
 
-  const after = await (await navigate(new URL(`/account?disconnected=${encodeURIComponent(CLIENT)}`, accounts.issuer), { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() })).text();
-  assert.match(after, /Example Assistant is disconnected/);
+  const after = await (await navigate(new URL('/account?disconnected=1', accounts.issuer), { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() })).text();
+  assert.match(after, /The app is disconnected\./);
   // A crafted link puts no words of its own on the page.
   const crafted = await (await navigate(new URL('/account?disconnected=Your%20passkeys%20were%20removed', accounts.issuer), { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() })).text();
   assert.doesNotMatch(crafted, /passkeys were removed|is disconnected/);

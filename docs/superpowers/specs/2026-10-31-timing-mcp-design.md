@@ -61,7 +61,7 @@ Access tokens are self-contained JWTs that live `TINYLAP_ACCESS_TTL` (600 s), an
   - A token issued in the same second as the change is cut off too, and no clocks are compared: `tv` and the version both come from accounts.
   - A token issued after the raise carries the new version and passes.
   - The client refreshes the token and gets fresh claims, or, if it was disconnected, its refresh fails and it must sign in again.
-- A notice without `versions` falls back to its time: a token issued in an earlier second, by timing's clock, is refused.
+- A notice without a version for a member falls back to its time, kept apart from the version: a token issued in an earlier second, by timing's clock, is refused whatever its `tv`. Accounts sends such a notice after it deleted an account, when there is no version left to raise.
 - An entry is pruned after a day, long after every token issued before it has expired.
 - If a notice can't be delivered, the cut-off falls back to the token lifetime. Accounts logs the failure, as it does today.
 
@@ -95,7 +95,7 @@ Today `/consent` says no other apps can ask for access. It becomes a real page, 
 
 ### 4.5 Connected apps on the account page
 
-- A new section, "Connected apps", lists each client the member has consented to: its name, its domain, when they allowed it, and when it was last used (the newest refresh token issued to it, since each refresh issues one). When there are none it says so in one line. After a disconnect the page says which app was disconnected.
+- A new section, "Connected apps", lists each client the member has consented to: its name, its domain, when they allowed it, and when it was last used (the newest refresh token issued to it, since each refresh issues one). When there are none it says so in one line. After a disconnect the page says "The app is disconnected.": a fixed message, so neither the URL nor a client's own document can put words in it.
 - Each row has a **Disconnect** form: a POST, then a 303 back to the account page. Disconnecting does three things:
   - deletes the consent;
   - deletes the member's refresh tokens (and any stored access tokens) for that client;

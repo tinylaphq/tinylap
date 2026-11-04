@@ -22,10 +22,10 @@ const quoteList = (names) => names.map((n) => `"${escapeHtml(n)}"`).join(', ');
  *   owned: string[],
  *   plannerExport: string | null,
  *   connections?: { clientId: string, name: string, host: string, allowedAt: string, lastUsedAt: string | null }[],
- *   disconnected?: string | null,
+ *   disconnected?: boolean,
  * }} view
  */
-export function accountPage({ user, passkeys, codesLeft, owned, plannerExport, connections = [], disconnected = null }) {
+export function accountPage({ user, passkeys, codesLeft, owned, plannerExport, connections = [], disconnected = false }) {
   const only = passkeys.length <= 1;
   const passkeyRows = passkeys.map((k, i) => `
     <li class="accounts-row" data-passkey="${escapeHtml(k.id)}" data-label="${escapeHtml(k.name ?? `Passkey ${i + 1}`)}">
@@ -46,7 +46,7 @@ export function accountPage({ user, passkeys, codesLeft, owned, plannerExport, c
   const apps = `
 <section class="stack-md" id="apps" aria-labelledby="apps-heading">
   <h2 class="h3" id="apps-heading">Connected apps <span class="accounts-count">${connections.length}</span></h2>
-  ${disconnected ? `<p class="status status-success" role="status">${escapeHtml(disconnected)} is disconnected. It can't use your account any more.</p>` : ''}
+  ${disconnected ? '<p class="status status-success" role="status">The app is disconnected. It can\'t use your account any more.</p>' : ''}
   ${connections.length
     ? `<ul class="accounts-list">${appRows}
   </ul>

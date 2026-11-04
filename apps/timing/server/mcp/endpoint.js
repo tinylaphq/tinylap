@@ -11,7 +11,7 @@ import { Readable } from 'node:stream';
 import { AuthError, verifyAccessToken } from '@tinylap/auth';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { workspaceRefusal } from '../access.js';
-import { clientOf, MAX_BODY, readBody } from '../body.js';
+import { clientOf, MAX_BODY } from '../body.js';
 import { PROBLEMS } from '../problems.js';
 import { json, problem } from '../responses.js';
 import { check, issue } from './confirm.js';
@@ -73,13 +73,13 @@ async function authenticate(request) {
     return { refused: challenge(request, 401, 'invalid_token', 'The access token is not valid for this server.') };
   }
   // A notice since the token was issued (a membership changed, the app was disconnected): its claims are stale.
-  // The token version decides when the notice named one; otherwise, its time, to the second.
+  // Refused if older than the newest version a notice named, or issued before a notice without one (to the second).
   const stale = request.store?.stale.of(claims.sub);
   const tv = /** @type {any} */ (claims).tv;
   const tokenVersion = Number.isSafeInteger(tv) ? Number(tv) : 0;
-  const outdated = stale && (stale.version !== null
-    ? tokenVersion < stale.version
-    : typeof claims.iat === 'number' && claims.iat < Math.floor(stale.since / 1000));
+  const outdated = Boolean(stale) && (
+    (stale.version !== null && tokenVersion < stale.version)
+    || (stale.plainSince !== null && typeof claims.iat === 'number' && claims.iat < Math.floor(stale.plainSince / 1000)));
   if (outdated) return { refused: challenge(request, 401, 'invalid_token', 'The access token is out of date. Refresh it.') };
   const scopes = typeof claims.scope === 'string' ? claims.scope.split(' ') : [];
   if (!scopes.includes(SCOPE)) return { refused: challenge(request, 403, 'insufficient_scope', 'This token may not run timing.') };
@@ -182,6 +182,31 @@ const handler = createMcpHandler(({ authInfo }) => {
   return buildServer(base, claims);
 }, { maxRequestBodySize: MAX_BODY });
 
+/**
+ * The body as text, or null as soon as it passes `max` bytes: reading stops
+ * there, and the caller answers with Connection: close so the rest is never read.
+ * @param {import('node:http').IncomingMessage} req @param {number} max @returns {Promise<string | null>}
+ */
+function readCapped(req, max) {
+  return new Promise((resolve, reject) => {
+    /** @type {Buffer[]} */
+    const chunks = [];
+    let size = 0;
+    const onData = (/** @type {Buffer} */ chunk) => {
+      size += chunk.length;
+      if (size > max) {
+        req.off('data', onData).off('end', onEnd).off('error', reject);
+        req.pause();
+        resolve(null);
+        return;
+      }
+      chunks.push(chunk);
+    };
+    const onEnd = () => resolve(Buffer.concat(chunks).toString('utf8'));
+    req.on('data', onData).on('end', onEnd).on('error', reject);
+  });
+}
+
 /** Sends an SDK answer through the app's send(): a buffered body, or a stream when it streams. */
 async function fromWeb(response) {
   /** @type {Record<string, string>} */
@@ -226,13 +251,11 @@ async function mcp(request) {
 
   let text;
   if (req.method === 'POST') {
-    // A declared length over the limit is refused before anything is read.
-    if (Number(req.headers['content-length'] ?? 0) > MAX_BODY) {
-      req.resume();
-      return problem(request, 'too-large', 'A request body may be at most 64 KiB.');
-    }
-    text = await readBody(req, MAX_BODY);
-    if (text === null) return problem(request, 'too-large', 'A request body may be at most 64 KiB.');
+    // Over the limit, by its declared length or once 64 KiB have come: 413, and the connection
+    // closes without reading the rest.
+    const capped = Number(req.headers['content-length'] ?? 0) > MAX_BODY ? null : await readCapped(req, MAX_BODY);
+    if (capped === null) return problem(request, 'too-large', 'A request body may be at most 64 KiB.', { Connection: 'close' });
+    text = capped;
   } else {
     req.resume();
   }

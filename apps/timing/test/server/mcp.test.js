@@ -125,6 +125,20 @@ test('a body that says it is over 64 KiB is refused with 413, before it is read'
   assert.equal(res.status, 413);
 });
 
+test('a chunked body is refused once it passes 64 KiB, without reading the rest', async () => {
+  const { accessToken } = await t.connect(user);
+  let sent = 0;
+  const chunk = new Uint8Array(16 * 1024).fill(32);
+  // An endless body: the server must answer without waiting for its end.
+  const body = new ReadableStream({ pull(controller) { sent += chunk.length; controller.enqueue(chunk); } });
+  const res = await fetch(`${t.base}/mcp`, {
+    method: 'POST', body, duplex: 'half',
+    headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+  });
+  assert.equal(res.status, 413);
+  assert.ok(sent < 64 * 1024 * 1024, `the server stopped reading (sent ${sent} bytes)`);
+});
+
 test('a JSON-RPC batch is not served', async () => {
   const { accessToken } = await t.connect(user);
   const res = await t.post([INIT, { ...INIT, id: 2 }], { authorization: `Bearer ${accessToken}` });
@@ -155,6 +169,20 @@ test('a notice with token versions refuses older tokens at once, in the same sec
   // A malformed versions map is refused.
   assert.equal((await notice({ users: [user.id], versions: { [user.id]: -1 } })).status, 422);
   assert.equal((await notice({ users: [user.id], versions: { someoneElse: 1 } })).status, 422);
+});
+
+test('a notice without versions still counts after a versioned one, as after an account deletion', async () => {
+  const someone = await t.signUp('Emil');
+  const { accessToken: first, refreshToken } = await t.connect(someone);
+  const versions = bumpTokenVersions(t.suite.accounts.db, [someone.id]);
+  assert.equal((await notice({ users: [someone.id], versions })).status, 204);
+  assert.equal((await t.post(INIT, { authorization: `Bearer ${first}` })).status, 401);
+  const fresh = await t.refresh(refreshToken);
+  assert.equal((await t.post(INIT, { authorization: `Bearer ${fresh.body.access_token}` })).status, 200, 'the new version passes');
+  await new Promise((done) => setTimeout(done, 1100));
+  // Accounts deleted the account: its notice can't name a version any more.
+  assert.equal((await notice({ users: [someone.id] })).status, 204);
+  assert.equal((await t.post(INIT, { authorization: `Bearer ${fresh.body.access_token}` })).status, 401, 'refused by the time, whatever its version');
 });
 
 test('a notice without versions falls back to its time, to the second', async () => {

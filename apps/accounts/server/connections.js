@@ -54,19 +54,6 @@ export function listConnections(db, userId) {
 }
 
 /**
- * The name for "… is disconnected" after a disconnect, from the client id in
- * the redirect: only an MCP client that exists and that the member is no
- * longer connected to, so a crafted link can't put words on the page.
- * @param {Db} db @param {string} userId @param {string | null} clientId
- */
-export function disconnectedName(db, userId, clientId) {
-  if (!clientId) return null;
-  const row = db.prepare(`SELECT c.name AS name FROM oauthClient c WHERE c.clientId = ? AND c.clientDiscoveryId IS NOT NULL
-    AND NOT EXISTS (SELECT 1 FROM oauthConsent k WHERE k.clientId = c.clientId AND k.userId = ?)`).get(clientId, userId);
-  return row ? clientName(row.name, clientId) : null;
-}
-
-/**
  * Disconnects one app: its consent and every token it holds for the member
  * go. Its access tokens are JWTs that can't be recalled; the notice the
  * caller sends makes timing refuse them (spec §4.2). True if it was connected.

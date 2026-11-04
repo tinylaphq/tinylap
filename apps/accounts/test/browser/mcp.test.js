@@ -142,7 +142,7 @@ test('the account page lists the app, and Disconnect removes it', async (t) => {
   assert.match(await apps.textContent(), /assistant\.example · allowed/);
   await apps.getByRole('button', { name: 'Disconnect' }).click();
   await page.waitForURL((u) => u.pathname === '/account' && u.searchParams.has('disconnected'));
-  assert.match(await apps.textContent(), /Example Assistant is disconnected/);
+  assert.match(await apps.textContent(), /The app is disconnected\./);
   assert.match(await apps.textContent(), /No apps are connected to your account\./);
 
   // The next sign-in asks again.
