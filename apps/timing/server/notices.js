@@ -31,11 +31,18 @@ async function notice(request) {
   }
   const { body, error } = await readJson(request);
   if (error) return error;
-  const { users } = body;
+  const { users, versions = {} } = body;
   if (!Array.isArray(users) || users.length < 1 || users.length > MAX_USERS || users.some((u) => typeof u !== 'string' || !u)) {
     return problem(request, 'invalid-request', `users must list 1 to ${MAX_USERS} user ids.`);
   }
+  // Each member's new token version, when accounts sends it (timing MCP spec §4.2).
+  if (!versions || typeof versions !== 'object' || Array.isArray(versions)
+    || Object.entries(versions).some(([user, v]) => !users.includes(user) || !Number.isSafeInteger(v) || v < 0)) {
+    return problem(request, 'invalid-request', 'versions must map listed user ids to whole numbers.');
+  }
   for (const user of users) request.auth.bff.stale(user);
+  // MCP tokens issued before now are refused, so their clients refresh (timing MCP spec §4.2).
+  request.store?.stale.mark(users, request.now(), versions);
   request.streams.recheck(users);
   return { status: 204, headers: { 'Cache-Control': 'no-store' } };
 }

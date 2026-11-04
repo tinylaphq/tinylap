@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS recovery_code (
   UNIQUE (lookup_id)
 );
 CREATE INDEX IF NOT EXISTS recovery_code_user ON recovery_code (user_id);
+CREATE TABLE IF NOT EXISTS token_version (
+  user_id TEXT PRIMARY KEY REFERENCES "user" (id) ON DELETE CASCADE,
+  version INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS deletion (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL CHECK (kind IN ('user', 'workspace')),
