@@ -218,6 +218,7 @@ test('sessions: start, the replace question bound to the running session, end an
   const asked = await call(member, 'start_session', { kind: 'race', roster: [anna.id], duration_seconds: 60, countdown_seconds: 0 });
   assert.equal(asked.value.status, 'confirm');
   assert.match(asked.value.message, /A practice has been running for under a minute/);
+  assert.match(asked.value.message, /Starting this race ends it, as a finished practice\./);
   assert.equal(t.store.runningSession(clubId).id, running.id, 'nothing replaced yet');
 
   // Another session starts in between: the old confirmation asks again, and replaces nothing.
@@ -233,6 +234,8 @@ test('sessions: start, the replace question bound to the running session, end an
   assert.equal(race.value.status, 'done', race.text);
   assert.equal(race.value.result.kind, 'race');
 
+  const overRace = await call(member, 'start_session', { kind: 'practice' });
+  assert.match(overRace.value.message, /Starting this practice aborts it; its laps stay in the history\./);
   const wrongEnd = await call(member, 'end_session', { session: race.value.result.id });
   assert.equal(wrongEnd.value.problem, 'not-found', 'end is for a practice');
   const abortAsk = await call(member, 'abort_session', { session: race.value.result.id });

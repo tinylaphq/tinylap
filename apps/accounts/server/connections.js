@@ -24,8 +24,9 @@ export function clientHost(clientId) {
 /** A client's name as shown: plain text, at most 60 characters, its host when it has none. */
 export function clientName(name, clientId) {
   const text = typeof name === 'string' ? name.normalize('NFC').replace(/\s+/g, ' ').trim() : '';
+  // Control characters, and the invisible ones that reorder or hide text (bidi overrides, zero-width).
   // eslint-disable-next-line no-control-regex
-  const clean = text.replace(/[\u0000-\u001f\u007f]/g, '');
+  const clean = text.replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff]/g, '').trim();
   if (!clean) return clientHost(clientId);
   const chars = [...clean];
   return chars.length > 60 ? `${chars.slice(0, 59).join('')}…` : clean;
@@ -50,6 +51,19 @@ export function listConnections(db, userId) {
       allowedAt: iso(r.allowedAt),
       lastUsedAt: r.lastUsedAt === null ? null : iso(r.lastUsedAt),
     }));
+}
+
+/**
+ * The name for "… is disconnected" after a disconnect, from the client id in
+ * the redirect: only an MCP client that exists and that the member is no
+ * longer connected to, so a crafted link can't put words on the page.
+ * @param {Db} db @param {string} userId @param {string | null} clientId
+ */
+export function disconnectedName(db, userId, clientId) {
+  if (!clientId) return null;
+  const row = db.prepare(`SELECT c.name AS name FROM oauthClient c WHERE c.clientId = ? AND c.clientDiscoveryId IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM oauthConsent k WHERE k.clientId = c.clientId AND k.userId = ?)`).get(clientId, userId);
+  return row ? clientName(row.name, clientId) : null;
 }
 
 /**

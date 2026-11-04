@@ -33,9 +33,10 @@ import { accountPage } from './pages/account.js';
 import { privacyPage } from './pages/privacy.js';
 import { signedOutPage } from './pages/signed-out.js';
 import { listPasskeys, ownedClubs, recoveryCodesLeft } from './account.js';
-import { clientHost, clientName, disconnect, listConnections } from './connections.js';
+import { clientHost, clientName, disconnect, disconnectedName, listConnections } from './connections.js';
 import { consentGonePage, consentPage } from './pages/consent.js';
 import { createNotifier } from './notices.js';
+import { bumpTokenVersions } from './token-version.js';
 
 const APP_DIR = fileURLToPath(new URL('..', import.meta.url));
 
@@ -293,7 +294,9 @@ export async function createAccounts(config, extras = {}) {
   // The planner, whose /library/export holds the user's tracks.
   const planner = config.clients.find((c) => c.trusted)?.resource ?? null;
 
-  const notify = createNotifier({ clients: config.clients });
+  // Every notice raises the members' token versions first (token-version.js).
+  const sendNotice = createNotifier({ clients: config.clients });
+  const notify = (/** @type {string[]} */ users) => sendNotice(users, bumpTokenVersions(db, users));
 
   const limiters = Object.fromEntries(Object.entries(LIMITS).map(([name, limit]) => [name, rateLimiter({ limit })]));
   const { issuer } = config;
@@ -345,7 +348,7 @@ export async function createAccounts(config, extras = {}) {
         owned: ownedClubs(db, id),
         plannerExport: planner && `${planner}/library/export`,
         connections: listConnections(db, id),
-        disconnected: url.searchParams.get('disconnected'),
+        disconnected: disconnectedName(db, id, url.searchParams.get('disconnected')),
       }));
     }
     const invite = /^\/invite\/([^/]+)$/.exec(pathname);
@@ -493,7 +496,11 @@ export async function createAccounts(config, extras = {}) {
     }
     const form = await readForm(req);
     if (!form) return problem(req, res, issuer, 'bad-request', 'Send the consent form.');
-    if (!session) return send(req, res, 303, { Location: `/sign-in?${form.get('oauth_query') ?? ''}`, 'Cache-Control': 'no-store' }, '');
+    if (!session) {
+      // Only a query of plain URL characters goes into the Location header.
+      const query = form.get('oauth_query') ?? '';
+      return send(req, res, 303, { Location: /^[\x21-\x7e]*$/.test(query) ? `/sign-in?${query}` : '/sign-in', 'Cache-Control': 'no-store' }, '');
+    }
     const found = await consentRequest(form.get('oauth_query') ?? '');
     if (!found) return html(req, res, consentGonePage(), 410);
     const accept = form.get('accept') === '1';
@@ -522,10 +529,10 @@ export async function createAccounts(config, extras = {}) {
     if (!form) return problem(req, res, issuer, 'bad-request', 'Send the disconnect form.');
     if (!session) return toSignIn(req, res, '/account');
     const clientId = form.get('client') ?? '';
-    const name = listConnections(db, session.user.id).find((c) => c.clientId === clientId)?.name;
-    if (disconnect(db, session.user.id, clientId)) notify([session.user.id]);
-    const done = name ? `?disconnected=${encodeURIComponent(name)}` : '';
-    return send(req, res, 303, { Location: `/account${done}#apps`, 'Cache-Control': 'no-store' }, '');
+    const done = disconnect(db, session.user.id, clientId);
+    if (done) notify([session.user.id]);
+    const query = done ? `?disconnected=${encodeURIComponent(clientId)}` : '';
+    return send(req, res, 303, { Location: `/account${query}#apps`, 'Cache-Control': 'no-store' }, '');
   }
 
   /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res */

@@ -50,7 +50,7 @@ export function accountPage({ user, passkeys, codesLeft, owned, plannerExport, c
   ${connections.length
     ? `<ul class="accounts-list">${appRows}
   </ul>
-  <p class="accounts-hint">Assistants and other apps you allowed to run timing as you. Disconnecting one stops it at once.</p>`
+  <p class="accounts-hint">Assistants and other apps you allowed to run timing as you. Disconnecting one stops it right away.</p>`
     : '<p>No apps are connected to your account.</p>'}
 </section>
 <hr class="divider">`;

@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { driveAuthorize } from '../../../../tools/test-env.js';
 import { testSession } from '../../../accounts/test/helpers.js';
+import { bumpTokenVersions } from '../../../accounts/server/token-version.js';
 import { startMcpTiming } from './mcp-rig.js';
 
 const NOTICE = 'notice-token-mcp';
@@ -118,7 +119,7 @@ test('with a token: the official client lists the tools; GET and DELETE are not 
   }
 });
 
-test('a body over 64 KiB is refused before anything reads it', async () => {
+test('a body that says it is over 64 KiB is refused with 413, before it is read', async () => {
   const { accessToken } = await t.connect(user);
   const res = await t.post(JSON.stringify({ ...INIT, padding: 'x'.repeat(70 * 1024) }), { authorization: `Bearer ${accessToken}` });
   assert.equal(res.status, 413);
@@ -130,27 +131,50 @@ test('a JSON-RPC batch is not served', async () => {
   assert.ok(res.status >= 400 || (await res.json()).error, 'a batch gets an error');
 });
 
-test('a notice from accounts refuses the tokens issued before it; a refreshed one works', async () => {
+/** A JWT's payload, unverified: the test only reads what accounts put in. */
+const decodeJwt = (token) => JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+
+const notice = (body) => fetch(`${t.base}/notices/membership`, { method: 'POST', headers: { authorization: `Bearer ${NOTICE}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+test('a notice with token versions refuses older tokens at once, in the same second; a refreshed one works', async () => {
   const { accessToken, refreshToken } = await t.connect(user);
   assert.equal((await t.post(INIT, { authorization: `Bearer ${accessToken}` })).status, 200);
-  // Access tokens are stamped to the second: let one pass, so the notice comes after this token.
-  await new Promise((done) => setTimeout(done, 1100));
-  const notice = await fetch(`${t.base}/notices/membership`, { method: 'POST', headers: { authorization: `Bearer ${NOTICE}`, 'content-type': 'application/json' }, body: JSON.stringify({ users: [user.id] }) });
-  assert.equal(notice.status, 204);
+  const before = decodeJwt(accessToken).tv;
+  assert.equal(typeof before, 'number');
+  // What accounts does for every notice: raise the member's version, then name it.
+  const versions = bumpTokenVersions(t.suite.accounts.db, [user.id]);
+  assert.equal(versions[user.id], before + 1);
+  assert.equal((await notice({ users: [user.id], versions })).status, 204);
   const stale = await t.post(INIT, { authorization: `Bearer ${accessToken}` });
   assert.equal(stale.status, 401);
   assert.equal(params(stale.headers.get('www-authenticate')).error, 'invalid_token');
+  const fresh = await t.refresh(refreshToken);
+  assert.equal(fresh.status, 200);
+  assert.equal(decodeJwt(fresh.body.access_token).tv, before + 1);
+  assert.equal((await t.post(INIT, { authorization: `Bearer ${fresh.body.access_token}` })).status, 200, 'no clock involved');
+  // A malformed versions map is refused.
+  assert.equal((await notice({ users: [user.id], versions: { [user.id]: -1 } })).status, 422);
+  assert.equal((await notice({ users: [user.id], versions: { someoneElse: 1 } })).status, 422);
+});
+
+test('a notice without versions falls back to its time, to the second', async () => {
+  const someone = await t.signUp('Dora');
+  const { accessToken, refreshToken } = await t.connect(someone);
+  // Access tokens are stamped to the second: let one pass, so the notice comes after this token.
+  await new Promise((done) => setTimeout(done, 1100));
+  const sent = await notice({ users: [someone.id] });
+  assert.equal(sent.status, 204);
+  assert.equal((await t.post(INIT, { authorization: `Bearer ${accessToken}` })).status, 401);
   await new Promise((done) => setTimeout(done, 1100));
   const fresh = await t.refresh(refreshToken);
   assert.equal(fresh.status, 200);
   assert.equal((await t.post(INIT, { authorization: `Bearer ${fresh.body.access_token}` })).status, 200);
 });
 
-test('disconnecting the app on the account page stops it at once', async () => {
+test('disconnecting the app on the account page stops it at once, even in the second its token was issued', async () => {
   const other = await t.signUp('Brigitte');
   const { jar, accessToken, refreshToken } = await t.connect(other);
   assert.equal((await t.post(INIT, { authorization: `Bearer ${accessToken}` })).status, 200);
-  await new Promise((done) => setTimeout(done, 1100));
   const res = await fetch(`${t.suite.issuer}/account/apps/disconnect`, {
     method: 'POST', redirect: 'manual',
     headers: { cookie: jar.header(), origin: t.suite.issuer, 'content-type': 'application/x-www-form-urlencoded' },

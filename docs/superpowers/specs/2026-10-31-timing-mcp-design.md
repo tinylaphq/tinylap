@@ -57,7 +57,11 @@ Anti-goals (a failure even if it works):
 Access tokens are self-contained JWTs that live `TINYLAP_ACCESS_TTL` (600 s), and the provider can't revoke them. On its own, a disconnected app or a member removed from a club would keep working for up to ten minutes. Timing closes that gap with the membership notices it already receives:
 
 - Accounts already sends a notice when a membership changes. It now also sends one when a member disconnects an app (§4.5). A notice still carries no authority: it only names users.
-- For each user named, timing records the time in its store (`mcp_stale`). A `/mcp` request whose token was issued in an earlier second gets 401 `invalid_token`. `iat` counts whole seconds, so a token issued in the same second as the notice still passes. The client refreshes the token and gets fresh claims, or, if it was disconnected, its refresh fails and it must sign in again.
+- **A token version, not a clock.** Accounts keeps a version per member (`token_version`), and every access token carries it as `tv`. Before accounts sends a notice, it raises the version of every member named, and the notice carries the new values as `versions`. Timing records the highest version it has heard of for each member (`mcp_stale`). A `/mcp` request whose token has a lower `tv` gets 401 `invalid_token`.
+  - A token issued in the same second as the change is cut off too, and no clocks are compared: `tv` and the version both come from accounts.
+  - A token issued after the raise carries the new version and passes.
+  - The client refreshes the token and gets fresh claims, or, if it was disconnected, its refresh fails and it must sign in again.
+- A notice without `versions` falls back to its time: a token issued in an earlier second, by timing's clock, is refused.
 - An entry is pruned after a day, long after every token issued before it has expired.
 - If a notice can't be delivered, the cut-off falls back to the token lifetime. Accounts logs the failure, as it does today.
 

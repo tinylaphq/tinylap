@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS bff_session (
   created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, name TEXT
 );
 CREATE INDEX IF NOT EXISTS bff_session_user ON bff_session (user_id);
-CREATE TABLE IF NOT EXISTS mcp_stale (user_id TEXT PRIMARY KEY, since INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS mcp_stale (user_id TEXT PRIMARY KEY, since INTEGER NOT NULL, version INTEGER);
 CREATE TABLE IF NOT EXISTS feed_cursor (feed TEXT PRIMARY KEY, seq INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS workspace (
   id TEXT PRIMARY KEY, track_id TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'ccw', watch_token TEXT UNIQUE
@@ -129,23 +129,26 @@ function sessionStore(db) {
 
 /**
  * When a member's MCP access tokens went stale (timing MCP spec §4.2): a
- * notice from accounts marks the time, and a token issued before it is
- * refused, so the client refreshes and gets fresh claims, or none.
+ * notice from accounts names the member's new token version, and a token
+ * with an older one is refused, so the client refreshes and gets fresh
+ * claims, or none. A notice without a version marks the time instead.
+ * A version never goes down.
  * @param {DatabaseSync} db
  */
 function staleStore(db) {
-  const upsert = db.prepare('INSERT INTO mcp_stale (user_id, since) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET since = excluded.since');
-  const select = db.prepare('SELECT since FROM mcp_stale WHERE user_id = ?');
+  const upsert = db.prepare(`INSERT INTO mcp_stale (user_id, since, version) VALUES (?, ?, ?)
+    ON CONFLICT (user_id) DO UPDATE SET since = excluded.since, version = MAX(COALESCE(version, 0), COALESCE(excluded.version, 0))`);
+  const select = db.prepare('SELECT since, version FROM mcp_stale WHERE user_id = ?');
   const prune = db.prepare('DELETE FROM mcp_stale WHERE since < ?');
   return {
-    /** @param {string[]} users @param {number} at ms */
-    mark(users, at) {
-      for (const user of users) upsert.run(user, at);
+    /** @param {string[]} users @param {number} at ms @param {Record<string, number>} [versions] */
+    mark(users, at, versions = {}) {
+      for (const user of users) upsert.run(user, at, Object.hasOwn(versions, user) ? versions[user] : null);
     },
-    /** @param {string} user @returns {number | null} ms */
-    since(user) {
+    /** @param {string} user @returns {{ since: number, version: number | null } | null} */
+    of(user) {
       const row = select.get(user);
-      return row ? Number(row.since) : null;
+      return row ? { since: Number(row.since), version: row.version === null ? null : Number(row.version) } : null;
     },
     /** Forgets marks older than `before` (ms): every token issued before them has expired. */
     prune(before) {

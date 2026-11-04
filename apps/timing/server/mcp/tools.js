@@ -393,7 +393,8 @@ export const TOOLS = [
       const minutes = Math.floor(Math.max(0, request.now() - (running.opensAt ?? running.createdAt)) / 60_000);
       const what = KIND_NAMES[args.kind];
       const now = runningFor(running.kind, minutes, request.engine.driverCount(running), running.state === 'countdown');
-      return { message: `${now} Starting this ${what} ends it.`, state: running.id };
+      const fate = running.kind === 'practice' ? 'ends it, as a finished practice' : `aborts it; its laps stay in the history`;
+      return { message: `${now} Starting this ${what} ${fate}.`, state: running.id };
     },
     run: ({ request }, args, confirmedState) => {
       // Replace only the session the member was shown; anything else running asks again.

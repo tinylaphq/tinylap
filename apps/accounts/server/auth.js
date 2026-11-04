@@ -16,6 +16,7 @@ import { cimd } from '@better-auth/cimd';
 import { fetchClientMetadataResource } from '@better-auth/cimd/node';
 import { passkey } from '@better-auth/passkey';
 import { spendRecoveryCode } from './recovery.js';
+import { tokenVersion } from './token-version.js';
 import { createPersonalWorkspace, listMemberships } from './workspaces.js';
 
 const DAY = 24 * 60 * 60;
@@ -293,9 +294,12 @@ export function authOptions(config, db = null, { fetchMetadata = fetchClientMeta
         // Every workspace the user is in, read live at each issuance, so
         // a refresh picks up role changes (spec §3). The name too, so an
         // MCP token (no openid, so no userinfo) still says who acted.
+        // `tv`, the member's token version, lets an app refuse a token
+        // issued before a membership notice (token-version.js).
         customAccessTokenClaims: ({ user }) => ({
           workspaces: user && db ? listMemberships(db, user.id).map(({ id, role, name, kind }) => ({ id, role, name, kind })) : [],
           ...(user?.name ? { name: user.name } : {}),
+          ...(user && db ? { tv: tokenVersion(db, user.id) } : {}),
         }),
         ...mcp.provider,
       }),

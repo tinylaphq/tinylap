@@ -38,6 +38,8 @@ const fetchMetadata = async (input) => {
 let accounts;
 /** Membership notices accounts sent, as the user lists they named. */
 const notices = [];
+/** The token versions each notice carried. */
+const noticeVersions = [];
 let noticeServer;
 
 before(async () => {
@@ -46,6 +48,7 @@ before(async () => {
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       notices.push(JSON.parse(body).users);
+      noticeVersions.push(JSON.parse(body).versions);
       res.writeHead(204).end();
     });
   });
@@ -217,6 +220,8 @@ test('re-seeding the configured clients leaves MCP clients enabled', async () =>
 test('connected apps: listed on the account page, disconnected with a plain form', async () => {
   const { user, jar } = await member('Clara');
   const tokens = (await connect(jar)).body;
+  const versionBefore = Number(decodeJwt(tokens.access_token).tv);
+  assert.equal(typeof versionBefore, 'number', 'access tokens carry the token version');
   const page = await (await navigate(new URL('/account', accounts.issuer), { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() })).text();
   assert.match(page, /Connected apps <span class="accounts-count">1<\/span>/);
   assert.match(page, /Example Assistant<span class="accounts-row-sub">assistant\.example · allowed/);
@@ -230,13 +235,17 @@ test('connected apps: listed on the account page, disconnected with a plain form
     body: new URLSearchParams({ client: CLIENT }),
   });
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), '/account?disconnected=Example%20Assistant#apps');
+  assert.equal(res.headers.get('location'), `/account?disconnected=${encodeURIComponent(CLIENT)}#apps`);
   assert.equal((await refresh(tokens.refresh_token)).status >= 400, true, 'its refresh token is gone');
   for (let i = 0; i < 50 && notices.length === sent; i++) await new Promise((done) => setTimeout(done, 10));
   assert.deepEqual(notices.at(-1), [user.id], 'timing is told');
+  assert.deepEqual(noticeVersions.at(-1), { [user.id]: versionBefore + 1 }, 'with the raised token version');
 
-  const after = await (await navigate(new URL('/account?disconnected=Example%20Assistant', accounts.issuer), { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() })).text();
+  const after = await (await navigate(new URL(`/account?disconnected=${encodeURIComponent(CLIENT)}`, accounts.issuer), { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() })).text();
   assert.match(after, /Example Assistant is disconnected/);
+  // A crafted link puts no words of its own on the page.
+  const crafted = await (await navigate(new URL('/account?disconnected=Your%20passkeys%20were%20removed', accounts.issuer), { accept: 'text/html', 'sec-fetch-mode': 'navigate', cookie: jar.header() })).text();
+  assert.doesNotMatch(crafted, /passkeys were removed|is disconnected/);
   assert.match(after, /No apps are connected to your account\./);
   const again = await authorize(jar);
   assert.equal(again.location.pathname, '/consent', 'the next sign-in asks again');
@@ -251,6 +260,13 @@ test('disconnect refuses a cross-site post', async () => {
     body: new URLSearchParams({ client: CLIENT }),
   });
   assert.equal(res.status, 403);
+});
+
+test('a client name loses control and invisible characters, and long ones are cut', async () => {
+  const { clientName } = await import('../server/connections.js');
+  assert.equal(clientName('Exa\u202Emple\u200B Assistant\u0007', CLIENT), 'Example Assistant');
+  assert.equal(clientName('  \u200B ', CLIENT), 'assistant.example', 'nothing left: the host');
+  assert.equal([...clientName('x'.repeat(80), CLIENT)].length, 60);
 });
 
 test('metadata documents are cached, not fetched on every sign-in', async () => {

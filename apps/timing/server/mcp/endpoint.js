@@ -73,10 +73,14 @@ async function authenticate(request) {
     return { refused: challenge(request, 401, 'invalid_token', 'The access token is not valid for this server.') };
   }
   // A notice since the token was issued (a membership changed, the app was disconnected): its claims are stale.
-  const since = request.store?.stale.since(claims.sub);
-  if (since !== null && since !== undefined && typeof claims.iat === 'number' && claims.iat < Math.floor(since / 1000)) {
-    return { refused: challenge(request, 401, 'invalid_token', 'The access token is out of date. Refresh it.') };
-  }
+  // The token version decides when the notice named one; otherwise, its time, to the second.
+  const stale = request.store?.stale.of(claims.sub);
+  const tv = /** @type {any} */ (claims).tv;
+  const tokenVersion = Number.isSafeInteger(tv) ? Number(tv) : 0;
+  const outdated = stale && (stale.version !== null
+    ? tokenVersion < stale.version
+    : typeof claims.iat === 'number' && claims.iat < Math.floor(stale.since / 1000));
+  if (outdated) return { refused: challenge(request, 401, 'invalid_token', 'The access token is out of date. Refresh it.') };
   const scopes = typeof claims.scope === 'string' ? claims.scope.split(' ') : [];
   if (!scopes.includes(SCOPE)) return { refused: challenge(request, 403, 'insufficient_scope', 'This token may not run timing.') };
   return { claims, scopes, token: match[1] };
@@ -192,7 +196,8 @@ async function fromWeb(response) {
       headers,
       stream: (req, res) => {
         const readable = Readable.fromWeb(/** @type {any} */ (body));
-        req.on('close', () => readable.destroy());
+        // The response's close: the request's already fired once its body was read.
+        res.on('close', () => readable.destroy());
         readable.pipe(res);
       },
     };
@@ -221,6 +226,11 @@ async function mcp(request) {
 
   let text;
   if (req.method === 'POST') {
+    // A declared length over the limit is refused before anything is read.
+    if (Number(req.headers['content-length'] ?? 0) > MAX_BODY) {
+      req.resume();
+      return problem(request, 'too-large', 'A request body may be at most 64 KiB.');
+    }
     text = await readBody(req, MAX_BODY);
     if (text === null) return problem(request, 'too-large', 'A request body may be at most 64 KiB.');
   } else {
