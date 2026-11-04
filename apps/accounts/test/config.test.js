@@ -110,3 +110,14 @@ test('noticeUri and noticeToken come together, and noticeUri is checked like res
   assert.throws(() => readConfig(withNotice({ noticeUri: 'https://timing.tinylap.test/n', noticeToken: '' })), /noticeToken/);
   assert.throws(() => readConfig(withNotice({ noticeUri: 'https://timing.tinylap.test/n', noticeToken: 'planner-secret' })), /secret/);
 });
+
+test('TINYLAP_MCP_RESOURCE is the MCP endpoint: https, with a path, exactly as clients send it', () => {
+  assert.equal(readConfig(env()).mcpResource, null);
+  assert.equal(readConfig(env({ TINYLAP_MCP_RESOURCE: 'https://timing.tinylap.test/mcp' })).mcpResource, 'https://timing.tinylap.test/mcp');
+  for (const bad of ['https://timing.tinylap.test', 'https://timing.tinylap.test/', 'https://timing.tinylap.test/mcp/', 'https://timing.tinylap.test/mcp?x=1', 'http://timing.tinylap.test/mcp', 'not a url']) {
+    assert.throws(() => readConfig(env({ TINYLAP_MCP_RESOURCE: bad })), /TINYLAP_MCP_RESOURCE/, bad);
+  }
+  assert.throws(() => readConfig(env({ TINYLAP_MCP_RESOURCE: 'https://127.0.0.1/mcp' })), /loopback/);
+  const dev = readConfig(env({ TINYLAP_DEV: '1', TINYLAP_ISSUER: 'http://localhost:4100', TINYLAP_CLIENTS: '[]', TINYLAP_MCP_RESOURCE: 'http://127.0.0.1:4300/mcp' }));
+  assert.equal(dev.mcpResource, 'http://127.0.0.1:4300/mcp');
+});

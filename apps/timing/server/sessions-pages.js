@@ -106,7 +106,7 @@ function renderTab(request, status, { error = null, errors = error ? [error] : [
  * "A practice has been running for 12 min, with 3 drivers.", or "…for under a minute, with no drivers yet.";
  * a race in its countdown "is counting down to its start, with 3 drivers."
  */
-function runningFor(kind, minutes, drivers, countingDown = false) {
+export function runningFor(kind, minutes, drivers, countingDown = false) {
   const length = minutes < 1 ? 'under a minute' : `${minutes} min`;
   const who = drivers === 0 ? 'no drivers yet' : `${drivers} ${drivers === 1 ? 'driver' : 'drivers'}`;
   return countingDown ? `A ${kind} is counting down to its start, with ${who}.` : `A ${kind} has been running for ${length}, with ${who}.`;

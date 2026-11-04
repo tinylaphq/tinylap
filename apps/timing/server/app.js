@@ -30,13 +30,15 @@ function send(req, res, { status, headers = {}, body, stream }) {
 }
 
 /**
- * @param {{ credentials?: boolean, varyCookie?: boolean }} route @param {Record<string, any>} [headers]
+ * @param {{ credentials?: boolean, varyCookie?: boolean, cors?: { allowHeaders?: string, exposeHeaders?: string } }} route @param {Record<string, any>} [headers]
  * @param {boolean} [credentials] the response's own mark
  */
 function withRouteHeaders(route, headers = {}, credentials = false) {
   const vary = headers.Vary ? `${headers.Vary}, Cookie` : 'Cookie';
   if (route.credentials || credentials) return { ...CREDENTIAL_HEADERS, ...headers, Vary: vary };
   if (route.varyCookie) return { ...API_HEADERS, ...headers, Vary: vary };
+  // A route with headers of its own to expose (MCP's WWW-Authenticate); never credentials.
+  if (route.cors?.exposeHeaders) return { ...API_HEADERS, 'Access-Control-Expose-Headers': `${API_HEADERS['Access-Control-Expose-Headers']}, ${route.cors.exposeHeaders}`, ...headers };
   return { ...API_HEADERS, ...headers };
 }
 
@@ -55,7 +57,7 @@ async function dispatch(request, routes, serveStatic) {
       if (route.credentials) return { status: 204, headers: withRouteHeaders(route, { Allow: allowed }) };
       return {
         status: 204,
-        headers: { ...API_HEADERS, 'Access-Control-Allow-Methods': allowed, 'Access-Control-Allow-Headers': 'Content-Type, Authorization, Last-Event-ID', 'Access-Control-Max-Age': '86400' },
+        headers: { ...API_HEADERS, 'Access-Control-Allow-Methods': allowed, 'Access-Control-Allow-Headers': route.cors?.allowHeaders ?? 'Content-Type, Authorization, Last-Event-ID', 'Access-Control-Max-Age': '86400' },
       };
     }
     const handler = route.methods[req.method === 'HEAD' ? 'GET' : req.method];
@@ -80,14 +82,15 @@ async function dispatch(request, routes, serveStatic) {
 }
 
 /** Per-minute and per-hour budgets (spec §9). */
-const LIMITS = { ingest: 600, logs: 600, tap: 120, pair: 10 };
+// mcp: calls per member per minute; mcpAnon: refused /mcp requests per client per minute.
+const LIMITS = { ingest: 600, logs: 600, tap: 120, pair: 10, mcp: 300, mcpAnon: 60 };
 /** When an open member stream checks its viewer's access again after an outage or error (#39). */
 const ACCESS_CHECK_MS = 15_000;
 
 /**
  * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string,
  *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
- *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, logs?: number, tap?: number, pair?: number }, accessCheckMs?: number, noticeToken?: string,
+ *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, logs?: number, tap?: number, pair?: number, mcp?: number, mcpAnon?: number }, accessCheckMs?: number, noticeToken?: string,
  *   streams?: import('./member-streams.js').MemberStreams }} options
  */
 export function createHandler(options) {
@@ -119,6 +122,9 @@ export function createHandler(options) {
       tap: rateLimiter({ limit: limits.tap, windowMs: 60_000, now }),
       // New decoders per member per hour.
       pair: rateLimiter({ limit: limits.pair, windowMs: 3_600_000, now }),
+      // MCP tool calls per member, and refused MCP requests per client address, per minute.
+      mcp: rateLimiter({ limit: limits.mcp, windowMs: 60_000, now }),
+      mcpAnon: rateLimiter({ limit: limits.mcpAnon, windowMs: 60_000, now }),
     },
   };
   const routes = options.routes ?? defaultRoutes;

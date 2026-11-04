@@ -29,3 +29,17 @@ test('no users send nothing', () => {
   createNotifier({ clients: [{ noticeUri: 'https://timing.test/n', noticeToken: 't' }], fetch })([]);
   assert.equal(calls, 0);
 });
+
+test('token versions go with their users, batch by batch', () => {
+  const bodies = [];
+  const fetch = async (_uri, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response(null, { status: 204 });
+  };
+  const notify = createNotifier({ clients: [{ noticeUri: 'https://timing.test/n', noticeToken: 't' }], fetch });
+  const users = Array.from({ length: 1001 }, (_, i) => `u${i}`);
+  notify(users, { u0: 3, u1000: 7 });
+  assert.deepEqual(bodies.map((b) => b.versions), [{ u0: 3 }, { u1000: 7 }]);
+  notify(['u5']);
+  assert.equal(bodies.at(-1).versions, undefined, 'no versions, no member');
+});
