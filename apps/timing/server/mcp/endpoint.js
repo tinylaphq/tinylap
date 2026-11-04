@@ -208,6 +208,16 @@ function readCapped(req, max) {
   });
 }
 
+/**
+ * A response after which the connection ends: once the answer is written,
+ * the unread rest of the body is dropped with the socket, so a client that
+ * keeps sending gets nowhere.
+ * @param {{ status: number, headers?: Record<string, string>, body?: string | Buffer }} response
+ */
+function closing({ body, ...response }) {
+  return { ...response, stream: (/** @type {any} */ req, /** @type {any} */ res) => res.end(body, () => req.destroy()) };
+}
+
 /** Sends an SDK answer through the app's send(): a buffered body, or a stream when it streams. */
 async function fromWeb(response) {
   /** @type {Record<string, string>} */
@@ -255,7 +265,7 @@ async function mcp(request) {
     // Over the limit, by its declared length or once 64 KiB have come: 413, and the connection
     // closes without reading the rest.
     const capped = Number(req.headers['content-length'] ?? 0) > MAX_BODY ? null : await readCapped(req, MAX_BODY);
-    if (capped === null) return problem(request, 'too-large', 'A request body may be at most 64 KiB.', { Connection: 'close' });
+    if (capped === null) return closing(problem(request, 'too-large', 'A request body may be at most 64 KiB.', { Connection: 'close' }));
     text = capped;
   } else {
     req.resume();

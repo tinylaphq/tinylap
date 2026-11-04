@@ -127,16 +127,30 @@ test('a body that says it is over 64 KiB is refused with 413, before it is read'
 
 test('a chunked body is refused once it passes 64 KiB, without reading the rest', async () => {
   const { accessToken } = await t.connect(user);
-  let sent = 0;
+  // 4 MiB in chunks, with no declared length: bounded, so the test itself can never run away.
   const chunk = new Uint8Array(16 * 1024).fill(32);
-  // An endless body: the server must answer without waiting for its end.
-  const body = new ReadableStream({ pull(controller) { sent += chunk.length; controller.enqueue(chunk); } });
-  const res = await fetch(`${t.base}/mcp`, {
-    method: 'POST', body, duplex: 'half',
-    headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+  let left = 256;
+  const body = new ReadableStream({
+    pull(controller) {
+      if (left-- > 0) controller.enqueue(chunk);
+      else controller.close();
+    },
   });
-  assert.equal(res.status, 413);
-  assert.ok(sent < 64 * 1024 * 1024, `the server stopped reading (sent ${sent} bytes)`);
+  /** @type {number | string} */
+  let status;
+  try {
+    status = (await fetch(`${t.base}/mcp`, {
+      method: 'POST', body, duplex: 'half',
+      headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    })).status;
+  } catch (error) {
+    // The server may close the connection while the body is still being sent.
+    status = /** @type {any} */ (error).cause?.code ?? 'closed';
+  }
+  assert.ok(status === 413 || status === 'UND_ERR_SOCKET' || status === 'ECONNRESET' || status === 'EPIPE' || status === 'closed', `refused: ${status}`);
+  assert.ok(left > 0, 'the server stopped reading before the end of the body');
+  // The server is still there for the next request.
+  assert.equal((await t.post(INIT, { authorization: `Bearer ${accessToken}` })).status, 200);
 });
 
 test('a JSON-RPC batch is not served', async () => {
