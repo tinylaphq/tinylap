@@ -65,11 +65,13 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
         words.push({ word, lines: lines.size });
         at += word.length + 1;
       }
-      return { name: el.textContent, transform: getComputedStyle(el).textTransform, size: parseFloat(getComputedStyle(el).fontSize), inside: text.left >= box.left && text.right <= box.right + 0.5 && el.scrollWidth <= el.clientWidth && name.scrollWidth <= name.clientWidth, words };
+      return { name: el.textContent, transform: getComputedStyle(el).textTransform, transition: getComputedStyle(el).transitionProperty, size: parseFloat(getComputedStyle(el).fontSize), inside: text.left >= box.left && text.right <= box.right + 0.5 && el.scrollWidth <= el.clientWidth && name.scrollWidth <= name.clientWidth, words };
     }));
     for (const tile of tiles) {
       assert.ok(tile.inside, `${tile.name} inside its tile`);
       assert.equal(tile.transform, 'none', `${tile.name} keeps its case`);
+      // A size that follows the tile must not animate, or it passes through sizes under 1rem on the way.
+      assert.doesNotMatch(tile.transition, /\ball\b|font/, `${tile.name}: its size never animates`);
       assert.ok(tile.size >= 16, `${tile.name}: ${tile.size}px, not under 16px`);
       for (const w of tile.words) assert.equal(w.lines, 1, `${tile.name}: "${w.word}" on one line`);
     }
