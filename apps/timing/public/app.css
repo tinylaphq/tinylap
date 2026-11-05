@@ -280,6 +280,10 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
   touch-action: manipulation;
   color: var(--p-text);
   cursor: pointer;
+  /* palace transitions all of a button's properties; a tile's size follows its
+   * container and must never animate, or a name passes through sizes under 1rem.
+   * Only the tap's flash fades. */
+  transition-property: background-color, color, box-shadow;
 }
 .tap-tile-name { display: block; overflow: hidden; text-overflow: ellipsis; }
 .tap-tile.is-tapped { background: var(--driver, var(--p-accent-1)); }
