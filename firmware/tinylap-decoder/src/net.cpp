@@ -140,12 +140,19 @@ int post(const Request& r) {
   esp_http_client_set_post_field(client, r.body.data(), r.body.size());
   for (int attempt = 0;; attempt++) {
     response = Response();
-    if (esp_http_client_perform(client) == ESP_OK) {
+    int64_t startUs = esp_timer_get_time();
+    esp_err_t err = esp_http_client_perform(client);
+    if (err == ESP_OK) {
       clientOpen = true;
       return esp_http_client_get_status_code(client);
     }
     esp_http_client_close(client);
-    bool retry = clientOpen && attempt == 0;   // the server may have closed the kept connection
+    // Once more only when the server closed the kept connection, not after a timeout: the task
+    // must not sit 20 s on one batch while a Wi-Fi event or a %TLWIFI waits. Some timeouts come
+    // back as a header error, so a failure that took half the timeout counts as one too.
+    bool timedOut = err == ESP_ERR_HTTP_EAGAIN || err == ESP_ERR_TIMEOUT ||
+                    esp_timer_get_time() - startUs > int64_t(kHttpTimeoutMs) * 500;
+    bool retry = clientOpen && attempt == 0 && !timedOut;
     clientOpen = false;
     if (!retry) return 0;
   }
@@ -153,12 +160,15 @@ int post(const Request& r) {
 
 // Core 0: the Wi-Fi connection and the posts (spec §3.1, §3.2, §3.4).
 void netTask(void*) {
+  // Should never happen. If it does, Wi-Fi stays off until the next reset: on_ stays set and a
+  // later %TLWIFI only stores its settings.
   if (!startDriver()) {
     pushLine(wifiLine("failed", 0, -1));
     state_ = NetState::Off;
     vTaskDelete(nullptr);
   }
   bool haveWifi = false, joining = false, connected = false;
+  bool leaving = false;   // our esp_wifi_disconnect()'s event is still to come
   int64_t joinAtUs = 0, joinStartUs = 0, backoffUs = kJoinMinUs;
   TickType_t wait = 0;
 
@@ -176,10 +186,13 @@ void netTask(void*) {
     for (BaseType_t got = xQueueReceive(events, &e, wait); got == pdTRUE; got = xQueueReceive(events, &e, 0)) {
       int64_t now = esp_timer_get_time();
       if (e.kind == Event::Disconnected) {
-        // Leaving is ours (new settings, a join timeout); otherwise only a join or a connection can fail.
-        if (e.reason != WIFI_REASON_ASSOC_LEAVE && (joining || connected)) failed(e.reason, now);
-      } else if (e.kind == Event::GotIp && !connected) {
+        // The one after our own leave (new settings, a join timeout) is ours, whatever its reason;
+        // otherwise only a join or a connection can fail.
+        if (leaving) leaving = false;
+        else if (joining || connected) failed(e.reason, now);
+      } else if (e.kind == Event::GotIp && joining) {   // a late one from a join we gave up is no link
         joining = false;
+        leaving = false;   // a new link: no leave event is still coming
         connected = true;
         backoffUs = kJoinMinUs;
         state_ = NetState::Connected;
@@ -205,6 +218,7 @@ void netTask(void*) {
       }
     }
     if (changed) {
+      if (joining || connected) leaving = true;   // only then does the driver report the leave
       esp_wifi_disconnect();
       wifi_config_t c = {};
       memcpy(c.sta.ssid, ssid.data(), std::min(ssid.size(), sizeof c.sta.ssid));
@@ -218,6 +232,7 @@ void netTask(void*) {
     }
 
     if (joining && now - joinStartUs > kJoinTimeoutUs) {
+      leaving = true;
       esp_wifi_disconnect();
       failed(0, now);
     }
