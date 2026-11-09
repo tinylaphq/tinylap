@@ -107,7 +107,7 @@ On Linux, WebHID needs a udev rule that lets your user open the device's hidraw 
 
 A batch may also carry `"logs": ["pass id=1F t=1E0A first=1DE2 last=1E32 frames=8"]`: decoder log lines, each the text after `%TLLOG ` and before `&`. `passings` may then be empty; a body with neither is refused.
 
-- **`now`** (optional) is the decoder's clock in the same milliseconds as `t`, when it sent the batch: with it the server places passings sent late at their real time. **`quiet`** (optional) is `true` when the decoder holds no passing it has not sent.
+- **`now`** (optional) is the decoder's clock in the same milliseconds as `t`, when it sent the batch: with it the server places passings sent late at their real time. **`quiet`** (optional) is `true` when the decoder sends no heartbeats from now until its next passing: the server stops expecting it.
 - **Limits:** at most 500 passings and 64 log lines per batch, the lines together at most 32 KiB and each at most 510 bytes. All of one boot.
 - **The answer** is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds.
 - **The outbox:** keep every passing until a batch that carried it is answered with a `through` that covers it. Drop only the passings you sent, since a passing of the same boot you never sent can lie below `through` too (the cable and Wi-Fi copies race). Resending is always safe.
