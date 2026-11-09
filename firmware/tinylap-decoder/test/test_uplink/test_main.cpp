@@ -305,6 +305,35 @@ static void test_boot_line_goes_with_the_next_batch() {
   TEST_ASSERT_FALSE(has(r.body, "\"logs\""));
 }
 
+static void test_a_new_decoder_id_leaves_the_old_backlog_behind() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  u.onPassing("2B", 2000, 0);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(0, r));   // both are in flight for d1
+  u.configure({"https://x", "d2", kToken2});
+  TEST_ASSERT_EQUAL(0, u.waiting());
+  u.onPassing("2C", 500, 0);
+  u.answer(200, "{\"stored\":2,\"duplicates\":0,\"through\":2000}", 0);   // d1's answer arrives
+  TEST_ASSERT_EQUAL(1, u.waiting());
+  TEST_ASSERT_TRUE(u.next(0, r));
+  TEST_ASSERT_TRUE(has(r.url, "/decoders/d2/passings"));
+  TEST_ASSERT_TRUE(has(r.body, "\"transponder\":\"2C\""));
+  TEST_ASSERT_FALSE(has(r.body, "\"transponder\":\"2A\""));
+}
+
+static void test_a_401_for_an_old_token_does_not_pause_the_new_one() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.configure({"https://x", "d1", kToken2});
+  u.answer(401, "", 0);
+  TEST_ASSERT_FALSE(u.paused());
+  TEST_ASSERT_TRUE(u.next(0, r));
+  TEST_ASSERT_EQUAL_STRING(("Bearer " + kToken2).c_str(), r.auth.c_str());
+}
+
 static void test_nothing_without_server_or_pairing() {
   Request r;
   Uplink a;
@@ -358,6 +387,8 @@ int main() {
   RUN_TEST(test_full_outbox_drops_the_oldest);
   RUN_TEST(test_batch_holds_at_most_500);
   RUN_TEST(test_401_pauses_until_configure_gives_a_new_token);
+  RUN_TEST(test_a_new_decoder_id_leaves_the_old_backlog_behind);
+  RUN_TEST(test_a_401_for_an_old_token_does_not_pause_the_new_one);
   RUN_TEST(test_404_and_422_drop_the_batch);
   RUN_TEST(test_429_waits_retry_after);
   RUN_TEST(test_backoff_doubles_to_30_s_and_resets_on_200);

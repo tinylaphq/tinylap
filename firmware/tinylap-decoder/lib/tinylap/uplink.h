@@ -16,7 +16,7 @@ class Uplink {
  public:
   static constexpr size_t kCapacity = 2000, kMaxBatch = 500;
   static constexpr int64_t kInUseUs = 15LL * 60 * 1000000, kBackoffMinUs = 1000000, kBackoffMaxUs = 30000000;
-  void configure(const UplinkConfig& c);                  // a new token ends a 401 pause
+  void configure(const UplinkConfig& c);                  // a new token ends a 401 pause; a new decoder id clears the outbox
   void onBoot(const std::string& boot, int64_t bootStartUs);
   void onPassing(const std::string& transponder, uint32_t tMs, int64_t nowUs);  // restarts the in-use window
   void onConnected(int64_t nowUs);                         // restarts the in-use window
@@ -54,6 +54,7 @@ class Uplink {
   bool inFlight_ = false, sentQuiet_ = false;
   size_t sent_ = 0;
   uint32_t sentBootLineGen_ = 0, sentStatGen_ = 0;   // which log lines it carried, 0 for none
+  std::string sentToken_;                            // the token it was sent with
 
   std::string bootLine_, stat_;                  // stat_: the latest stat line
   bool bootLinePending_ = false, statPending_ = false;

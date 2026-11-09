@@ -7,6 +7,10 @@ namespace tinylap {
 
 void Uplink::configure(const UplinkConfig& c) {
   if (c.token != config_.token) paused_ = false;
+  if (c.decoder != config_.decoder && !config_.decoder.empty()) {   // paired again: the old pairing's backlog is not this one's
+    head_ = count_ = sent_ = 0;
+    sentBootLineGen_ = sentStatGen_ = 0;
+  }
   config_ = c;
 }
 
@@ -116,6 +120,7 @@ bool Uplink::next(int64_t nowUs, Request& out) {
   while (!server.empty() && server.back() == '/') server.pop_back();
   out.url = server + "/decoders/" + config_.decoder + "/passings";
   out.auth = "Bearer " + config_.token;
+  sentToken_ = config_.token;
   out.body = batchBody(*bootId(seq), passings, logs, current ? &nowMs : nullptr, quiet);
 
   inFlight_ = true;
@@ -147,7 +152,7 @@ void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t 
     backoffUs_ = kBackoffMinUs;
     delivered = true;
   } else if (status == 401) {
-    paused_ = true;
+    if (sentToken_ == config_.token) paused_ = true;   // not when a new token came meanwhile
   } else if (status == 404 || status == 422) {
     head_ = (head_ + sent_) % kCapacity;   // never taken: drop that batch's passings
     count_ -= sent_;
