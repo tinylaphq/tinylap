@@ -19,7 +19,8 @@ const MARKS = [
   [/noreply@anthropic\.com/i, 'an Anthropic address'],
   [/^\s*co-authored-by:.*\b(claude|anthropic|copilot|chatgpt|openai|gemini)\b/im, 'an AI co-author trailer'],
   [/^\s*signed-off-by:.*\b(claude|anthropic)\b/im, 'a sign-off by an AI identity'],
-  [/generated with \[?claude code/i, 'a "Generated with Claude Code" line'],
+  // The footer line itself ("🤖 Generated with [Claude Code](…)"), not a sentence that mentions it.
+  [/^\W*generated with \[?claude code\b/im, 'a "Generated with Claude Code" line'],
   [/claude\.ai\/code\/session/i, 'a link to a Claude Code session'],
 ];
 

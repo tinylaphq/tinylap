@@ -31,4 +31,6 @@ test('AI trailers and lines are found, in any case', () => {
 test('naming Claude as a client the code supports is not attribution', () => {
   assert.deepEqual(findings('t', 'feat: what real MCP clients need, checked against Claude and the client SDK'), []);
   assert.deepEqual(findings('t', 'Co-authored-by: Ana <ana@example.org>'), []);
+  assert.deepEqual(findings('t', '- It fails on a "Generated with Claude Code" line.'), [], 'a sentence about the footer');
+  assert.deepEqual(findings('t', 'Body\n\nGenerated with Claude Code'), ['t: a "Generated with Claude Code" line']);
 });
