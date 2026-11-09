@@ -49,6 +49,7 @@ Today the IR task runs on core 0 (`main.cpp`, `xTaskCreatePinnedToCore(..., 0)`)
 
 - The IR task is pinned to **core 1** at priority 10. `loop()` runs on core 1 at priority 1, so the IR task still preempts it at once.
 - The network code (§3.2, §3.4) runs in its own task on **core 0**, so a slow TLS handshake never stalls `loop()` or the IR task.
+- That task runs at the **idle task's priority**. The first handshake to the server computes for many seconds (about 16 s on the board) without blocking; any higher, it keeps core 0's idle task from running, and the task watchdog (5 s, watching that idle task) resets the board. At idle priority the two share the core. Later posts reuse the connection and take a fraction of a second.
 - **(board)** The bench check: the frame-to-frame spread of a still transponder (decoder spec §4.1) with Wi-Fi off, with Wi-Fi connected and idle, and while posting a batch every 100 ms. Wi-Fi on must not widen it beyond the measurement's own noise. If it does, the fallback is stamping in the RMT's interrupt rather than in the task (guess: not needed).
 
 ### 3.2 The Wi-Fi connection (`src/net.cpp`)

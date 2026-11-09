@@ -22,7 +22,9 @@ namespace net {
 namespace {
 
 constexpr uint32_t kStackBytes = 12288;   // the TLS handshake runs on this task's stack
-constexpr UBaseType_t kPriority = 3;      // below the Wi-Fi and lwIP tasks on core 0
+// The idle task's: a TLS handshake computes for seconds without blocking, and above idle it would
+// starve core 0's idle task until the task watchdog resets the board. Wi-Fi and lwIP stay above it.
+constexpr UBaseType_t kPriority = tskIDLE_PRIORITY;
 constexpr int64_t kJoinMinUs = 1000000, kJoinMaxUs = 30000000;   // rejoin back-off (spec §3.2)
 constexpr int64_t kJoinTimeoutUs = 30000000;   // a join that never gets an address
 constexpr int kHttpTimeoutMs = 10000;
