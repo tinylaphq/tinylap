@@ -72,6 +72,8 @@ const ROUTES = [
   ['DELETE', /^\/api\/me\/passkeys\/([^/]+)$/, (ctx, user, [id]) => (removePasskey(ctx.db, user.id, id), [204]), FRESH],
   ['POST', /^\/api\/me\/sign-out-everywhere$/, (ctx, user) => {
     signOutEverywhere(ctx.db, user.id);
+    // Apps refuse the access tokens still out there at once, not when they expire.
+    ctx.notify([user.id]);
     return [204, undefined, { 'Set-Cookie': ctx.clearCookie }];
   }],
   ['GET', /^\/api\/workspaces$/, (ctx, user) => [200, { workspaces: ws.listMemberships(ctx.db, user.id) }]],

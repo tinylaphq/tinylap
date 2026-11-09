@@ -162,8 +162,8 @@ shorten that wait, `accounts` can tell a client at once. Add `noticeUri` and
 its own, never the client secret.
 
 After a removal, role change, leaving, ownership transfer, club deletion,
-account deletion or disconnecting an app, `accounts` raises each member's
-token version and posts `{ "users": [...], "versions": { "<user>": n } }` to
+account deletion, signing out everywhere or disconnecting an app, `accounts`
+raises each member's token version and posts `{ "users": [...], "versions": { "<user>": n } }` to
 `noticeUri` with `Authorization: Bearer <noticeToken>`. Access tokens carry
 the version as `tv`, so an app can refuse every token issued before the change,
 whatever its clock says. It does not wait for the answer, gives

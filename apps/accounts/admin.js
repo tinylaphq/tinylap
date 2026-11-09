@@ -11,9 +11,15 @@
 //
 // Gives a club whose owner can no longer act (every passkey and recovery
 // code lost) to one of its members, after the request has been verified out
-// of band. The old owner, if there is one, becomes an admin.
+// of band. The old owner, if there is one, becomes an admin. With the
+// server's configuration in the environment, as on its machine, both
+// members' token versions go up and the apps get a membership notice, as
+// after a change made on the club page; elsewhere it says none was sent.
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { readConfig } from './server/config.js';
+import { createNotifier } from './server/notices.js';
+import { bumpTokenVersions } from './server/token-version.js';
 import { forceTransferOwnership, WorkspaceError } from './server/workspaces.js';
 
 const USAGE = 'Usage: node apps/accounts/admin.js transfer-ownership <workspaceId> <userId>';
@@ -31,6 +37,28 @@ const path = process.env.TINYLAP_DB || '/data/accounts.sqlite';
 // DatabaseSync would create an empty file; a typo must not look like "no such workspace".
 if (!existsSync(path)) fail(`There is no database at ${path}. Set TINYLAP_DB.`);
 
+/**
+ * Tells the apps, as the server does after a membership change: the members'
+ * token versions go up, then a notice goes to each client with a noticeUri.
+ * @param {DatabaseSync} database @param {string[]} users
+ */
+function notice(database, users) {
+  let clients;
+  try {
+    clients = readConfig(process.env).clients;
+  } catch (error) {
+    process.stdout.write(`No membership notice sent (${error instanceof Error ? error.message : error}). Apps see the change within 10 minutes.\n`);
+    return;
+  }
+  const targets = clients.filter((c) => c.noticeUri);
+  if (!targets.length) {
+    process.stdout.write('No membership notice sent: no client has a noticeUri. Apps see the change within 10 minutes.\n');
+    return;
+  }
+  createNotifier({ clients: targets, logger: { warn: (m) => process.stderr.write(`${m}\n`) } })(users, bumpTokenVersions(database, users));
+  process.stdout.write(`Membership notice sent to ${targets.map((c) => new URL(/** @type {string} */ (c.noticeUri)).origin).join(', ')}.\n`);
+}
+
 const db = new DatabaseSync(path);
 try {
   db.exec('PRAGMA foreign_keys = ON');
@@ -41,6 +69,7 @@ try {
   } else {
     const before = from ? ` ${from.name} (${from.id}) is now an admin.` : ' It had no owner.';
     process.stdout.write(`Transferred ${workspace.name} (${workspace.id}) to ${to.name} (${to.id}).${before}\n`);
+    notice(db, [to.id, ...(from ? [from.id] : [])]);
   }
 } catch (error) {
   db.close();

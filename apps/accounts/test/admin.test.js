@@ -93,3 +93,45 @@ test('transfer-ownership makes the member the owner and the old owner an admin, 
   assert.match(stdout, /Lost Owner/);
   assert.deepEqual(roles(), { [ids.owner]: 'admin', [ids.member]: 'owner' });
 });
+
+test('without the server configuration it says no notice went out', async () => {
+  // The club now belongs to Next Owner: hand it back.
+  const { code, stdout, stderr } = await run(['transfer-ownership', ids.club, ids.owner]);
+  assert.equal(code, 0, stderr);
+  assert.match(stdout, /No membership notice sent/);
+});
+
+test('with the server configuration it raises both token versions and sends the notice', async () => {
+  const { createServer } = await import('node:http');
+  const bodies = [];
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      bodies.push({ auth: req.headers.authorization, ...JSON.parse(body) });
+      res.writeHead(204).end();
+    });
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', () => done(undefined)));
+  try {
+    const { port } = /** @type {import('node:net').AddressInfo} */ (server.address());
+    const noticeUri = `http://127.0.0.1:${port}/notices/membership`;
+    const env = {
+      TINYLAP_DB: dbPath,
+      TINYLAP_DEV: '1',
+      TINYLAP_ISSUER: 'http://localhost:4100',
+      BETTER_AUTH_SECRET: 'x'.repeat(32),
+      TINYLAP_CLIENTS: JSON.stringify([{ clientId: 'timing', clientSecret: 's', redirectUris: ['http://127.0.0.1:9/auth/callback'], resource: 'http://127.0.0.1:9', noticeUri, noticeToken: 'notice-t' }]),
+    };
+    const { code, stdout, stderr } = await run(['transfer-ownership', ids.club, ids.member], env);
+    assert.equal(code, 0, stderr);
+    assert.match(stdout, /Membership notice sent to http:\/\/127\.0\.0\.1/);
+    assert.equal(bodies.length, 1);
+    assert.equal(bodies[0].auth, 'Bearer notice-t');
+    assert.deepEqual([...bodies[0].users].sort(), [ids.member, ids.owner].sort());
+    assert.ok(bodies[0].versions[ids.member] >= 1 && bodies[0].versions[ids.owner] >= 1, JSON.stringify(bodies[0].versions));
+  } finally {
+    server.closeAllConnections();
+    await new Promise((done) => server.close(() => done(undefined)));
+  }
+});

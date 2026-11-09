@@ -251,6 +251,17 @@ test('connected apps: listed on the account page, disconnected with a plain form
   assert.equal(again.location.pathname, '/consent', 'the next sign-in asks again');
 });
 
+test('sign out everywhere raises the token version and sends a notice', async () => {
+  const { user, jar } = await member('Fiona');
+  await connect(jar);
+  const sent = notices.length;
+  const res = await fetch(`${accounts.issuer}/api/me/sign-out-everywhere`, { method: 'POST', headers: { cookie: jar.header(), origin: accounts.issuer } });
+  assert.equal(res.status, 204);
+  for (let i = 0; i < 500 && notices.length === sent; i++) await new Promise((done) => setTimeout(done, 10));
+  assert.deepEqual(notices.at(-1), [user.id]);
+  assert.ok(noticeVersions.at(-1)[user.id] >= 1, 'with the raised token version');
+});
+
 test('disconnect refuses a cross-site post', async () => {
   const { jar } = await member();
   const res = await fetch(`${accounts.issuer}/account/apps/disconnect`, {
