@@ -22,6 +22,10 @@ export const RECORD_FRESH_MS = 60_000;
 const OFFSET_WINDOW_MS = 60_000;
 /** How many drivers the idle board's "Fastest on this track" lists. */
 const FASTEST = 10;
+/** A Wi-Fi decoder that has been silent this long is offline (decoder Wi-Fi spec §6). */
+export const OFFLINE_AFTER_MS = 25_000;
+/** After this long without a batch a decoder counts as switched off, and its banner goes. */
+export const EXPECTED_FOR_MS = 30 * 60_000;
 const ACTIVE = new Set(['countdown', 'running', 'finishing']);
 
 /** What members see of a crossing. */
@@ -171,9 +175,26 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     hub.publish(workspaceId, 'idle', { idle }, null);
   }
 
+  /** Decoders that report over Wi-Fi and have not said they are going quiet, by id. */
+  const expected = new Map();
+  /** Each workspace's offline list as last published, to publish only changes. */
+  const offlineShown = new Map();
+
+  function offlineOf(workspaceId, t = now()) {
+    const list = [];
+    for (const [id, e] of expected) {
+      if (e.workspaceId === workspaceId && t - e.lastAt >= OFFLINE_AFTER_MS && t - e.lastAt < EXPECTED_FOR_MS) {
+        list.push({ id, name: store.decoder(id)?.name ?? id });
+      }
+    }
+    return list;
+  }
+
   /** Stores a batch (spec §5). Repeating it is safe. */
   function ingest({ workspaceId, decoder, via, batch }) {
     const receivedAt = now();
+    if (batch.quiet) expected.delete(decoder);
+    else if (via === 'net' || expected.has(decoder)) expected.set(decoder, { workspaceId, lastAt: receivedAt });
     const sorted = [...batch.passings].sort((a, b) => a.t - b.t);
     noteOffsets(decoder, batch.boot, sorted, receivedAt, batch.now);
     return store.transaction(() => {
@@ -258,6 +279,14 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       // The first sweep looks a day back from the cutoff, not at every passing ever kept.
       store.deleteLoosePassings(t - LOOSE_PASSING_MS, t - 2 * LOOSE_PASSING_MS);
     }
+    for (const [id, e] of expected) if (t - e.lastAt >= EXPECTED_FOR_MS) expected.delete(id);
+    for (const workspaceId of new Set([...offlineShown.keys(), ...[...expected.values()].map((e) => e.workspaceId)])) {
+      const offline = offlineOf(workspaceId, t);
+      const key = JSON.stringify(offline);
+      if (key === (offlineShown.get(workspaceId) ?? '[]')) continue;
+      offlineShown.set(workspaceId, key);
+      hub.publish(workspaceId, 'decoders', { offline });
+    }
     for (const workspaceId of recordNews.keys()) {
       if (!recordNewOf(workspaceId, t)) clearRecord(workspaceId);
     }
@@ -337,6 +366,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       // Each driver's best here, for the board when nobody is racing; through personal_best_fastest, ten rows at most.
       fastest: session ? [] : store.fastest(workspaceId, track.id, ws.direction, FASTEST),
       recordNew,
+      offline: offlineOf(workspaceId),
       lastResults: ended && { session: publicSession(ended), standings: endedRows },
       ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idleOf(workspaceId), driven: session !== null || store.driven(workspaceId) }),
     };

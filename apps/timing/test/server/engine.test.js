@@ -221,3 +221,85 @@ test('now places late passings at their real time after a long outage', () => {
   engine.ingest({ workspaceId: W, decoder: 'd1', via: 'net', batch: { boot: BOOT, passings: [{ transponder: '0A', t: 1000 }, { transponder: '0A', t: 9000 }], logs: [], now: 300_000 } });
   assert.deepEqual(store.crossings(practice.id).map((c) => c.at), [T0 + 1000, T0 + 9000]);
 });
+
+/** A batch from decoder d1 with no passings: the heartbeat of a board in use. */
+const beat = (engine, via = 'net', extra = {}) => engine.ingest({ workspaceId: W, decoder: 'd1', via, batch: { boot: BOOT, passings: [], ...extra } });
+const offlineEvents = (events) => events.filter((e) => e.type === 'decoders');
+
+test('a wifi decoder silent for 25 s shows offline, and its next batch clears it', () => {
+  const { engine, clock, store, events } = rig();
+  store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
+  beat(engine);
+  clock.now = T0 + 24_000;
+  engine.tick();
+  assert.deepEqual(engine.snapshot(W).offline, []);
+  clock.now = T0 + 25_000;
+  engine.tick();
+  engine.tick();
+  assert.deepEqual(engine.snapshot(W).offline, [{ id: 'd1', name: 'Start line' }]);
+  assert.deepEqual(engine.snapshot(W, { watcher: true }).offline, [{ id: 'd1', name: 'Start line' }]);
+  assert.deepEqual(offlineEvents(events).map((e) => e.data), [{ offline: [{ id: 'd1', name: 'Start line' }] }]);
+  beat(engine);
+  engine.tick();
+  assert.deepEqual(engine.snapshot(W).offline, []);
+  assert.deepEqual(offlineEvents(events).map((e) => e.data.offline.length), [1, 0]);
+});
+
+test('quiet ends expecting the decoder', () => {
+  const { engine, clock, store, events } = rig();
+  store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
+  beat(engine);
+  clock.now = T0 + 10_000;
+  beat(engine, 'net', { quiet: true });
+  clock.now = T0 + 60_000;
+  engine.tick();
+  assert.deepEqual(engine.snapshot(W).offline, []);
+  assert.deepEqual(offlineEvents(events), []);
+});
+
+test('a lost quiet keeps the banner until 30 minutes', () => {
+  const { engine, clock, store } = rig();
+  store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
+  beat(engine);
+  clock.now = T0 + 30 * 60_000 - 1;
+  engine.tick();
+  assert.equal(engine.snapshot(W).offline.length, 1);
+  clock.now = T0 + 30 * 60_000;
+  engine.tick();
+  assert.deepEqual(engine.snapshot(W).offline, []);
+});
+
+test('a cable-only decoder never shows offline', () => {
+  const { engine, clock, store, events } = rig();
+  store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
+  beat(engine, 'serial');
+  clock.now = T0 + 5 * 60_000;
+  engine.tick();
+  assert.deepEqual(engine.snapshot(W).offline, []);
+  assert.deepEqual(offlineEvents(events), []);
+});
+
+test('cable batches keep an expected wifi decoder fresh', () => {
+  const { engine, clock, store } = rig();
+  store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
+  beat(engine);
+  clock.now = T0 + 20_000;
+  beat(engine, 'serial');
+  clock.now = T0 + 40_000;
+  engine.tick();
+  assert.deepEqual(engine.snapshot(W).offline, []);
+  clock.now = T0 + 45_000;
+  engine.tick();
+  assert.equal(engine.snapshot(W).offline.length, 1);
+});
+
+test('the decoders event goes to watchers too', () => {
+  const { engine, clock, store, hub } = rig();
+  store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
+  const seen = [];
+  hub.subscribe(W, { lastEventId: null, watcher: true }, (e) => seen.push(e));
+  beat(engine);
+  clock.now = T0 + 25_000;
+  engine.tick();
+  assert.deepEqual(offlineEvents(seen).map((e) => e.data), [{ offline: [{ id: 'd1', name: 'Start line' }] }]);
+});
