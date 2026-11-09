@@ -21,7 +21,8 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   assert.equal(res.status, 200);
   const body = await res.text();
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
-  assert.match(body, new RegExp(`<div id="bridge" data-workspace="${me.workspaces[0].id}">`));
+  assert.match(body, new RegExp(`<div id="bridge" data-workspace="${me.workspaces[0].id}" data-server=`));
+  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+">/, 'the page carries the address the decoder posts to');
   for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready', 'disconnected']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
   assert.doesNotMatch(body, /not-tinylap/);
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
