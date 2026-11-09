@@ -26,7 +26,7 @@ test('the sender keeps passings until the server holds them', async () => {
   assert.deepEqual(await sender.flush(), { sent: 2 });
   assert.equal(posts[0].url, 'http://timing.test/decoders/d1/passings');
   assert.equal(posts[0].init.headers.authorization, `Bearer ${'t'.repeat(43)}`);
-  assert.deepEqual(JSON.parse(posts[0].init.body), { boot: 'b00tb00t', passings: [{ transponder: '10', t: 1000 }, { transponder: '10', t: 9000 }] });
+  assert.deepEqual(JSON.parse(posts[0].init.body), { boot: 'b00tb00t', now: 0, passings: [{ transponder: '10', t: 1000 }, { transponder: '10', t: 9000 }] });
   assert.equal(sender.pending, 1, 'the server only holds up to 1000');
   fail = true;
   await assert.rejects(sender.flush(), /503/);
@@ -51,6 +51,40 @@ test('the sender keeps a passing it did not send, even below `through`', async (
   assert.equal(sender.pending, 1, 'added while the batch was in flight');
   await sender.flush();
   assert.equal(sender.pending, 0);
+});
+
+test('the sender stamps `now`, beats every 10 s while in use, and goes quiet after 15 idle minutes', async () => {
+  const bodies = [];
+  const fetch = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return Response.json({ stored: 0, duplicates: 0, through: null });
+  };
+  let now = 0;
+  const sender = createSender({ url: 'http://timing.test', decoder: 'd1', token: 't'.repeat(43), boot: 'b00tb00t', fetch, clock: () => now });
+  now = 9_999;
+  assert.deepEqual(await sender.flush(), { sent: 0 }, 'not due yet');
+  assert.equal(bodies.length, 0);
+  now = 10_000;
+  await sender.flush();
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0].now, 10_000);
+  assert.deepEqual(bodies[0].passings, []);
+  assert.match(bodies[0].logs[0], /^stat up=10 /);
+  assert.equal(bodies[0].quiet, undefined);
+  now = 15_000;
+  await sender.flush();
+  assert.equal(bodies.length, 1, 'the next beat is 10 s later');
+  now = 15 * 60_000;
+  await sender.flush();
+  assert.equal(bodies.at(-1).quiet, true);
+  const count = bodies.length;
+  now += 60_000;
+  await sender.flush();
+  assert.equal(bodies.length, count, 'silent after the quiet batch');
+  sender.add([{ transponder: '10', t: now }]);
+  await sender.flush();
+  assert.equal(bodies.at(-1).quiet, undefined, 'a passing ends the quiet');
+  assert.equal(bodies.at(-1).passings.length, 1);
 });
 
 const settle = () => new Promise((done) => setImmediate(done));

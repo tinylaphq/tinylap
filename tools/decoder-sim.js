@@ -4,7 +4,9 @@
 
 // Pretends to be a TinyLap decoder, to try timing without hardware.
 //   node tools/decoder-sim.js net --url http://localhost:8100 --decoder <id> --token <token> [--cars 4]
-//     posts passings every second, like a decoder on Wi-Fi.
+//     posts passings every second, like a decoder on Wi-Fi: with its clock in `now`, a `stat` line every
+//     10 s while in use, and a `quiet` batch after 15 idle minutes. --silent-after <s> stops all posting
+//     after that many seconds, to see the board's "isn't reporting" banner.
 //   node tools/decoder-sim.js serial [--cars 4]
 //     speaks ZRound (and %TL… commands) on stdin/stdout, like a decoder on USB:
 //     socat -d -d pty,raw,echo=0,link=/tmp/decoder EXEC:"node tools/decoder-sim.js serial"
@@ -16,14 +18,22 @@ import { MAX_BATCH, createReader, createSimulator } from '@tinylap/timing';
 /** @param {number} n */
 export const carsOf = (n) => Array.from({ length: n }, (_, i) => ({ transponder: (0x10 + i).toString(16).toUpperCase(), lapMs: 7500 + i * 400 }));
 
+const HEARTBEAT_MS = 10_000;
+const IN_USE_MS = 15 * 60_000;
+
 /**
  * Posts passings in batches and keeps each until a batch carried it and the
- * server's `through` covers it, as a decoder's outbox does (spec §5).
- * @param {{ url: string, decoder: string, token: string, boot: string, fetch?: typeof fetch }} options
+ * server's `through` covers it, as a decoder's outbox does (spec §5). Like the
+ * board it adds `now`, a `stat` line every 10 s while in use (15 min after the
+ * start and after each passing), then one `quiet` batch and silence.
+ * @param {{ url: string, decoder: string, token: string, boot: string, fetch?: typeof fetch, clock?: () => number }} options
  */
-export function createSender({ url, decoder, token, boot, fetch: fetchImpl = fetch }) {
+export function createSender({ url, decoder, token, boot, fetch: fetchImpl = fetch, clock = () => 0 }) {
   /** @type {{ transponder: string, t: number }[]} */
   let outbox = [];
+  let lastUse = clock();
+  let lastBeat = lastUse;
+  let quietSent = false;
   const endpoint = `${url.replace(/\/$/, '')}/decoders/${decoder}/passings`;
   return {
     get pending() {
@@ -31,17 +41,29 @@ export function createSender({ url, decoder, token, boot, fetch: fetchImpl = fet
     },
     /** @param {{ transponder: string, t: number }[]} passings */
     add(passings) {
+      if (passings.length === 0) return;
       outbox.push(...passings);
+      lastUse = clock();
+      quietSent = false;
     },
     async flush() {
-      if (outbox.length === 0) return { sent: 0 };
+      const now = clock();
+      const inUse = now - lastUse < IN_USE_MS;
+      const beat = inUse && now - lastBeat >= HEARTBEAT_MS;
       const batch = outbox.slice(0, MAX_BATCH);
+      const quiet = !inUse && !quietSent && batch.length === outbox.length;
+      if (batch.length === 0 && !beat && !quiet) return { sent: 0 };
+      const body = { boot, now, passings: batch };
+      if (beat) body.logs = [`stat up=${Math.floor(now / 1000)} net=connected outbox=${outbox.length}`];
+      if (quiet) body.quiet = true;
       const res = await fetchImpl(endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-        body: JSON.stringify({ boot, passings: batch }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`timing answered ${res.status}: ${await res.text()}`);
+      if (beat) lastBeat = now;
+      if (quiet) quietSent = true;
       const { through } = await res.json();
       // Drop what this batch carried, up to `through`; a passing it didn't carry stays (spec §5).
       const sent = new Set(batch.filter((p) => through !== null && p.t <= through));
@@ -75,7 +97,7 @@ export function runSerial({ input, output, sim, clock }) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
-    options: { url: { type: 'string' }, decoder: { type: 'string' }, token: { type: 'string' }, cars: { type: 'string', default: '4' } },
+    options: { url: { type: 'string' }, decoder: { type: 'string' }, token: { type: 'string' }, cars: { type: 'string', default: '4' }, 'silent-after': { type: 'string' } },
   });
   const sim = createSimulator({ cars: carsOf(Number(values.cars)), decoder: values.decoder ?? null, token: values.token ?? null });
   const started = Date.now();
@@ -85,10 +107,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       console.error('net needs --url, --decoder and --token (pair a decoder in Setup to get them).');
       process.exit(2);
     }
-    const sender = createSender({ url: values.url, decoder: values.decoder, token: values.token, boot: sim.boot });
+    const sender = createSender({ url: values.url, decoder: values.decoder, token: values.token, boot: sim.boot, clock });
+    const silentAfter = values['silent-after'] === undefined ? Infinity : Number(values['silent-after']) * 1000;
     console.error(`decoder ${values.decoder}, boot ${sim.boot}, ${values.cars} cars`);
     setInterval(async () => {
       sender.add(sim.advance(clock()));
+      if (clock() >= silentAfter) return;
       try {
         const { sent } = await sender.flush();
         if (sent) console.error(`sent ${sent}, ${sender.pending} waiting`);
@@ -100,7 +124,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const serial = runSerial({ input: process.stdin, output: process.stdout, sim, clock });
     setInterval(() => serial.tick(), 100);
   } else {
-    console.error('usage: decoder-sim.js net --url <origin> --decoder <id> --token <token> [--cars n] | serial [--cars n]');
+    console.error('usage: decoder-sim.js net --url <origin> --decoder <id> --token <token> [--cars n] [--silent-after s] | serial [--cars n]');
     process.exit(2);
   }
 }
