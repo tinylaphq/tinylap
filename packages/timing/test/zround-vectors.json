@@ -71,6 +71,19 @@
       }
     },
     {
+      "body": "TLSERVER aHR0cHM6Ly94",
+      "message": {
+        "type": "server",
+        "url": "https://x"
+      }
+    },
+    {
+      "body": "TLSERVER aHR0cHM6Ly94 aHR0cHM6Ly94",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
       "body": "TLWIFI T2ZmaWNlIDVHICYgQ28 cCVzcyB3w7ZyZA",
       "message": {
         "type": "wifi",
@@ -886,6 +899,28 @@
       "ssid": "bmV0",
       "password": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZg",
       "reply": "%TLOK&"
+    }
+  ],
+  "server": [
+    {
+      "url": "aHR0cHM6Ly90aW55bGFwLXRpbWluZy5mbHkuZGV2",
+      "reply": "%TLOK&"
+    },
+    {
+      "url": "aHR0cDovLzE5Mi4xNjguMS4yMDo4MDgw",
+      "reply": "%TLOK&"
+    },
+    {
+      "url": "ZnRwOi8veA",
+      "reply": "%TLERR server&"
+    },
+    {
+      "url": "aHR0cHM6Ly9hYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh",
+      "reply": "%TLERR server&"
+    },
+    {
+      "url": "",
+      "reply": "%TLERR server&"
     }
   ]
 }

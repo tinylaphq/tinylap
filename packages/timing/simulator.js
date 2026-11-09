@@ -9,7 +9,7 @@
 // can be tried without hardware.
 
 import { randomBoot } from './passing.js';
-import { commands, wifiError } from './zround.js';
+import { commands, serverError, wifiError } from './zround.js';
 
 /** @import { ZroundMessage } from './types.js' */
 
@@ -161,6 +161,10 @@ export function createSimulator({ cars, jitterMs = 150, random = Math.random, de
           return [commands.ok];
         case 'wifi': {
           const error = wifiError(message.ssid, message.password);
+          return [error ? commands.error(error) : commands.ok];
+        }
+        case 'server': {
+          const error = serverError(message.url);
           return [error ? commands.error(error) : commands.ok];
         }
         case 'startup':

@@ -20,11 +20,12 @@ static const char* typeName(Message::Type t) {
     case Message::Type::HelloRequest: return "hello-request";
     case Message::Type::Pair: return "pair";
     case Message::Type::Wifi: return "wifi";
+    case Message::Type::Server: return "server";
     default: return "unknown";
   }
 }
 
-// Compares a message with a vector's expected one: the type, and the fields for pair and wifi.
+// Compares a message with a vector's expected one: the type, and the fields for pair, wifi and server.
 static void expectMessage(const Message& m, JsonVariantConst want, const std::string& what) {
   TEST_ASSERT_EQUAL_STRING_MESSAGE(want["type"].as<const char*>(), typeName(m.type), what.c_str());
   std::string type = want["type"].as<std::string>();
@@ -34,6 +35,8 @@ static void expectMessage(const Message& m, JsonVariantConst want, const std::st
   } else if (type == "wifi") {
     TEST_ASSERT_EQUAL_STRING_MESSAGE(want["ssid"].as<const char*>(), m.ssid.c_str(), what.c_str());
     TEST_ASSERT_EQUAL_STRING_MESSAGE(want["password"].as<const char*>(), m.password.c_str(), what.c_str());
+  } else if (type == "server") {
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(want["url"].as<const char*>(), m.server.c_str(), what.c_str());
   }
 }
 

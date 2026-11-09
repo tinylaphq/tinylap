@@ -18,10 +18,16 @@ static_assert(sizeof(Counters) == kCounterCount * sizeof(uint32_t), "Counters mu
 // under 512 bytes (spec §6.1).
 constexpr size_t kFwMax = 32;
 
+// What the stat line says about Wi-Fi delivery (Wi-Fi spec §3.5). post is the last answer's status,
+// 0 for no connection or a timeout (post=err), negative before the first answer (no post).
+struct NetStats { const char* net; uint32_t outbox, odrop; int post; };
+
 // Every line is `%TLLOG <kind> key=value ...&`; values hold no space, % or &.
-// prev may be null (nothing survived the reset).
+// prev may be null (nothing survived the reset); net may be null (no net fields).
 std::string bootLine(const char* reason, const char* fw, const Counters* prev);
-std::string statLine(const Counters& c, uint32_t upS, uint32_t heap);
+std::string statLine(const Counters& c, uint32_t upS, uint32_t heap, const NetStats* net = nullptr);
+// rssi= when connected, reason= (the ESP-IDF disconnect reason) otherwise; never the SSID (Wi-Fi spec §3.5).
+std::string wifiLine(const char* state, int rssi, int reason);
 std::string passLine(const CrossingEnd& e);   // Outcome::Passed only
 std::string eventLine(const CrossingEnd& e);  // Single, Quiet, MinLap
 std::string overflowLine(uint32_t tMs);

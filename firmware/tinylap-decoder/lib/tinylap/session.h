@@ -8,11 +8,12 @@
 
 namespace tinylap {
 
-// Where the pairing and the Wi-Fi settings live (NVS on the board).
+// Where the pairing, the Wi-Fi settings and the server address live (NVS on the board).
 struct Store {
   virtual bool load(std::string& decoder, std::string& token) = 0;     // false when nothing is stored
   virtual bool savePairing(const std::string& decoder, const std::string& token) = 0;
   virtual bool saveWifi(const std::string& ssid, const std::string& password) = 0;   // bytes, may hold NUL
+  virtual bool saveServer(const std::string& url) = 0;
   virtual ~Store() = default;
 };
 

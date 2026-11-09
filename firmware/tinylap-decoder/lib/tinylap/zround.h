@@ -8,9 +8,10 @@ namespace tinylap {
 
 // A message from the PC (spec §7). Only the fields of its type are set.
 struct Message {
-  enum class Type { Unknown, Startup, Reset, Stop, HelloRequest, Pair, Wifi } type = Type::Unknown;
+  enum class Type { Unknown, Startup, Reset, Stop, HelloRequest, Pair, Wifi, Server } type = Type::Unknown;
   std::string decoder, token;     // Pair
   std::string ssid, password;     // Wifi: decoded bytes
+  std::string server;             // Server: the decoded URL
   std::string raw;                // Unknown
 };
 

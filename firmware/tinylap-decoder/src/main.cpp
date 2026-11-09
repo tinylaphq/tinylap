@@ -10,6 +10,7 @@
 #include "diag.h"
 #include "frames.h"
 #include "ir_rmt.h"
+#include "net.h"
 #include "session.h"
 #include "store_nvs.h"
 
@@ -96,8 +97,10 @@ struct Observer : CrossingObserver {
 Crossings crossings({}, &observer);
 
 // The boot id's randomness (spec §3). Without Wi-Fi or Bluetooth the ESP32's generator needs the
-// SAR ADC's noise, so this switches it on around each draw. It must never run once Wi-Fi is on.
+// SAR ADC's noise, so this switches it on around each draw. It must never run once Wi-Fi is on;
+// then the radio makes esp_random() random by itself (Wi-Fi spec §3.6).
 uint32_t bootRandom() {
+  if (net::on()) return esp_random();
   bootloader_random_enable();
   uint32_t r = esp_random();
   bootloader_random_disable();
@@ -124,15 +127,51 @@ void onBoot(bool powerOn) {
   if (powerOn) {
     const char* reason = resetReason();
     bool showPrev = havePrev && strcmp(reason, "poweron") != 0;
-    sink.write(bootLine(reason, fw.c_str(), showPrev ? &prev : nullptr));
+    std::string line = bootLine(reason, fw.c_str(), showPrev ? &prev : nullptr);
+    sink.write(line);
+    net::bootLine(line);
   } else {
-    sink.write(bootLine("reset", fw.c_str(), nullptr));
+    std::string line = bootLine("reset", fw.c_str(), nullptr);
+    sink.write(line);
+    net::bootLine(line);
     crossings.reset();
   }
 }
 
-NvsStore store;
-Session session(store, bootRandom, sink, onBoot);
+// Tells the net glue about new settings once they are stored, without a reboot (Wi-Fi spec §3.2, §4).
+struct NetStore : Store {
+  NvsStore nvs;
+  UplinkConfig config;
+  bool load(std::string& decoder, std::string& token) override { return nvs.load(decoder, token); }
+  bool savePairing(const std::string& decoder, const std::string& token) override {
+    if (!nvs.savePairing(decoder, token)) return false;
+    config.decoder = decoder;
+    config.token = token;
+    net::setConfig(config);
+    return true;
+  }
+  bool saveWifi(const std::string& ssid, const std::string& password) override {
+    if (!nvs.saveWifi(ssid, password)) return false;
+    net::setWifi(ssid, password);
+    return true;
+  }
+  bool saveServer(const std::string& url) override {
+    if (!nvs.saveServer(url)) return false;
+    config.server = url;
+    net::setConfig(config);
+    return true;
+  }
+} store;
+Session session(store, bootRandom, sink, [](bool powerOn) {
+  net::boot(session.boot(), session.bootStartUs());
+  onBoot(powerOn);
+});
+
+// A confirmed passing goes out over the cable and into the outbox (Wi-Fi spec §3.3).
+void passed(const Passing& p) {
+  session.onPassing(p);
+  net::passing(line::transponder(p.id), p.tMs);
+}
 
 Counters snapshot() {
   Counters c = own;
@@ -169,7 +208,8 @@ void send(const QueuedFrame& q) {
   if (xQueueSend(queue, &q, 0) != pdTRUE) ir_.qdrop++;
 }
 
-// Core 0: batches to stamped frames on the queue, and nothing else (spec §2.4, §5.3).
+// Core 1, away from Wi-Fi (Wi-Fi spec §3.1): batches to stamped frames on the queue, and nothing
+// else (spec §2.4, §5.3).
 // Static buffers: a Batch is ~2 KB, too much for the task's stack.
 void irTask(void*) {
   static ir::Batch batch;
@@ -210,12 +250,18 @@ void setup() {
   havePrev = restore(saved, prev);
   save(saved, own);  // from here on, saved holds this run's counters
 
-  store.begin();  // if NVS fails, load reports nothing stored and saves answer %TLERR store
-  session.begin(esp_timer_get_time());
+  store.nvs.begin();  // if NVS fails, load reports nothing stored and saves answer %TLERR store
+  session.begin(esp_timer_get_time());  // before net::begin: the power-on boot id takes the ADC's noise
+
+  std::string decoder, ssid, password;
+  if (store.nvs.load(decoder, store.config.token) && validDecoderId(decoder)) store.config.decoder = decoder;
+  store.nvs.loadServer(store.config.server);
+  if (!store.nvs.loadWifi(ssid, password)) ssid.clear();
+  net::begin(store.config, ssid, password);
 
   queue = xQueueCreate(64, sizeof(QueuedFrame));
   // Without the queue or the receiver there is nothing to read; the stat lines then show batches=0.
-  if (queue && ir::begin(kIrPin)) xTaskCreatePinnedToCore(irTask, "ir", kIrStackBytes, nullptr, 10, nullptr, 0);
+  if (queue && ir::begin(kIrPin)) xTaskCreatePinnedToCore(irTask, "ir", kIrStackBytes, nullptr, 10, nullptr, 1);
 }
 
 void loop() {
@@ -235,7 +281,7 @@ void loop() {
       continue;
     }
     size_t n = crossings.onFrame(q.id, tMs, out, 2);
-    for (size_t i = 0; i < n; i++) session.onPassing(out[i]);
+    for (size_t i = 0; i < n; i++) passed(out[i]);
     observer.flush();
   }
 
@@ -244,15 +290,21 @@ void loop() {
   if (toBootMs(now, session.bootStartUs(), &nowMs)) {
     // Behind the clock, so a crossing is never closed before its last frames arrive (spec §5.3).
     size_t n = crossings.tick(nowMs > kTickLagMs ? nowMs - kTickLagMs : 0, out, 128);
-    for (size_t i = 0; i < n; i++) session.onPassing(out[i]);
+    for (size_t i = 0; i < n; i++) passed(out[i]);
     observer.flush();
   }
   session.tick(now);
 
+  std::string wifi;
+  while (net::nextLine(wifi)) sink.write(wifi);  // the net task's lines; only loop() writes Serial
+
   if (now >= nextStatUs) {
     nextStatUs += kStatUs;
     Counters c = snapshot();
-    sink.write(statLine(c, uint32_t(now / 1000000), ESP.getFreeHeap()));
+    NetStats n = net::stats();
+    std::string line = statLine(c, uint32_t(now / 1000000), ESP.getFreeHeap(), &n);
+    sink.write(line);
+    net::stat(line);
     save(saved, c);
   }
   vTaskDelay(1);

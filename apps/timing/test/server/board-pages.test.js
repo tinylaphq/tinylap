@@ -21,6 +21,7 @@ let finishClub;
 let recordsClub;
 let topClub;
 let countedClub;
+let quietClub;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -35,6 +36,8 @@ before(async () => {
   app.join(tess, topClub.id, user);
   countedClub = app.club(tess, 'Counted');
   app.join(tess, countedClub.id, user);
+  quietClub = app.club(tess, 'Quiet');
+  app.join(tess, quietClub.id, user);
   member = await app.login(user);
   base = `/clubs/${office.id}`;
 });
@@ -439,7 +442,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   s = await screens();
   const part = (body, start) => body.slice(body.indexOf(start), body.indexOf('</section>', body.indexOf(start)));
   for (const body of Object.values(s)) {
-    assert.doesNotMatch(body, /data-record-new|is-record|New track record|No session yet|Last laps|board-title|status-warning/);
+    assert.doesNotMatch(body, /data-record-new|is-record|New track record|No session yet|Last laps|board-title|board-unknown/);
     const head = body.slice(body.indexOf('<header class="board-track'), body.indexOf('</header>', body.indexOf('<header class="board-track')));
     assert.doesNotMatch(head, /Track record|7\.500/, 'the record is below, once');
     const hero = part(body, '<section class="board-hero"');
@@ -480,4 +483,31 @@ test('the last session shows its top three finishers', async () => {
   assert.deepEqual([...last.matchAll(/>(Abe|Bea|Cid|Dot)<\/span>/g)].map((m) => m[1]), ['Dot', 'Bea', 'Cid']);
   const fastest = body.slice(body.indexOf('<section class="board-fastest"'), body.indexOf('</section>', body.indexOf('<section class="board-fastest"')));
   assert.deepEqual([...fastest.matchAll(/>(Abe|Bea|Cid|Dot)<\/span>/g)].map((m) => m[1]), ['Dot', 'Bea', 'Cid', 'Abe']);
+});
+
+test('a decoder that is not reporting shows on every live board, and goes when it is back', async () => {
+  const quiet = `/clubs/${quietClub.id}`;
+  const sentence = /<p class="status status-warning flag board-offline" role="status">&lt;b&gt;Start&lt;\/b&gt; isn't reporting\. Laps will appear once it's back\.<\/p>/;
+  const beat = (t) => {
+    clock.now = 1_000_000_000_000 + t;
+    app.engine.ingest({ workspaceId: quietClub.id, decoder: 'q1', via: 'net', batch: { boot: 'b00tb00t', passings: [] } });
+  };
+  app.store.addDecoder(quietClub.id, { id: 'q1', name: '<b>Start</b>', tokenHash: 'h', createdAt: clock.now });
+  await app.form(member, `${quiet}/watch-link`, {});
+  const token = app.store.workspace(quietClub.id).watchToken;
+  beat(0);
+  const pages = () => [`${quiet}/board`, `${quiet}/board?big`].map((path) => get(member, path)).concat(get(null, `/watch/${token}`));
+  for (const res of await Promise.all(pages())) assert.doesNotMatch(await res.text(), /board-offline/, 'reporting');
+  clock.now += 25_000;
+  app.engine.tick();
+  for (const res of await Promise.all(pages())) {
+    const body = await res.text();
+    assert.match(body, sentence, 'idle');
+    assert.ok(body.indexOf('board-track') < body.indexOf('board-offline'), 'right after the track header');
+  }
+  app.engine.start(quietClub.id, { kind: 'practice', replace: true });
+  for (const res of await Promise.all(pages())) assert.match(await res.text(), sentence, 'session');
+  beat(30_000);
+  app.engine.tick();
+  for (const res of await Promise.all(pages())) assert.doesNotMatch(await res.text(), /board-offline/, 'back');
 });

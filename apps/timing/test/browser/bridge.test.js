@@ -254,6 +254,30 @@ test('a refusal after pairing says the decoder is paired', async (t) => {
   assert.equal(await page.getByLabel('Decoder name').isEditable(), true);
 });
 
+test('a board that does not answer the server address says its firmware is too old, and gets no Wi-Fi settings', async (t) => {
+  // The decoder swallows %TLSERVER, as firmware without the command does.
+  const DROP_SERVER = () => {
+    const Original = window.WritableStream;
+    Object.assign(window, { __sent: [] });
+    window.WritableStream = class extends Original {
+      constructor(sink, ...rest) {
+        super(sink && { ...sink, write: (chunk, c) => {
+          const line = new TextDecoder().decode(chunk);
+          /** @type {any} */ (window).__sent.push(line);
+          return line.startsWith('%TLSERVER ') ? undefined : sink.write(chunk, c);
+        } }, ...rest);
+      }
+    };
+  };
+  const { page } = await toPairing(t, { init: DROP_SERVER, as: wren });
+  await pairWith(page, { name: 'Old', ssid: 'Office', password: 'secret12' });
+  await page.getByRole('alert').filter({ hasText: 'The decoder is paired, but its firmware is too old for Wi-Fi. Update it, then pair again. Its passings still reach TinyLap over this cable.' }).waitFor({ timeout: 10_000 });
+  await page.getByText('Forwarding from Old', { exact: true }).first().waitFor();
+  const lines = await sent(page);
+  assert.ok(lines.some((line) => line.startsWith('%TLSERVER ')));
+  assert.ok(!lines.some((line) => line.startsWith('%TLWIFI')));
+});
+
 test('status lines on the bridge read as sentences, not in capitals', async (t) => {
   const { context, page } = await pageAs(browser, app, member);
   t.after(() => context.close());

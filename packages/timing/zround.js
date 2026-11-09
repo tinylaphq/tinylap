@@ -29,6 +29,8 @@ const LOG_VALUE = /^[!#$'-<>-[\]-~]{0,32}$/;
 /** The decoder's Wi-Fi limits, in UTF-8 bytes. */
 export const WIFI_NAME_BYTES = Object.freeze({ min: 1, max: 32 });
 export const WIFI_PASSWORD_BYTES = Object.freeze({ min: 8, max: 63 });
+/** The longest server address the decoder stores, in UTF-8 bytes. */
+export const SERVER_URL_BYTES = Object.freeze({ max: 128 });
 const HEX_KEY = /^[0-9A-Fa-f]{64}$/;
 
 /** @param {string} text */
@@ -81,6 +83,16 @@ export function wifiError(ssid, password) {
   return 'Wi-Fi password length';
 }
 
+/**
+ * The firmware's refusal for a server address, or null.
+ * @param {string} url
+ * @returns {'server' | null}
+ */
+export function serverError(url) {
+  const bytes = new TextEncoder().encode(url).length;
+  return /^https?:\/\//.test(url) && bytes <= SERVER_URL_BYTES.max ? null : 'server';
+}
+
 /** One message. @param {string} body the text between "%" and "&" @returns {ZroundMessage} */
 export function parseMessage(body) {
   const unknown = /** @type {const} */ ({ type: 'unknown', raw: body });
@@ -107,6 +119,10 @@ export function parseMessage(body) {
       const ssid = decode(fields[0]);
       const password = decode(fields[1]);
       if (ssid !== null && password !== null) return { type: 'wifi', ssid, password };
+    }
+    if (word === 'TLSERVER' && fields.length === 1) {
+      const url = decode(fields[0]);
+      if (url !== null) return { type: 'server', url };
     }
     return unknown;
   }
@@ -175,6 +191,8 @@ export const commands = Object.freeze({
   pair: (decoder, token) => `%TLPAIR ${decoder} ${token}&`,
   /** @param {string} ssid @param {string} password */
   wifi: (ssid, password) => `%TLWIFI ${encode(ssid)} ${encode(password)}&`,
+  /** @param {string} url */
+  server: (url) => `%TLSERVER ${encode(url)}&`,
   /** @param {string | null} decoder @param {string} boot */
   id: (decoder, boot) => `%TLID ${decoder ?? '-'} ${boot}&`,
   /** @param {string} text */

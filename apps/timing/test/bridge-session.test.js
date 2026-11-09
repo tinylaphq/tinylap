@@ -99,7 +99,7 @@ test('a %TLID before %C&: the bridge never sends %C&, ends unpaired, then pairs'
   assert.equal(count(rig.writes, commands.startup), 0, 'no %C&');
   assert.equal(bridge.kind, 'tinylap');
   assert.ok(!states.includes('choose') && !states.includes('listening'));
-  await bridge.pair('dec_1', 't'.repeat(43));
+  await bridge.pair('dec_1', 't'.repeat(43), null, 'https://timing.example');
   await until(() => bridge.state === 'ready');
   assert.equal(model.sim.decoder, 'dec_1');
   assert.equal(bridge.boot, model.sim.boot);
@@ -469,7 +469,7 @@ test('no write after close', async () => {
   const n = calls;
   await wait(100);
   // pair() is the one path that writes without a timer.
-  await bridge.pair('dec_1', 't'.repeat(43)).catch(() => {});
+  await bridge.pair('dec_1', 't'.repeat(43), null, 'https://timing.example').catch(() => {});
   assert.equal(calls, n);
 });
 
@@ -579,8 +579,8 @@ test('hello() keeps one retry: repeated clock-backs and pairings do not stack he
     rig.say(commands.clock(100));
   }
   await until(() => bridge.state === 'connecting');
-  await bridge.pair('dec_1', 't'.repeat(43));
-  await bridge.pair('dec_1', 't'.repeat(43));
+  await bridge.pair('dec_1', 't'.repeat(43), null, 'https://timing.example');
+  await bridge.pair('dec_1', 't'.repeat(43), null, 'https://timing.example');
   const from = rig.writes.length;
   await wait(FAST.helloMs * 4 + 20);
   const hellos = count(rig.writes.slice(from), commands.hello);
@@ -725,7 +725,7 @@ test('lines are dropped while unpaired, for a plain ZRound decoder, on #decide a
   await until(() => a.bridge.state === 'unpaired');
   unpaired.say(log('stat up=1'));
   await wait(20);
-  await a.bridge.pair('dec_1', 't'.repeat(43));
+  await a.bridge.pair('dec_1', 't'.repeat(43), null, 'https://timing.example');
   await until(() => a.bridge.state === 'ready');
   await wait(100);
   assert.deepEqual(logged(a.posts), [], 'unpaired');

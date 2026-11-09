@@ -22,7 +22,7 @@
 //   and offers that one to confirm.
 // The Bridge class itself (serial, outbox, retries) is ../bridge.js.
 import { wifiError } from '@tinylap/timing';
-import { Bridge, WifiRefusedError, WifiUnconfirmedError, sendOutbox } from '../bridge.js';
+import { Bridge, ServerUnconfirmedError, WifiRefusedError, WifiUnconfirmedError, sendOutbox } from '../bridge.js';
 import { formatLap } from '../format.js';
 import { EASYLAP_FILTER, hidTransport } from '../link/hid.js';
 import { robitronicProtocol } from '../link/robitronic.js';
@@ -654,19 +654,21 @@ class TlBridge extends HTMLElement {
         run.names.set(run.made.id, run.made.name);
         nameField.readOnly = true;
       }
-      await current().pair(run.made.id, run.made.token, ssid ? { ssid, password } : null);
+      await current().pair(run.made.id, run.made.token, ssid ? { ssid, password } : null, run.root.dataset.server ?? '');
       run.made = null;
       nameField.readOnly = false;
       if (run === this.run) this.ok(run);
     } catch (caught) {
-      if (caught instanceof WifiRefusedError || caught instanceof WifiUnconfirmedError) {
-        // The pairing is stored and the bridge is ready: only the Wi-Fi settings didn't take.
+      if (caught instanceof ServerUnconfirmedError || caught instanceof WifiRefusedError || caught instanceof WifiUnconfirmedError) {
+        // The pairing is stored and the bridge is ready: only the server address or the Wi-Fi settings didn't take.
         run.made = null;
         nameField.readOnly = false;
         if (run === this.run) {
-          this.fail(run, new Error(caught instanceof WifiRefusedError
-            ? `The decoder is paired, but it refused the Wi-Fi settings: ${caught.reason}.`
-            : "The decoder is paired, but it didn't confirm the Wi-Fi settings. Its passings still reach TinyLap over this cable."));
+          this.fail(run, new Error(caught instanceof ServerUnconfirmedError
+            ? 'The decoder is paired, but its firmware is too old for Wi-Fi. Update it, then pair again. Its passings still reach TinyLap over this cable.'
+            : caught instanceof WifiRefusedError
+              ? `The decoder is paired, but it refused the Wi-Fi settings: ${caught.reason}.`
+              : "The decoder is paired, but it didn't confirm the Wi-Fi settings. Its passings still reach TinyLap over this cable."));
         }
         return;
       }

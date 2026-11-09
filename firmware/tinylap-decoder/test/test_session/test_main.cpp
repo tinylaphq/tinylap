@@ -18,8 +18,8 @@ static uint32_t nextRandom() { return counter++; }
 
 struct FakeStore : Store {
   bool has = false, fail = false;
-  std::string decoder, token, ssid, password;
-  int pairings = 0, wifis = 0;
+  std::string decoder, token, ssid, password, server;
+  int pairings = 0, wifis = 0, servers = 0;
   bool load(std::string& d, std::string& t) override {
     if (!has) return false;
     d = decoder; t = token;
@@ -33,6 +33,11 @@ struct FakeStore : Store {
   bool saveWifi(const std::string& s, const std::string& p) override {
     if (fail) return false;
     ssid = s; password = p; wifis++;
+    return true;
+  }
+  bool saveServer(const std::string& u) override {
+    if (fail) return false;
+    server = u; servers++;
     return true;
   }
 };
@@ -204,6 +209,19 @@ static void test_wifi_vectors() {
   }
 }
 
+static void test_server_vectors() {
+  Rig a; a.start();
+  int accepted = 0;
+  for (JsonObjectConst v : vectors["server"].as<JsonArrayConst>()) {
+    const char* reply = v["reply"].as<const char*>();
+    expectReply(a, "%TLSERVER " + v["url"].as<std::string>() + "&", reply);
+    if (std::string(reply) == "%TLOK&") accepted++;
+  }
+  TEST_ASSERT_EQUAL(accepted, a.store.servers);
+  a.store.fail = true;
+  expectReply(a, "%TLSERVER aHR0cHM6Ly94&", "%TLERR store&");
+}
+
 static void test_wifi_bytes_reach_the_store_exactly() {
   Rig a; a.start();
   const std::string ssid("a\0b\xC3\xA9", 5);
@@ -269,6 +287,7 @@ int main() {
   RUN_TEST(test_wifi_bounds);
   RUN_TEST(test_wifi_vectors);
   RUN_TEST(test_wifi_bytes_reach_the_store_exactly);
+  RUN_TEST(test_server_vectors);
   RUN_TEST(test_longest_pairing_round_trips);
   RUN_TEST(test_stop_and_unknown_are_silent);
   RUN_TEST(test_clock);

@@ -134,3 +134,23 @@ test('a render that throws ends that stream, logs once and the server keeps goin
   assert.ok(await next(again, 'board'));
   await again.return();
 });
+
+test('the stream renders the offline banner after a decoders event', async () => {
+  const clock = { now: 1_000_000_000_000 };
+  const rig = await startTiming({ clock });
+  try {
+    const user = await rig.signUp('Dee');
+    const club = rig.club(user, 'Quiet');
+    const who = await rig.login(user);
+    rig.store.addDecoder(club.id, { id: 'q1', name: 'Start', tokenHash: 'h', createdAt: clock.now });
+    rig.engine.ingest({ workspaceId: club.id, decoder: 'q1', via: 'net', batch: { boot: 'b00tb00t', passings: [] } });
+    const it = events(await rig.api(who, 'GET', `/clubs/${club.id}/board/events`), { raw: true });
+    assert.doesNotMatch((await next(it, 'board')).data, /board-offline/);
+    clock.now += 25_000;
+    rig.engine.tick();
+    assert.match((await next(it, 'board')).data, /<p class="status status-warning flag board-offline" role="status">Start isn't reporting\. Laps will appear once it's back\.<\/p>/);
+    await it.return();
+  } finally {
+    await rig.close();
+  }
+});

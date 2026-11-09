@@ -43,6 +43,30 @@ void test_stat_line() {
   TEST_ASSERT_EQUAL_STRING(want.c_str(), statLine(c, 600, 200000).c_str());
 }
 
+void test_stat_line_with_net_fields() {
+  Counters c = sample();
+  std::string base = statLine(c, 600, 200000);
+  base.pop_back();   // the "&"
+  NetStats n{"connected", 3, 0, 200};
+  std::string s = statLine(c, 600, 200000, &n);
+  TEST_ASSERT_EQUAL_STRING((base + " net=connected outbox=3 odrop=0 post=200&").c_str(), s.c_str());
+  n = NetStats{"connecting", 12, 4, 0};
+  TEST_ASSERT_EQUAL_STRING((base + " net=connecting outbox=12 odrop=4 post=err&").c_str(), statLine(c, 600, 200000, &n).c_str());
+  n = NetStats{"off", 0, 0, -1};   // no answer yet: no post
+  TEST_ASSERT_EQUAL_STRING((base + " net=off outbox=0 odrop=0&").c_str(), statLine(c, 600, 200000, &n).c_str());
+  TEST_ASSERT_EQUAL_STRING((base + "&").c_str(), statLine(c, 600, 200000, nullptr).c_str());
+  // "pass" alone is the passings counter
+  for (const char* bad : {"ssid", "password", "psk", "token"}) TEST_ASSERT_NULL(strstr(s.c_str(), bad));
+}
+
+void test_wifi_line_connected_and_failed() {
+  TEST_ASSERT_EQUAL_STRING("%TLLOG wifi state=connected rssi=-61&", wifiLine("connected", -61, 0).c_str());
+  TEST_ASSERT_EQUAL_STRING("%TLLOG wifi state=failed reason=201&", wifiLine("failed", 0, 201).c_str());
+  TEST_ASSERT_EQUAL_STRING("%TLLOG wifi state=connecting reason=8&", wifiLine("connecting", 0, 8).c_str());
+  for (const std::string& s : {wifiLine("connected", -61, 0), wifiLine("failed", 0, 201)})
+    for (const char* bad : {"ssid", "pass", "token"}) TEST_ASSERT_NULL(strstr(s.c_str(), bad));
+}
+
 void test_lines_fit() {
   Counters c;
   memset(&c, 0xFF, sizeof c);
@@ -52,6 +76,10 @@ void test_lines_fit() {
   TEST_ASSERT_LESS_THAN(512, s.size());
   TEST_ASSERT_LESS_THAN(512, b.size());
   TEST_ASSERT_GREATER_THAN(100, s.size());
+  // The Uplink drops a log line (the text after "%TLLOG " without "&") over 510 bytes from batches.
+  NetStats n{"connecting", UINT32_MAX, UINT32_MAX, INT32_MAX};
+  std::string withNet = statLine(c, UINT32_MAX, UINT32_MAX, &n);
+  TEST_ASSERT_LESS_OR_EQUAL(510, withNet.size() - strlen("%TLLOG ") - 1);
 }
 
 void test_pass_line() {
@@ -150,6 +178,8 @@ int main() {
   RUN_TEST(test_vectors_load);
   RUN_TEST(test_boot_line);
   RUN_TEST(test_stat_line);
+  RUN_TEST(test_stat_line_with_net_fields);
+  RUN_TEST(test_wifi_line_connected_and_failed);
   RUN_TEST(test_lines_fit);
   RUN_TEST(test_pass_line);
   RUN_TEST(test_event_lines);

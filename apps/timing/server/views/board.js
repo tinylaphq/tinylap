@@ -237,12 +237,18 @@ function idleBoard(request, snap, { watcher, big }) {
 ${lists.length ? html`<div class="board-idle${timeWidths([...snap.fastest.map((b) => b.bestMs), ...(snap.lastResults?.standings ?? []).slice(0, 3).map((row) => row.bestMs)])}">${lists}</div>` : null}`;
 }
 
+/** One warning per Wi-Fi decoder that has gone quiet (decoder Wi-Fi spec §6); its laps arrive once it is back. */
+function offlineBanners(snap) {
+  return (snap.offline ?? []).map((decoder) => html`<p class="status status-warning flag board-offline" role="status">${decoder.name} isn't reporting. Laps will appear once it's back.</p>`);
+}
+
 /** Everything on the board that changes, in one element the stream replaces. */
 export function boardLive(request, snap, { watcher = false, big = false, token = null } = {}) {
   const events = `${watcher ? `/watch/${token}` : `${request.space.base}/board`}/events${big ? '?big' : ''}`;
   if (!snap.session) {
     return html`<div id="board-live" class="board is-idle" data-events="${events}">
 ${trackHeader(snap)}
+${offlineBanners(snap)}
 ${idleBoard(request, snap, { watcher, big })}
 </div>`;
   }
@@ -252,6 +258,7 @@ ${idleBoard(request, snap, { watcher, big })}
     : null;
   return html`<div id="board-live" class="board" data-events="${events}">
 ${trackHeader(snap)}
+${offlineBanners(snap)}
 ${header(snap)}
 ${unknown}
 <div class="board-main">${standingsTable(snap)}</div>

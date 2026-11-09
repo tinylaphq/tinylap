@@ -28,6 +28,7 @@ TinyLap's own commands, which ZRound never sends (fields separated by one space)
 | decoder → PC | `%TLID <decoder id or -> <boot>&` | `-` while unpaired; also sent unprompted whenever the boot changes |
 | PC → decoder | `%TLPAIR <decoder id> <token>&` | store the id and the 43-character token; answer `%TLOK&` |
 | PC → decoder | `%TLWIFI <base64url ssid> <base64url password>&` | store Wi-Fi; answer `%TLOK&` |
+| PC → decoder | `%TLSERVER <base64url url>&` | store where to post; answer `%TLOK&`, or `%TLERR server&` unless it starts `http://` or `https://` and is at most 128 bytes |
 | decoder → PC | `%TLOK&`, `%TLERR <text>&` | done, or why not |
 | decoder → PC | `%TLLOG <kind> <key=value>…&` | the decoder's own diagnostics; see Diagnostics |
 
@@ -106,6 +107,7 @@ On Linux, WebHID needs a udev rule that lets your user open the device's hidraw 
 
 A batch may also carry `"logs": ["pass id=1F t=1E0A first=1DE2 last=1E32 frames=8"]`: decoder log lines, each the text after `%TLLOG ` and before `&`. `passings` may then be empty; a body with neither is refused.
 
+- **`now`** (optional) is the decoder's clock in the same milliseconds as `t`, when it sent the batch: with it the server places passings sent late at their real time. **`quiet`** (optional) is `true` when the decoder sends no heartbeats from now until its next passing: the server stops expecting it.
 - **Limits:** at most 500 passings and 64 log lines per batch, the lines together at most 32 KiB and each at most 510 bytes. All of one boot.
 - **The answer** is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds.
 - **The outbox:** keep every passing until a batch that carried it is answered with a `through` that covers it. Drop only the passings you sent, since a passing of the same boot you never sent can lie below `through` too (the cable and Wi-Fi copies race). Resending is always safe.
@@ -115,10 +117,12 @@ From the bridge, the same route takes the member's session instead of a token, f
 
 The server writes the log lines to its log and stores none. A bad line is skipped, not refused, so a log line never costs a passing; a `422` for `logs` comes only when it is not an array of strings or breaks the limits above. A batch of logs alone stores nothing, but it counts as the decoder being in use.
 
+A decoder that has sent over Wi-Fi is expected to keep reporting: when it has sent nothing, over Wi-Fi or through the bridge, for 25 s, every live board shows "<name> isn't reporting. Laps will appear once it's back." It stops being expected after a batch with `quiet: true`, or after 30 minutes of silence. A decoder that only ever posts through the bridge never shows it.
+
 The whole API is described at `/openapi.json` and `/api` on any timing server.
 
 ## Without hardware
 
-Start the timing server (`apps/timing/README.md`, Development) with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production. The `tinylap` one behaves as the board does: four cars (codes `20` to `23`), already running when the port opens (no reset), and paired for good once paired, in this browser's storage. `tools/decoder-sim.js` plays a decoder on Wi-Fi, or on a serial pty.
+Start the timing server (`apps/timing/README.md`, Development) with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production. The `tinylap` one behaves as the board does: four cars (codes `20` to `23`), already running when the port opens (no reset), and paired for good once paired, in this browser's storage. `tools/decoder-sim.js` plays a decoder on Wi-Fi, or on a serial pty; on Wi-Fi it sends `now`, a `stat` line every 10 s and a `quiet` batch as the board does, and `--silent-after <s>` makes it stop posting, to see the banner.
 
 To try a real decoder on the bench, `pnpm --filter @tinylap/timing-app bench` starts accounts and timing in one process, in memory, and opens Chrome signed in on the Bridge page; the server's log, `decoder-log` lines included, goes to stdout.

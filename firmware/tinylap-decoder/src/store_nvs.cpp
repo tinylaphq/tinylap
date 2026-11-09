@@ -21,3 +21,25 @@ bool NvsStore::saveWifi(const std::string& ssid, const std::string& password) {
   if (password.empty()) return !prefs_.isKey("pass") || prefs_.remove("pass");
   return prefs_.putBytes("pass", password.data(), password.size()) == password.size();
 }
+
+bool NvsStore::saveServer(const std::string& url) {
+  return prefs_.putString("server", url.c_str()) == url.size();
+}
+
+bool NvsStore::loadServer(std::string& url) {
+  if (!prefs_.isKey("server")) return false;
+  url = prefs_.getString("server").c_str();
+  return true;
+}
+
+bool NvsStore::loadWifi(std::string& ssid, std::string& password) {
+  size_t n = prefs_.getBytesLength("ssid");
+  if (n == 0) return false;
+  ssid.assign(n, '\0');
+  if (prefs_.getBytes("ssid", &ssid[0], n) != n) return false;
+  password.clear();
+  n = prefs_.getBytesLength("pass");
+  if (n == 0) return true;
+  password.assign(n, '\0');
+  return prefs_.getBytes("pass", &password[0], n) == n;
+}

@@ -55,6 +55,12 @@ export class WifiUnconfirmedError extends Error {
   constructor() { super("The decoder didn't answer."); }
 }
 
+/** The decoder stored the pairing but didn't take the server address: no answer (firmware without %TLSERVER) or a %TLERR. */
+export class ServerUnconfirmedError extends Error {
+  name = 'ServerUnconfirmedError';
+  constructor() { super("The decoder didn't take the server address."); }
+}
+
 export class Bridge extends EventTarget {
   #replies = [];
   /** @type {Set<ReturnType<typeof setTimeout>>} */
@@ -584,17 +590,20 @@ export class Bridge extends EventTarget {
   }
 
   /**
-   * Stores the decoder's id and token on the board (and Wi-Fi, if given), then asks again who it is.
-   * Once the pairing is stored, the bridge asks whatever the Wi-Fi answer, so a paired board ends ready;
-   * then it rejects with WifiRefusedError or WifiUnconfirmedError if the Wi-Fi settings weren't taken (spec §5.2).
+   * Stores the decoder's id and token on the board, then the server address it posts to (and Wi-Fi, if given),
+   * then asks again who it is. Once the pairing is stored, the bridge asks whatever the later answers, so a paired board
+   * ends ready; then it rejects with ServerUnconfirmedError (no %TLWIFI is sent), WifiRefusedError or
+   * WifiUnconfirmedError if the server address or the Wi-Fi settings weren't taken (spec §5.2).
    */
-  async pair(decoderId, token, wifi = null) {
+  async pair(decoderId, token, wifi = null, server) {
     if (BROWSER_ASSIGNED.has(this.kind)) throw new Error("This decoder can't be paired over the cable.");
     let reply = this.#reply();
     await this.#write(encode(commands.pair(decoderId, token)));
     await reply;
-    let failure = null;
-    if (wifi) {
+    reply = this.#reply();
+    await this.#write(encode(commands.server(server)));
+    let failure = await reply.then(() => null, () => new ServerUnconfirmedError());
+    if (!failure && wifi) {
       reply = this.#reply();
       await this.#write(encode(commands.wifi(wifi.ssid, wifi.password)));
       failure = await reply.then(() => null, (caught) => (typeof caught.reason === 'string' ? new WifiRefusedError(caught.reason) : new WifiUnconfirmedError()));

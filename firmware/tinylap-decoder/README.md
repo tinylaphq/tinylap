@@ -1,6 +1,6 @@
 # TinyLap decoder firmware
 
-Firmware for a decoder you build yourself: an ESP32 with infrared receivers at the finish line, reading the transponders in the cars. Over USB it speaks ZRound plus TinyLap's `%TL…` commands, as `docs/timing.md` describes, so the timing app's bridge can pair it and forward its passings. Wi-Fi delivery comes later.
+Firmware for a decoder you build yourself: an ESP32 with infrared receivers at the finish line, reading the transponders in the cars. Over USB it speaks ZRound plus TinyLap's `%TL…` commands, as `docs/timing.md` describes, so the timing app's bridge can pair it and forward its passings. With Wi-Fi stored it also posts its passings to the timing server itself (see Wi-Fi delivery).
 
 The design is in `docs/superpowers/specs/2026-10-26-decoder-firmware-design.md`.
 
@@ -64,6 +64,34 @@ esptool.py --port /dev/cu.usbserial-XXXX write_flash 0 backup.bin    # to restor
 
 `esptool.py` comes with PlatformIO, in `~/.platformio/packages/tool-esptoolpy/`.
 
+## Wi-Fi delivery
+
+Pairing in the timing app stores the decoder id and token (`%TLPAIR`), where to post (`%TLSERVER`, the server's public address) and the Wi-Fi name and password (`%TLWIFI`). With Wi-Fi stored the board joins the network at power-up (station mode, rejoining with back-off from 1 s to 30 s) and a new `%TLWIFI` reconnects at once. With none stored, Wi-Fi stays off and it works over the cable only.
+
+- **The outbox** holds the last 2000 passings in RAM, not in flash; when full the oldest goes. A batch of up to 500 is posted to `<server>/decoders/<id>/passings` as soon as passings wait, one request at a time, over HTTPS checked against the ESP-IDF certificate bundle (`http://` works for a local server). What a batch carried leaves the outbox once an answer's `through` covers it, so cable and Wi-Fi together store each passing once.
+- **In use:** for 15 minutes after joining Wi-Fi and after each passing, the board posts the `stat` line every 10 s, which tells the server it is alive. Then it sends one batch with `quiet` and stays silent until the next passing.
+- **Answers:** `401` pauses sending until the board is paired again; `404` and `422` drop the batch; `429` waits `Retry-After`; anything else retries with back-off from 1 s to 30 s.
+- **Cores:** the IR task runs on core 1 and the network task on core 0, so Wi-Fi does not delay the frame stamps.
+
+Reading the logs (serial monitor or the bridge):
+
+- `%TLLOG wifi state=connecting|connected|failed rssi=… reason=…&` on each change. `rssi=` shows when connected, `reason=` (the ESP-IDF disconnect reason) when not. A wrong password shows `state=failed`.
+- The `stat` line carries `net=` (off, connecting, connected, or paused after a `401`), `outbox=` (passings waiting), `odrop=` (dropped because the outbox was full) and `post=` (the status of the last answer, or `err`; absent before the first answer).
+- Log lines over 510 bytes are left out of Wi-Fi batches. Only `stat` and `boot` go over Wi-Fi.
+
+To try the server side without a board: `node tools/decoder-sim.js net --url <origin> --decoder <id> --token <token> [--silent-after <s>]`.
+
+### Bench checks (not yet measured)
+
+Board-only; nothing here has been measured. Fill in the numbers when done.
+
+| Check | How | Result |
+| --- | --- | --- |
+| Frame spread | Frame-to-frame spread of a still transponder (decoder spec §4.1) with Wi-Fi off, connected and idle, and posting a batch every 100 ms. Wi-Fi on must not widen it beyond the measurement's own noise. | off: _TBD_ · idle: _TBD_ · posting: _TBD_ |
+| Router pulled mid-session | Cut the router's power while cars run: the banner shows within about 25 s; after power returns the laps from the gap arrive with their right times. | _TBD_ |
+| Cable and Wi-Fi together | Run both with a laptop on the cable: each passing is stored once. | _TBD_ |
+| Wrong password | Pair with a wrong Wi-Fi password: `state=failed` with a `reason=`. | _TBD_ |
+
 ### The pairing and the token
 
-The decoder keeps its pairing (decoder id and token) and the Wi-Fi settings in NVS, the board's flash. They are **not encrypted**: anyone holding the board can read the token with `esptool`. To unpair, pair again (a new `%TLPAIR` replaces the old pairing), or erase the flash with `pio run -e esp32dev -t erase --upload-port /dev/cu.usbserial-XXXX`, which also removes the firmware.
+The decoder keeps its pairing (decoder id and token), the server address and the Wi-Fi settings in NVS, the board's flash. They are **not encrypted**: anyone holding the board can read the token with `esptool`. To unpair, pair again (a new `%TLPAIR` replaces the old pairing), or erase the flash with `pio run -e esp32dev -t erase --upload-port /dev/cu.usbserial-XXXX`, which also removes the firmware.

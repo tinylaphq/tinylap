@@ -22,7 +22,7 @@ Owner decisions recorded here (binding):
 6. A **CI job** that runs the host tests and builds both board environments, in parallel with `check`, so `check` stays at about 3 minutes (§10).
 
 **Non-goals**
-- **Wi-Fi delivery** (the ingest API, the outbox, connecting at all). `%TLWIFI` stores the credentials and answers, so the bridge's setup flow already works; using them is the next step.
+- **Wi-Fi delivery** (the ingest API, the outbox, connecting at all). `%TLWIFI` stores the credentials and answers, so the bridge's setup flow already works; using them is `2026-11-09-decoder-wifi-delivery-design.md`.
 - Transponder firmware, and any change to the transponders.
 - Another board (Nano/Uno, ESP32-S3, C3). The pure code builds anywhere; only the `esp32dev` environment is set up.
 - Over-the-air updates, a status LED, a display, a web page on the decoder.
@@ -105,7 +105,7 @@ A frame stamped before the current boot started (`t_us` below the boot's start, 
 ## 3. Time and the boot
 
 - The decoder's clock is **milliseconds since the current boot**, from `esp_timer_get_time()` (64-bit µs since power-up) minus the boot's start. It never wraps in practice.
-- A **boot id** is 11 base64url characters (66 random bits) from `esp_random()`, with `bootloader_random_enable()`/`bootloader_random_disable()` around it, since without Wi-Fi or Bluetooth running the ESP32's generator is not truly random. It uses the SAR ADC, so it must never run while Wi-Fi is on; the code guards that now, for the next step. 11 matches the example in `docs/timing.md` and lies within 8–32.
+- A **boot id** is 11 base64url characters (66 random bits) from `esp_random()`, with `bootloader_random_enable()`/`bootloader_random_disable()` around it, since without Wi-Fi or Bluetooth running the ESP32's generator is not truly random. It uses the SAR ADC, so it must never run while Wi-Fi is on; the code guards that (`2026-11-09-decoder-wifi-delivery-design.md` §3.6). 11 matches the example in `docs/timing.md` and lies within 8–32.
 - A new boot starts **at power-up and at every `%I&`**. Each sends `%TLID <decoder or -> <boot>&` unprompted (`docs/timing.md`; `simulator.js` on `reset`). The one at power-up may go out before anything listens; the bridge asks with `%TLHELLO&` anyway.
 - A reset of the board (the EN button, or opening the port, §11) is a power-up: a new boot, a clock from zero. The bridge sees its clock go back and asks again.
 - The first `%T` is `%T3E8&`, one second into the boot.
@@ -249,7 +249,7 @@ The decoder says what it sees and drops, as `%TLLOG` lines over USB. They are wr
 - ZRound software sees `%TLLOG` as it sees `%TLID`: an unknown message, ignored. Today's bridge turns it into noise and ignores it (`apps/timing/public/link/zround.js`, the `unknown` case).
 - `docs/timing.md` gets the message in its table of TinyLap messages, decoder → PC, with this section's fields.
 
-**Where the lines go.** At the bench, the serial monitor. In use, the bridge forwards them to the timing server with the passings, and the server writes each as one JSON line to its log, with the decoder id and boot; on Fly.io that is `fly logs` and Fly's log search. That is in the bridge follow-up (§11); once Wi-Fi delivery exists, the decoder posts them itself. If Fly's log retention is too short, a log shipper is added then; nothing here changes.
+**Where the lines go.** At the bench, the serial monitor. In use, the bridge forwards them to the timing server with the passings, and the server writes each as one JSON line to its log, with the decoder id and boot; on Fly.io that is `fly logs` and Fly's log search. That is in the bridge follow-up (§11); with Wi-Fi delivery the decoder posts the `stat` and `boot` lines itself (`2026-11-09-decoder-wifi-delivery-design.md` §3.4). If Fly's log retention is too short, a log shipper is added then; nothing here changes.
 
 ## 7. Shared protocol vectors
 

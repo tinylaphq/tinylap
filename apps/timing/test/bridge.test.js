@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { commands, createReader, createSimulator } from '@tinylap/timing';
-import { Bridge, WifiRefusedError, WifiUnconfirmedError, sendOutbox } from '../public/bridge.js';
+import { Bridge, ServerUnconfirmedError, WifiRefusedError, WifiUnconfirmedError, sendOutbox } from '../public/bridge.js';
 import { memoryOutbox } from '../public/outbox.js';
 
 /** A serial port whose other end is `sim` (or silence). */
@@ -50,7 +50,7 @@ test('an unpaired decoder is paired, then forwards passings', async () => {
   const bridge = new Bridge({ port, outbox, post: async (decoder, batch) => { posts.push({ decoder, batch }); return { through: Math.max(...batch.passings.map((x) => x.t)) }; } });
   await bridge.start();
   await until(() => bridge.state === 'unpaired');
-  await bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' });
+  await bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' }, 'https://timing.example');
   await until(() => bridge.state === 'ready');
   assert.equal(sim.decoder, 'dec_1');
   assert.equal(bridge.decoder, 'dec_1');
@@ -145,7 +145,7 @@ test("a 404 for the decoder's own id stops forwarding until it is paired again; 
   assert.equal(posts.length, 2);
   assert.equal(await outbox.count(), 0);
 
-  await bridge.pair('dec_2', 't'.repeat(43));
+  await bridge.pair('dec_2', 't'.repeat(43), null, 'https://timing.example');
   await until(() => bridge.state === 'ready');
   assert.equal(sim.decoder, 'dec_2');
   send(commands.lap('0A', 25000));
@@ -286,7 +286,8 @@ test('a reply that came too late does not answer the next request', async () => 
   const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }), helloMs: 10_000, replyMs: 30 });
   await bridge.start();
   await assert.rejects(bridge.pair('dec_1', 't'.repeat(43)), /didn't answer/);
-  const second = bridge.pair('dec_1', 't'.repeat(43));
+  const second = bridge.pair('dec_1', 't'.repeat(43), null, 'https://timing.example');
+  send(commands.ok);
   send(commands.ok);
   await second;
   await bridge.close();
@@ -299,7 +300,7 @@ test('a decoder that refuses Wi-Fi after %TLOK& for the pairing ends ready, and 
   const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }) });
   await bridge.start();
   await until(() => bridge.state === 'unpaired');
-  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'short12' }),
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'short12' }, 'https://timing.example'),
     (e) => e instanceof WifiRefusedError && e.name === 'WifiRefusedError' && e.reason === 'Wi-Fi password length');
   await until(() => bridge.state === 'ready');
   assert.equal(bridge.decoder, 'dec_1');
@@ -314,10 +315,57 @@ test('a Wi-Fi timeout after %TLOK& ends ready, and pair rejects with WifiUnconfi
   const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }), replyMs: 50 });
   await bridge.start();
   await until(() => bridge.state === 'unpaired');
-  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' }),
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' }, 'https://timing.example'),
     (e) => e instanceof WifiUnconfirmedError && e.name === 'WifiUnconfirmedError');
   await until(() => bridge.state === 'ready');
   assert.equal(bridge.decoder, 'dec_1');
+  await bridge.close();
+});
+
+test('pairing writes %TLPAIR, %TLSERVER, then %TLWIFI, and %TLSERVER goes without Wi-Fi too', async () => {
+  const sim = createSimulator({ cars: [] });
+  const seen = [];
+  const spy = { reply: (message, now) => { seen.push(message.type); return sim.reply(message, now); } };
+  const { port } = fakePort(spy);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }) });
+  await bridge.start();
+  await until(() => bridge.state === 'unpaired');
+  await bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' }, 'https://timing.example');
+  assert.deepEqual(seen.filter((type) => ['pair', 'server', 'wifi'].includes(type)), ['pair', 'server', 'wifi']);
+  assert.ok(seen.includes('server'));
+  seen.length = 0;
+  await bridge.pair('dec_1', 't'.repeat(43), null, 'https://timing.example');
+  assert.deepEqual(seen.filter((type) => ['pair', 'server', 'wifi'].includes(type)), ['pair', 'server']);
+  await bridge.close();
+});
+
+test('a decoder silent on %TLSERVER gets no %TLWIFI, is still asked who it is, and pair rejects with ServerUnconfirmedError', async () => {
+  const sim = createSimulator({ cars: [] });
+  const seen = [];
+  const silent = { reply: (message, now) => { seen.push(message.type); return message.type === 'server' ? [] : sim.reply(message, now); } };
+  const { port } = fakePort(silent);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }), replyMs: 50 });
+  await bridge.start();
+  await until(() => bridge.state === 'unpaired');
+  seen.length = 0;
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' }, 'https://timing.example'),
+    (e) => e instanceof ServerUnconfirmedError && e.name === 'ServerUnconfirmedError');
+  assert.ok(!seen.includes('wifi'));
+  assert.ok(seen.includes('hello-request'));
+  await until(() => bridge.state === 'ready');
+  await bridge.close();
+});
+
+test('a %TLERR for the server address skips %TLWIFI and rejects with ServerUnconfirmedError', async () => {
+  const sim = createSimulator({ cars: [] });
+  const seen = [];
+  const spy = { reply: (message, now) => { seen.push(message.type); return sim.reply(message, now); } };
+  const { port } = fakePort(spy);
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }) });
+  await bridge.start();
+  await until(() => bridge.state === 'unpaired');
+  await assert.rejects(bridge.pair('dec_1', 't'.repeat(43), { ssid: 'Office', password: 'secret12' }, 'ftp://nope'), ServerUnconfirmedError);
+  assert.ok(!seen.includes('wifi'));
   await bridge.close();
 });
 

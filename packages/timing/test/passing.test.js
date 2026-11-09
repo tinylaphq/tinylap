@@ -65,3 +65,14 @@ test('random boots are valid and differ', () => {
   assert.equal(a.length, 11);
   assert.notEqual(a, randomBoot());
 });
+
+test('readBatch takes now and quiet when given', () => {
+  const r = readBatch({ boot: 'b00tb00t', passings: [], logs: ['stat up=1'], now: 81234, quiet: true });
+  assert.deepEqual(r, { ok: true, batch: { boot: 'b00tb00t', passings: [], logs: ['stat up=1'], now: 81234, quiet: true } });
+  assert.equal('now' in readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }] }).batch, false);
+});
+
+test('readBatch refuses a bad now or quiet', () => {
+  for (const now of [-1, 1.5, '5', null]) assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], now }).ok, false);
+  assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], quiet: 'yes' }).ok, false);
+});
