@@ -183,8 +183,9 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   function offlineOf(workspaceId, t = now()) {
     const list = [];
     for (const [id, e] of expected) {
-      if (e.workspaceId === workspaceId && t - e.lastAt >= OFFLINE_AFTER_MS && t - e.lastAt < EXPECTED_FOR_MS) {
-        list.push({ id, name: store.decoder(id)?.name ?? id });
+      const decoder = store.decoder(id);
+      if (e.workspaceId === workspaceId && decoder?.workspaceId === workspaceId && t - e.lastAt >= OFFLINE_AFTER_MS && t - e.lastAt < EXPECTED_FOR_MS) {
+        list.push({ id, name: decoder.name });
       }
     }
     return list;
@@ -279,7 +280,10 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       // The first sweep looks a day back from the cutoff, not at every passing ever kept.
       store.deleteLoosePassings(t - LOOSE_PASSING_MS, t - 2 * LOOSE_PASSING_MS);
     }
-    for (const [id, e] of expected) if (t - e.lastAt >= EXPECTED_FOR_MS) expected.delete(id);
+    for (const [id, e] of expected) {
+      // An unpaired decoder is no longer expected.
+      if (t - e.lastAt >= EXPECTED_FOR_MS || store.decoder(id)?.workspaceId !== e.workspaceId) expected.delete(id);
+    }
     for (const workspaceId of new Set([...offlineShown.keys(), ...[...expected.values()].map((e) => e.workspaceId)])) {
       const offline = offlineOf(workspaceId, t);
       const key = JSON.stringify(offline);

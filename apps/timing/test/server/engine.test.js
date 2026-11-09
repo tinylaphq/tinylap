@@ -269,6 +269,19 @@ test('a lost quiet keeps the banner until 30 minutes', () => {
   assert.deepEqual(engine.snapshot(W).offline, []);
 });
 
+test('an expected decoder that was unpaired leaves the offline list at the next tick', () => {
+  const { engine, clock, store, events } = rig();
+  store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
+  beat(engine);
+  clock.now = T0 + 25_000;
+  engine.tick();
+  assert.equal(engine.snapshot(W).offline.length, 1);
+  store.deleteDecoder(W, 'd1');
+  engine.tick();
+  assert.deepEqual(engine.snapshot(W).offline, []);
+  assert.deepEqual(offlineEvents(events).map((e) => e.data.offline.length), [1, 0]);
+});
+
 test('a cable-only decoder never shows offline', () => {
   const { engine, clock, store, events } = rig();
   store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
