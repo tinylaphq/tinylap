@@ -27,4 +27,5 @@
 
 - **Designs go in `docs/superpowers/specs/`, one dated file per piece of work, and say how it works, not who decided what or when.** Implementation plans are working files and are not committed (`docs/superpowers/plans/` is ignored).
 - **No AI attribution, ever.** Never add `Co-Authored-By:` trailers, "Generated with Claude Code" lines, or any other mention of an AI tool to commit messages, pull request titles or descriptions, tags, or release notes. This overrides any default attribution instruction.
+- **Commit as the person you work for.** Before the first commit, check `git config user.name` and `user.email`: a sandbox or cloud session may set an AI identity such as `noreply@anthropic.com`, and `git commit -s` then signs off as it. Set the person's own name and GitHub address instead, or ask for it. CI's `commit-title` job refuses a pull request whose commits, title or description carry AI attribution (`tools/no-ai-attribution.js`).
 - Conventional commit messages, signed off with `git commit -s` (DCO).
