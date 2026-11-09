@@ -142,3 +142,10 @@ test('%TLWIFI answers through the wifi vectors', () => {
     assert.deepEqual(sim.reply(parseMessage(`TLWIFI ${ssid} ${password}`), 0), [reply], `${ssid} / ${password}`);
   }
 });
+
+test('%TLSERVER answers through the server vectors', () => {
+  const sim = createSimulator({ cars: [] });
+  for (const { url, reply } of vectors.server) {
+    assert.deepEqual(sim.reply(parseMessage(`TLSERVER ${url}`), 0), [reply], url);
+  }
+});

@@ -77,6 +77,12 @@ Message parseMessage(const std::string& body) {
         m.ssid = ssid;
         m.password = password;
       }
+    } else if (word == "TLSERVER" && fields.size() == 2) {
+      std::string url;
+      if (decodeText(fields[1], url)) {
+        m.type = Message::Type::Server;
+        m.server = url;
+      }
     }
   }
   if (m.type != Message::Type::Unknown) m.raw.clear();

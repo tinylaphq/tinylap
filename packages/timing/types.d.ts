@@ -98,6 +98,7 @@ export type ZroundMessage =
   | { type: 'hello'; decoder: string | null; boot: string }
   | { type: 'pair'; decoder: string; token: string }
   | { type: 'wifi'; ssid: string; password: string }
+  | { type: 'server'; url: string }
   | { type: 'ok' }
   | { type: 'error'; text: string }
   | { type: 'unknown'; raw: string };

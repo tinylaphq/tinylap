@@ -10,6 +10,8 @@ static bool hexDigits(const std::string& s) {
   return true;
 }
 
+static bool startsWith(const std::string& s, const char* prefix) { return s.rfind(prefix, 0) == 0; }
+
 Session::Session(Store& store, uint32_t (*random)(), Sink& out, std::function<void(bool)> onBoot)
     : store_(store), random_(random), out_(out), onBoot_(std::move(onBoot)) {}
 
@@ -54,6 +56,13 @@ void Session::onBytes(const char* data, size_t n, int64_t nowUs) {
           out_.write(line::error("Wi-Fi password length"));
         } else {
           out_.write(store_.saveWifi(m.ssid, m.password) ? line::ok() : line::error("store"));
+        }
+        break;
+      case Message::Type::Server:
+        if (!(startsWith(m.server, "http://") || startsWith(m.server, "https://")) || m.server.size() > 128) {
+          out_.write(line::error("server"));
+        } else {
+          out_.write(store_.saveServer(m.server) ? line::ok() : line::error("store"));
         }
         break;
       case Message::Type::Reset:

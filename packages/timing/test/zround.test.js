@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { commands, createReader, parseLog, parseMessage, wifiError } from '../index.js';
+import { commands, createReader, parseLog, parseMessage, serverError, wifiError } from '../index.js';
 
 test('ZRound messages', () => {
   assert.deepEqual(parseMessage('C'), { type: 'startup' });
@@ -40,6 +40,7 @@ test('commands round-trip, Wi-Fi credentials included', () => {
   assert.deepEqual(parseMessage(body(commands.clock(500))), { type: 'clock', t: 500 });
   assert.deepEqual(parseMessage(body(commands.id(null, 'b00tb00t'))), { type: 'hello', decoder: null, boot: 'b00tb00t' });
   assert.deepEqual(parseMessage(body(commands.wifi('Office 5G & Co', 'p%ss wörd'))), { type: 'wifi', ssid: 'Office 5G & Co', password: 'p%ss wörd' });
+  assert.deepEqual(parseMessage(body(commands.server('https://x.example/ü'))), { type: 'server', url: 'https://x.example/ü' });
   // "%" and "&" are removed, so two spaces remain.
   assert.equal(commands.error('50% & more'), '%TLERR 50  more&');
   assert.deepEqual(parseMessage(body(commands.reset)), { type: 'reset' });
@@ -126,6 +127,15 @@ test('vectors: Wi-Fi lengths', () => {
     assert.equal(m.type, 'wifi');
     const error = wifiError(m.ssid, m.password);
     assert.equal(error ? commands.error(error) : commands.ok, reply, `${m.ssid} / ${m.password}`);
+  }
+});
+
+test('vectors: server address', () => {
+  for (const { url, reply } of vectors.server) {
+    const m = parseMessage(`TLSERVER ${url}`);
+    assert.equal(m.type, 'server');
+    const error = serverError(m.url);
+    assert.equal(error ? commands.error(error) : commands.ok, reply, m.url);
   }
 });
 

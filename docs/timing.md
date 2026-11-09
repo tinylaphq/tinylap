@@ -28,6 +28,7 @@ TinyLap's own commands, which ZRound never sends (fields separated by one space)
 | decoder → PC | `%TLID <decoder id or -> <boot>&` | `-` while unpaired; also sent unprompted whenever the boot changes |
 | PC → decoder | `%TLPAIR <decoder id> <token>&` | store the id and the 43-character token; answer `%TLOK&` |
 | PC → decoder | `%TLWIFI <base64url ssid> <base64url password>&` | store Wi-Fi; answer `%TLOK&` |
+| PC → decoder | `%TLSERVER <base64url url>&` | store where to post; answer `%TLOK&`, or `%TLERR server&` unless it starts `http://` or `https://` and is at most 128 bytes |
 | decoder → PC | `%TLOK&`, `%TLERR <text>&` | done, or why not |
 | decoder → PC | `%TLLOG <kind> <key=value>…&` | the decoder's own diagnostics; see Diagnostics |
 
