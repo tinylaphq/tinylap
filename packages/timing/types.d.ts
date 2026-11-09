@@ -16,6 +16,10 @@ export interface Batch {
   boot: string;
   passings: { transponder: string; t: number }[];
   logs: string[];
+  /** The decoder's clock in ms when it sent the batch; places late passings at their real time. */
+  now?: number;
+  /** The decoder holds no passing it has not sent. */
+  quiet?: boolean;
 }
 
 /** The decoder-time position of a passing, for lap arithmetic. */

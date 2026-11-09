@@ -213,3 +213,11 @@ test('loose passings older than a day are deleted; passings of a session and tra
   assert.equal(store.countPassings(W), 1);
   assert.ok(store.transponders(W).some((t) => t.code === '0A'));
 });
+
+test('now places late passings at their real time after a long outage', () => {
+  const { engine, clock, store, startPractice } = rig();
+  const practice = startPractice();
+  clock.now = T0 + 300_000; // five minutes after the passings happened
+  engine.ingest({ workspaceId: W, decoder: 'd1', via: 'net', batch: { boot: BOOT, passings: [{ transponder: '0A', t: 1000 }, { transponder: '0A', t: 9000 }], logs: [], now: 300_000 } });
+  assert.deepEqual(store.crossings(practice.id).map((c) => c.at), [T0 + 1000, T0 + 9000]);
+});

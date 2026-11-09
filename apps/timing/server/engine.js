@@ -105,11 +105,12 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, session: publicSession(ended), standings: rows });
     return ended;
   }
-  /** Records every passing's receive offset first, so a late batch maps by its newest passing. */
-  function noteOffsets(decoder, boot, passings, receivedAt) {
+  /** Records every passing's receive offset, and the batch's own `now` when it has one, first, so a late batch maps by its newest passing. */
+  function noteOffsets(decoder, boot, passings, receivedAt, now) {
     const key = `${decoder} ${boot}`;
     const list = (offsets.get(key) ?? []).filter((o) => o.receivedAt >= receivedAt - OFFSET_WINDOW_MS);
     for (const p of passings) list.push({ receivedAt, offset: receivedAt - p.t });
+    if (now !== undefined) list.push({ receivedAt, offset: receivedAt - now });
     offsets.set(key, list);
   }
   /** Server time of decoder time `t`: the smallest offset seen in the last minute. */
@@ -174,7 +175,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   function ingest({ workspaceId, decoder, via, batch }) {
     const receivedAt = now();
     const sorted = [...batch.passings].sort((a, b) => a.t - b.t);
-    noteOffsets(decoder, batch.boot, sorted, receivedAt);
+    noteOffsets(decoder, batch.boot, sorted, receivedAt, batch.now);
     return store.transaction(() => {
       let stored = 0;
       let seen = false;

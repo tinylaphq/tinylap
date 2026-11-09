@@ -38,8 +38,10 @@ export const randomBoot = () => base64url(globalThis.crypto.getRandomValues(new 
  */
 export function readBatch(value) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return { ok: false, error: 'The body must be a JSON object.' };
-  const { boot, passings, logs } = /** @type {{ boot?: unknown, passings?: unknown, logs?: unknown }} */ (value);
+  const { boot, passings, logs, now, quiet } = /** @type {{ boot?: unknown, passings?: unknown, logs?: unknown, now?: unknown, quiet?: unknown }} */ (value);
   if (typeof boot !== 'string' || !BOOT_ID.test(boot)) return { ok: false, error: '`boot` must be 8 to 32 base64url characters.' };
+  if (now !== undefined && (typeof now !== 'number' || !Number.isSafeInteger(now) || now < 0)) return { ok: false, error: '`now` must be a whole number of milliseconds, 0 or more.' };
+  if (quiet !== undefined && typeof quiet !== 'boolean') return { ok: false, error: '`quiet` must be true or false.' };
   /** @type {string[]} */
   const lines = [];
   if (logs !== undefined) {
@@ -64,5 +66,9 @@ export function readBatch(value) {
     if (typeof t !== 'number' || !Number.isSafeInteger(t) || t < 0) return { ok: false, error: `passings[${i}].t must be a whole number of milliseconds, 0 or more.` };
     out.push({ transponder, t });
   }
-  return { ok: true, batch: { boot, passings: out, logs: lines } };
+  /** @type {Batch} */
+  const batch = { boot, passings: out, logs: lines };
+  if (now !== undefined) batch.now = /** @type {number} */ (now);
+  if (quiet !== undefined) batch.quiet = /** @type {boolean} */ (quiet);
+  return { ok: true, batch };
 }
