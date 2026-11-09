@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "uplink.h"
@@ -188,12 +189,74 @@ static void test_backoff_doubles_to_30_s_and_resets_on_200() {
     TEST_ASSERT_TRUE(u.next(now, r));
   }
   TEST_ASSERT_EQUAL(0, u.lastStatus());
-  u.answer(200, "{\"stored\":0,\"duplicates\":1,\"through\":null}", now);
+  u.answer(200, "{\"stored\":0,\"duplicates\":1,\"through\":0}", now);
   TEST_ASSERT_EQUAL(1, u.waiting());
   TEST_ASSERT_TRUE(u.next(now, r));
   u.answer(500, "", now);
   TEST_ASSERT_FALSE(u.next(now + kS - 1, r));
   TEST_ASSERT_TRUE(u.next(now + kS, r));
+}
+
+static void test_429_retry_after_is_at_most_an_hour() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.answer(429, "", 0, INT64_MAX / 1000);
+  TEST_ASSERT_FALSE(u.next(3600 * kS - 1, r));
+  TEST_ASSERT_TRUE(u.next(3600 * kS, r));
+}
+
+static void test_200_without_through_backs_off() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.answer(200, "<html>Sign in to the hotel Wi-Fi</html>", 0);
+  TEST_ASSERT_EQUAL(1, u.waiting());
+  TEST_ASSERT_FALSE(u.next(kS - 1, r));
+  TEST_ASSERT_TRUE(u.next(kS, r));
+  u.answer(200, "{\"stored\":0,\"duplicates\":0,\"through\":null}", kS);
+  TEST_ASSERT_FALSE(u.next(3 * kS - 1, r));
+  TEST_ASSERT_TRUE(u.next(3 * kS, r));
+}
+
+static void test_reconnecting_ends_the_backoff() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  int64_t now = 0;
+  for (int i = 0; i < 5; i++) {
+    TEST_ASSERT_TRUE(u.next(now, r));
+    u.answer(0, "", now);
+    now += 30 * kS;
+  }
+  TEST_ASSERT_TRUE(u.next(now, r));
+  u.answer(0, "", now);
+  TEST_ASSERT_FALSE(u.next(now + kS, r));
+  u.onConnected(now + kS);
+  TEST_ASSERT_TRUE(u.next(now + kS, r));
+  u.answer(0, "", now + kS);   // and the back-off starts again at 1 s
+  TEST_ASSERT_FALSE(u.next(now + 2 * kS - 1, r));
+  TEST_ASSERT_TRUE(u.next(now + 2 * kS, r));
+  u.answer(401, "", now + 2 * kS);
+  u.onConnected(now + 3 * kS);
+  TEST_ASSERT_FALSE(u.next(now + 3 * kS, r));   // a 401 pause stays
+}
+
+static void test_long_log_line_stays_out() {
+  Uplink u; ready(u);
+  u.onConnected(0);
+  u.onStat(std::string(511, 's'), 10 * kS);
+  u.onPassing("2A", 1000, 10 * kS);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(10 * kS, r));
+  TEST_ASSERT_TRUE(has(r.body, "{\"transponder\":\"2A\",\"t\":1000}"));
+  TEST_ASSERT_FALSE(has(r.body, "\"logs\""));
+  u.answer(200, "{\"stored\":1,\"duplicates\":0,\"through\":1000}", 10 * kS);
+  u.onStat(std::string(510, 's'), 20 * kS);
+  TEST_ASSERT_TRUE(u.next(20 * kS, r));
+  TEST_ASSERT_TRUE(has(r.body, std::string(510, 's')));
 }
 
 static void test_heartbeat_only_while_in_use() {
@@ -277,6 +340,8 @@ static void test_read_through_null_and_number() {
   TEST_ASSERT_EQUAL(81234, t);
   TEST_ASSERT_TRUE(readThrough("{ \"through\" : 7 }", t));
   TEST_ASSERT_EQUAL(7, t);
+  TEST_ASSERT_TRUE(readThrough("{\n\t\"through\":\r\n 7\n}", t));
+  TEST_ASSERT_EQUAL(7, t);
   TEST_ASSERT_FALSE(readThrough("{\"stored\":0,\"duplicates\":0,\"through\":null}", t));
   TEST_ASSERT_FALSE(readThrough("{\"stored\":0}", t));
   TEST_ASSERT_FALSE(readThrough("", t));
@@ -296,6 +361,10 @@ int main() {
   RUN_TEST(test_404_and_422_drop_the_batch);
   RUN_TEST(test_429_waits_retry_after);
   RUN_TEST(test_backoff_doubles_to_30_s_and_resets_on_200);
+  RUN_TEST(test_429_retry_after_is_at_most_an_hour);
+  RUN_TEST(test_200_without_through_backs_off);
+  RUN_TEST(test_reconnecting_ends_the_backoff);
+  RUN_TEST(test_long_log_line_stays_out);
   RUN_TEST(test_heartbeat_only_while_in_use);
   RUN_TEST(test_boot_line_goes_with_the_next_batch);
   RUN_TEST(test_nothing_without_server_or_pairing);

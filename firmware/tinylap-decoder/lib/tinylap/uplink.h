@@ -33,6 +33,8 @@ class Uplink {
   struct Entry { uint8_t boot; uint32_t t; char transponder[5]; };
   struct Boot { uint8_t seq; std::string id; };
   static constexpr size_t kBoots = 4;
+  static constexpr size_t kMaxLogBytes = 510;        // the server's limit per log line (docs/timing.md)
+  static constexpr int64_t kMaxRetryAfterS = 3600;   // a longer Retry-After is taken as an hour
 
   Entry& at(size_t i) { return ring_[(head_ + i) % kCapacity]; }
   void dropFront();

@@ -56,7 +56,12 @@ void Uplink::onPassing(const std::string& transponder, uint32_t tMs, int64_t now
   startInUse(nowUs);
 }
 
-void Uplink::onConnected(int64_t nowUs) { startInUse(nowUs); }
+// Back on Wi-Fi: what waited through the outage goes at once (a 401 pause stays).
+void Uplink::onConnected(int64_t nowUs) {
+  backoffUs_ = kBackoffMinUs;
+  waitUntilUs_ = 0;
+  startInUse(nowUs);
+}
 
 // In use for 15 minutes after connecting and after each passing (spec §3.4).
 void Uplink::startInUse(int64_t nowUs) {
@@ -93,9 +98,12 @@ bool Uplink::next(int64_t nowUs, Request& out) {
   bool quiet = passings.empty() && quietDue_;
 
   // A batch of logs alone always carries the stat line: the server refuses an empty batch.
+  // A line over the server's 510 bytes stays out, or the 422 would cost the passings (docs/timing.md).
+  const bool withBootLine = bootLinePending_ && bootLine_.size() <= kMaxLogBytes;
+  const bool withStat = !stat_.empty() && stat_.size() <= kMaxLogBytes && (statPending_ || passings.empty());
   std::vector<std::string> logs;
-  if (bootLinePending_) logs.push_back(bootLine_);
-  if (!stat_.empty() && (statPending_ || passings.empty())) logs.push_back(stat_);
+  if (withBootLine) logs.push_back(bootLine_);
+  if (withStat) logs.push_back(stat_);
   if (passings.empty() && logs.empty()) {
     heartbeatDue_ = quietDue_ = false;
     return false;
@@ -113,8 +121,8 @@ bool Uplink::next(int64_t nowUs, Request& out) {
   inFlight_ = true;
   sent_ = passings.size();
   sentQuiet_ = quiet;
-  sentBootLineGen_ = bootLinePending_ ? bootLineGen_ : 0;
-  sentStatGen_ = !stat_.empty() && (statPending_ || passings.empty()) ? statGen_ : 0;
+  sentBootLineGen_ = withBootLine ? bootLineGen_ : 0;
+  sentStatGen_ = withStat ? statGen_ : 0;
   heartbeatDue_ = quietDue_ = false;
   if (quiet) quietSent_ = true;
   return true;
@@ -126,9 +134,10 @@ void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t 
   inFlight_ = false;
   lastStatus_ = status;
   bool delivered = false;
-  if (status == 200) {
-    int64_t through;
-    if (readThrough(body, through)) {   // drop only what this batch carried and through covers
+  int64_t through = 0;
+  const bool readable = status == 200 && readThrough(body, through);
+  if (status == 200 && (readable || sent_ == 0)) {
+    if (readable) {   // drop only what this batch carried and through covers
       size_t gone = sent_;   // the kept ones close up toward the batch's end, the front gaps go
       for (size_t i = sent_; i-- > 0;)
         if (at(i).t > through) at(--gone) = at(i);
@@ -144,8 +153,8 @@ void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t 
     count_ -= sent_;
     delivered = true;
   } else if (status == 429 && retryAfterS > 0) {
-    waitUntilUs_ = nowUs + retryAfterS * 1000000;
-  } else {
+    waitUntilUs_ = nowUs + std::min<int64_t>(retryAfterS, kMaxRetryAfterS) * 1000000;
+  } else {   // also a 200 without a readable through for passings it carried (a captive portal, a proxy)
     waitUntilUs_ = nowUs + backoffUs_;
     backoffUs_ = std::min(backoffUs_ * 2, kBackoffMaxUs);
   }
@@ -206,9 +215,10 @@ bool readThrough(const std::string& body, int64_t& through) {
   size_t i = body.find("\"through\"");
   if (i == std::string::npos) return false;
   i += 9;
-  while (i < body.size() && body[i] == ' ') i++;
+  auto space = [&] { while (i < body.size() && (body[i] == ' ' || body[i] == '\t' || body[i] == '\r' || body[i] == '\n')) i++; };
+  space();
   if (i >= body.size() || body[i++] != ':') return false;
-  while (i < body.size() && body[i] == ' ') i++;
+  space();
   size_t start = i;
   int64_t v = 0;
   for (; i < body.size() && body[i] >= '0' && body[i] <= '9' && i - start < 18; i++) v = v * 10 + (body[i] - '0');
