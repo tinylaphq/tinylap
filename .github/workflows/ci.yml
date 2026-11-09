@@ -155,6 +155,8 @@ jobs:
   commit-title:
     # Also on a dispatch to a pull request's branch (the release pull request,
     # see release.yml), never on a run by hand on main, which has no title.
+    # On a pull request it also checks that no commit, the title or the
+    # description carries AI attribution (AGENTS.md).
     if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:
@@ -162,6 +164,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -178,6 +182,13 @@ jobs:
       - run: echo "$TITLE" | pnpm commitlint
         env:
           TITLE: ${{ github.event.pull_request.title || steps.pr.outputs.title }}
+      - if: github.event_name == 'pull_request'
+        run: node tools/no-ai-attribution.js "$BASE" "$HEAD"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
 
   deploy:
     needs: [check, smoke]
