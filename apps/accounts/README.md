@@ -148,7 +148,10 @@ fly ssh console --app tinylap-accounts -C \
 
 The user becomes the owner, the previous owner (if any) an admin. It works on
 `TINYLAP_DB`, default `/data/accounts.sqlite`, and says `Nothing changed` if the
-user already owns the club.
+user already owns the club. On the machine it reads the server's configuration,
+raises both members' token versions and sends the clients a membership notice,
+as a change on the club page does. Where the configuration is missing, it says
+no notice was sent, and apps see the change within 10 minutes.
 
 ### Rotation
 

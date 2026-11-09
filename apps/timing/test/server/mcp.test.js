@@ -56,7 +56,9 @@ test('without a token: 401 with a challenge that leads to sign-in', async () => 
   const header = res.headers.get('www-authenticate');
   assert.match(header, /^Bearer /);
   assert.deepEqual(params(header), { resource_metadata: `${t.base}/.well-known/oauth-protected-resource/mcp`, scope: 'timing offline_access' });
-  assert.match(res.headers.get('access-control-expose-headers'), /WWW-Authenticate/);
+  const exposed = /** @type {string} */ (res.headers.get('access-control-expose-headers')).split(',').map((h) => h.trim().toLowerCase());
+  assert.ok(exposed.includes('www-authenticate'));
+  assert.equal(new Set(exposed).size, exposed.length, `each header once: ${exposed.join(', ')}`);
 });
 
 test('a token that is not one of ours, or not for /mcp, is invalid_token', async () => {

@@ -295,7 +295,7 @@ async function mcp(request) {
 }
 
 export const mcpRoutes = [
-  { pattern: /^\/mcp$/, cors: { allowHeaders: MCP_REQUEST_HEADERS, exposeHeaders: 'WWW-Authenticate, Retry-After, Mcp-Protocol-Version' }, methods: { POST: mcp, GET: mcp, DELETE: mcp } },
+  { pattern: /^\/mcp$/, cors: { allowHeaders: MCP_REQUEST_HEADERS, exposeHeaders: 'WWW-Authenticate, Mcp-Protocol-Version' }, methods: { POST: mcp, GET: mcp, DELETE: mcp } },
   // The path-suffixed location (RFC 9728 §3.1) that the 401 names, and the root one some clients probe.
   { pattern: /^\/\.well-known\/oauth-protected-resource(?:\/mcp)?$/, methods: { GET: protectedResource } },
 ];
