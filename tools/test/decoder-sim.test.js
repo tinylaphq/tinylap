@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
-import { createSimulator } from '@tinylap/timing';
+import { createSimulator, readBatch } from '@tinylap/timing';
 import { carsOf, createSender, runSerial } from '../decoder-sim.js';
 
 test('cars get distinct transponders and lap times', () => {
@@ -56,7 +56,9 @@ test('the sender keeps a passing it did not send, even below `through`', async (
 test('the sender stamps `now`, beats every 10 s while in use, and goes quiet after 15 idle minutes', async () => {
   const bodies = [];
   const fetch = async (_url, init) => {
-    bodies.push(JSON.parse(init.body));
+    const body = JSON.parse(init.body);
+    if (!readBatch(body).ok) return new Response('refused', { status: 422 });
+    bodies.push(body);
     return Response.json({ stored: 0, duplicates: 0, through: null });
   };
   let now = 0;
@@ -77,6 +79,7 @@ test('the sender stamps `now`, beats every 10 s while in use, and goes quiet aft
   now = 15 * 60_000;
   await sender.flush();
   assert.equal(bodies.at(-1).quiet, true);
+  assert.ok(bodies.at(-1).logs.length > 0, 'a logs-only batch needs its stat line');
   const count = bodies.length;
   now += 60_000;
   await sender.flush();

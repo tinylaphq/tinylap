@@ -24,7 +24,7 @@ const IN_USE_MS = 15 * 60_000;
 /**
  * Posts passings in batches and keeps each until a batch carried it and the
  * server's `through` covers it, as a decoder's outbox does (spec §5). Like the
- * board it adds `now`, a `stat` line every 10 s while in use (15 min after the
+ * board it adds `now`, a minimal `stat` line every 10 s while in use (15 min after the
  * start and after each passing), then one `quiet` batch and silence.
  * @param {{ url: string, decoder: string, token: string, boot: string, fetch?: typeof fetch, clock?: () => number }} options
  */
@@ -54,7 +54,7 @@ export function createSender({ url, decoder, token, boot, fetch: fetchImpl = fet
       const quiet = !inUse && !quietSent && batch.length === outbox.length;
       if (batch.length === 0 && !beat && !quiet) return { sent: 0 };
       const body = { boot, now, passings: batch };
-      if (beat) body.logs = [`stat up=${Math.floor(now / 1000)} net=connected outbox=${outbox.length}`];
+      if (beat || quiet) body.logs = [`stat up=${Math.floor(now / 1000)} net=connected outbox=${outbox.length}`];
       if (quiet) body.quiet = true;
       const res = await fetchImpl(endpoint, {
         method: 'POST',
