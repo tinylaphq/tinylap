@@ -47,10 +47,23 @@ std::string bootLine(const char* reason, const char* fw, const Counters* prev) {
   return s + "&";
 }
 
-std::string statLine(const Counters& c, uint32_t upS, uint32_t heap) {
+std::string statLine(const Counters& c, uint32_t upS, uint32_t heap, const NetStats* net) {
   std::string s = "%TLLOG stat up=" + std::to_string(upS);
   counters(s, c, "");
-  return s + " heap=" + std::to_string(heap) + "&";
+  s += " heap=" + std::to_string(heap);
+  if (net) {
+    s += " net=" + clean(net->net) + " outbox=" + std::to_string(net->outbox) + " odrop=" + std::to_string(net->odrop);
+    if (net->post == 0) s += " post=err";
+    else if (net->post > 0) s += " post=" + std::to_string(net->post);
+  }
+  return s + "&";
+}
+
+std::string wifiLine(const char* state, int rssi, int reason) {
+  std::string s = "%TLLOG wifi state=" + clean(state);
+  if (strcmp(state, "connected") == 0) s += " rssi=" + std::to_string(rssi);
+  else s += " reason=" + std::to_string(reason);
+  return s + "&";
 }
 
 std::string passLine(const CrossingEnd& e) {
