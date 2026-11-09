@@ -399,11 +399,13 @@ issues):
 
 ## 14. Out of scope (later specs)
 
-- **Device pairing** for club laptops, in the timing-app spec: a device is its
+- **Device pairing** for club laptops, in a spec of its own: a device is its
   own principal (`sub = device:<id>`, a `device` role in one workspace, its
   own refresh-token family), never the approving admin's identity. Needs its
-  own spike of custom token claims in Better Auth.
-- **MCP:** Client ID Metadata Documents, Dynamic Client Registration and
-  protected resource metadata, with the first MCP server.
+  own spike of custom token claims in the provider's device-authorization
+  grant.
+- **MCP** is no longer out of scope: Client ID Metadata Documents, protected
+  resource metadata, the consent page and connected apps are in
+  `2026-10-31-timing-mcp-design.md`. Dynamic Client Registration stays off.
 - GitHub and Google login; email (see §13).
 - The timing app, online races, social features.
