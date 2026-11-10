@@ -145,10 +145,14 @@ test('the stream renders the offline banner after a decoders event', async () =>
     rig.store.addDecoder(club.id, { id: 'q1', name: 'Start', tokenHash: 'h', createdAt: clock.now });
     rig.engine.ingest({ workspaceId: club.id, decoder: 'q1', via: 'net', batch: { boot: 'b00tb00t', passings: [] } });
     const it = events(await rig.api(who, 'GET', `/clubs/${club.id}/board/events`), { raw: true });
-    assert.doesNotMatch((await next(it, 'board')).data, /board-offline/);
+    const first = (await next(it, 'board')).data;
+    assert.doesNotMatch(first, /board-offline/);
+    assert.match(first, /<li class="board-decoder is-reporting">Start: reporting<\/li>/);
     clock.now += 25_000;
     rig.engine.tick();
-    assert.match((await next(it, 'board')).data, /<p class="status status-warning flag board-offline" role="status">Start isn't reporting\. Laps will appear once it's back\.<\/p>/);
+    const later = (await next(it, 'board')).data;
+    assert.match(later, /<li class="board-decoder is-offline">Start: not reporting<\/li>/);
+    assert.match(later, /<p class="status status-warning flag board-offline" role="status">Start isn't reporting\. Laps will appear once it's back\.<\/p>/);
     await it.return();
   } finally {
     await rig.close();

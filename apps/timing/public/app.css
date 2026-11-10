@@ -849,3 +849,13 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
   .standings-table { font-size: 0.875em; --cell-x: 6px; }
   .standings-table.is-race .col-last { display: none; }
 }
+
+/* One item per decoder in the track header (decoder connections spec §6): colour and words, never colour alone. */
+.board-track .board-decoders { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-md); margin: 0; padding: 0; list-style: none; }
+.board-decoder { display: inline-flex; align-items: center; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.board-decoder::before { content: ''; flex: none; width: 0.6em; height: 0.6em; margin-right: 0.4em; background: var(--p-text-secondary); }
+.board-decoder.is-reporting::before { background: var(--p-success); }
+.board-decoder.is-offline::before { background: var(--p-error); }
+.board-decoder.is-idle { color: var(--p-text-secondary); }
+.board-track.is-record .board-decoder { color: inherit; }
+.board-track.is-record .board-decoder::before { background: currentColor; }

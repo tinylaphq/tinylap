@@ -29,6 +29,13 @@ const chip = (snap, id, options) => driverChip(snap.drivers, id, options);
 /** A record's time, holder and date, apart by their line's gap, not by dots: "7.412  Haris  12 Oct". */
 const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by cut-words">${chip(snap, r.driverId)}</span> <span class="board-track-by cut-words">${safe(localTime(r.at, 'date'))}</span>`;
 
+/** One item per decoder heard in the last 30 minutes, beside the track (decoder connections spec §6). */
+function decoderStates(snap) {
+  const words = { reporting: 'reporting', idle: 'idle', offline: 'not reporting' };
+  if (!snap.decoders?.length) return null;
+  return html`<ul class="board-decoders">${snap.decoders.map((d) => html`<li class="board-decoder is-${d.state}">${d.name}: ${words[d.state]}</li>`)}</ul>`;
+}
+
 /**
  * The track, its direction as an icon, and its record, above every board
  * (records spec §5.1, named tracks spec §4). While nobody races the record is
@@ -37,6 +44,7 @@ const recordLine = (snap, r) => html`<span class="num board-track-time">${format
  * record colour, and the record it beat.
  */
 function trackHeader(snap) {
+  const states = decoderStates(snap);
   const where = html`<p class="board-track-name"><strong class="cut-words">${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>`;
   const n = snap.recordNew;
   if (n) {
@@ -46,6 +54,7 @@ function trackHeader(snap) {
     <p class="board-track-new cut-words"><strong class="board-track-label">New track record</strong> <span class="num board-track-time">${formatLap(n.lapMs)}</span> ${chip(snap, n.driverId)}</p>
     ${n.beat ? html`<p class="board-track-beat cut-words">Beat ${recordLine(snap, n.beat)}</p>` : null}
   </div>
+  ${states}
 </header>`;
   }
   const record = !snap.session ? null
@@ -54,6 +63,7 @@ function trackHeader(snap) {
   return html`<header class="board-track">
   ${where}
   ${record}
+  ${states}
 </header>`;
 }
 
