@@ -77,6 +77,17 @@ Message parseMessage(const std::string& body) {
         m.ssid = ssid;
         m.password = password;
       }
+    } else if (word == "TLNET" && fields.size() == 1) {
+      m.type = Message::Type::NetQuery;
+    } else if (word == "TLSCAN" && fields.size() == 1) {
+      m.type = Message::Type::Scan;
+    } else if (word == "TLJOIN" && fields.size() == 3) {
+      std::string name, password;
+      if (decodeText(fields[1], name) && decodeText(fields[2], password)) {
+        m.type = Message::Type::Join;
+        m.ssid = name;
+        m.password = password;
+      }
     } else if (word == "TLSERVER" && fields.size() == 2) {
       std::string url;
       if (decodeText(fields[1], url)) {
@@ -127,6 +138,14 @@ std::string id(const std::string& decoder, const std::string& boot) {
 }
 std::string lap(const std::string& transponder, uint64_t tMs) { return "%L" + transponder + "," + hex(tMs) + "&"; }
 std::string clock(uint64_t tMs) { return "%T" + hex(tMs) + "&"; }
+std::string net(const std::string& state, const std::string& name, int signal, const std::string& cause) {
+  return "%TLNET " + state + " " + base64urlEncode(name) + " " + std::to_string(signal) + " " + cause + "&";
+}
+std::string ap(const std::string& name, int signal, bool open) {
+  return "%TLAP " + base64urlEncode(name) + " " + std::to_string(signal) + (open ? " open&" : " locked&");
+}
+std::string scanEnd(int count) { return "%TLSCANEND " + std::to_string(count) + "&"; }
+std::string joined(const std::string& cause) { return "%TLJOINED " + cause + "&"; }
 std::string transponder(uint8_t id) { return hex(id); }
 }  // namespace line
 

@@ -12,8 +12,18 @@ static bool hexDigits(const std::string& s) {
 
 static bool startsWith(const std::string& s, const char* prefix) { return s.rfind(prefix, 0) == 0; }
 
-Session::Session(Store& store, uint32_t (*random)(), Sink& out, std::function<void(bool)> onBoot)
-    : store_(store), random_(random), out_(out), onBoot_(std::move(onBoot)) {}
+// The %TLERR text for a name or password that breaks the Wi-Fi limits, or null.
+static const char* wifiError(const Message& m) {
+  if (m.ssid.empty() || m.ssid.size() > 32) return "Wi-Fi name too long";
+  if (!(m.password.empty() || (m.password.size() >= 8 && m.password.size() <= 63) ||
+        (m.password.size() == 64 && hexDigits(m.password))))
+    return "Wi-Fi password length";
+  return nullptr;
+}
+
+Session::Session(Store& store, uint32_t (*random)(), Sink& out, std::function<void(bool)> onBoot,
+                 NetControl* net)
+    : store_(store), random_(random), out_(out), onBoot_(std::move(onBoot)), net_(net) {}
 
 void Session::begin(int64_t nowUs) {
   std::string decoder, token;
@@ -49,14 +59,18 @@ void Session::onBytes(const char* data, size_t n, int64_t nowUs) {
         }
         break;
       case Message::Type::Wifi:
-        if (m.ssid.empty() || m.ssid.size() > 32) {
-          out_.write(line::error("Wi-Fi name too long"));
-        } else if (!(m.password.empty() || (m.password.size() >= 8 && m.password.size() <= 63) ||
-                     (m.password.size() == 64 && hexDigits(m.password)))) {
-          out_.write(line::error("Wi-Fi password length"));
-        } else {
-          out_.write(store_.saveWifi(m.ssid, m.password) ? line::ok() : line::error("store"));
-        }
+        if (const char* bad = wifiError(m)) out_.write(line::error(bad));
+        else out_.write(store_.saveWifi(m.ssid, m.password) ? line::ok() : line::error("store"));
+        break;
+      case Message::Type::NetQuery:
+        if (net_) net_->query();
+        break;
+      case Message::Type::Scan:
+        if (net_) net_->scan();
+        break;
+      case Message::Type::Join:   // the same byte checks as %TLWIFI; the answer is %TLJOINED, from the net side
+        if (const char* bad = wifiError(m)) out_.write(line::error(bad));
+        else if (net_) net_->join(m.ssid, m.password);
         break;
       case Message::Type::Server:
         if (!(startsWith(m.server, "http://") || startsWith(m.server, "https://")) || m.server.size() > 128) {

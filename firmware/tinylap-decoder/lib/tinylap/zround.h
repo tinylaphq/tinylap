@@ -8,9 +8,9 @@ namespace tinylap {
 
 // A message from the PC (spec §7). Only the fields of its type are set.
 struct Message {
-  enum class Type { Unknown, Startup, Reset, Stop, HelloRequest, Pair, Wifi, Server } type = Type::Unknown;
+  enum class Type { Unknown, Startup, Reset, Stop, HelloRequest, Pair, Wifi, Server, NetQuery, Scan, Join } type = Type::Unknown;
   std::string decoder, token;     // Pair
-  std::string ssid, password;     // Wifi: decoded bytes
+  std::string ssid, password;     // Wifi, Join: decoded bytes
   std::string server;             // Server: the decoded URL
   std::string raw;                // Unknown
 };
@@ -36,6 +36,10 @@ std::string error(const std::string& text);                   // % and & are rem
 std::string id(const std::string& decoder, const std::string& boot);  // an empty decoder is sent as "-"
 std::string lap(const std::string& transponder, uint64_t tMs);
 std::string clock(uint64_t tMs);
+std::string net(const std::string& state, const std::string& name, int signal, const std::string& cause);  // %TLNET (spec §4)
+std::string ap(const std::string& name, int signal, bool open);   // %TLAP
+std::string scanEnd(int count);                               // %TLSCANEND
+std::string joined(const std::string& cause);                 // %TLJOINED
 std::string transponder(uint8_t id);                          // upper-case hex, no padding (spec §6)
 }  // namespace line
 

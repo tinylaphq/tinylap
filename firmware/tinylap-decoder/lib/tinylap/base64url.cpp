@@ -31,6 +31,22 @@ bool base64urlDecode(const std::string& in, std::string& out) {
   return true;
 }
 
+std::string base64urlEncode(const std::string& in) {
+  std::string out;
+  uint32_t acc = 0;
+  int bits = 0;
+  for (char c : in) {
+    acc = (acc << 8) | (uint8_t)c;
+    bits += 8;
+    while (bits >= 6) {
+      bits -= 6;
+      out.push_back(kAlphabet[(acc >> bits) & 63]);
+    }
+  }
+  if (bits > 0) out.push_back(kAlphabet[(acc << (6 - bits)) & 63]);
+  return out;
+}
+
 std::string bootId(uint32_t (*random)()) {
   std::string id;
   for (int i = 0; i < 11; i++) id.push_back(kAlphabet[random() % 64]);

@@ -17,6 +17,15 @@ struct Store {
   virtual ~Store() = default;
 };
 
+// The Wi-Fi side's commands from the PC (spec §4). It answers later, on its own task, through the
+// serial lines the loop writes; Session does not reply to these.
+struct NetControl {
+  virtual void query() = 0;                                                       // %TLNET&
+  virtual void scan() = 0;                                                        // %TLSCAN&
+  virtual void join(const std::string& name, const std::string& password) = 0;   // %TLJOIN, bytes checked
+  virtual ~NetControl() = default;
+};
+
 // Takes whole lines, one write each.
 struct Sink {
   virtual void write(const std::string& line) = 0;
@@ -26,7 +35,8 @@ struct Sink {
 // The decoder's side of the serial conversation, its boot and its clock (spec §3, §6).
 class Session {
  public:
-  Session(Store& store, uint32_t (*random)(), Sink& out, std::function<void(bool powerOn)> onBoot = {});
+  Session(Store& store, uint32_t (*random)(), Sink& out, std::function<void(bool powerOn)> onBoot = {},
+          NetControl* net = nullptr);   // net: null on a board without Wi-Fi
   void begin(int64_t nowUs);                                  // loads the pairing (a bad id counts as unpaired), new boot, %TLID
   void onBytes(const char* data, size_t n, int64_t nowUs);    // replies per spec §6
   // onBoot runs right after every %TLID that starts a boot: powerOn true from begin(), false for %I&
@@ -44,6 +54,7 @@ class Session {
   uint32_t (*random_)();
   Sink& out_;
   std::function<void(bool)> onBoot_;
+  NetControl* net_;
   std::string decoder_, boot_;
   int64_t bootStartUs_ = 0;
   uint64_t nextSecond_ = 1;   // the next whole second of this boot to report
