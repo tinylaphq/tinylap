@@ -46,16 +46,21 @@ function boardStream(request, workspaceId, { watcher, token = null }) {
         if (timer) return;
         timer = setTimeout(render, Math.max(0, THROTTLE_MS - (Date.now() - last)));
       };
+      request.boardViewers.add(workspaceId);
       res.write('retry: 2000\n\n');
       const sub = request.hub.subscribe(workspaceId, { lastEventId: null, watcher, tag: token ?? undefined, onClose: () => res.end() }, changed);
       render();
       const beat = setInterval(() => res.write(': beat\n\n'), HEARTBEAT_MS);
       beat.unref();
+      let open = true;
       const close = () => {
+        if (!open) return;
+        open = false;
         clearInterval(beat);
         stopChecks();
         if (timer) clearTimeout(timer);
         sub.unsubscribe();
+        request.boardViewers.remove(workspaceId);
       };
       const stopChecks = request.streams.watch(request, workspaceId, 'timing.run', watcher, () => {
         close();

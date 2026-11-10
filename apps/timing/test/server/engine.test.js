@@ -238,11 +238,12 @@ test('a wifi decoder silent for 25 s shows offline, and its next batch clears it
   engine.tick();
   assert.deepEqual(engine.snapshot(W).offline, [{ id: 'd1', name: 'Start line' }]);
   assert.deepEqual(engine.snapshot(W, { watcher: true }).offline, [{ id: 'd1', name: 'Start line' }]);
-  assert.deepEqual(offlineEvents(events).map((e) => e.data), [{ offline: [{ id: 'd1', name: 'Start line' }] }]);
+  assert.deepEqual(offlineEvents(events).at(-1).data, { offline: [{ id: 'd1', name: 'Start line' }] });
   beat(engine);
   engine.tick();
   assert.deepEqual(engine.snapshot(W).offline, []);
-  assert.deepEqual(offlineEvents(events).map((e) => e.data.offline.length), [1, 0]);
+  // The first event is the header going from nothing to reporting (connections spec §6).
+  assert.deepEqual(offlineEvents(events).map((e) => e.data.offline.length), [0, 1, 0]);
 });
 
 test('quiet ends expecting the decoder', () => {
@@ -254,7 +255,7 @@ test('quiet ends expecting the decoder', () => {
   clock.now = T0 + 60_000;
   engine.tick();
   assert.deepEqual(engine.snapshot(W).offline, []);
-  assert.deepEqual(offlineEvents(events), []);
+  assert.deepEqual(offlineEvents(events).filter((e) => e.data.offline.length), []);
 });
 
 test('a lost quiet keeps the banner until 30 minutes', () => {
@@ -315,4 +316,82 @@ test('the decoders event goes to watchers too', () => {
   clock.now = T0 + 25_000;
   engine.tick();
   assert.deepEqual(offlineEvents(seen).map((e) => e.data), [{ offline: [{ id: 'd1', name: 'Start line' }] }]);
+});
+
+const connection = (engine, id = 'd1') => engine.connectionsOf(W).find((d) => d.id === id);
+const withDecoder = () => {
+  const r = rig();
+  r.store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
+  return r;
+};
+
+test('wifi batch within 25 s reads reporting', () => {
+  const { engine, clock } = withDecoder();
+  beat(engine);
+  clock.now = T0 + 24_000;
+  assert.deepEqual(connection(engine).wifi, { state: 'reporting', at: T0 });
+  assert.equal(connection(engine).name, 'Start line');
+  assert.equal(connection(engine).createdAt, T0);
+});
+
+test('quiet reads idle', () => {
+  const { engine, clock } = withDecoder();
+  beat(engine, 'net', { quiet: true });
+  clock.now = T0 + 25_000;
+  assert.deepEqual(connection(engine).wifi, { state: 'idle', at: T0 });
+});
+
+test('expected and silent reads offline', () => {
+  const { engine, clock } = withDecoder();
+  beat(engine);
+  clock.now = T0 + 25_000;
+  assert.equal(connection(engine).wifi.state, 'offline');
+});
+
+test('after a restart the wifi row claims nothing', () => {
+  const { engine, store } = withDecoder();
+  store.touchDecoder('d1', T0);
+  assert.deepEqual(connection(engine).wifi, { state: 'unknown', at: null });
+  assert.equal(connection(engine).lastSeenAt, T0);
+});
+
+test('cable batch from another bridge reads as connected elsewhere', () => {
+  const { engine, clock } = withDecoder();
+  assert.equal(connection(engine).cable.state, 'none');
+  beat(engine, 'serial');
+  clock.now = T0 + 24_000;
+  assert.equal(connection(engine).cable.state, 'other');
+  clock.now = T0 + 25_000;
+  assert.equal(connection(engine).cable.state, 'none');
+});
+
+test('header lists decoders heard in 30 min with their state', () => {
+  const { engine, clock, store } = withDecoder();
+  store.addDecoder(W, { id: 'd2', name: 'Pit', tokenHash: 'h2', createdAt: T0 });
+  store.addDecoder(W, { id: 'd3', name: 'Old', tokenHash: 'h3', createdAt: T0 });
+  assert.deepEqual(engine.headerOf(W), []);
+  beat(engine);
+  engine.ingest({ workspaceId: W, decoder: 'd2', via: 'net', batch: { boot: BOOT, passings: [], quiet: true } });
+  clock.now = T0 + 25_000;
+  assert.deepEqual(engine.headerOf(W), [{ id: 'd2', name: 'Pit', state: 'idle' }, { id: 'd1', name: 'Start line', state: 'offline' }]);
+  assert.deepEqual(engine.snapshot(W).decoders, engine.headerOf(W));
+  assert.deepEqual(engine.snapshot(W, { watcher: true }).decoders, engine.headerOf(W));
+  clock.now = T0 + 30 * 60_000;
+  assert.deepEqual(engine.headerOf(W), []);
+});
+
+test('decoders event on a state change only', () => {
+  const { engine, clock, events } = withDecoder();
+  beat(engine);
+  engine.tick();
+  const count = () => offlineEvents(events).length;
+  const first = count();
+  clock.now = T0 + 10_000;
+  engine.tick();
+  assert.equal(count(), first, 'still reporting: nothing new');
+  clock.now = T0 + 25_000;
+  engine.tick();
+  assert.equal(count(), first + 1);
+  engine.tick();
+  assert.equal(count(), first + 1);
 });

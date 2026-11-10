@@ -85,7 +85,7 @@ const postPassings = withSession(async (request, match) => {
   if (!('batch' in result)) return problem(request, 'invalid-request', result.error);
   const answer = request.engine.ingest({ workspaceId: decoder.workspaceId, decoder: decoderId, via, batch: result.batch });
   writeDecoderLogs(request, { decoder: decoderId, boot: result.batch.boot, via, lines: result.batch.logs });
-  return json(200, answer, NO_STORE);
+  return json(200, { ...answer, watched: request.boardViewers.count(decoder.workspaceId) > 0 }, NO_STORE);
 });
 
 async function postTap(request) {

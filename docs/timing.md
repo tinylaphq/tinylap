@@ -115,7 +115,7 @@ A batch may also carry `"logs": ["pass id=1F t=1E0A first=1DE2 last=1E32 frames=
 
 - **`now`** (optional) is the decoder's clock in the same milliseconds as `t`, when it sent the batch: with it the server places passings sent late at their real time. **`quiet`** (optional) is `true` when the decoder sends no heartbeats from now until its next passing: the server stops expecting it.
 - **Limits:** at most 500 passings and 64 log lines per batch, the lines together at most 32 KiB and each at most 510 bytes. All of one boot.
-- **The answer** is `{ "stored", "duplicates", "through" }`: `through` is the highest `t` of this boot the server holds.
+- **The answer** is `{ "stored", "duplicates", "through", "watched" }`: `through` is the highest `t` of this boot the server holds. `watched` is `true` while a live board of the decoder's club is open (a member's, the big board or the watchers link); a Wi-Fi decoder treats it like a passing and keeps its heartbeat going, so the board can say it is reporting.
 - **The outbox:** keep every passing until a batch that carried it is answered with a `through` that covers it. Drop only the passings you sent, since a passing of the same boot you never sent can lie below `through` too (the cable and Wi-Fi copies race). Resending is always safe.
 - **`401`** means the token is wrong or the decoder was unpaired: keep the outbox and stop sending until it is paired again. **`429`** comes with `Retry-After`.
 

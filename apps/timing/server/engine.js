@@ -177,8 +177,10 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
 
   /** Decoders that report over Wi-Fi and have not said they are going quiet, by id. */
   const expected = new Map();
-  /** Each workspace's offline list as last published, to publish only changes. */
+  /** Each workspace's offline list and header as last published, to publish only changes. */
   const offlineShown = new Map();
+  /** What each decoder's batches say since the server started: the last over Wi-Fi (and whether it said quiet), the last over a cable. */
+  const heard = new Map();
 
   function offlineOf(workspaceId, t = now()) {
     const list = [];
@@ -191,9 +193,48 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return list;
   }
 
+  /** A decoder's connections as the Bridge page and the bridge see them (connections spec §3). */
+  function connectionsOf(workspaceId, t = now()) {
+    const offline = new Set(offlineOf(workspaceId, t).map((d) => d.id));
+    return store.decoders(workspaceId).map((d) => {
+      const h = heard.get(d.id);
+      const netAt = h?.netAt ?? null;
+      const state = netAt !== null && t - netAt < OFFLINE_AFTER_MS ? 'reporting' : h?.quiet ? 'idle' : offline.has(d.id) ? 'offline' : 'unknown';
+      return {
+        ...d,
+        cable: { state: h?.cableAt != null && t - h.cableAt < OFFLINE_AFTER_MS ? 'other' : 'none' },
+        wifi: { state, at: netAt },
+      };
+    });
+  }
+
+  /** One state per decoder heard in the last 30 minutes, for the board's header (connections spec §6). */
+  function headerOf(workspaceId, t = now()) {
+    const offline = new Set(offlineOf(workspaceId, t).map((d) => d.id));
+    const list = [];
+    for (const [id, h] of heard) {
+      const decoder = store.decoder(id);
+      if (h.workspaceId !== workspaceId || decoder?.workspaceId !== workspaceId) continue;
+      const last = Math.max(h.netAt ?? 0, h.cableAt ?? 0);
+      if (t - last >= EXPECTED_FOR_MS) continue;
+      const state = t - last < OFFLINE_AFTER_MS ? 'reporting' : h.quiet ? 'idle' : offline.has(id) ? 'offline' : null;
+      if (state) list.push({ id, name: decoder.name, state });
+    }
+    return list.sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
+  }
+
   /** Stores a batch (spec §5). Repeating it is safe. */
   function ingest({ workspaceId, decoder, via, batch }) {
     const receivedAt = now();
+    const h = heard.get(decoder) ?? { workspaceId, netAt: null, quiet: false, cableAt: null };
+    h.workspaceId = workspaceId;
+    if (via === 'net') {
+      h.netAt = receivedAt;
+      h.quiet = batch.quiet === true;
+    } else if (via === 'serial') {
+      h.cableAt = receivedAt;
+    }
+    heard.set(decoder, h);
     if (batch.quiet) expected.delete(decoder);
     else if (via === 'net' || expected.has(decoder)) expected.set(decoder, { workspaceId, lastAt: receivedAt });
     const sorted = [...batch.passings].sort((a, b) => a.t - b.t);
@@ -284,10 +325,13 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       // An unpaired decoder is no longer expected.
       if (t - e.lastAt >= EXPECTED_FOR_MS || store.decoder(id)?.workspaceId !== e.workspaceId) expected.delete(id);
     }
-    for (const workspaceId of new Set([...offlineShown.keys(), ...[...expected.values()].map((e) => e.workspaceId)])) {
+    for (const [id, h] of heard) {
+      if (store.decoder(id)?.workspaceId !== h.workspaceId) heard.delete(id);
+    }
+    for (const workspaceId of new Set([...offlineShown.keys(), ...[...expected.values()].map((e) => e.workspaceId), ...[...heard.values()].map((h) => h.workspaceId)])) {
       const offline = offlineOf(workspaceId, t);
-      const key = JSON.stringify(offline);
-      if (key === (offlineShown.get(workspaceId) ?? '[]')) continue;
+      const key = JSON.stringify({ offline, header: headerOf(workspaceId, t) });
+      if (key === (offlineShown.get(workspaceId) ?? '{"offline":[],"header":[]}')) continue;
       offlineShown.set(workspaceId, key);
       hub.publish(workspaceId, 'decoders', { offline });
     }
@@ -371,6 +415,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       fastest: session ? [] : store.fastest(workspaceId, track.id, ws.direction, FASTEST),
       recordNew,
       offline: offlineOf(workspaceId),
+      decoders: headerOf(workspaceId),
       lastResults: ended && { session: publicSession(ended), standings: endedRows },
       ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idleOf(workspaceId), driven: session !== null || store.driven(workspaceId) }),
     };
@@ -398,5 +443,5 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return { session: publicSession(session), standings: standingsOf(session), crossings: store.crossings(sessionId).map(memberCrossing) };
   }
 
-  return { ingest, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, idleOf, driverCount, bestsOf, sessionDetail };
+  return { ingest, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail };
 }
