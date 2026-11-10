@@ -123,7 +123,7 @@ The dialog also says, once: "TinyLap never sees the password: it goes from this 
 
 ## 6. One status on every live board
 
-At the track the question is "are laps counted right now?". Every live board (the member's board, the big board, the watchers link) answers it in its header, beside the stream's Live state: one item per decoder that reported in the last 30 minutes, by either path:
+At the track the question is "are laps counted right now?". Every live board (the member's board, the big board, the watchers link) answers it in its header, in a row under the track name (apart from the navbar's Live state): one item per decoder that reported in the last 30 minutes, by either path:
 - **Reporting** (green): a batch within 25 s over the cable or Wi-Fi.
 - **Idle** (neutral): its last Wi-Fi batch said `quiet`: "wakes up with the next lap".
 - **Not reporting** (red): in the expected set and offline; the existing banner (Wi-Fi spec §6) says the rest.

@@ -307,7 +307,7 @@ Today, `tinylapModel` sends nothing when the port opens, no `%T` and no `%TLLOG`
 | `%TLHELLO&` | `%TLID …&` | as today |
 | `%TLPAIR` (as `parseMessage` reads it) | stores the pairing, then `%TLOK&` | as today |
 | `%TLWIFI` | `%TLERR Wi-Fi name too long&` unless the Wi-Fi name is 1–32 bytes; `%TLERR Wi-Fi password length&` unless the password is empty, 8–63 bytes, or 64 hex digits; otherwise `%TLOK&` | the same, through `wifiError` (§5.2) |
-| `%I&` | a new boot: `%TLID …&`, then `%TLLOG boot reason=reset fw=…&`; the clock starts from zero and open crossings are dropped | the same. The boot starts at `now`, so the cars' times and the clock restart together |
+| `%I&` | a new boot: `%TLID …&`, then `%TLLOG boot reason=reset fw=…&`, then `%TLNET …&` (Wi-Fi state, see `2026-11-10-decoder-connections-design.md` §4); the clock starts from zero and open crossings are dropped | the same. The boot starts at `now`, so the cars' times and the clock restart together |
 | `%F&` and anything else | nothing | as today |
 
 Within one `tick`, lines come in time order. When a `%L` (with its `pass` line) and a `%T` fall on the same millisecond, the `%L` comes first, as in the firmware's `loop()`.
@@ -478,7 +478,7 @@ Unit:
   - `start` gives `%TLID`, then `%TLLOG boot`;
   - `%T3E8&` comes first, then one a second, caught up after a late tick;
   - `stat` every 10 s, not reset by `%I&`;
-  - `%I&` gives `%TLID`, `%TLLOG boot reason=reset`, a clock from zero, and no early crossings;
+  - `%I&` gives `%TLID`, `%TLLOG boot reason=reset`, `%TLNET` (decoder connections spec §4), a clock from zero, and no early crossings;
   - `%TLWIFI` through the `wifi` vectors.
 - `sim.test.js`: the model with `resetOnOpen` set to `true` and to `false`.
 - `decoder-sim.test.js`: the power-up lines.

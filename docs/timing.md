@@ -34,7 +34,7 @@ TinyLap's own commands, which ZRound never sends (fields separated by one space)
 | PC → decoder | `%TLSCAN&` | scan for networks. Cable only |
 | decoder → PC | `%TLAP <base64url name> <signal> <open\|locked>&` | one network seen, strongest first; ends with `%TLSCANEND <count>&`, or `%TLERR scan&`. Cable only |
 | PC → decoder | `%TLJOIN <base64url name> <base64url password>&` | try new Wi-Fi settings, with `%TLWIFI`'s checks; stored only if the join works. Cable only |
-| decoder → PC | `%TLJOINED <cause>&` | the result: `ok`, `password`, `notfound`, `other` or `timeout`. Cable only |
+| decoder → PC | `%TLJOINED <cause>&` | the result: `ok`, `password`, `notfound`, `other` or `timeout`; `%TLERR store&` instead of `ok` when it joined but could not save. Cable only |
 | decoder → PC | `%TLOK&`, `%TLERR <text>&` | done, or why not |
 | decoder → PC | `%TLLOG <kind> <key=value>…&` | the decoder's own diagnostics; see Diagnostics |
 
@@ -125,10 +125,18 @@ The server writes the log lines to its log and stores none. A bad line is skippe
 
 A decoder that has sent over Wi-Fi is expected to keep reporting: when it has sent nothing, over Wi-Fi or through the bridge, for 25 s, every live board shows "<name> isn't reporting. Laps will appear once it's back." It stops being expected after a batch with `quiet: true`, or after 30 minutes of silence. A decoder that only ever posts through the bridge never shows it.
 
+Every live board (a member's, the big board, the watchers link) also says in its track header, in a row under the track name and apart from the navbar's Live state, whether each decoder heard in the last 30 minutes is counted: "<name>: reporting" (a batch within 25 s, by cable or Wi-Fi), "<name>: idle" (its last Wi-Fi batch said `quiet`) or "<name>: not reporting" (expected and silent; also a TinyLap decoder whose last batch came over the cable with log lines and has been silent for 25 s). A decoder silent for longer, or one that only ever sent passings over the cable without log lines, shows nothing. The row is part of `#board-live`, so the board stream keeps it current.
+
+**Staying awake while a board is open:** a Wi-Fi decoder goes quiet 15 minutes after its last passing, which would read as "idle" in front of a screen. So `watched: true` in an answer restarts that 15-minute window like a passing does: the decoder keeps its 10 s heartbeat while anyone watches, and goes quiet 15 minutes after the last viewer left. A board that was already quiet when the screen opened shows "idle" until its next batch, normally the next lap.
+
+### The Bridge page
+
+The page lists each decoder of the workspace as a card with a Cable row and a Wi-Fi row. Without this tab's cable the Wi-Fi row says what the server knows: "Reporting", "Idle" or "Not reporting since <time>", otherwise nothing is claimed. With a TinyLap decoder on this tab's cable the row comes from `%TLNET` instead: connected (with the signal as strong, fair or weak), joining, can't find the network, password refused, or not set up. **Change Wi-Fi** (for members who may pair decoders) works with three exchanges, all over the cable and none forwarded: `%TLSCAN&` fills the list of networks from `%TLAP` lines up to `%TLSCANEND`; `%TLJOIN` tries the chosen network for up to 20 s and answers `%TLJOINED`, keeping the settings only if the join worked (`%TLERR store&` instead of `%TLJOINED ok&` when it joined but could not save them); a failed try leaves the decoder on its old network. The password goes from the laptop straight to the decoder.
+
 The whole API is described at `/openapi.json` and `/api` on any timing server.
 
 ## Without hardware
 
-Start the timing server (`apps/timing/README.md`, Development) with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production. The `tinylap` one behaves as the board does: four cars (codes `20` to `23`), already running when the port opens (no reset), and paired for good once paired, in this browser's storage. `tools/decoder-sim.js` plays a decoder on Wi-Fi, or on a serial pty; on Wi-Fi it sends `now`, a `stat` line every 10 s and a `quiet` batch as the board does, and `--silent-after <s>` makes it stop posting, to see the banner.
+Start the timing server (`apps/timing/README.md`, Development) with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production. The `tinylap` one behaves as the board does: four cars (codes `20` to `23`), already running when the port opens (no reset), and paired for good once paired, in this browser's storage. `tools/decoder-sim.js` plays a decoder on Wi-Fi, or on a serial pty; on Wi-Fi it sends `now`, a `stat` line every 10 s and a `quiet` batch as the board does, keeps beating while the answers say `watched`, and `--silent-after <s>` makes it stop posting, to see the banner.
 
 To try a real decoder on the bench, `pnpm --filter @tinylap/timing-app bench` starts accounts and timing in one process, in memory, and opens Chrome signed in on the Bridge page; the server's log, `decoder-log` lines included, goes to stdout.

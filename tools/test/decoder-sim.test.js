@@ -90,6 +90,28 @@ test('the sender stamps `now`, beats every 10 s while in use, and goes quiet aft
   assert.equal(bodies.at(-1).passings.length, 1);
 });
 
+test('an answer with `watched: true` keeps the sender beating past 15 idle minutes, as the board does', async () => {
+  const bodies = [];
+  let watched = true;
+  const fetch = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return Response.json({ stored: 0, duplicates: 0, through: null, watched });
+  };
+  let now = 0;
+  const sender = createSender({ url: 'http://timing.test', decoder: 'd1', token: 't'.repeat(43), boot: 'b00tb00t', fetch, clock: () => now });
+  for (now = 10_000; now <= 30 * 60_000; now += 10_000) await sender.flush();
+  assert.ok(bodies.every((b) => b.quiet === undefined), 'never quiet while watched');
+  assert.equal(bodies.length, 180, 'a beat every 10 s for 30 minutes');
+  watched = false;
+  await sender.flush();
+  now = 45 * 60_000 - 10_000;
+  await sender.flush();
+  assert.equal(bodies.at(-1).quiet, undefined, 'still in use just under 15 min after the last watched answer');
+  now += 10_000;
+  await sender.flush();
+  assert.equal(bodies.at(-1).quiet, true, 'quiet 15 min after the last viewer left');
+});
+
 const settle = () => new Promise((done) => setImmediate(done));
 
 test('the serial mode answers commands and writes laps', async () => {
