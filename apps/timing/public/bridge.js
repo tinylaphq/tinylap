@@ -18,8 +18,11 @@
 // - A TinyLap decoder's %TLLOG lines are stamped as passings are, and kept in
 //   memory: they go with the next batch of passings for their boot, or alone
 //   after logMaxWaitMs (spec §2.2, §2.4, §2.6).
+// - A TinyLap decoder's Wi-Fi (connections spec §4): its state (%TLNET), a
+//   scan (%TLAP… %TLSCANEND) and a try (%TLJOINED) are for this page only.
+//   They are never queued and never forwarded, as %TLPAIR's answers aren't.
 // - Decoder events, timers and assign() run on one chain, in order.
-import { MAX_BATCH, MAX_LOG_BYTES, MAX_LOG_LINES, MIN_LAP_MS, commands, frames, nextLap, passingKey, randomBoot } from '@tinylap/timing';
+import { MAX_BATCH, MAX_LOG_BYTES, MAX_LOG_LINES, MIN_LAP_MS, commands, frames, nextLap, passingKey, randomBoot, wifiError } from '@tinylap/timing';
 import { serialTransport } from './link/serial.js';
 import { zroundProtocol } from './link/zround.js';
 
@@ -99,6 +102,12 @@ export class Bridge extends EventTarget {
   #againAlone = false;
   /** A normal flush was asked for while one was in flight: the rerun is a normal one, so no passing waits for the log timer. */
   #againFull = false;
+  /** The scan running: the access points so far, and how it ends (connections spec §4.2). @type {{ aps: { name: string, signal: number, open: boolean }[], done: (error: Error | null) => void, promise: Promise<{ name: string, signal: number, open: boolean }[]> } | null} */
+  #scanning = null;
+  /** The %TLJOIN waiting for its %TLJOINED (connections spec §4.3). @type {((cause: string) => void) | null} */
+  #joining = null;
+  /** queryNet()s waiting for the next %TLNET. @type {((net: any) => void)[]} */
+  #netWaiters = [];
   /** The decoder id the server answered 404 for: its %TLID means 'unknown' until the decoder is paired again. @type {string | null} */
   #unknown = null;
   /** @type {any} */ transport;
@@ -120,20 +129,22 @@ export class Bridge extends EventTarget {
   /** @type {number} */ retryMs;
   /** @type {number} */ replyMs;
   /** @type {number} */ logMaxWaitMs;
+  /** @type {number} */ scanMs;
+  /** @type {number} */ joinMs;
 
   /**
    * @param {{ link?: { transport: any, protocol: any } | null, port?: any, outbox: ReturnType<typeof import('./outbox.js').memoryOutbox>,
    *   post: (decoderId: string, batch: Batch) => Promise<{ through: number | null }>,
    *   openDelayMs?: number, synMs?: number, handshakeMs?: number, spacingMs?: number, helloMs?: number, helloEveryMs?: number,
    *   startMs?: number, listenSynMs?: number, listenMs?: number, flushWaitMs?: number, retryMs?: number, replyMs?: number,
-   *   logMaxWaitMs?: number }} options
+   *   logMaxWaitMs?: number, scanMs?: number, joinMs?: number }} options
    */
   constructor({ link = null, port = null, outbox, post, openDelayMs = 0, synMs = 500, handshakeMs = 6000, spacingMs = 300, helloMs = 2500,
     helloEveryMs = 700, startMs = 6000, listenSynMs = 2000, listenMs = 60_000, flushWaitMs = 10_000, retryMs = 5000, replyMs = 3000,
-    logMaxWaitMs = 10_000 }) {
+    logMaxWaitMs = 10_000, scanMs = 15_000, joinMs = 30_000 }) {
     super();
     const { transport, protocol } = link ?? { transport: serialTransport(port), protocol: zroundProtocol() };
-    Object.assign(this, { transport, protocol, port, outbox, post, openDelayMs, synMs, handshakeMs, spacingMs, helloMs, helloEveryMs, startMs, listenSynMs, listenMs, flushWaitMs, retryMs, replyMs, logMaxWaitMs });
+    Object.assign(this, { transport, protocol, port, outbox, post, openDelayMs, synMs, handshakeMs, spacingMs, helloMs, helloEveryMs, startMs, listenSynMs, listenMs, flushWaitMs, retryMs, replyMs, logMaxWaitMs, scanMs, joinMs });
     this.device = transport.device;
     this.state = 'idle';
     /** @type {'tinylap' | 'zround' | 'easylap' | null} */
@@ -148,6 +159,8 @@ export class Bridge extends EventTarget {
     this.blocked = 0;
     /** Transponder → the mark its laps are measured from, for the preview. */
     this.references = new Map();
+    /** The decoder's latest %TLNET, or null before one came (connections spec §4.1). @type {{ state: 'off' | 'joining' | 'connected' | 'failed', name: string, signal: number, cause: 'none' | 'password' | 'notfound' | 'other' } | null} */
+    this.net = null;
   }
 
   #set(state) {
@@ -333,6 +346,23 @@ export class Bridge extends EventTarget {
       case 'ok':
       case 'error':
         this.#replies.shift()?.(event);
+        return undefined;
+      // Cable-only (connections spec §4): kept here and told to the page, never queued for the server.
+      case 'net': {
+        const { state, name, signal, cause } = event;
+        this.net = { state, name, signal, cause };
+        for (const waiter of this.#netWaiters.splice(0)) waiter(this.net);
+        this.dispatchEvent(new Event('net'));
+        return undefined;
+      }
+      case 'ap':
+        this.#scanning?.aps.push({ name: event.name, signal: event.signal, open: event.open });
+        return undefined;
+      case 'scan-end':
+        this.#scanning?.done(null);
+        return undefined;
+      case 'joined':
+        this.#joining?.(event.cause);
         return undefined;
       default: return undefined;
     }
@@ -587,6 +617,88 @@ export class Bridge extends EventTarget {
       }, this.replyMs);
       this.#replies.push(answer);
     });
+  }
+
+  /** Asks the decoder for its Wi-Fi state: the next %TLNET, also in `net` (connections spec §4.1). */
+  async queryNet() {
+    let timer;
+    const answer = new Promise((resolve, reject) => {
+      const waiter = (net) => {
+        clearTimeout(timer);
+        resolve(net);
+      };
+      timer = setTimeout(() => {
+        this.#netWaiters = this.#netWaiters.filter((w) => w !== waiter);
+        reject(new Error("The decoder didn't answer."));
+      }, this.replyMs);
+      this.#netWaiters.push(waiter);
+    });
+    await this.#write(encode(commands.netQuery));
+    return answer;
+  }
+
+  /**
+   * The networks the decoder sees, strongest first (connections spec §4.2). One scan at a time: a call while one
+   * runs gets that one. A %TLERR, or no %TLSCANEND within scanMs, rejects.
+   * @returns {Promise<{ name: string, signal: number, open: boolean }[]>}
+   */
+  scan() {
+    if (this.#scanning) return this.#scanning.promise;
+    /** @type {{ name: string, signal: number, open: boolean }[]} */
+    const aps = [];
+    let finish;
+    const promise = new Promise((resolve, reject) => {
+      /** @param {any} message */
+      const refused = (message) => { if (message.type === 'error') finish(new Error(`The decoder said: ${message.text}`)); };
+      const timer = setTimeout(() => finish(new Error("The decoder didn't answer.")), this.scanMs);
+      /** @param {Error | null} error */
+      finish = (error) => {
+        clearTimeout(timer);
+        const i = this.#replies.indexOf(refused);
+        if (i !== -1) this.#replies.splice(i, 1);
+        this.#scanning = null;
+        if (error) reject(error);
+        else resolve([...aps].sort((a, b) => b.signal - a.signal));
+      };
+      this.#replies.push(refused);
+    });
+    this.#scanning = { aps, done: finish, promise };
+    this.#write(encode(commands.scan)).catch((error) => finish(error));
+    return promise;
+  }
+
+  /**
+   * Has the decoder try a network, keeping its old one if that fails (connections spec §4.3): resolves with
+   * %TLJOINED's cause (ok, password, notfound, other, timeout). Rejects on the decoder's byte checks (before
+   * anything is sent), a %TLERR, or no answer within joinMs.
+   * @param {string} name @param {string} password @returns {Promise<'ok' | 'password' | 'notfound' | 'other' | 'timeout'>}
+   */
+  async join(name, password) {
+    const wrong = wifiError(name, password);
+    if (wrong) throw Object.assign(new Error(`The decoder would refuse it: ${wrong}`), { reason: wrong });
+    if (this.#joining) throw new Error('The decoder is already trying a network.');
+    let finish;
+    const answer = new Promise((resolve, reject) => {
+      /** @param {any} message */
+      const refused = (message) => { if (message.type === 'error') finish(Object.assign(new Error(`The decoder said: ${message.text}`), { reason: message.text })); };
+      const timer = setTimeout(() => finish(new Error("The decoder didn't answer.")), this.joinMs);
+      finish = (error, cause) => {
+        clearTimeout(timer);
+        const i = this.#replies.indexOf(refused);
+        if (i !== -1) this.#replies.splice(i, 1);
+        this.#joining = null;
+        if (error) reject(error);
+        else resolve(cause);
+      };
+      this.#replies.push(refused);
+      this.#joining = (cause) => finish(null, cause);
+    });
+    try {
+      await this.#write(encode(commands.join(name, password)));
+    } catch (error) {
+      finish(error);
+    }
+    return answer;
   }
 
   /**

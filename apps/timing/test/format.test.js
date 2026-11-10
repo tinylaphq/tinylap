@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clockAt, formatClock, formatLap, formatLength } from '../public/format.js';
+import { clockAt, formatClock, formatLap, formatLength, formatWhen } from '../public/format.js';
 
 test('lap times to the millisecond, minutes past a minute', () => {
   assert.equal(formatLap(8000), '8.000');
@@ -43,4 +43,15 @@ test('formatLength says seconds under a minute, and minutes plus seconds when no
   assert.equal(formatLength(180_000), '3 minutes');
   assert.equal(formatLength(90_000), '1 minute 30 seconds');
   assert.equal(formatLength(121_000), '2 minutes 1 second');
+});
+
+test('a last-heard moment: the time today, the weekday this week, else the date', () => {
+  const now = Date.parse('2026-11-10T15:00:00Z'); // a Tuesday; 16:00 in Berlin
+  const zone = 'Europe/Berlin';
+  assert.equal(formatWhen(Date.parse('2026-11-10T13:02:00Z'), now, zone), '14:02');
+  assert.equal(formatWhen(Date.parse('2026-11-09T23:30:00Z'), now, zone), '00:30', 'after midnight in Berlin is today');
+  assert.equal(formatWhen(Date.parse('2026-11-09T22:30:00Z'), now, zone), 'Monday, 23:30');
+  assert.equal(formatWhen(Date.parse('2026-11-04T13:02:00Z'), now, zone), 'Wednesday, 14:02');
+  assert.equal(formatWhen(Date.parse('2026-11-03T13:02:00Z'), now, zone), '3 Nov, 14:02');
+  assert.equal(formatWhen(Date.parse('2025-12-24T13:02:00Z'), now, zone), '24 Dec 2025, 14:02');
 });

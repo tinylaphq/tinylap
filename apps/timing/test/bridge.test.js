@@ -706,3 +706,68 @@ test('stamped lines go out after the port is lost, with the next flush of passin
   assert.deepEqual(posts, [{ decoder: 'dec_1', boot: sim.boot, passings: [{ transponder: '0A', t: 1000 }], logs: ['stat up=1'] }]);
   await bridge.close();
 });
+
+// The decoder's Wi-Fi over the cable (connections spec §4): cable-only, never forwarded.
+
+test('net/ap/scan-end/joined are never forwarded', async (t) => {
+  const { send, posts, bridge } = await ready(t, { logMaxWaitMs: 50 });
+  const nets = [];
+  bridge.addEventListener('net', () => nets.push(bridge.net));
+  send(commands.net({ state: 'connected', name: 'Clubhaus', signal: -55, cause: 'none' }));
+  send(commands.ap({ name: 'Clubhaus', signal: -55, open: false }));
+  send(commands.scanEnd(1));
+  send(commands.joined('ok'));
+  send(log('stat up=1'));
+  send(commands.lap('0A', 1000));
+  await until(() => posts.length === 1 && nets.length === 1);
+  await wait(150);
+  assert.deepEqual(nets, [{ state: 'connected', name: 'Clubhaus', signal: -55, cause: 'none' }]);
+  assert.deepEqual(posts.map((x) => x.logs ?? []), [['stat up=1']], 'only the %TLLOG line rides along');
+  assert.ok(!JSON.stringify(posts).includes('Clubhaus'));
+});
+
+test('queryNet asks the decoder for its Wi-Fi state', async (t) => {
+  const { bridge } = await ready(t);
+  assert.deepEqual(await bridge.queryNet(), { state: 'off', name: '', signal: 0, cause: 'none' });
+  assert.deepEqual(bridge.net, { state: 'off', name: '', signal: 0, cause: 'none' });
+});
+
+test('scan collects aps until scan-end', async (t) => {
+  const { bridge } = await ready(t);
+  const found = await bridge.scan();
+  assert.equal(found.length, 25);
+  assert.deepEqual(found[0], { name: 'Clubhaus', signal: -48, open: false });
+  assert.ok(found.every((x, i) => i === 0 || found[i - 1].signal >= x.signal), 'strongest first');
+  assert.deepEqual(found.find((x) => x.name === 'Gäste'), { name: 'Gäste', signal: -57, open: true });
+  // One scan at a time: a second call while one runs is the same scan.
+  const [a, b] = [bridge.scan(), bridge.scan()];
+  assert.equal(a, b);
+  await a;
+});
+
+test('a scan the decoder refuses rejects', async (t) => {
+  const sim = createSimulator({ cars: [], decoder: 'dec_1' });
+  const { port } = fakePort({ reply: (message, now) => (message.type === 'scan' ? [commands.error('scan')] : sim.reply(message, now)) });
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }) });
+  t.after(() => bridge.close());
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  await assert.rejects(bridge.scan(), /scan/);
+});
+
+test('join resolves with the joined cause, times out at 30 s', async (t) => {
+  const { bridge } = await ready(t);
+  assert.equal(bridge.joinMs, 30_000, 'the page waits at most 30 s');
+  assert.equal(await bridge.join('Clubhaus', 'wrong-one'), 'password');
+  assert.equal(bridge.net.state, 'off', 'a failed join leaves the board as it was');
+  assert.equal(await bridge.join('Nowhere', 'whatever1'), 'notfound');
+  assert.equal(await bridge.join('Clubhaus', 'tinylap!'), 'ok');
+  assert.deepEqual(bridge.net, { state: 'connected', name: 'Clubhaus', signal: -48, cause: 'none' });
+  await assert.rejects(bridge.join('Clubhaus', 'short'), /password/, "the decoder's own byte checks, before anything is sent");
+
+  const silent = fakePort(null);
+  const quiet = new Bridge({ port: silent.port, outbox: memoryOutbox(), post: async () => ({ through: null }), joinMs: 40 });
+  t.after(() => quiet.close());
+  await quiet.start();
+  await assert.rejects(quiet.join('Clubhaus', 'tinylap!'), /didn't answer/);
+});

@@ -5,7 +5,8 @@
 // The ZRound reader (decoders spec §2.3): text messages, TinyLap's %TL…
 // included, as session events. A clock, a lap or an ack says the device
 // speaks ZRound ("alive"); %TLID says it is a TinyLap decoder ("identity");
-// %TLLOG is one of its log lines ("log").
+// %TLLOG is one of its log lines ("log"); %TLNET, %TLAP, %TLSCANEND and
+// %TLJOINED are its Wi-Fi, as they come.
 import { ZROUND_BAUD, createReader } from '@tinylap/timing';
 
 /** @import { DecoderEvent, ZroundMessage } from '@tinylap/timing/types' */
@@ -22,6 +23,11 @@ function eventsOf(m) {
     case 'reset': return [{ type: 'reset' }];
     case 'ok': return [{ type: 'ok' }];
     case 'error': return [{ type: 'error', text: m.text }];
+    // The decoder's Wi-Fi, over the cable only (connections spec §4): for the bridge's page, never forwarded.
+    case 'net': return [{ type: 'net', state: m.state, name: m.name, signal: m.signal, cause: m.cause }];
+    case 'ap': return [{ type: 'ap', name: m.name, signal: m.signal, open: m.open }];
+    case 'scan-end': return [{ type: 'scan-end', count: m.count }];
+    case 'joined': return [{ type: 'joined', cause: m.cause }];
     case 'unknown': return [{ type: 'noise', detail: m.raw }];
     default: return [];
   }

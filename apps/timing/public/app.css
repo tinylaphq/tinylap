@@ -342,8 +342,14 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .decoder-row-action { grid-column: 2; display: grid; justify-items: start; gap: var(--p-space-sm); }
 .decoder-row-action > .btn { margin-top: var(--p-space-sm); }
 .decoder-row-action > .decoder-row-help + .btn { margin-top: 0; }
-/* Where the browser can't reach USB decoders (or tl-bridge can't run), no Connect decoder: it couldn't work. */
+/* Where the browser can't reach USB decoders (or tl-bridge can't run), no Connect decoder: it couldn't work.
+   This rule owns only that; tl-bridge (TlBridge.paint) disables every card's Connect decoder while a connection
+   is in progress or a decoder is on the cable, and hides the one on the cabled card. */
 #bridge:has([data-bridge-missing="serial"]:not([hidden]), [data-bridge-state="unsupported"]:not([hidden])) #bridge-decoders [data-bridge-connect] { display: none; }
+/* A plain ZRound decoder or EasyLap on the cable: no Wi-Fi row, and the Cable row ends the card. */
+.decoder-row[hidden] { display: none; }
+.decoder-row:has(+ .decoder-row[hidden]) { padding-bottom: 0; }
+.decoder-row-action > .decoder-row-help[hidden] + .btn { margin-top: var(--p-space-sm); }
 .decoder-empty > p { margin: 0; }
 .decoder-empty > p + p { margin-top: var(--p-space-md); }
 .bridge-more p { margin-bottom: 0; }

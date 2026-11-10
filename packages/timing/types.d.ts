@@ -128,4 +128,8 @@ export type DecoderEvent =
   | { type: 'ok' }
   | { type: 'error'; text: string }
   | { type: 'log'; line: string; boot: boolean }
-  | { type: 'noise'; detail: string };
+  | { type: 'noise'; detail: string }
+  | { type: 'net'; state: 'off' | 'joining' | 'connected' | 'failed'; name: string; signal: number; cause: 'none' | 'password' | 'notfound' | 'other' }
+  | { type: 'ap'; name: string; signal: number; open: boolean }
+  | { type: 'scan-end'; count: number }
+  | { type: 'joined'; cause: 'ok' | 'password' | 'notfound' | 'other' | 'timeout' };

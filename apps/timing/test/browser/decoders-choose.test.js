@@ -93,9 +93,12 @@ test('a replaced bridge writes nothing while the next one connects, and no longe
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   // The next connect's decoder list never answers, so it stays connecting for its 3 s cap.
   await page.route('**/workspaces/*/decoders', (route) => (route.request().method() === 'GET' ? new Promise(() => {}) : route.continue()));
+  // The cards' Connect decoder is disabled while a decoder is connected (connections spec §2); connect() still
+  // replaces a bridge, as Connect again and Try another device do, so it is called here directly.
   await page.evaluate(() => {
-    /** @type {any} */ (window).__old = /** @type {any} */ (document.querySelector('tl-bridge')).run.bridge;
-    /** @type {HTMLElement} */ (document.querySelector('[data-bridge-connect="serial"]')).click();
+    const el = /** @type {any} */ (document.querySelector('tl-bridge'));
+    /** @type {any} */ (window).__old = el.run.bridge;
+    void el.connect(el.run, 'serial').catch(() => {});
   });
   await page.locator('[data-bridge-state="connecting"]').waitFor();
   const seen = await page.evaluate(() => {

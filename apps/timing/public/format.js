@@ -43,3 +43,20 @@ export function formatLength(ms) {
   const unit = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   return [minutes ? unit(minutes, 'minute') : '', seconds || !minutes ? unit(seconds, 'second') : ''].filter(Boolean).join(' ');
 }
+
+/**
+ * A moment for "Last heard …" (connections spec §2.1), in the viewer's time zone (or `timeZone`): the time on
+ * the day of `now`, the weekday and time within the six days before, otherwise the date and time, with the year
+ * only when it isn't `now`'s. "14:02", "Tuesday, 14:02", "3 Nov, 14:02", "3 Nov 2025, 14:02".
+ * @param {number} at @param {number} now @param {string} [timeZone]
+ */
+export function formatWhen(at, now, timeZone) {
+  const day = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms);
+  const time = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at);
+  if (day(at) === day(now)) return time;
+  const daysAgo = Math.round((Date.parse(day(now)) - Date.parse(day(at))) / 86_400_000);
+  if (daysAgo > 0 && daysAgo < 7) return `${new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'long' }).format(at)}, ${time}`;
+  const year = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric' }).format(ms);
+  const date = new Intl.DateTimeFormat('en-GB', { timeZone, day: 'numeric', month: 'short', ...(year(at) === year(now) ? {} : { year: 'numeric' }) }).format(at);
+  return `${date}, ${time}`;
+}

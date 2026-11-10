@@ -7,7 +7,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
-import { openBrowser, pageAs } from './browser.js';
+import { openBrowser, pageAs, postPassings } from './browser.js';
 
 let app;
 let browser;
@@ -519,5 +519,232 @@ test('E3e: a double click on Connect, and a click while the decoder-list GET is 
   // Shows that no second pick or open comes late.
   await page.waitForTimeout(500);
   assert.deepEqual(await page.evaluate(() => [window.__picks, window.__opens]), [1, 1]);
+  assert.deepEqual(errors, []);
+});
+
+// The decoder cards and Change Wi-Fi (connections spec §2, §4, §5), with the simulated TinyLap decoder: it answers
+// %TLNET, %TLSCAN (25 networks) and %TLJOIN, and takes the password tinylap!.
+
+/** A fresh member whose personal space has `names` as decoders; the simulated board is paired as the first one. */
+async function cabledPage(t, { names = ['Finish line'], viewport, connect = true } = {}) {
+  const who = await app.login(await app.signUp(`Cable ${Math.random().toString(36).slice(2, 8)}`));
+  const ws = (await (await app.api(who, 'GET', '/auth/me')).json()).workspaces[0].id;
+  const decoders = [];
+  for (const name of names) decoders.push(await (await app.api(who, 'POST', `/workspaces/${ws}/decoders`, { name })).json());
+  const opened = await pageAs(browser, app, who, viewport ? { viewport } : {});
+  t.after(() => opened.context.close());
+  const [board] = decoders;
+  await opened.page.addInitScript((pairing) => localStorage.setItem('tinylap-sim-decoder', JSON.stringify(pairing)), { decoder: board.id, token: board.token });
+  simulating(t, 'tinylap,fast');
+  await opened.page.goto('/personal/bridge');
+  const card = (d) => opened.page.locator(`[data-decoder="${d.id}"]`);
+  const row = (d, which) => card(d).locator(`[data-row="${which}"]`);
+  if (connect) {
+    await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+    await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  }
+  return { ...opened, decoders, board, card, row };
+}
+
+/** Opens Change Wi-Fi (or Set up Wi-Fi) on the cabled card and waits for the list. */
+async function openWifi(page, card) {
+  await card.locator('[data-bridge-wifi]').click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('[data-step="list"]:not([hidden])').waitFor();
+  return dialog;
+}
+
+/** The dialog's steps as they show, in order, from now on. */
+const recordSteps = (page) => page.evaluate(() => {
+  window.__steps = [];
+  const dialog = document.querySelector('#wifi-dialog');
+  new MutationObserver(() => {
+    const shown = dialog.querySelector('[data-step]:not([hidden])')?.getAttribute('data-step');
+    if (shown && window.__steps.at(-1) !== shown) window.__steps.push(shown);
+  }).observe(dialog, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
+});
+
+test('connecting marks the card connected and shows the board\'s network', async (t) => {
+  const { page, errors, board, card, row } = await cabledPage(t);
+  assert.equal(await card(board).locator('[data-slot="status"]').innerText(), 'Laps get through over the cable.');
+  assert.equal(await row(board, 'cable').locator('[data-bridge-connect]').isVisible(), false, 'no Connect decoder on the cabled card');
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Not set up' }).waitFor();
+  assert.equal(await row(board, 'wifi').locator('.lamp').getAttribute('data-state'), 'off');
+  assert.equal(await row(board, 'wifi').getByRole('button', { name: 'Set up Wi-Fi' }).isVisible(), true);
+  // The board joins a network on its own (another laptop's dialog, say): its %TLNET paints the card.
+  await page.evaluate(() => document.querySelector('tl-bridge').run.bridge.join('Clubhaus', 'tinylap!'));
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Connected to “Clubhaus”' }).waitFor();
+  assert.equal(await row(board, 'wifi').locator('[data-slot="detail"]').innerText(), 'Signal strong.');
+  assert.deepEqual(await row(board, 'wifi').locator('.lamp').evaluate((x) => [x.dataset.state, x.dataset.signal]), ['ok', 'strong']);
+  assert.equal(await card(board).locator('[data-slot="status"]').innerText(), 'Laps get through over the cable and Wi-Fi.');
+  assert.equal(await row(board, 'wifi').getByRole('button', { name: 'Change Wi-Fi' }).isVisible(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('while a decoder is connected, another card\'s Connect decoder opens no second picker', async (t) => {
+  const { page, errors, decoders, card } = await cabledPage(t, { names: ['A gate', 'B gate'] });
+  await page.evaluate(() => {
+    window.__picks = 0;
+    const real = navigator.serial.requestPort;
+    navigator.serial.requestPort = (...args) => { window.__picks += 1; return real(...args); };
+  });
+  const other = card(decoders[1]).getByRole('button', { name: 'Connect decoder' });
+  assert.equal(await other.isDisabled(), true);
+  await other.click({ force: true });
+  await page.evaluate(() => /** @type {HTMLElement} */ (document.querySelector(`[data-decoder] [data-bridge-connect]:not([hidden])`)).click());
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.__picks), 0);
+  assert.equal(await card(decoders[1]).locator('[data-row="cable"] [data-slot="state"]').innerText(), 'Not connected');
+  assert.deepEqual(errors, []);
+});
+
+test('change wifi lists 25 networks that scroll, strongest first, another network separate', async (t) => {
+  const { page, errors, board, card } = await cabledPage(t);
+  const dialog = await openWifi(page, card(board));
+  assert.equal(await dialog.getAttribute('aria-labelledby'), 'wifi-title-list');
+  const nets = dialog.locator('[data-slot="networks"] button.net');
+  assert.equal(await nets.count(), 25);
+  const names = await nets.locator('[data-slot="name"]').allInnerTexts();
+  assert.equal(names[0], 'Clubhaus');
+  assert.equal(names.at(-1), 'TinyLap-Testnetz-langer-Name-032');
+  const signals = await nets.evaluateAll((xs) => xs.map((x) => x.getAttribute('data-signal')));
+  assert.deepEqual([signals[0], signals.at(-1)], ['strong', 'weak']);
+  assert.equal(signals.join(' ').replace(/(\w+)( \1)*/g, '$1'), 'strong fair weak', 'strongest first, weak ones at the bottom');
+  assert.equal(await nets.nth(2).locator('[data-slot="note"]').innerText(), 'Open', 'Gäste is open');
+  const list = dialog.locator('[data-slot="networks"]');
+  assert.ok(await list.evaluate((x) => x.scrollHeight > x.clientHeight + 100), 'the list scrolls inside the dialog');
+  const box = await dialog.boundingBox();
+  assert.ok(box.y >= 0 && box.y + box.height <= 800, 'the dialog fits the viewport');
+  const another = dialog.getByRole('button', { name: 'Another network' });
+  assert.equal(await list.locator('[data-wifi-action="another"]').count(), 0, 'Another network is outside the list');
+  assert.equal(await another.isVisible(), true);
+  const at = await another.boundingBox();
+  assert.ok(at.y + at.height <= 800, 'and in view');
+  assert.equal(await page.evaluate(() => document.activeElement?.matches('button.net')), true, 'focus on the first network');
+  assert.deepEqual(errors, []);
+});
+
+test('joining the right password ends joined', async (t) => {
+  const { page, errors, board, card, row } = await cabledPage(t);
+  const dialog = await openWifi(page, card(board));
+  await dialog.getByRole('button', { name: /^Clubhaus/ }).click();
+  await dialog.getByRole('heading', { name: 'Clubhaus' }).waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'wifi-password');
+  await page.locator('#wifi-password').fill('tinylap!');
+  await dialog.getByRole('button', { name: 'Join network' }).click();
+  await dialog.getByText('Joined “Clubhaus”').waitFor();
+  assert.equal(await dialog.locator('[data-result="joined"] .decoder-row-help').innerText(), 'Signal strong. Laps now also get through over Wi-Fi.');
+  assert.equal(await page.locator('[data-bridge-live]').textContent(), 'Joined “Clubhaus”.');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  assert.equal(await page.locator('#wifi-dialog').evaluate((x) => x.open), false);
+  assert.equal(await row(board, 'wifi').locator('[data-slot="state"]').innerText(), 'Connected to “Clubhaus”');
+  assert.equal(await page.evaluate(() => document.activeElement?.matches('[data-bridge-wifi]')), true, 'focus back on Change Wi-Fi');
+  assert.equal(await page.locator('#wifi-password').inputValue(), '', 'no password left in the page');
+  assert.deepEqual(errors, []);
+});
+
+test('refused password returns with the password kept', async (t) => {
+  const { page, errors, board, card } = await cabledPage(t);
+  await page.evaluate(() => document.querySelector('tl-bridge').run.bridge.join('Clubhaus', 'tinylap!'));
+  const dialog = await openWifi(page, card(board));
+  assert.equal(await dialog.getByRole('button', { name: /^Clubhaus/ }).locator('[data-slot="note"]').innerText(), 'Current network');
+  await dialog.getByRole('button', { name: /^Rennstrecke/ }).click();
+  await page.locator('#wifi-password').fill('not-the-one');
+  await dialog.getByRole('button', { name: 'Join network' }).click();
+  const alert = dialog.getByRole('alert');
+  await alert.waitFor();
+  assert.equal(await alert.innerText(), '“Rennstrecke” refused the password. The decoder is back on “Clubhaus”.');
+  assert.equal(await page.locator('#wifi-password').inputValue(), 'not-the-one');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'wifi-password');
+  assert.equal(await dialog.getAttribute('aria-labelledby'), 'wifi-title-password');
+  assert.deepEqual(errors, []);
+});
+
+test('another network by name', async (t) => {
+  const { page, errors, board, card, row } = await cabledPage(t);
+  const dialog = await openWifi(page, card(board));
+  await dialog.getByRole('button', { name: 'Another network' }).click();
+  await dialog.getByRole('heading', { name: 'Another network' }).waitFor();
+  await dialog.getByLabel('Network name').fill('Nowhere');
+  await page.locator('#wifi-another-password').fill('whatever1');
+  await dialog.getByRole('button', { name: 'Join network' }).click();
+  await dialog.getByRole('alert').filter({ hasText: 'Can\'t find “Nowhere” from here.' }).waitFor();
+  await dialog.getByRole('button', { name: 'Back to the list' }).click();
+  await dialog.getByRole('button', { name: 'Another network' }).click();
+  await dialog.getByLabel('Network name').fill('Rennstrecke');
+  await page.locator('#wifi-another-password').fill('tinylap!');
+  await dialog.getByRole('button', { name: 'Join network' }).click();
+  await dialog.getByText('Joined “Rennstrecke”').waitFor();
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  assert.equal(await row(board, 'wifi').locator('[data-slot="state"]').innerText(), 'Connected to “Rennstrecke”');
+  assert.deepEqual(errors, []);
+});
+
+test('open network skips the password', async (t) => {
+  const { page, errors, board, card } = await cabledPage(t);
+  const dialog = await openWifi(page, card(board));
+  await recordSteps(page);
+  await dialog.getByRole('button', { name: /^Gäste/ }).click();
+  await dialog.getByText('Joined “Gäste”').waitFor();
+  assert.deepEqual(await page.evaluate(() => window.__steps), ['joining', 'result']);
+  assert.deepEqual(errors, []);
+});
+
+test('card swap keeps the dialog and the cable rows', async (t) => {
+  const { page, errors, board, decoders, card, row } = await cabledPage(t, { names: ['A gate', 'B gate'] });
+  const other = decoders[1];
+  const dialog = await openWifi(page, card(board));
+  // B gate reports over Wi-Fi meanwhile: only a fresh copy of the page knows.
+  await postPassings(app, other, [{ transponder: '0A', t: 1000 }]);
+  assert.equal(await row(other, 'wifi').locator('[data-slot="state"]').innerText(), '');
+  const before = await page.evaluate(() => document.querySelector('#bridge-decoders'));
+  await page.evaluate(() => document.querySelector('tl-bridge').refresh(document.querySelector('tl-bridge').run));
+  assert.equal(await page.evaluate((old) => document.querySelector('#bridge-decoders') !== old, before), true, 'swapped');
+  assert.equal(await row(other, 'wifi').locator('[data-slot="state"]').innerText(), 'Reporting');
+  assert.match(await row(other, 'wifi').locator('time[data-when]').innerText(), /^\d\d:\d\d$/, 'its time in the browser\'s zone');
+  assert.equal(await page.locator('#wifi-dialog').evaluate((x) => x.open), true, 'the dialog stays open');
+  assert.equal(await dialog.locator('button.net').count(), 25);
+  assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Connected');
+  assert.equal(await row(board, 'wifi').locator('[data-slot="state"]').innerText(), 'Not set up');
+  assert.equal(await card(other).getByRole('button', { name: 'Connect decoder' }).isDisabled(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('no change wifi without the cable', async (t) => {
+  const { page, errors, board, decoders, card, row } = await cabledPage(t, { names: ['A gate', 'B gate'], connect: false });
+  await card(board).getByRole('button', { name: 'Connect decoder' }).waitFor();
+  assert.equal(await page.locator('[data-bridge-wifi]').evaluateAll((xs) => xs.every((x) => x.hidden)), true, 'hidden on every card');
+  assert.equal(await row(board, 'wifi').locator('[data-slot="detail"]').innerText(), 'Connect the cable to see its Wi-Fi.');
+  await page.evaluate(() => {
+    const real = navigator.serial.requestPort;
+    navigator.serial.requestPort = async (...args) => { window.__port = await real(...args); return window.__port; };
+  });
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'wifi').getByRole('button', { name: 'Set up Wi-Fi' }).waitFor();
+  assert.equal(await row(decoders[1], 'wifi').locator('[data-bridge-wifi]').isVisible(), false, 'only on the cabled card');
+  // Unplugged: the card is the server's again.
+  await page.evaluate(() => window.__port.unplug());
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^(Not connected|Connected on another laptop)$/ }).waitFor();
+  assert.equal(await row(board, 'wifi').locator('[data-bridge-wifi]').isVisible(), false);
+  assert.deepEqual(errors, []);
+});
+
+test('show toggles the password', async (t) => {
+  const { page, errors, board, card } = await cabledPage(t);
+  const dialog = await openWifi(page, card(board));
+  await dialog.getByRole('button', { name: /^Clubhaus/ }).click();
+  const field = page.locator('#wifi-password');
+  await field.fill('secret12');
+  const show = dialog.getByRole('button', { name: 'Show password' });
+  assert.equal(await show.textContent(), 'Show');
+  await show.click();
+  const hide = dialog.getByRole('button', { name: 'Hide password' });
+  assert.equal(await hide.textContent(), 'Hide');
+  assert.equal(await field.getAttribute('type'), 'text');
+  assert.equal(await hide.getAttribute('aria-pressed'), null);
+  await hide.click();
+  assert.equal(await field.getAttribute('type'), 'password');
+  assert.equal(await dialog.getByRole('button', { name: 'Show password' }).textContent(), 'Show');
+  assert.equal(await field.inputValue(), 'secret12');
   assert.deepEqual(errors, []);
 });
