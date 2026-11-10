@@ -12,6 +12,7 @@ import { chip, idleNotice, marks, marksHead, timeWidths } from '../server/views/
 import { directionIcon } from '../server/views/direction.js';
 import { shortLength } from '../server/views/sessions.js';
 import { decoderCards, wifiDialog } from '../server/views/bridge.js';
+import { formatWhen } from '../public/format.js';
 
 test('interpolations are escaped', () => {
   const name = `<b>Ana</b> & "Ben" 'C'`;
@@ -188,9 +189,9 @@ test('decoder cards: every server state in its words, lamp and action (connectio
   assert.match(off, /status-warning/);
   assert.equal(slot(off, 'status'), `<p>If it's on, its laps wait on it. Connect the cable to see why.</p><p>Last heard <time datetime="${iso(T - 120_000)}" data-when>2 min ago</time>.</p>`);
   assert.equal(lamp(rowOf(off, 'wifi')), 'fail');
-  // "since 2 min ago" doesn't read: the state stays short, and when goes in the detail.
-  assert.equal(slot(rowOf(off, 'wifi'), 'state'), 'Not reporting');
-  assert.equal(slot(rowOf(off, 'wifi'), 'detail'), `Last heard <time datetime="${iso(T - 120_000)}" data-when>2 min ago</time>.`);
+  // The spec's words, with the time of day until the browser writes it in its zone; the status line says "Last heard".
+  assert.equal(slot(rowOf(off, 'wifi'), 'state'), `Not reporting since <time datetime="${iso(T - 120_000)}" data-when>${formatWhen(T - 120_000, T)}</time>`);
+  assert.equal(slot(rowOf(off, 'wifi'), 'detail'), '', 'no second "Last heard" in the row');
   assert.equal(slot(rowOf(off, 'cable'), 'detail'), 'Plug the decoder in by USB, then connect it.');
   assert.match(slot(rowOf(off, 'cable'), 'action'), /btn-primary/);
 

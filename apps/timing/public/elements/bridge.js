@@ -56,6 +56,11 @@ const KIND_TEXT = {
 const LIST_TIMEOUT_MS = 3000;
 /** The decoder cards come fresh from the server this often (connections spec §3). */
 const REFRESH_MS = 15_000;
+/**
+ * The server says a cable is on another laptop until it has heard nothing over one for 25 s (the engine's
+ * OFFLINE_AFTER_MS): a copy fetched up to LIST_TIMEOUT_MS later may still say so of the cable this tab just lost.
+ */
+const LEFT_FOR_MS = 25_000 + LIST_TIMEOUT_MS;
 
 const quoted = (name) => `“${name}”`;
 /**
@@ -202,6 +207,8 @@ class TlBridge extends HTMLElement {
   /** @type {Run | null} */ run = null;
   /** The cards as the server rendered them, by decoder id: what a card goes back to when the cable leaves. @type {Map<string, Node>} */
   served = new Map();
+  /** When each decoder left this tab's cable, by decoder id: the server may still call it connected elsewhere. @type {Map<string, number>} */
+  left = new Map();
 
   connectedCallback() { this.start(); }
 
@@ -575,6 +582,13 @@ class TlBridge extends HTMLElement {
     for (const card of /** @type {NodeListOf<HTMLElement>} */ (list.querySelectorAll('[data-decoder][data-cabled]'))) {
       if (card.dataset.decoder !== id) this.uncable(run, card);
     }
+    for (const [gone, at] of this.left) {
+      if (gone === id || Date.now() - at >= LEFT_FOR_MS) this.left.delete(gone);
+      else {
+        const other = /** @type {HTMLElement | null} */ (list.querySelector(`[data-decoder="${CSS.escape(gone)}"]:not([data-cabled])`));
+        if (other) this.unclaim(other, at);
+      }
+    }
     const card = id ? /** @type {HTMLElement | null} */ (list.querySelector(`[data-decoder="${CSS.escape(id)}"]`)) : null;
     if (card && bridge) this.cable(card, bridge, run.silent === bridge);
     else if (id && run.missing !== id) {
@@ -589,14 +603,6 @@ class TlBridge extends HTMLElement {
       const at = Date.parse(time.dateTime);
       const text = Number.isNaN(at) ? time.textContent : formatWhen(at, Date.now());
       if (time.textContent !== text) time.textContent = text;
-    }
-    // The server's offline row says "Not reporting" with "Last heard <time>." under it; here it reads as the spec's one line.
-    for (const row of list.querySelectorAll('[data-decoder]:not([data-cabled]) [data-row="wifi"]:has(> .lamp[data-state="fail"])')) {
-      const time = row.querySelector('[data-slot="detail"] time[data-when]');
-      if (time) {
-        /** @type {HTMLElement} */ (row.querySelector('[data-slot="state"]')).replaceChildren('Not reporting since ', time);
-        /** @type {HTMLElement} */ (row.querySelector('[data-slot="detail"]')).textContent = '';
-      }
     }
     // The dialog is for the decoder on the cable only.
     if (run.wizard?.dialog.open && run.wizard.decoder !== id) run.wizard.close();
@@ -641,7 +647,10 @@ class TlBridge extends HTMLElement {
     if (status) {
       status.className = 'status status-success';
       const [first, ...rest] = status.querySelectorAll('p');
-      const text = `Laps get through over the cable${tinylap && bridge.net?.state === 'connected' ? ' and Wi-Fi' : ''}.`;
+      // Wi-Fi counts once the server hears it (or knows it idle), not when the decoder says it joined.
+      const served = /** @type {Element | undefined} */ (this.served.get(card.dataset.decoder ?? ''));
+      const heard = /** @type {HTMLElement | null | undefined} */ (served?.querySelector('[data-row="wifi"] > .lamp'))?.dataset.state;
+      const text = `Laps get through over the cable${tinylap && (heard === 'ok' || heard === 'idle') ? ' and Wi-Fi' : ''}.`;
       if (first && first.textContent !== text) first.textContent = text;
       for (const p of rest) p.remove();
     }
@@ -664,6 +673,7 @@ class TlBridge extends HTMLElement {
 
   /** The cable left this card: back to the server's copy, or a fresh one when there is none. @param {Run} run @param {HTMLElement} card */
   uncable(run, card) {
+    this.left.set(card.dataset.decoder ?? '', Date.now());
     const served = this.served.get(card.dataset.decoder ?? '');
     if (!served) {
       void this.refresh(run);
@@ -672,6 +682,44 @@ class TlBridge extends HTMLElement {
     const focus = this.focusOf(card.parentElement);
     card.replaceWith(served.cloneNode(true));
     this.refocus(run, focus);
+  }
+
+  /**
+   * A card whose cable just left this tab, while the server's copy still says "Connected on another laptop" (it heard
+   * that very cable): Not connected, as the server will say once 25 s have passed (connections spec §2.1, §3).
+   * @param {HTMLElement} card @param {number} at when the cable left
+   */
+  unclaim(card, at) {
+    const row = card.querySelector('[data-row="cable"]');
+    const lamp = /** @type {HTMLElement | null} */ (row?.querySelector('.lamp') ?? null);
+    if (!row || lamp?.dataset.state !== 'ok') return;
+    const wifi = /** @type {HTMLElement | null} */ (card.querySelector('[data-row="wifi"] > .lamp'))?.dataset.state;
+    const viaWifi = wifi === 'ok' || wifi === 'idle';
+    lamp.dataset.state = 'off';
+    /** @type {HTMLElement} */ (row.querySelector('[data-slot="state"]')).textContent = 'Not connected';
+    /** @type {HTMLElement} */ (row.querySelector('[data-slot="detail"]')).textContent = viaWifi ? 'Not needed while Wi-Fi works.' : 'Plug the decoder in by USB, then connect it.';
+    for (const button of row.querySelectorAll('[data-bridge-connect]')) {
+      button.classList.toggle('btn-primary', !viaWifi);
+      button.classList.toggle('btn-outline', viaWifi);
+    }
+    const status = /** @type {HTMLElement | null} */ (card.querySelector('[data-slot="status"]'));
+    if (!status) return;
+    /** @param {(string | Node)[]} parts */
+    const line = (...parts) => {
+      const p = document.createElement('p');
+      p.append(...parts);
+      return p;
+    };
+    if (viaWifi) {
+      status.className = 'status status-success';
+      status.replaceChildren(line('Laps get through over Wi-Fi.'));
+      return;
+    }
+    // What it last sent came over that cable.
+    const time = Object.assign(document.createElement('time'), { dateTime: new Date(at).toISOString() });
+    time.dataset.when = '';
+    status.className = 'status status-warning';
+    status.replaceChildren(line("If it's on, its laps wait on it. Connect the cable to see why."), line('Last heard ', time, '.'));
   }
 
   /** Where focus is inside the cards, as a card and its button, to find again in a new copy. @param {Element | null} list */

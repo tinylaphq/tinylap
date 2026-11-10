@@ -130,6 +130,8 @@ export class WifiWizard {
     }
     const chosen = /** @type {Network} */ (this.#chosen);
     if (form.dataset.wifiForm === 'password') {
+      // A locked network can't be joined without its password: no 20 s try that can't work.
+      if (!chosen.open && password === '') return this.#refuse(field('password'), `Enter the password of ${quoted(chosen.name)}.`);
       const wrong = this.host.problem(chosen.name, password);
       if (wrong) return this.#refuse(field('password'), wrong.text);
     }
@@ -289,7 +291,8 @@ export class WifiWizard {
         : cause ? `Can't join ${name}.`
           : error?.unstored ? `The decoder joined ${name} but couldn't keep the settings. Try again.`
             : typeof error?.reason === 'string' ? `The decoder refused it: ${error.reason}.` : String(error?.message ?? error);
-    const back = before?.state === 'connected' && before.name !== chosen.name ? ` The decoder is back on ${quoted(before.name)}.` : '';
+    // Joined but not kept: it is on the new network, not back on the old one.
+    const back = !error?.unstored && before?.state === 'connected' && before.name !== chosen.name ? ` The decoder is back on ${quoted(before.name)}.` : '';
     return this.#password(password, why + back);
   }
 

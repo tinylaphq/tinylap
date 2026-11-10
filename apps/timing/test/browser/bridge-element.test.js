@@ -582,6 +582,10 @@ test('connecting marks the card connected and shows the board\'s network', async
   await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Connected to “Clubhaus”' }).waitFor();
   assert.equal(await row(board, 'wifi').locator('[data-slot="detail"]').innerText(), 'Signal strong.');
   assert.deepEqual(await row(board, 'wifi').locator('.lamp').evaluate((x) => [x.dataset.state, x.dataset.signal]), ['ok', 'strong']);
+  // Joined isn't heard: Wi-Fi counts for laps once the server hears it.
+  assert.equal(await card(board).locator('[data-slot="status"]').innerText(), 'Laps get through over the cable.');
+  await postPassings(app, board, [{ transponder: '0A', t: 1000 }]);
+  await page.evaluate(() => document.querySelector('tl-bridge').refresh(document.querySelector('tl-bridge').run));
   assert.equal(await card(board).locator('[data-slot="status"]').innerText(), 'Laps get through over the cable and Wi-Fi.');
   assert.equal(await row(board, 'wifi').getByRole('button', { name: 'Change Wi-Fi' }).isVisible(), true);
   assert.deepEqual(errors, []);
@@ -685,6 +689,24 @@ test('another network by name', async (t) => {
   await dialog.getByText('Joined “Rennstrecke”', { exact: true }).waitFor();
   await dialog.getByRole('button', { name: 'Done' }).click();
   assert.equal(await row(board, 'wifi').locator('[data-slot="state"]').innerText(), 'Connected to “Rennstrecke”');
+  assert.deepEqual(errors, []);
+});
+
+test('a locked network refuses an empty password, without a try', async (t) => {
+  const { page, errors, board, card } = await cabledPage(t, { init: [COUNT] });
+  const dialog = await openWifi(page, card(board));
+  await dialog.getByRole('button', { name: /^Clubhaus/ }).click();
+  await dialog.getByRole('heading', { name: 'Clubhaus' }).waitFor();
+  await recordSteps(page);
+  const writes = await page.evaluate(() => window.__writes.length);
+  await dialog.getByRole('button', { name: 'Join network' }).click();
+  const field = page.locator('#wifi-password');
+  assert.equal(await field.evaluate((el) => el.validationMessage), 'Enter the password of “Clubhaus”.');
+  assert.deepEqual(await page.evaluate(() => window.__steps), [], 'still the password step');
+  assert.equal(await page.evaluate(() => window.__writes.length), writes, 'nothing sent to the decoder');
+  await field.fill('tinylap!');
+  await dialog.getByRole('button', { name: 'Join network' }).click();
+  await dialog.getByText('Joined “Clubhaus”', { exact: true }).waitFor();
   assert.deepEqual(errors, []);
 });
 
@@ -796,9 +818,25 @@ test('the decoder on the cable comes first, and goes back to its place when unpl
   const { page, errors, decoders, row } = await cabledPage(t, { names: ['Zebra gate', 'Alpha gate'] });
   const order = () => page.locator('#bridge-decoders [data-decoder] [data-slot="name"]').allTextContents();
   assert.deepEqual(await order(), ['Zebra gate', 'Alpha gate']);
+  // The bridge posts what comes over the cable, so the server's copy says the cable is on another laptop.
+  const refresh = () => page.evaluate(() => document.querySelector('tl-bridge').refresh(document.querySelector('tl-bridge').run));
+  const servedCable = () => page.evaluate((id) => document.querySelector('tl-bridge').served.get(id)?.querySelector('[data-row="cable"] [data-slot="state"]')?.textContent, decoders[0].id);
+  for (const end = Date.now() + 20_000; await servedCable() !== 'Connected on another laptop';) {
+    assert.ok(Date.now() < end, 'the server hears the cable');
+    await refresh();
+  }
   await page.evaluate(() => window.__port.unplug());
-  await row(decoders[0], 'cable').locator('[data-slot="state"]', { hasText: /^(Not connected|Connected on another laptop)$/ }).waitFor();
+  const cable = row(decoders[0], 'cable');
+  // At once, not once the server forgets the cable 25 s later.
+  await cable.locator('[data-slot="state"]', { hasText: /^Not connected$/ }).waitFor({ timeout: 5000 });
   assert.deepEqual(await order(), ['Alpha gate', 'Zebra gate']);
+  // A copy fetched since still says another laptop (it heard this one): the page never claims the cable it lost.
+  await refresh();
+  assert.equal(await cable.locator('[data-slot="state"]').innerText(), 'Not connected');
+  assert.equal(await cable.locator('.lamp').getAttribute('data-state'), 'off');
+  assert.equal(await cable.locator('[data-slot="detail"]').innerText(), 'Plug the decoder in by USB, then connect it.');
+  assert.match(await cable.getByRole('button', { name: 'Connect decoder' }).getAttribute('class'), /btn-primary/);
+  assert.match(await page.locator(`[data-decoder="${decoders[0].id}"] [data-slot="status"]`).innerText(), /^If it's on, its laps wait on it\. Connect the cable to see why\.\n+Last heard \d\d:\d\d\.$/);
   assert.deepEqual(errors, []);
 });
 
@@ -825,13 +863,17 @@ test('a decoder that never answers %TLNET& reads neutral, without Change Wi-Fi',
 
 test('a join the decoder couldn\'t keep says so on the password step', async (t) => {
   const [script, prefixes] = dropping(['%TLJOIN']);
-  const { page, errors, board, card } = await cabledPage(t, { init: [{ content: `(${script})(${JSON.stringify(prefixes)})` }] });
+  const { page, errors, board, card, row } = await cabledPage(t, { init: [{ content: `(${script})(${JSON.stringify(prefixes)})` }] });
+  const send = (line) => page.evaluate((l) => window.__port.send(new TextEncoder().encode(l)), line);
+  // On "Gäste" before the try: it joined the new network, so it isn't back on the old one.
+  await send('%TLNET connected R8Okc3Rl -60 none&');
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Connected to “Gäste”' }).waitFor();
   const dialog = await openWifi(page, card(board));
   await dialog.getByRole('button', { name: /^Clubhaus/ }).click();
   await page.locator('#wifi-password').fill('tinylap!');
   await dialog.getByRole('button', { name: 'Join network' }).click();
   await dialog.locator('[data-step="joining"]:not([hidden])').waitFor();
-  await page.evaluate(() => window.__port.send(new TextEncoder().encode('%TLNET connected Q2x1YmhhdXM -48 none&%TLERR store&')));
+  await send('%TLNET connected Q2x1YmhhdXM -48 none&%TLERR store&');
   const alert = dialog.getByRole('alert');
   await alert.waitFor({ timeout: 5000 });
   assert.equal(await alert.innerText(), 'The decoder joined “Clubhaus” but couldn\'t keep the settings. Try again.');

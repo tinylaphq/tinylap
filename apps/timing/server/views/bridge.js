@@ -7,6 +7,7 @@
 // Serial and WebHID, the page says what the bridge needs.
 import { createHash } from 'node:crypto';
 import { formatAgo } from '@tinylap/design/format-ago.js';
+import { formatWhen } from '../../public/format.js';
 import { html, safe } from './html.js';
 import { selectField, textField } from './form-parts.js';
 import { asset, layout } from './layout.js';
@@ -39,6 +40,8 @@ const lamp = (state, icon) => html`<span class="lamp" data-state="${state}">${sa
 
 /** A time the browser formats in its own time zone (tl-bridge); the server's words until then. @param {any} request @param {number} at */
 const when = (request, at) => html`<time datetime="${new Date(at).toISOString()}" data-when>${formatAgo(at, request.now())}</time>`;
+/** The same, with the time of day as the server's zone has it ("since 2 min ago" doesn't read). @param {any} request @param {number} at */
+const clock = (request, at) => html`<time datetime="${new Date(at).toISOString()}" data-when>${formatWhen(at, request.now())}</time>`;
 
 /** One connection: lamp, name, state, one line of help, at most one action. */
 const connectionRow = ({ which, name, state, icon, words, detail, action }) => html`<li class="decoder-row" data-row="${which}">
@@ -50,8 +53,8 @@ const connectionRow = ({ which, name, state, icon, words, detail, action }) => h
 const WIFI_ROW = {
   reporting: { state: 'ok', words: () => 'Reporting', detail: (request, at) => (at === null ? null : html`Last heard ${when(request, at)}.`) },
   idle: { state: 'idle', words: () => 'Idle', detail: () => 'Wakes up with the next lap.' },
-  // The state stays short; when it was last heard is the detail ("since 2 min ago" doesn't read).
-  offline: { state: 'fail', words: () => 'Not reporting', detail: (request, at) => (at === null ? null : html`Last heard ${when(request, at)}.`) },
+  // The status line already says when it was last heard: the row doesn't say it again.
+  offline: { state: 'fail', words: (request, at) => (at === null ? 'Not reporting' : html`Not reporting since ${clock(request, at)}`), detail: () => null },
   unknown: { state: 'unknown', words: () => null, detail: () => 'Connect the cable to see its Wi-Fi.' },
 };
 
@@ -101,8 +104,9 @@ function decoderCard(request, d, mayPair) {
  *   who may pair (timing.setup) only; shown while this decoder is on this
  *   tab's cable (named Set up Wi-Fi when it has none), with the help line
  *   before it dropped. It opens #wifi-dialog.
- * - time[data-when]: a time, with the server's "2 min ago" until the browser
- *   writes it in its own time zone (today the time; otherwise weekday or date).
+ * - time[data-when]: a time, with the server's "2 min ago" (or, after "since",
+ *   its time of day) until the browser writes it in its own time zone (today
+ *   the time; otherwise weekday or date).
  * A plain ZRound decoder or EasyLap has no Wi-Fi: remove its Wi-Fi row once
  * the cable shows what it is.
  */
