@@ -22,9 +22,11 @@ namespace net {
 namespace {
 
 constexpr uint32_t kStackBytes = 12288;   // the TLS handshake runs on this task's stack
-// The idle task's: a TLS handshake computes for seconds without blocking, and above idle it would
-// starve core 0's idle task until the task watchdog resets the board. Wi-Fi and lwIP stay above it.
-constexpr UBaseType_t kPriority = tskIDLE_PRIORITY;
+// Core 1 at loop()'s priority (spec §3.1). A TLS handshake computes for seconds without blocking:
+// on core 0 it would starve the idle task the task watchdog watches, or at idle priority take twice
+// as long. Here it takes turns with loop(), which yields every pass; the IR task stays above both.
+constexpr BaseType_t kCore = 1;
+constexpr UBaseType_t kPriority = 1;
 constexpr int64_t kJoinMinUs = 1000000, kJoinMaxUs = 30000000;   // rejoin back-off (spec §3.2)
 constexpr int64_t kJoinTimeoutUs = 30000000;   // a join that never gets an address
 constexpr int kHttpTimeoutMs = 10000;
@@ -160,7 +162,7 @@ int post(const Request& r) {
   }
 }
 
-// Core 0: the Wi-Fi connection and the posts (spec §3.1, §3.2, §3.4).
+// Core 1, beside loop(): the Wi-Fi connection and the posts (spec §3.1, §3.2, §3.4).
 void netTask(void*) {
   // Should never happen. If it does, Wi-Fi stays off until the next reset: on_ stays set and a
   // later %TLWIFI only stores its settings.
@@ -268,7 +270,7 @@ void start() {
   if (on_) return;
   on_ = true;
   state_ = NetState::Connecting;
-  xTaskCreatePinnedToCore(netTask, "net", kStackBytes, nullptr, kPriority, nullptr, 0);
+  xTaskCreatePinnedToCore(netTask, "net", kStackBytes, nullptr, kPriority, nullptr, kCore);
 }
 
 }  // namespace

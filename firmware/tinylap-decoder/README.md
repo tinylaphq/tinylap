@@ -71,7 +71,7 @@ Pairing in the timing app stores the decoder id and token (`%TLPAIR`), where to 
 - **The outbox** holds the last 2000 passings in RAM, not in flash; when full the oldest goes. A batch of up to 500 is posted to `<server>/decoders/<id>/passings` as soon as passings wait, one request at a time, over HTTPS checked against the ESP-IDF certificate bundle (`http://` works for a local server). What a batch carried leaves the outbox once an answer's `through` covers it, so cable and Wi-Fi together store each passing once.
 - **In use:** for 15 minutes after joining Wi-Fi and after each passing, the board posts the `stat` line every 10 s, which tells the server it is alive. Then it sends one batch with `quiet` and stays silent until the next passing.
 - **Answers:** `401` pauses sending until the board is paired again; `404` and `422` drop the batch; `429` waits `Retry-After`; anything else retries with back-off from 1 s to 30 s.
-- **Cores:** the IR task runs on core 1 and the network task on core 0, so Wi-Fi does not delay the frame stamps. The network task runs at the idle task's priority: the first HTTPS handshake computes for about 16 s, and at any higher priority the task watchdog would reset the board (`boot reason=wdt`). Later posts reuse the connection.
+- **Tasks:** the IR task runs on core 1 at priority 10, above everything else there, so Wi-Fi does not delay the frame stamps. The network task runs on core 1 too, at `loop()`'s priority: the first HTTPS handshake computes for about 6 s while the two take turns, and on core 0 it would starve the idle task until the task watchdog reset the board (`boot reason=wdt`). Later posts reuse the connection.
 
 Reading the logs (serial monitor or the bridge):
 
