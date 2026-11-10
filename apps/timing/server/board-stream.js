@@ -46,31 +46,46 @@ function boardStream(request, workspaceId, { watcher, token = null }) {
         if (timer) return;
         timer = setTimeout(render, Math.max(0, THROTTLE_MS - (Date.now() - last)));
       };
-      res.write('retry: 2000\n\n');
-      const sub = request.hub.subscribe(workspaceId, { lastEventId: null, watcher, tag: token ?? undefined, onClose: () => res.end() }, changed);
-      render();
-      const beat = setInterval(() => res.write(': beat\n\n'), HEARTBEAT_MS);
-      beat.unref();
       let open = true;
       let counted = false;
+      let sub = null;
+      let beat = null;
+      let stopChecks = null;
       const close = () => {
         if (!open) return;
         open = false;
         clearInterval(beat);
-        stopChecks();
+        stopChecks?.();
         if (timer) clearTimeout(timer);
-        sub.unsubscribe();
+        sub?.unsubscribe();
         if (counted) request.boardViewers.remove(workspaceId);
       };
-      const stopChecks = request.streams.watch(request, workspaceId, 'timing.run', watcher, () => {
+      // First, so a setup that throws, or a viewer already gone, never leaves the club watched.
+      res.on('close', close);
+      try {
+        res.write('retry: 2000\n\n');
+        sub = request.hub.subscribe(workspaceId, { lastEventId: null, watcher, tag: token ?? undefined, onClose: () => res.end() }, changed);
+        render();
+        beat = setInterval(() => res.write(': beat\n\n'), HEARTBEAT_MS);
+        beat.unref();
+        stopChecks = request.streams.watch(request, workspaceId, 'timing.run', watcher, () => {
+          close();
+          res.end();
+        });
+        // It ended the stream before its stop existed.
+        if (!open) stopChecks();
+        if (open && !res.destroyed) {
+          request.boardViewers.add(workspaceId);
+          counted = true;
+        }
+      } catch (error) {
+        // The page reconnects and gets whatever the server answers now.
+        console.error('board stream: setup failed', error);
         close();
         res.end();
-      });
-      if (open) {
-        request.boardViewers.add(workspaceId);
-        counted = true;
       }
-      res.on('close', close);
+      // Gone before it started: its close came before the listener.
+      if (res.destroyed) close();
     },
   };
 }

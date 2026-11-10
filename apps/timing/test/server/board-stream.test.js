@@ -158,3 +158,76 @@ test('the stream renders the offline banner after a decoders event', async () =>
     await rig.close();
   }
 });
+
+/** A rig whose club has a paired decoder, to ask the ingest answer whether the board is watched. @param {any} [options] */
+async function watchedRig(options) {
+  const rig = await startTiming(options);
+  const user = await rig.signUp('Eve');
+  const club = rig.club(user, 'Watched');
+  const who = await rig.login(user);
+  const gate = await (await rig.api(who, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+  const watched = async () => (await (await fetch(`${rig.base}/decoders/${gate.id}/passings`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${gate.token}` },
+    body: JSON.stringify({ boot: 'b00tb00t', passings: [], logs: ['boot'] }),
+  })).json()).watched;
+  // Live hub subscriptions, to see that none is left behind.
+  const subscribe = rig.hub.subscribe;
+  const live = { count: 0 };
+  rig.hub.subscribe = (...args) => {
+    const sub = subscribe(...args);
+    live.count += 1;
+    let done = false;
+    return { ...sub, unsubscribe: () => { if (!done) { done = true; live.count -= 1; } sub.unsubscribe(); } };
+  };
+  return { rig, club, who, watched, live };
+}
+
+test('a stream whose setup throws ends, logs once, and leaves the club unwatched', async () => {
+  const { rig, club, who, watched, live } = await watchedRig({ streams: { watch: () => { throw new Error('checks are down'); } } });
+  const logged = [];
+  const error = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    const res = await rig.api(who, 'GET', `/clubs/${club.id}/board/events`);
+    await res.text();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(logged.length, 1);
+    assert.equal(await watched(), false);
+    assert.equal(live.count, 0, 'its hub subscription is gone');
+  } finally {
+    console.error = error;
+    await rig.close();
+  }
+});
+
+test('a viewer gone before its stream starts is never counted', async () => {
+  const { routes } = await import('../../server/routes.js');
+  let entered;
+  const inRoute = new Promise((resolve) => { entered = resolve; });
+  let started;
+  const streamed = new Promise((resolve) => { started = resolve; });
+  const slow = routes.map((route) => (route.pattern.exec('/clubs/x/board/events') && route.methods.GET
+    ? { ...route, methods: { ...route.methods, GET: async (request, ...rest) => {
+      entered();
+      // The viewer leaves while the server still works on the answer.
+      await new Promise((resolve) => (request.req.socket.destroyed ? resolve() : request.req.socket.once('close', resolve)));
+      const answer = await route.methods.GET(request, ...rest);
+      return { ...answer, stream: (req, res) => { answer.stream(req, res); started(); } };
+    } } }
+    : route));
+  const { rig, club, who, watched, live } = await watchedRig({ routes: slow });
+  try {
+    const abort = new AbortController();
+    const res = fetch(`${rig.base}/clubs/${club.id}/board/events`, { headers: { origin: rig.base, cookie: who.jar.header() }, signal: abort.signal }).catch(() => null);
+    await inRoute;
+    abort.abort();
+    await res;
+    await streamed;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(await watched(), false);
+    assert.equal(live.count, 0);
+  } finally {
+    await rig.close();
+  }
+});
