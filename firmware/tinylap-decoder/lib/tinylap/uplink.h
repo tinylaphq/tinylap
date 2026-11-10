@@ -71,5 +71,6 @@ class Uplink {
 std::string batchBody(const std::string& boot, const std::vector<std::pair<std::string, uint32_t>>& passings,
                       const std::vector<std::string>& logs, const int64_t* nowMs, bool quiet);  // JSON; escapes " and \ in log lines
 bool readThrough(const std::string& body, int64_t& through);  // false when "through" is null or missing
+bool readWatched(const std::string& body);                    // "watched": true; missing is false (connections spec §6)
 
 }  // namespace tinylap

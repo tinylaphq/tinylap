@@ -1,8 +1,11 @@
 // Wi-Fi and HTTPS for the outbox (Wi-Fi spec §3.2, §3.4, §3.5). The Uplink decides what to post and
-// when; this joins the network, does the HTTP and hands Wi-Fi lines to loop().
+// when; this joins the network, does the HTTP, scans and tries new settings (connections spec §4)
+// and hands its lines to loop().
 #include "net.h"
 #include <algorithm>
 #include <atomic>
+#include <new>
+#include <vector>
 #include <esp_crt_bundle.h>
 #include <esp_event.h>
 #include <esp_http_client.h>
@@ -15,6 +18,8 @@
 #include <freertos/task.h>
 #include <stdlib.h>
 #include <string.h>
+#include "scan.h"
+#include "zround.h"
 
 using namespace tinylap;
 
@@ -29,22 +34,33 @@ constexpr BaseType_t kCore = 1;
 constexpr UBaseType_t kPriority = 1;
 constexpr int64_t kJoinMinUs = 1000000, kJoinMaxUs = 30000000;   // rejoin back-off (spec §3.2)
 constexpr int64_t kJoinTimeoutUs = 30000000;   // a join that never gets an address
+constexpr int64_t kTryUs = 20000000;           // a %TLJOIN's try: the scan and the join (connections spec §4.3)
 constexpr int kHttpTimeoutMs = 10000;
 constexpr TickType_t kIdleTicks = pdMS_TO_TICKS(100);
 constexpr size_t kMaxBody = 1024;   // an answer is {"through":…}
 
 struct Event { enum Kind : uint8_t { Kick, Disconnected, GotIp } kind; int32_t reason; };
-struct Line { char text[64]; };   // a wifi line is under 50 bytes
+struct Line { char text[96]; };   // a %TLNET with a 32-byte name is about 80 bytes
+// A scan's 31 lines and what else waits. The net task also waits for room for them (pushLine's wait),
+// so no line of a scan or a %TLJOINED is lost; lines pushed under the mutex never wait.
+constexpr UBaseType_t kLines = 40;
 
 // Made on the first call, from setup() (the boot's onBoot runs before begin).
 SemaphoreHandle_t mutex;
 QueueHandle_t events;   // Wi-Fi events and kicks, to the net task
-QueueHandle_t lines;    // wifi lines, to loop()
+QueueHandle_t lines;    // the net side's lines, to loop()
 
 // Under the mutex: the Uplink and the Wi-Fi settings not yet taken by the net task.
 Uplink* uplink;
 std::string ssid_, password_;
 bool wifiChanged_ = false;
+bool (*save_)(const std::string&, const std::string&) = nullptr;
+// The PC's requests not yet taken by the net task, and whether it died at the start (then nobody would answer).
+bool scanWanted_ = false, tryWanted_ = false, broken_ = false;
+std::string tryName_, tryPassword_;
+int64_t tryAskedUs_ = 0;   // when the %TLJOIN came: its 20 s count from there, not from when the task is free
+// What the last %TLNET said; a new one goes out only when its state, name or cause changes (connections spec §4.3).
+struct Shown { const char* state; std::string name; int signal; const char* cause; } shown_{"off", "", 0, "none"};
 
 std::atomic<bool> on_{false};   // only setup() and loop() set it, the thread that calls bootRandom() (spec §3.6)
 std::atomic<NetState> state_{NetState::Off};   // the net task's
@@ -58,7 +74,7 @@ void init() {
   if (mutex) return;
   mutex = xSemaphoreCreateMutex();
   events = xQueueCreate(16, sizeof(Event));
-  lines = xQueueCreate(8, sizeof(Line));
+  lines = xQueueCreate(kLines, sizeof(Line));
   uplink = new Uplink();   // its ring takes ~32 KB, once
 }
 
@@ -68,10 +84,29 @@ void kick() {
   if (on_ && uxQueueMessagesWaiting(events) == 0) xQueueSend(events, &e, 0);
 }
 
-void pushLine(const std::string& s) {
+void pushLine(const std::string& s, TickType_t wait = 0) {
   Line l;
   strlcpy(l.text, s.c_str(), sizeof l.text);
-  xQueueSend(lines, &l, 0);   // full: loop() is far behind, the line is lost
+  xQueueSend(lines, &l, wait);   // full: loop() is far behind, the line is lost
+}
+
+// The net task's answers to the PC: they wait for loop() to make room. Never under the mutex, which loop() takes.
+void answerLine(const std::string& s) { pushLine(s, portMAX_DELAY); }
+
+// Under the mutex, so a %TLNET& answer and a change go out in the order they happened.
+void show(const char* state, const std::string& name, int signal, const char* cause) {
+  bool same = strcmp(state, shown_.state) == 0 && name == shown_.name && strcmp(cause, shown_.cause) == 0;
+  shown_ = Shown{state, name, signal, cause};
+  if (!same) pushLine(line::net(state, name, signal, cause));
+}
+
+// The ESP-IDF disconnect reason as %TLNET and %TLJOINED name it (connections spec §4.1).
+const char* causeOf(int reason) {
+  switch (reason) {
+    case 2: case 15: case 202: case 204: return "password";   // auth expired, 4-way handshake, auth fail, handshake timeout
+    case 201: return "notfound";
+    default: return "other";
+  }
 }
 
 // "%TLLOG stat …&" to "stat …", as the Uplink takes log lines.
@@ -107,6 +142,50 @@ bool startDriver() {
   if (esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK || esp_wifi_start() != ESP_OK) return false;
   esp_wifi_set_ps(WIFI_PS_MIN_MODEM);   // spec §3.2
   return true;
+}
+
+// Sets the station's network; the name and password are bytes and may hold NUL.
+void setStation(const std::string& ssid, const std::string& password) {
+  wifi_config_t c = {};
+  memcpy(c.sta.ssid, ssid.data(), std::min(ssid.size(), sizeof c.sta.ssid));
+  memcpy(c.sta.password, password.data(), std::min(password.size(), sizeof c.sta.password));
+  // The strongest access point of that name, not the first one heard: a club or office network
+  // has several, and a distant one refuses the association (reason 203). PMF capable, so a
+  // WPA2/WPA3 network can use it.
+  c.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+  c.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+  c.sta.pmf_cfg.capable = true;
+  esp_wifi_set_config(WIFI_IF_STA, &c);
+}
+
+// Whether the access point has this name, in bytes: the driver keeps up to 32, NUL-padded.
+bool sameName(const wifi_ap_record_t& ap, const std::string& name) {
+  const size_t n = std::min(name.size(), size_t(32));
+  return memcmp(ap.ssid, name.data(), n) == 0 && (n == 32 || ap.ssid[n] == 0);
+}
+
+// A blocking scan of all channels, as the %TLSCAN answer (connections spec §4.2). Connected, the
+// radio leaves the channel meanwhile; a link it costs comes back as a disconnect, rejoined as any.
+std::vector<std::string> scanNetworks() {
+  wifi_scan_config_t sc = {};   // all channels, active, hidden names left out
+  if (esp_wifi_scan_start(&sc, true) != ESP_OK) return {line::error("scan")};
+  uint16_t n = 0;
+  esp_wifi_scan_get_ap_num(&n);
+  std::vector<ApRecord> records;
+  if (n > 0) {
+    wifi_ap_record_t* aps = new (std::nothrow) wifi_ap_record_t[n];   // ~80 bytes each, on the heap
+    if (!aps) {
+      esp_wifi_clear_ap_list();
+      return {line::error("scan")};
+    }
+    if (esp_wifi_scan_get_ap_records(&n, aps) == ESP_OK)
+      for (uint16_t i = 0; i < n; i++) {
+        const char* name = reinterpret_cast<const char*>(aps[i].ssid);
+        records.push_back({std::string(name, strnlen(name, sizeof aps[i].ssid)), aps[i].rssi, aps[i].authmode == WIFI_AUTH_OPEN});
+      }
+    delete[] aps;
+  }
+  return scanLines(records);
 }
 
 // The HTTP side, the net task's alone.
@@ -162,19 +241,30 @@ int post(const Request& r) {
   }
 }
 
-// Core 1, beside loop(): the Wi-Fi connection and the posts (spec §3.1, §3.2, §3.4).
+// Core 1, beside loop(): the Wi-Fi connection, the posts, the scans and the tries (spec §3.1, §3.2,
+// §3.4; connections spec §4).
 void netTask(void*) {
-  // Should never happen. If it does, Wi-Fi stays off until the next reset: on_ stays set and a
-  // later %TLWIFI only stores its settings.
+  // Should never happen. If it does, Wi-Fi stays off until the next reset: on_ stays set, a later
+  // %TLWIFI only stores its settings, and a %TLSCAN or %TLJOIN is answered at once.
   if (!startDriver()) {
     pushLine(wifiLine("failed", 0, -1));
     state_ = NetState::Off;
+    Lock lock;
+    if (scanWanted_) pushLine(line::error("scan"));
+    if (tryWanted_) pushLine(line::joined("other"));
+    scanWanted_ = tryWanted_ = false;
+    broken_ = true;
     vTaskDelete(nullptr);
   }
   bool haveWifi = false, joining = false, connected = false;
   bool leaving = false;   // our esp_wifi_disconnect()'s event is still to come
   int64_t joinAtUs = 0, joinStartUs = 0, backoffUs = kJoinMinUs;
   TickType_t wait = 0;
+  std::string ssid, password;   // the stored settings, which the board goes back to after a try
+  // A %TLJOIN's try: its settings are on the station, and the back-off rejoin waits until it ends.
+  bool trying = false;
+  int64_t tryStartUs = 0;
+  std::string tryName, tryPassword;
 
   auto failed = [&](int reason, int64_t now) {
     if (connected) backoffUs = kJoinMinUs;   // a drop starts the back-off over
@@ -183,6 +273,24 @@ void netTask(void*) {
     pushLine(wifiLine("failed", 0, reason));
     joinAtUs = now + backoffUs;
     backoffUs = std::min(backoffUs * 2, kJoinMaxUs);
+    Lock lock;   // the retries keep the first failure's cause until connected (connections spec §4.3)
+    if (strcmp(shown_.state, "failed") != 0) show("failed", ssid, 0, causeOf(reason));
+  };
+
+  // The try did not join: back to the stored settings, rejoined at once, or to no Wi-Fi without any.
+  auto tryFailed = [&](int reason, const char* cause, int64_t now) {
+    trying = joining = connected = false;
+    pushLine(wifiLine("failed", 0, reason));
+    if (haveWifi) setStation(ssid, password);
+    backoffUs = kJoinMinUs;
+    joinAtUs = now;
+    state_ = haveWifi ? NetState::Connecting : NetState::Off;
+    {
+      Lock lock;
+      if (haveWifi) show("joining", ssid, 0, "none");
+      else show("off", "", 0, "none");
+    }
+    answerLine(line::joined(cause));
   };
 
   for (;;) {
@@ -190,33 +298,62 @@ void netTask(void*) {
     for (BaseType_t got = xQueueReceive(events, &e, wait); got == pdTRUE; got = xQueueReceive(events, &e, 0)) {
       int64_t now = esp_timer_get_time();
       if (e.kind == Event::Disconnected) {
-        // The one after our own leave (new settings, a join timeout) is ours, whatever its reason;
-        // otherwise only a join or a connection can fail.
+        // The one after our own leave (new settings, a try, a join timeout) is ours, whatever its
+        // reason; otherwise only a join or a connection can fail.
         if (leaving) leaving = false;
+        else if (trying && joining) tryFailed(e.reason, causeOf(e.reason), now);
         else if (joining || connected) failed(e.reason, now);
       } else if (e.kind == Event::GotIp && joining) {   // a late one from a join we gave up is no link
+        wifi_ap_record_t ap;
+        bool info = esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+        // During a try, only the tried network counts: a link the old join made just before the
+        // try left it must not store the new settings.
+        if (trying && !(info && sameName(ap, tryName))) continue;
         joining = false;
         leaving = false;   // a new link: no leave event is still coming
         connected = true;
         backoffUs = kJoinMinUs;
         state_ = NetState::Connected;
-        wifi_ap_record_t ap;
-        pushLine(wifiLine("connected", esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0, 0));
-        Lock lock;
-        uplink->onConnected(now);
+        int rssi = info ? ap.rssi : 0;
+        pushLine(wifiLine("connected", rssi, 0));
+        // The try joined: its settings are kept, stored as %TLWIFI stores them (connections spec §4.3).
+        // If storing fails the board stays on it until the next reset, and says so.
+        std::string reply;
+        if (trying) {
+          trying = false;
+          ssid = tryName;
+          password = tryPassword;
+          haveWifi = true;
+          bool (*save)(const std::string&, const std::string&);
+          bool overtaken;   // a %TLWIFI came meanwhile: it is stored already, and the try must not overwrite it
+          {
+            Lock lock;
+            save = save_;
+            overtaken = wifiChanged_;
+          }
+          if (overtaken) reply = line::joined("other");
+          else reply = save && save(ssid, password) ? line::joined("ok") : line::error("store");
+        }
+        {
+          Lock lock;
+          show("connected", ssid, rssi, "none");
+          uplink->onConnected(now);
+        }
+        if (!reply.empty()) answerLine(reply);
       }
     }
     wait = kIdleTicks;
     int64_t now = esp_timer_get_time();
 
-    // New settings: leave the old network and join the new one at once (spec §3.2).
-    std::string ssid, password;
+    // New settings (%TLWIFI): leave the old network and join the new one at once (spec §3.2). They
+    // end a try, which keeps nothing.
+    std::string newSsid, newPassword;
     bool changed = false;
     {
       Lock lock;
       if (wifiChanged_) {
-        ssid = ssid_;
-        password = password_;
+        newSsid = ssid_;
+        newPassword = password_;
         wifiChanged_ = false;
         changed = true;
       }
@@ -224,29 +361,88 @@ void netTask(void*) {
     if (changed) {
       if (joining || connected) leaving = true;   // only then does the driver report the leave
       esp_wifi_disconnect();
-      wifi_config_t c = {};
-      memcpy(c.sta.ssid, ssid.data(), std::min(ssid.size(), sizeof c.sta.ssid));
-      memcpy(c.sta.password, password.data(), std::min(password.size(), sizeof c.sta.password));
-      // The strongest access point of that name, not the first one heard: a club or office network
-      // has several, and a distant one refuses the association (reason 203). PMF capable, so a
-      // WPA2/WPA3 network can use it.
-      c.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
-      c.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
-      c.sta.pmf_cfg.capable = true;
-      esp_wifi_set_config(WIFI_IF_STA, &c);
+      if (trying) {
+        trying = false;
+        answerLine(line::joined("other"));
+      }
+      ssid = newSsid;
+      password = newPassword;
+      setStation(ssid, password);
       haveWifi = true;
       joining = connected = false;
       backoffUs = kJoinMinUs;
       joinAtUs = now;
       state_ = NetState::Connecting;
+      Lock lock;
+      show("joining", ssid, 0, "none");
     }
 
-    if (joining && now - joinStartUs > kJoinTimeoutUs) {
+    if (trying && now - tryStartUs > kTryUs) {
+      leaving = true;   // the try's join is still running
+      esp_wifi_disconnect();
+      tryFailed(0, "timeout", now);
+    }
+    if (joining && !trying && now - joinStartUs > kJoinTimeoutUs) {
       leaving = true;
       esp_wifi_disconnect();
       failed(0, now);
     }
-    if (haveWifi && !joining && !connected && now >= joinAtUs) {
+
+    // A scan waits while a join runs (the driver's own scan); a %TLSCAN while one runs gets its answer.
+    // One that came during a post has waited for it too (up to 10 s, 20 s with the retry); it still runs.
+    bool scan;
+    {
+      Lock lock;
+      scan = scanWanted_;
+    }
+    if (scan && !joining) {
+      std::vector<std::string> found = scanNetworks();
+      {
+        Lock lock;
+        scanWanted_ = false;
+      }
+      for (const std::string& l : found) answerLine(l);
+      now = esp_timer_get_time();
+    }
+
+    // A %TLJOIN: leave the network and try the new settings once (connections spec §4.3).
+    bool tryNow = false;
+    int64_t askedUs = 0;
+    if (!trying) {
+      Lock lock;
+      if (tryWanted_) {
+        tryName = tryName_;
+        tryPassword = tryPassword_;
+        askedUs = tryAskedUs_;
+        tryWanted_ = false;
+        tryNow = true;
+      }
+    }
+    // Waited its 20 s behind a post or an earlier try: answered as one that ran out, so %TLJOINED
+    // always comes within 20 s of the %TLJOIN.
+    if (tryNow && now - askedUs >= kTryUs) {
+      tryNow = false;
+      answerLine(line::joined("timeout"));
+    }
+    if (tryNow) {
+      if (joining || connected) leaving = true;
+      esp_wifi_disconnect();
+      setStation(tryName, tryPassword);
+      trying = true;
+      tryStartUs = askedUs;
+      connected = false;
+      state_ = NetState::Connecting;
+      {
+        Lock lock;
+        show("joining", tryName, 0, "none");
+      }
+      pushLine(wifiLine("connecting", 0, 0));
+      joining = true;
+      joinStartUs = now;
+      if (esp_wifi_connect() != ESP_OK) tryFailed(0, "other", now);
+    }
+
+    if (haveWifi && !trying && !joining && !connected && now >= joinAtUs) {
       pushLine(wifiLine("connecting", 0, 0));
       joining = true;
       joinStartUs = now;
@@ -275,14 +471,55 @@ void netTask(void*) {
 void start() {
   if (on_) return;
   on_ = true;
-  state_ = NetState::Connecting;
   xTaskCreatePinnedToCore(netTask, "net", kStackBytes, nullptr, kPriority, nullptr, kCore);
 }
 
+struct Control : NetControl {
+  void query() override {
+    init();
+    Lock lock;
+    pushLine(line::net(shown_.state, shown_.name, shown_.signal, shown_.cause));
+  }
+  void scan() override {
+    init();
+    {
+      Lock lock;
+      if (broken_) {
+        pushLine(line::error("scan"));
+        return;
+      }
+      scanWanted_ = true;
+    }
+    start();
+    kick();
+  }
+  void join(const std::string& name, const std::string& password) override {
+    init();
+    {
+      Lock lock;
+      if (broken_) {
+        pushLine(line::joined("other"));
+        return;
+      }
+      tryName_ = name;   // a second %TLJOIN during a try runs after it, the last one only
+      tryPassword_ = password;
+      tryAskedUs_ = esp_timer_get_time();
+      tryWanted_ = true;
+    }
+    start();
+    kick();
+  }
+};
+
 }  // namespace
 
-void begin(const UplinkConfig& config, const std::string& ssid, const std::string& password) {
+void begin(const UplinkConfig& config, const std::string& ssid, const std::string& password,
+           bool (*save)(const std::string&, const std::string&)) {
   init();
+  {
+    Lock lock;
+    save_ = save;
+  }
   setConfig(config);
   if (!ssid.empty()) setWifi(ssid, password);
 }
@@ -294,7 +531,9 @@ void setWifi(const std::string& ssid, const std::string& password) {
     ssid_ = ssid;
     password_ = password;
     wifiChanged_ = true;
+    show("joining", ssid, 0, "none");   // at once, so the power-up's %TLNET names it
   }
+  state_ = NetState::Connecting;
   start();
   kick();
 }
@@ -346,6 +585,11 @@ NetStats stats() {
   NetState s = !on_ ? NetState::Off : uplink->paused() ? NetState::Paused : state_.load();
   const char* names[] = {"off", "connecting", "connected", "paused"};
   return NetStats{names[static_cast<int>(s)], uint32_t(uplink->waiting()), uplink->dropped(), uplink->lastStatus()};
+}
+
+NetControl* control() {
+  static Control c;
+  return &c;
 }
 
 bool nextLine(std::string& line) {

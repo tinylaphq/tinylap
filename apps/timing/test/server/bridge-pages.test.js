@@ -22,7 +22,7 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const body = await res.text();
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
   assert.match(body, new RegExp(`<div id="bridge" data-workspace="${me.workspaces[0].id}" data-server=`));
-  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+">/, 'the page carries the address the decoder posts to');
+  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+" data-cable-closed="\/personal\/decoders\/\{id\}\/cable">/, 'the page carries the address the decoder posts to, and where a closed cable is told');
   for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready', 'disconnected']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
   assert.doesNotMatch(body, /not-tinylap/);
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
@@ -62,7 +62,7 @@ test('two Connect buttons, the serial one first; the missing-API notes hidden; t
   assert.match(body, /<p>An EasyLap\? Use Connect EasyLap: it doesn't show up in the decoder list\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-missing="serial" hidden>This browser can't reach USB decoders, only an EasyLap\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-missing="hid" hidden>This browser can't reach an EasyLap, only other USB decoders\.<\/p>/);
-  assert.equal(body.match(/data-bridge-connect="last"/g).length, 2, 'Try another device and Connect again');
+  assert.equal(body.match(/data-bridge-connect="last"/g).length, 5, 'Try another device (listening, unpaired, unknown, choose) and Connect again');
   assert.match(body, /<label for="bridge-choose-name">Name for the new decoder<\/label>/);
   assert.equal(body.match(/>Decoder name</g).length, 1, 'exactly one "Decoder name" label');
   assert.match(body, /<h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this\?<\/h2>/, 'focusable, for focus after Connect');
@@ -91,4 +91,75 @@ test('the choose list: the club\'s decoders, escaped, "A new decoder" last; none
   assert.match(select, /<option value="" selected>A new decoder<\/option>\s*$/);
   // data-known names every decoder the server knew, the one on Wi-Fi too, so tl-bridge doesn't take it for a new one.
   assert.match(body, new RegExp(`<select id="bridge-choose" name="decoder" data-known="${gate.id} ${wifi.id}" aria-describedby="bridge-choose-hint">`));
+});
+
+test('the decoder cards: every decoder of the club by name, above the connect flow, with the Wi-Fi dialog closed beside them', async () => {
+  const ana = await app.signUp('Cara');
+  const club = app.club(ana, 'Pits');
+  const cara = await app.login(ana);
+  const zed = await (await app.api(cara, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Zed' })).json();
+  const gate = await (await app.api(cara, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+  const sent = await fetch(`${app.base}/decoders/${zed.id}/passings`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${zed.token}` }, body: JSON.stringify({ boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] }) });
+  assert.equal(sent.status, 200);
+  const body = await (await app.api(cara, 'GET', `/clubs/${club.id}/bridge`, undefined, { accept: 'text/html' })).text();
+  assert.deepEqual([...body.matchAll(/data-decoder="([^"]+)"/g)].map((m) => m[1]), [gate.id, zed.id], 'by name');
+  const cards = body.indexOf('<div id="bridge-decoders">');
+  assert.ok(cards > body.indexOf('data-bridge-error') && cards < body.indexOf('data-bridge-state="connect"'), 'under the error, above the flow');
+  assert.match(body, /Laps get through over Wi-Fi\./);
+  assert.match(body, /If it's on, its laps wait on it\. Connect the cable to see why\./);
+  assert.equal(body.match(/data-bridge-wifi hidden>Change Wi-Fi</g).length, 2, 'a member who may pair has it, hidden until the cable is in');
+  assert.match(body, /<dialog id="wifi-dialog"/);
+  assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="disconnected"'), 'outside the cards, so a swap keeps it');
+});
+
+test('a wrong port is never a trap: the pair, re-pair and choose steps offer Try another device', async () => {
+  const body = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  for (const state of ['unpaired', 'unknown', 'choose', 'listening']) {
+    const section = new RegExp(`<section data-bridge-state="${state}"[\\s\\S]*?</section>`).exec(body)[0];
+    assert.match(section, /<button type="button" class="btn [a-z- ]+" data-bridge-connect="last">Try another device<\/button>/, state);
+  }
+});
+
+test('a cable closed on this tab: Not connected at once, then back to the Bridge page', async () => {
+  const ana = await app.signUp('Dora');
+  const club = app.club(ana, 'Kerbs');
+  const dora = await app.login(ana);
+  const gate = await (await app.api(dora, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+  const sent = await app.api(dora, 'POST', `/decoders/${gate.id}/passings`, { boot: 'b00tb00t', passings: [], logs: ['boot'] });
+  assert.equal(sent.status, 200);
+  const base = `/clubs/${club.id}`;
+  const bridge = async () => (await app.api(dora, 'GET', `${base}/bridge`, undefined, { accept: 'text/html' })).text();
+  assert.match(await bridge(), /Connected on another laptop/);
+  const res = await app.form(dora, `${base}/decoders/${gate.id}/cable`, { state: 'closed' });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), `${base}/bridge`);
+  const body = await bridge();
+  assert.doesNotMatch(body, /Connected on another laptop/);
+  assert.match(body, /Not connected/);
+  assert.deepEqual(app.engine.headerOf(club.id).map((d) => d.state), ['offline']);
+  // A GET on it (after a reload) goes to the Bridge page.
+  const get = await app.api(dora, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { accept: 'text/html' });
+  assert.equal(get.status, 303);
+  assert.equal(get.headers.get('location'), `${base}/bridge`);
+});
+
+test('a closed cable: another club\'s decoder or an unknown one is not found; a bad state, another site or a stranger are refused', async () => {
+  const ana = await app.signUp('Eve');
+  const mine = app.club(ana, 'Mine');
+  const theirs = app.club(ana, 'Theirs');
+  const eve = await app.login(ana);
+  const other = await (await app.api(eve, 'POST', `/workspaces/${theirs.id}/decoders`, { name: 'Theirs' })).json();
+  const gate = await (await app.api(eve, 'POST', `/workspaces/${mine.id}/decoders`, { name: 'Gate' })).json();
+  const base = `/clubs/${mine.id}`;
+  assert.equal((await app.form(eve, `${base}/decoders/${other.id}/cable`, { state: 'closed' })).status, 404);
+  assert.equal((await app.form(eve, `${base}/decoders/nope/cable`, { state: 'closed' })).status, 404);
+  const bad = await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'open' });
+  assert.equal(bad.status, 422);
+  assert.equal((await bad.json()).type.endsWith('/problems/invalid-request'), true);
+  assert.equal((await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'closed' }, { origin: 'https://elsewhere.example' })).status, 403);
+  const stranger = await app.login(await app.signUp('Finn'));
+  assert.equal((await app.form(stranger, `${base}/decoders/${gate.id}/cable`, { state: 'closed' })).status, 404);
+  const out = await app.form(null, `${base}/decoders/${gate.id}/cable`, { state: 'closed' });
+  assert.equal(out.status, 303);
+  assert.match(out.headers.get('location'), /^\/auth\/login\?/);
 });

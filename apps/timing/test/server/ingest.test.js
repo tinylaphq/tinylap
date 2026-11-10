@@ -52,9 +52,9 @@ const problemOf = async (res, status, name) => {
 test('a decoder posts with its token; the same batch through the bridge is a duplicate', async () => {
   const net = await asDecoder(gate.id, gate.token);
   assert.equal(net.status, 200);
-  assert.deepEqual(await net.json(), { stored: 2, duplicates: 0, through: 9000 });
+  assert.deepEqual(await net.json(), { stored: 2, duplicates: 0, through: 9000, watched: false });
   const serial = await app.api(member, 'POST', `/decoders/${gate.id}/passings`, batch);
-  assert.deepEqual(await serial.json(), { stored: 0, duplicates: 2, through: 9000 });
+  assert.deepEqual(await serial.json(), { stored: 0, duplicates: 2, through: 9000, watched: false });
   const snapshot = await (await app.api(member, 'GET', `/workspaces/${office.id}`)).json();
   assert.deepEqual(snapshot.crossings.map((c) => [c.transponder, c.lapMs, c.via]), [['0A', 8000, 'net'], ['0A', null, 'net']]);
   assert.deepEqual(snapshot.unknown, ['0A']);
@@ -131,7 +131,7 @@ test('a bad line is skipped and counted, and the passings are still stored', asy
   const d = await pairDecoder('Log3');
   logged.length = 0;
   const res = await asDecoder(d.id, d.token, withLogs(['stat up=1', 'BAD', 'stat x="y"']));
-  assert.deepEqual(await res.json(), { stored: 1, duplicates: 0, through: 1000 });
+  assert.deepEqual(await res.json(), { stored: 1, duplicates: 0, through: 1000, watched: false });
   const lines = decoderLogs().map(bare);
   assert.equal(lines.length, 2);
   assert.equal(lines[0].type, 'decoder-log');
@@ -171,14 +171,14 @@ test('a logs-only batch answers through and updates last_seen_at', async (t) => 
   await asDecoder(d.id, d.token, withLogs([]));
   clock.now += 1000;
   const res = await asDecoder(d.id, d.token, { boot: 'b00tb00t', passings: [], logs: ['stat up=1'] });
-  assert.deepEqual(await res.json(), { stored: 0, duplicates: 0, through: 1000 });
+  assert.deepEqual(await res.json(), { stored: 0, duplicates: 0, through: 1000, watched: false });
   assert.equal(app.store.decoders(office.id).find((x) => x.id === d.id).lastSeenAt, clock.now);
 });
 
 test('a logs-only batch of a new boot answers through null', async () => {
   const d = await pairDecoder('Log7');
   const res = await asDecoder(d.id, d.token, { boot: 'n3wb00t0', passings: [], logs: ['stat up=1'] });
-  assert.deepEqual(await res.json(), { stored: 0, duplicates: 0, through: null });
+  assert.deepEqual(await res.json(), { stored: 0, duplicates: 0, through: null, watched: false });
 });
 
 test('no log line on a 401, a 403 or a 404', async () => {
@@ -206,4 +206,16 @@ test('tap entry times a driver by hand', async () => {
   assert.deepEqual(await (await tap()).json(), { stored: false, lapMs: null }, 'the same millisecond');
   await problemOf(await app.api(member, 'POST', `/workspaces/${office.id}/tap`, { driverId: 'nobody' }), 422, 'invalid-request');
   await problemOf(await app.api(stranger, 'POST', `/workspaces/${office.id}/tap`, { driverId: ana.id }), 404, 'not-found');
+});
+
+test('the answer says watched while a board stream is open', async () => {
+  const { events, next } = await import('./sse.js');
+  const open = events(await app.api(member, 'GET', `/clubs/${office.id}/board/events`), { raw: true });
+  await next(open, 'board');
+  const answer = await (await asDecoder(gate.id, gate.token, { boot: 'b00tb00t', passings: [], logs: ['boot'] })).json();
+  assert.equal(answer.watched, true);
+  await open.return();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const after = await (await asDecoder(gate.id, gate.token, { boot: 'b00tb00t', passings: [], logs: ['boot'] })).json();
+  assert.equal(after.watched, false);
 });

@@ -141,6 +141,7 @@ void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t 
   bool delivered = false;
   int64_t through = 0;
   const bool readable = status == 200 && readThrough(body, through);
+  if (status == 200 && readWatched(body)) startInUse(nowUs);   // someone has the board on screen, as a passing (connections spec §6)
   if (status == 200 && (readable || sent_ == 0)) {
     if (readable) {   // drop only what this batch carried and through covers
       size_t gone = sent_;   // the kept ones close up toward the batch's end, the front gaps go
@@ -230,6 +231,17 @@ bool readThrough(const std::string& body, int64_t& through) {
   if (i == start) return false;
   through = v;
   return true;
+}
+
+bool readWatched(const std::string& body) {
+  size_t i = body.find("\"watched\"");
+  if (i == std::string::npos) return false;
+  i += 9;
+  auto space = [&] { while (i < body.size() && (body[i] == ' ' || body[i] == '\t' || body[i] == '\r' || body[i] == '\n')) i++; };
+  space();
+  if (i >= body.size() || body[i++] != ':') return false;
+  space();
+  return body.compare(i, 4, "true") == 0;
 }
 
 }  // namespace tinylap

@@ -21,6 +21,9 @@ static const char* typeName(Message::Type t) {
     case Message::Type::Pair: return "pair";
     case Message::Type::Wifi: return "wifi";
     case Message::Type::Server: return "server";
+    case Message::Type::NetQuery: return "net-query";
+    case Message::Type::Scan: return "scan";
+    case Message::Type::Join: return "join";
     default: return "unknown";
   }
 }
@@ -34,6 +37,9 @@ static void expectMessage(const Message& m, JsonVariantConst want, const std::st
     TEST_ASSERT_EQUAL_STRING_MESSAGE(want["token"].as<const char*>(), m.token.c_str(), what.c_str());
   } else if (type == "wifi") {
     TEST_ASSERT_EQUAL_STRING_MESSAGE(want["ssid"].as<const char*>(), m.ssid.c_str(), what.c_str());
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(want["password"].as<const char*>(), m.password.c_str(), what.c_str());
+  } else if (type == "join") {
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(want["name"].as<const char*>(), m.ssid.c_str(), what.c_str());
     TEST_ASSERT_EQUAL_STRING_MESSAGE(want["password"].as<const char*>(), m.password.c_str(), what.c_str());
   } else if (type == "server") {
     TEST_ASSERT_EQUAL_STRING_MESSAGE(want["url"].as<const char*>(), m.server.c_str(), what.c_str());
@@ -62,6 +68,35 @@ void test_from_decoder() {
     else if (name == "transponder") got = line::transponder(args[1].as<uint8_t>());
     else TEST_FAIL_MESSAGE(name.c_str());
     TEST_ASSERT_EQUAL_STRING_MESSAGE(v["line"].as<const char*>(), got.c_str(), name.c_str());
+  }
+}
+
+// The net, scan and join sections: PC-to-decoder lines parse to their message; decoder-side lines with a
+// call are what the encoders write.
+void test_net_scan_join_vectors() {
+  for (const char* section : {"net", "scan", "join"}) {
+    for (JsonObjectConst v : vectors[section].as<JsonArrayConst>()) {
+      std::string text = v["line"].as<std::string>();
+      std::string direction = v["direction"].as<std::string>();
+      if (direction == "toDecoder") {
+        expectMessage(parseMessage(text.substr(1, text.size() - 2)), v["message"], text);
+      } else if (!v["call"].isNull()) {
+        JsonArrayConst args = v["call"];
+        std::string name = args[0].as<std::string>();
+        std::string got;
+        if (name == "net") {
+          JsonObjectConst a = args[1];
+          got = line::net(a["state"].as<std::string>(), a["name"].as<std::string>(), a["signal"].as<int>(),
+                          a["cause"].as<std::string>());
+        } else if (name == "ap") {
+          JsonObjectConst a = args[1];
+          got = line::ap(a["name"].as<std::string>(), a["signal"].as<int>(), a["open"].as<bool>());
+        } else if (name == "scanEnd") got = line::scanEnd(args[1].as<int>());
+        else if (name == "joined") got = line::joined(args[1].as<std::string>());
+        else TEST_FAIL_MESSAGE(name.c_str());
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(text.c_str(), got.c_str(), name.c_str());
+      }
+    }
   }
 }
 
@@ -113,6 +148,7 @@ int main() {
   RUN_TEST(test_vectors_load);
   RUN_TEST(test_to_decoder);
   RUN_TEST(test_from_decoder);
+  RUN_TEST(test_net_scan_join_vectors);
   RUN_TEST(test_streams);
   RUN_TEST(test_reader_bounded);
   RUN_TEST(test_valid_ids);

@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { commands, createReader, parseLog, parseMessage, serverError, wifiError } from '../index.js';
+import { commands, createReader, parseLog, parseMessage, serverError, signalWord, wifiError } from '../index.js';
 
 test('ZRound messages', () => {
   assert.deepEqual(parseMessage('C'), { type: 'startup' });
@@ -137,6 +137,40 @@ test('vectors: server address', () => {
     const error = serverError(m.url);
     assert.equal(error ? commands.error(error) : commands.ok, reply, m.url);
   }
+});
+
+test('vectors: Wi-Fi state, scan and join', () => {
+  for (const section of ['net', 'scan', 'join']) {
+    for (const { line, call, message, reply } of vectors[section]) {
+      const parsed = parseMessage(line.slice(1, -1));
+      if (message.type === 'unknown') assert.equal(parsed.type, 'unknown', line);
+      else assert.deepEqual(parsed, message, line);
+      if (call) {
+        const [name, ...args] = call;
+        assert.equal(commands[name](...args), line, line);
+      }
+      if (message.type === 'join') {
+        assert.equal(commands.join(message.name, message.password), line, line);
+        const error = wifiError(message.name, message.password);
+        assert.equal(error ? commands.error(error) : null, reply, line);
+      }
+    }
+  }
+  assert.equal(commands.netQuery, '%TLNET&');
+  assert.equal(commands.scan, '%TLSCAN&');
+});
+
+test('Wi-Fi state, scan and join are never log lines', () => {
+  for (const section of ['net', 'scan', 'join']) {
+    for (const { line } of vectors[section]) assert.notEqual(parseMessage(line.slice(1, -1)).type, 'log', line);
+  }
+});
+
+test('signalWord: strong from -60, fair from -72', () => {
+  assert.equal(signalWord(-60), 'strong');
+  assert.equal(signalWord(-61), 'fair');
+  assert.equal(signalWord(-72), 'fair');
+  assert.equal(signalWord(-73), 'weak');
 });
 
 test('log lines are ASCII only', () => {

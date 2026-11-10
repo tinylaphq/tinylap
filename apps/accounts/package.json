@@ -19,7 +19,7 @@
     "@tinylap/auth": "workspace:*",
     "@tinylap/design": "workspace:*",
     "better-auth": "1.7.7",
-    "palace-ui": "^0.12.2"
+    "palace-ui": "^0.13.0"
   },
   "devDependencies": {
     "jose": "^6",

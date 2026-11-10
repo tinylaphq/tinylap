@@ -5,7 +5,8 @@
 // Pretends to be a TinyLap decoder, to try timing without hardware.
 //   node tools/decoder-sim.js net --url http://localhost:8100 --decoder <id> --token <token> [--cars 4]
 //     posts passings every second, like a decoder on Wi-Fi: with its clock in `now`, a `stat` line every
-//     10 s while in use, and a `quiet` batch after 15 idle minutes. --silent-after <s> stops all posting
+//     10 s while in use, and a `quiet` batch after 15 idle minutes (restarted by every answer with
+//     `watched: true`, which means a live board is open). --silent-after <s> stops all posting
 //     after that many seconds, to see the board's "isn't reporting" banner.
 //   node tools/decoder-sim.js serial [--cars 4]
 //     speaks ZRound (and %TL… commands) on stdin/stdout, like a decoder on USB:
@@ -25,7 +26,7 @@ const IN_USE_MS = 15 * 60_000;
  * Posts passings in batches and keeps each until a batch carried it and the
  * server's `through` covers it, as a decoder's outbox does (spec §5). Like the
  * board it adds `now`, a minimal `stat` line every 10 s while in use (15 min after the
- * start and after each passing), then one `quiet` batch and silence.
+ * start, after each passing and after each answer with `watched: true`), then one `quiet` batch and silence.
  * @param {{ url: string, decoder: string, token: string, boot: string, fetch?: typeof fetch, clock?: () => number }} options
  */
 export function createSender({ url, decoder, token, boot, fetch: fetchImpl = fetch, clock = () => 0 }) {
@@ -64,7 +65,12 @@ export function createSender({ url, decoder, token, boot, fetch: fetchImpl = fet
       if (!res.ok) throw new Error(`timing answered ${res.status}: ${await res.text()}`);
       if (beat) lastBeat = now;
       if (quiet) quietSent = true;
-      const { through } = await res.json();
+      const { through, watched } = await res.json();
+      // An answer with `watched: true` counts like a passing: the in-use window restarts (spec: decoder connections §6).
+      if (watched === true) {
+        lastUse = now;
+        quietSent = false;
+      }
       // Drop what this batch carried, up to `through`; a passing it didn't carry stays (spec §5).
       const sent = new Set(batch.filter((p) => through !== null && p.t <= through));
       outbox = outbox.filter((p) => !sent.has(p));

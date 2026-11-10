@@ -22,6 +22,7 @@ let recordsClub;
 let topClub;
 let countedClub;
 let quietClub;
+let statusClub;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -38,6 +39,8 @@ before(async () => {
   app.join(tess, countedClub.id, user);
   quietClub = app.club(tess, 'Quiet');
   app.join(tess, quietClub.id, user);
+  statusClub = app.club(tess, 'Status');
+  app.join(tess, statusClub.id, user);
   member = await app.login(user);
   base = `/clubs/${office.id}`;
 });
@@ -510,4 +513,34 @@ test('a decoder that is not reporting shows on every live board, and goes when i
   beat(30_000);
   app.engine.tick();
   for (const res of await Promise.all(pages())) assert.doesNotMatch(await res.text(), /board-offline/, 'back');
+});
+
+test('every live board says whether each decoder is reporting, idle or not reporting', async () => {
+  const club = statusClub;
+  const path = `/clubs/${club.id}`;
+  await app.form(member, `${path}/watch-link`, {});
+  const token = app.store.workspace(club.id).watchToken;
+  const pages = async () => (await Promise.all([`${path}/board`, `${path}/board?big`].map((p) => get(member, p)).concat(get(null, `/watch/${token}`)))).map((res) => res.text());
+  for (const body of await Promise.all(await pages())) assert.doesNotMatch(body, /board-decoders/, 'tap-only club');
+  clock.now = 1_000_000_000_000;
+  app.store.addDecoder(club.id, { id: 's1', name: 'Start <b>', tokenHash: 'h1', createdAt: clock.now });
+  app.store.addDecoder(club.id, { id: 's2', name: 'Pit', tokenHash: 'h2', createdAt: clock.now });
+  const ingest = (decoder, batch) => app.engine.ingest({ workspaceId: club.id, decoder, via: 'net', batch: { boot: 'b00tb00t', passings: [], ...batch } });
+  ingest('s1', {});
+  ingest('s2', { quiet: true });
+  for (const body of await Promise.all(await pages())) {
+    assert.match(body, /<li class="board-decoder is-reporting">Start &lt;b&gt;: reporting<\/li>/);
+    assert.match(body, /<li class="board-decoder is-reporting">Pit: reporting<\/li>/);
+    assert.ok(body.indexOf('board-track') < body.indexOf('board-decoders'), 'in the track header');
+  }
+  clock.now += 25_000;
+  app.engine.tick();
+  for (const body of await Promise.all(await pages())) {
+    assert.match(body, /<li class="board-decoder is-offline">Start &lt;b&gt;: not reporting<\/li>/);
+    assert.match(body, /<li class="board-decoder is-idle">Pit: idle<\/li>/, 'its last batch said quiet');
+    assert.ok(body.indexOf('Pit: idle') < body.indexOf('Start &lt;b&gt;: not reporting'), 'sorted by name');
+    assert.match(body, /<ul class="board-decoders" role="list" aria-label="Decoders">/);
+  }
+  app.engine.start(club.id, { kind: 'practice', replace: true });
+  for (const body of await Promise.all(await pages())) assert.match(body, /Start &lt;b&gt;: not reporting/, 'during a session');
 });

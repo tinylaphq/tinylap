@@ -11,6 +11,8 @@ import { notFoundPage, startPage } from '../server/views/notice.js';
 import { chip, idleNotice, marks, marksHead, timeWidths } from '../server/views/marks.js';
 import { directionIcon } from '../server/views/direction.js';
 import { shortLength } from '../server/views/sessions.js';
+import { decoderCards, wifiDialog } from '../server/views/bridge.js';
+import { formatWhen } from '../public/format.js';
 
 test('interpolations are escaped', () => {
   const name = `<b>Ana</b> & "Ben" 'C'`;
@@ -133,4 +135,126 @@ test('a short length rounds to whole seconds first, so 59.6 s reads "1 min", nev
   assert.equal(shortLength(59_600), '1 min');
   assert.equal(shortLength(60_000), '1 min');
   assert.equal(shortLength(12 * 60_000 + 59_000), '12 min');
+});
+
+// The Bridge page's decoder cards (connections spec §2, §2.1, §3) and the Change Wi-Fi dialog (§5).
+const T = Date.UTC(2026, 10, 10, 14, 31);
+const bridgeRequest = { now: () => T };
+const row = (id, name, cable, wifi, at = null, lastSeenAt = null) => ({ id, name, createdAt: 1, lastSeenAt, cable: { state: cable }, wifi: { state: wifi, at } });
+const cardOf = (out, id) => new RegExp(`<section class="card-static decoder-card" data-decoder="${id}">([\\s\\S]*?)</section>`).exec(out)?.[1];
+const rowOf = (card, which) => new RegExp(`<li class="decoder-row" data-row="${which}">([\\s\\S]*?)</li>`).exec(card)?.[1];
+const slot = (part, name) => new RegExp(`data-slot="${name}">([\\s\\S]*?)</${name === 'status' || name === 'action' ? 'div' : 'p'}>`).exec(part)?.[1];
+const lamp = (part) => /<span class="lamp" data-state="([a-z]+)"/.exec(part)?.[1];
+
+test('decoder cards: every server state in its words, lamp and action (connections spec §2.1, §3)', () => {
+  const out = String(decoderCards(bridgeRequest, [
+    row('never', 'Never', 'none', 'unknown'),
+    row('rep', 'Reporting', 'none', 'reporting', T - 5000, T - 5000),
+    row('idle', 'Idle', 'none', 'idle', T - 600_000, T - 600_000),
+    row('off', 'Offline', 'none', 'offline', T - 120_000, T - 120_000),
+    row('silent', 'Silent', 'none', 'unknown', null, T - 3 * 86_400_000),
+    row('other', 'Other', 'other', 'unknown', null, T - 5000),
+    row('both', 'Both', 'other', 'reporting', T - 5000, T - 5000),
+  ], { mayPair: true }));
+  const iso = (ms) => new Date(ms).toISOString();
+
+  const never = cardOf(out, 'never');
+  assert.equal(slot(never, 'status'), "<p>If it's on, its laps wait on it. Connect the cable to see why.</p><p>Never heard.</p>");
+  assert.match(never, /<div class="status status-warning" data-slot="status">/);
+  assert.equal(lamp(rowOf(never, 'cable')), 'off');
+  assert.equal(slot(rowOf(never, 'cable'), 'state'), 'Not connected');
+  assert.equal(slot(rowOf(never, 'cable'), 'detail'), 'Plug the decoder in by USB, then connect it.');
+  assert.match(slot(rowOf(never, 'cable'), 'action'), /^<button type="button" class="btn btn-sm btn-primary" data-bridge-connect="serial">Connect decoder<\/button>$/, 'primary while laps wait');
+  assert.equal(lamp(rowOf(never, 'wifi')), 'unknown');
+  assert.equal(slot(rowOf(never, 'wifi'), 'state'), '', 'no state claimed');
+  assert.equal(slot(rowOf(never, 'wifi'), 'detail'), 'Connect the cable to see its Wi-Fi.');
+
+  const rep = cardOf(out, 'rep');
+  assert.match(rep, /<div class="status status-success" data-slot="status"><p>Laps get through over Wi-Fi\.<\/p><\/div>/);
+  assert.equal(slot(rowOf(rep, 'cable'), 'detail'), 'Not needed while Wi-Fi works.');
+  assert.match(slot(rowOf(rep, 'cable'), 'action'), /class="btn btn-sm btn-outline" data-bridge-connect="serial">Connect decoder</, 'outline while Wi-Fi works');
+  assert.equal(lamp(rowOf(rep, 'wifi')), 'ok');
+  assert.equal(slot(rowOf(rep, 'wifi'), 'state'), 'Reporting');
+  assert.equal(slot(rowOf(rep, 'wifi'), 'detail'), `Last heard <time datetime="${iso(T - 5000)}" data-when>just now</time>.`);
+  assert.match(slot(rowOf(rep, 'wifi'), 'action'), /^<p class="decoder-row-help">Connect the cable to see and change its Wi-Fi\.<\/p><button type="button" class="btn btn-sm btn-outline" data-bridge-wifi hidden>Change Wi-Fi<\/button>$/, 'no Change Wi-Fi without the cable');
+
+  const idle = cardOf(out, 'idle');
+  assert.match(idle, /data-slot="status"><p>Laps get through over Wi-Fi\.<\/p>/);
+  assert.equal(lamp(rowOf(idle, 'wifi')), 'idle');
+  assert.equal(slot(rowOf(idle, 'wifi'), 'state'), 'Idle');
+  assert.equal(slot(rowOf(idle, 'wifi'), 'detail'), 'Wakes up with the next lap.');
+  assert.match(slot(rowOf(idle, 'cable'), 'action'), /btn-outline/);
+
+  const off = cardOf(out, 'off');
+  assert.match(off, /status-warning/);
+  assert.equal(slot(off, 'status'), `<p>If it's on, its laps wait on it. Connect the cable to see why.</p><p>Last heard <time datetime="${iso(T - 120_000)}" data-when>2 min ago</time>.</p>`);
+  assert.equal(lamp(rowOf(off, 'wifi')), 'fail');
+  // The spec's words, with the time of day until the browser writes it in its zone; the status line says "Last heard".
+  assert.equal(slot(rowOf(off, 'wifi'), 'state'), `Not reporting since <time datetime="${iso(T - 120_000)}" data-when>${formatWhen(T - 120_000, T)}</time>`);
+  assert.equal(slot(rowOf(off, 'wifi'), 'detail'), '', 'no second "Last heard" in the row');
+  assert.equal(slot(rowOf(off, 'cable'), 'detail'), 'Plug the decoder in by USB, then connect it.');
+  assert.match(slot(rowOf(off, 'cable'), 'action'), /btn-primary/);
+
+  const silent = cardOf(out, 'silent');
+  assert.match(slot(silent, 'status'), new RegExp(`<p>Last heard <time datetime="${iso(T - 3 * 86_400_000)}" data-when>`));
+  assert.equal(lamp(rowOf(silent, 'wifi')), 'unknown');
+
+  const other = cardOf(out, 'other');
+  assert.match(other, /data-slot="status"><p>Laps get through over the cable\.<\/p>/);
+  assert.equal(lamp(rowOf(other, 'cable')), 'ok');
+  assert.equal(slot(rowOf(other, 'cable'), 'state'), 'Connected on another laptop');
+  assert.match(slot(rowOf(other, 'cable'), 'action'), /btn-outline" data-bridge-connect="serial">Connect decoder</, 'another laptop may be this one before a reload');
+  assert.ok(rowOf(other, 'wifi'), 'a decoder that may be a plain ZRound keeps its Wi-Fi row until this tab\'s cable says otherwise');
+  assert.equal(slot(rowOf(other, 'wifi'), 'detail'), 'Connect the cable to see its Wi-Fi.');
+
+  assert.match(cardOf(out, 'both'), /data-slot="status"><p>Laps get through over the cable and Wi-Fi\.<\/p>/);
+});
+
+test('decoder cards: by name; Change Wi-Fi only for members who may pair; an empty club can still connect', () => {
+  const rows = [row('b', 'Zeta', 'none', 'reporting', T, T), row('a', 'alpha <1>', 'none', 'unknown'), row('c', 'Mid', 'none', 'idle', T, T)];
+  const out = String(decoderCards(bridgeRequest, rows, { mayPair: true }));
+  assert.match(out, /^<div id="bridge-decoders">/);
+  assert.deepEqual([...out.matchAll(/data-decoder="([^"]+)"/g)].map((m) => m[1]), ['a', 'c', 'b']);
+  assert.match(out, /<h2 class="h3 cut-words" data-slot="name">alpha &lt;1&gt;<\/h2>/);
+  assert.equal(out.match(/data-bridge-wifi/g).length, 3, 'one per card, all hidden');
+  const run = String(decoderCards(bridgeRequest, rows, { mayPair: false }));
+  assert.doesNotMatch(run, /data-bridge-wifi|Change Wi-Fi/);
+  assert.doesNotMatch(run, /see and change/);
+  assert.match(slot(rowOf(cardOf(run, 'b'), 'wifi'), 'action'), /^<p class="decoder-row-help">Connect the cable to see its Wi-Fi\.<\/p>$/);
+  const empty = String(decoderCards(bridgeRequest, [], { mayPair: true }));
+  assert.match(empty, /<div id="bridge-decoders">\s*<section class="card-static decoder-empty">\s*<p>No decoder yet\. Plug one in by USB, then connect it to pair it\.<\/p>\s*<p><button type="button" class="btn btn-primary" data-bridge-connect="serial">Connect decoder<\/button><\/p>/);
+  assert.doesNotMatch(empty, /data-decoder=/);
+});
+
+test('the Change Wi-Fi dialog: closed, one hidden step each, in the spec\'s words (connections spec §5)', () => {
+  const out = String(wifiDialog());
+  assert.match(out, /^<dialog id="wifi-dialog" class="wifi-dialog" aria-labelledby="wifi-title-looking">/);
+  assert.doesNotMatch(out, /<dialog[^>]* open/);
+  const steps = [...out.matchAll(/<(?:section|form) class="wifi-step" data-step="([a-z]+)"[^>]*hidden/g)].map((m) => m[1]);
+  assert.deepEqual(steps, ['looking', 'list', 'password', 'another', 'joining', 'result']);
+  for (const words of [
+    'Looking for networks near the decoder…', 'Networks near the decoder', '>Look again<', 'Only 2.4 GHz networks show here.',
+    'Not in the list, or its name is hidden?', '>Another network<', '>Back to the list<', '>Join network<',
+    'Exactly as it is written, capitals included.', 'Leave empty for an open network.', '>Done<',
+    'Laps now also get through over Wi-Fi.', "The decoder didn't answer",
+    'TinyLap never sees the password: it goes from this laptop straight to the decoder.',
+  ]) assert.ok(out.includes(words), words);
+  assert.equal(out.match(/TinyLap never sees the password/g).length, 1, 'said once');
+  assert.match(out, /<template data-wifi-row><li><button type="button" class="net" data-signal="">/);
+  assert.match(out, /^<dialog [^>]*>\s*<p class="visually-hidden" role="status" data-wifi-live><\/p>/, 'its own live region: showModal makes the page inert');
+  assert.match(out, /<p class="status status-error" role="alert" data-scan="failed" hidden>The decoder couldn't look for networks\. Look again\.<\/p>/);
+  assert.match(out, /<p class="wifi-empty" data-scan="empty" hidden>No networks near the decoder\. Look again, or enter another network\.<\/p>/);
+  assert.match(out, /<ul class="nets-list" data-slot="networks" aria-labelledby="wifi-nets-title"><\/ul>/, 'its rows are buttons: no tab stop of its own');
+  // Never sent to the server: a submit that slips past the client closes the dialog, nothing in a URL.
+  assert.deepEqual([...out.matchAll(/<form ([^>]*)>/g)].map((m) => /method="dialog"/.test(m[1])), [true, true]);
+  assert.match(out, /<input type="text" id="wifi-another-name" name="ssid" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="wifi-another-name-hint">/);
+  // The Show button inside the password field: palace's .input-action, a real button, no aria-pressed.
+  assert.equal(out.match(/<div class="input-action"><input type="password"/g).length, 2);
+  assert.match(out, /<button type="button" class="btn btn-sm btn-outline" data-wifi-show aria-controls="wifi-password" aria-label="Show password">Show<\/button>/);
+  assert.doesNotMatch(out, /aria-pressed/);
+  // Actions right-aligned, the primary last; Cancel and Back are outline.
+  for (const menu of out.matchAll(/<menu class="wifi-menu">([\s\S]*?)<\/menu>/g)) {
+    const buttons = [...menu[1].matchAll(/class="btn ([a-z-]+)"/g)].map((m) => m[1]);
+    assert.ok(buttons.slice(0, -1).every((b) => b === 'btn-outline'), menu[1]);
+  }
 });

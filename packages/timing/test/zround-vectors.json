@@ -922,5 +922,509 @@
       "url": "",
       "reply": "%TLERR server&"
     }
+  ],
+  "net": [
+    {
+      "direction": "toDecoder",
+      "line": "%TLNET&",
+      "message": {
+        "type": "net-query"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "net",
+        {
+          "state": "off",
+          "name": "",
+          "signal": 0,
+          "cause": "none"
+        }
+      ],
+      "line": "%TLNET off  0 none&",
+      "message": {
+        "type": "net",
+        "state": "off",
+        "name": "",
+        "signal": 0,
+        "cause": "none"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "net",
+        {
+          "state": "joining",
+          "name": "Clubhaus",
+          "signal": 0,
+          "cause": "none"
+        }
+      ],
+      "line": "%TLNET joining Q2x1YmhhdXM 0 none&",
+      "message": {
+        "type": "net",
+        "state": "joining",
+        "name": "Clubhaus",
+        "signal": 0,
+        "cause": "none"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "net",
+        {
+          "state": "connected",
+          "name": "Clubhaus",
+          "signal": -58,
+          "cause": "none"
+        }
+      ],
+      "line": "%TLNET connected Q2x1YmhhdXM -58 none&",
+      "message": {
+        "type": "net",
+        "state": "connected",
+        "name": "Clubhaus",
+        "signal": -58,
+        "cause": "none"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "net",
+        {
+          "state": "connected",
+          "name": "Office 5G & 100% Wörd",
+          "signal": -72,
+          "cause": "none"
+        }
+      ],
+      "line": "%TLNET connected T2ZmaWNlIDVHICYgMTAwJSBXw7ZyZA -72 none&",
+      "message": {
+        "type": "net",
+        "state": "connected",
+        "name": "Office 5G & 100% Wörd",
+        "signal": -72,
+        "cause": "none"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "net",
+        {
+          "state": "failed",
+          "name": "Clubhaus",
+          "signal": 0,
+          "cause": "password"
+        }
+      ],
+      "line": "%TLNET failed Q2x1YmhhdXM 0 password&",
+      "message": {
+        "type": "net",
+        "state": "failed",
+        "name": "Clubhaus",
+        "signal": 0,
+        "cause": "password"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "net",
+        {
+          "state": "failed",
+          "name": "Clubhaus",
+          "signal": 0,
+          "cause": "notfound"
+        }
+      ],
+      "line": "%TLNET failed Q2x1YmhhdXM 0 notfound&",
+      "message": {
+        "type": "net",
+        "state": "failed",
+        "name": "Clubhaus",
+        "signal": 0,
+        "cause": "notfound"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "net",
+        {
+          "state": "failed",
+          "name": "Clubhaus",
+          "signal": 0,
+          "cause": "other"
+        }
+      ],
+      "line": "%TLNET failed Q2x1YmhhdXM 0 other&",
+      "message": {
+        "type": "net",
+        "state": "failed",
+        "name": "Clubhaus",
+        "signal": 0,
+        "cause": "other"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLNET off  0 none extra&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLNET sleeping Q2x1YmhhdXM 0 none&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLNET connected Q2x1YmhhdXM -5x8 none&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLNET connected Q2x1YmhhdXM -58 wrong&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLNET connected Q2x1YmhhdXM+ -58 none&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLNET connected Q2x1YmhhdXM -58&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLNET connected Q2x1YmhhdXM -0 none&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLNET connected Q2x1YmhhdXM 1000 none&",
+      "message": {
+        "type": "unknown"
+      }
+    }
+  ],
+  "scan": [
+    {
+      "direction": "toDecoder",
+      "line": "%TLSCAN&",
+      "message": {
+        "type": "scan"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "ap",
+        {
+          "name": "Clubhaus",
+          "signal": -48,
+          "open": true
+        }
+      ],
+      "line": "%TLAP Q2x1YmhhdXM -48 open&",
+      "message": {
+        "type": "ap",
+        "name": "Clubhaus",
+        "signal": -48,
+        "open": true
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "ap",
+        {
+          "name": "Büro & Co 5G",
+          "signal": -71,
+          "open": false
+        }
+      ],
+      "line": "%TLAP QsO8cm8gJiBDbyA1Rw -71 locked&",
+      "message": {
+        "type": "ap",
+        "name": "Büro & Co 5G",
+        "signal": -71,
+        "open": false
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "scanEnd",
+        2
+      ],
+      "line": "%TLSCANEND 2&",
+      "message": {
+        "type": "scan-end",
+        "count": 2
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "scanEnd",
+        0
+      ],
+      "line": "%TLSCANEND 0&",
+      "message": {
+        "type": "scan-end",
+        "count": 0
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLSCAN now&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLAP Q2x1YmhhdXM -48 closed&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLAP Q2x1YmhhdXM -48&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLAP  -48 open&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLAP Q2x1YmhhdXM+ -48 open&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLSCANEND&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLSCANEND many&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLSCANEND 1000&",
+      "message": {
+        "type": "unknown"
+      }
+    }
+  ],
+  "join": [
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN Q2x1YmhhdXM dGlueWxhcCE&",
+      "message": {
+        "type": "join",
+        "name": "Clubhaus",
+        "password": "tinylap!"
+      },
+      "reply": null
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN T2ZmaWNlIDVHICYgQ28 cCVzcyB3w7ZyZA&",
+      "message": {
+        "type": "join",
+        "name": "Office 5G & Co",
+        "password": "p%ss wörd"
+      },
+      "reply": null
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN Q2FmZQ &",
+      "message": {
+        "type": "join",
+        "name": "Cafe",
+        "password": ""
+      },
+      "reply": null
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN  cGFzc3dvcmQ&",
+      "message": {
+        "type": "join",
+        "name": "",
+        "password": "password"
+      },
+      "reply": "%TLERR Wi-Fi name too long&"
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN c3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nz cGFzc3dvcmQ&",
+      "message": {
+        "type": "join",
+        "name": "sssssssssssssssssssssssssssssssss",
+        "password": "password"
+      },
+      "reply": "%TLERR Wi-Fi name too long&"
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN bmV0 cHBwcHBwcA&",
+      "message": {
+        "type": "join",
+        "name": "net",
+        "password": "ppppppp"
+      },
+      "reply": "%TLERR Wi-Fi password length&"
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN bmV0 cHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcA&",
+      "message": {
+        "type": "join",
+        "name": "net",
+        "password": "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+      },
+      "reply": "%TLERR Wi-Fi password length&"
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "joined",
+        "ok"
+      ],
+      "line": "%TLJOINED ok&",
+      "message": {
+        "type": "joined",
+        "cause": "ok"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "joined",
+        "password"
+      ],
+      "line": "%TLJOINED password&",
+      "message": {
+        "type": "joined",
+        "cause": "password"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "joined",
+        "notfound"
+      ],
+      "line": "%TLJOINED notfound&",
+      "message": {
+        "type": "joined",
+        "cause": "notfound"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "joined",
+        "other"
+      ],
+      "line": "%TLJOINED other&",
+      "message": {
+        "type": "joined",
+        "cause": "other"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "call": [
+        "joined",
+        "timeout"
+      ],
+      "line": "%TLJOINED timeout&",
+      "message": {
+        "type": "joined",
+        "cause": "timeout"
+      }
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN Q2x1YmhhdXM&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "toDecoder",
+      "line": "%TLJOIN Q2x1YmhhdXM+ cGFzc3dvcmQ&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLJOINED&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLJOINED maybe&",
+      "message": {
+        "type": "unknown"
+      }
+    },
+    {
+      "direction": "fromDecoder",
+      "line": "%TLJOINED ok ok&",
+      "message": {
+        "type": "unknown"
+      }
+    }
   ]
 }

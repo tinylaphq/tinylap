@@ -88,25 +88,22 @@ test('a replaced bridge writes nothing while the next one connects, and no longe
   const { page, errors } = await fresh(t);
   await openZround(t, page);
   await toChoose(page);
-  await page.getByLabel('Name for the new decoder').fill('Gate');
-  await page.getByRole('button', { name: 'Use this decoder' }).click();
-  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   // The next connect's decoder list never answers, so it stays connecting for its 3 s cap.
   await page.route('**/workspaces/*/decoders', (route) => (route.request().method() === 'GET' ? new Promise(() => {}) : route.continue()));
-  await page.evaluate(() => {
-    /** @type {any} */ (window).__old = /** @type {any} */ (document.querySelector('tl-bridge')).run.bridge;
-    /** @type {HTMLElement} */ (document.querySelector('[data-bridge-connect="serial"]')).click();
-  });
+  await page.evaluate(() => { /** @type {any} */ (window).__old = /** @type {any} */ (document.querySelector('tl-bridge')).run.bridge; });
+  // The wrong port: the choose step offers another device (the cards' Connect decoder is disabled while one is connected).
+  await page.locator('[data-bridge-state="choose"]').getByRole('button', { name: 'Try another device' }).click();
   await page.locator('[data-bridge-state="connecting"]').waitFor();
   const seen = await page.evaluate(() => {
     const old = /** @type {any} */ (window).__old;
+    old.dispatchEvent(new Event('state'));
     old.dispatchEvent(new Event('online'));
     old.dispatchEvent(new Event('outbox'));
     const leave = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(leave);
-    return { live: document.querySelector('[data-bridge-live]')?.textContent, guarded: leave.defaultPrevented };
+    return { live: document.querySelector('[data-bridge-live]')?.textContent, guarded: leave.defaultPrevented, replaced: document.querySelector('tl-bridge').run.bridge !== old };
   });
-  assert.deepEqual(seen, { live: 'Talking to the decoder.', guarded: false });
+  assert.deepEqual(seen, { live: 'Talking to the decoder.', guarded: false, replaced: true });
   assert.deepEqual(errors, []);
 });
 

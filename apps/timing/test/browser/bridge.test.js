@@ -44,7 +44,7 @@ test('connect, pair and forward with the simulated decoder', async (t) => {
   t.after(() => context.close());
   simulating(t, 'tinylap,fast');
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   await page.getByLabel('Decoder name').fill('  Gate  ');
   await page.getByRole('button', { name: 'Pair' }).click();
@@ -66,7 +66,7 @@ test('without JavaScript, the page says what the bridge needs', async (t) => {
   t.after(() => context.close());
   await page.goto('/personal/bridge');
   await page.getByText(/needs Chrome or Edge/).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), false);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), false);
   assert.equal(await page.getByRole('link', { name: 'Pair over Wi-Fi only' }).isVisible(), true);
 });
 
@@ -76,7 +76,7 @@ test('without Web Serial or WebHID, the notice stays and no button is offered', 
   await page.addInitScript(() => { delete Navigator.prototype.serial; delete Navigator.prototype.hid; });
   await page.goto('/personal/bridge');
   await page.getByText(/needs Chrome or Edge/).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), false);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), false);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.deepEqual(errors, []);
 });
@@ -88,7 +88,7 @@ async function toPairing(t, { viewport, init, arg, as = member } = {}) {
   if (init) await who.page.addInitScript(init, arg);
   simulating(t, 'tinylap,fast');
   await who.page.goto('/personal/bridge');
-  await who.page.getByRole('button', { name: 'Connect decoder' }).click();
+  await who.page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await who.page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   return who;
 }
@@ -108,9 +108,13 @@ test('the ready panel: name, aligned preview with headings, one live region', as
   await page.getByText('Lap', { exact: true }).waitFor();
   assert.ok((await page.locator('[data-bridge-preview] li', { hasText: 'first pass' }).count()) > 0);
   assert.equal(await page.locator('[data-bridge-preview] li', { hasText: '—' }).count(), 0);
+  // One live region for the page; the Change Wi-Fi dialog, inert-making when open, has its own.
   const live = page.locator('#bridge > [role="status"]');
   assert.equal(await live.count(), 1);
+  assert.equal(await page.locator('#bridge [role="status"]:not(#wifi-dialog *)').count(), 1);
   assert.equal(await page.locator('#bridge section [role="status"]').count(), 0);
+  assert.equal(await page.locator('#wifi-dialog > [role="status"][data-wifi-live]').count(), 1);
+  assert.equal(await page.locator('#wifi-dialog [role="status"]').count(), 1);
   assert.match(await live.textContent(), /Forwarding from Gate/);
   assert.deepEqual(errors, []);
 });
@@ -402,7 +406,7 @@ async function replug(t, devices) {
   await page.addInitScript(SERIAL);
   await page.addInitScript((list) => { /** @type {any} */ (window).__devices = list; }, devices);
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   await page.getByLabel('Decoder name').fill('First');
   await page.getByRole('button', { name: 'Pair' }).click();
@@ -457,7 +461,7 @@ test('passings for a club without access wait, say why, and never hold up this d
   await note.filter({ hasText: `1 passing from earlier is waiting in this browser, from any club or personal space. ${wait}` }).waitFor();
   assert.doesNotMatch(await note.innerText(), /sign in/i);
 
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByLabel('Decoder name').fill('Mine');
   await page.getByRole('button', { name: 'Pair' }).click();
   await page.getByText('Forwarding from Mine', { exact: true }).first().waitFor();
@@ -488,7 +492,7 @@ test('a decoder the server no longer knows stops forwarding and offers to pair a
   t.after(() => context.close());
   simulating(t, 'tinylap,fast');
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByLabel('Decoder name').fill('Gate');
   await page.getByRole('button', { name: 'Pair' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();

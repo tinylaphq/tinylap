@@ -32,6 +32,19 @@ export const WIFI_PASSWORD_BYTES = Object.freeze({ min: 8, max: 63 });
 /** The longest server address the decoder stores, in UTF-8 bytes. */
 export const SERVER_URL_BYTES = Object.freeze({ max: 128 });
 const HEX_KEY = /^[0-9A-Fa-f]{64}$/;
+const NET_STATES = ['off', 'joining', 'connected', 'failed'];
+const NET_CAUSES = ['none', 'password', 'notfound', 'other'];
+const JOINED_CAUSES = ['ok', 'password', 'notfound', 'other', 'timeout'];
+/** A signed whole number of dBm: "0" when not connected, else "-62". */
+const SIGNAL = /^(0|-?[1-9][0-9]{0,2})$/;
+const COUNT = /^(0|[1-9][0-9]{0,2})$/;
+
+/**
+ * How a signal in dBm reads on the page: strong from -60, fair from -72, else weak.
+ * @param {number} dBm
+ * @returns {'strong' | 'fair' | 'weak'}
+ */
+export const signalWord = (dBm) => (dBm >= -60 ? 'strong' : dBm >= -72 ? 'fair' : 'weak');
 
 /** @param {string} text */
 const encode = (text) => base64url(new TextEncoder().encode(text));
@@ -124,6 +137,27 @@ export function parseMessage(body) {
       const url = decode(fields[0]);
       if (url !== null) return { type: 'server', url };
     }
+    if (word === 'TLNET' && fields.length === 0) return { type: 'net-query' };
+    if (word === 'TLNET' && fields.length === 4) {
+      const [state, encoded, signal, cause] = fields;
+      const name = decode(encoded);
+      if (name !== null && NET_STATES.includes(state) && SIGNAL.test(signal) && NET_CAUSES.includes(cause)) {
+        return { type: 'net', state: /** @type {'off' | 'joining' | 'connected' | 'failed'} */ (state), name, signal: Number(signal), cause: /** @type {'none' | 'password' | 'notfound' | 'other'} */ (cause) };
+      }
+    }
+    if (word === 'TLSCAN' && fields.length === 0) return { type: 'scan' };
+    if (word === 'TLAP' && fields.length === 3) {
+      const [encoded, signal, access] = fields;
+      const name = decode(encoded);
+      if (name && SIGNAL.test(signal) && (access === 'open' || access === 'locked')) return { type: 'ap', name, signal: Number(signal), open: access === 'open' };
+    }
+    if (word === 'TLSCANEND' && fields.length === 1 && COUNT.test(fields[0])) return { type: 'scan-end', count: Number(fields[0]) };
+    if (word === 'TLJOIN' && fields.length === 2) {
+      const name = decode(fields[0]);
+      const password = decode(fields[1]);
+      if (name !== null && password !== null) return { type: 'join', name, password };
+    }
+    if (word === 'TLJOINED' && fields.length === 1 && JOINED_CAUSES.includes(fields[0])) return { type: 'joined', cause: /** @type {'ok' | 'password' | 'notfound' | 'other' | 'timeout'} */ (fields[0]) };
     return unknown;
   }
   if (body[0] === 'T' && TIME_HEX.test(body.slice(1))) {
@@ -193,6 +227,20 @@ export const commands = Object.freeze({
   wifi: (ssid, password) => `%TLWIFI ${encode(ssid)} ${encode(password)}&`,
   /** @param {string} url */
   server: (url) => `%TLSERVER ${encode(url)}&`,
+  /** Asks the decoder for its Wi-Fi state (cable only). */
+  netQuery: '%TLNET&',
+  /** Asks the decoder to scan for networks (cable only). */
+  scan: '%TLSCAN&',
+  /** Tries new settings; stored only if the decoder joins (cable only). @param {string} name @param {string} password */
+  join: (name, password) => `%TLJOIN ${encode(name)} ${encode(password)}&`,
+  /** @param {{ state: 'off' | 'joining' | 'connected' | 'failed', name: string, signal: number, cause: 'none' | 'password' | 'notfound' | 'other' }} net */
+  net: ({ state, name, signal, cause }) => `%TLNET ${state} ${encode(name)} ${signal} ${cause}&`,
+  /** @param {{ name: string, signal: number, open: boolean }} ap */
+  ap: ({ name, signal, open }) => `%TLAP ${encode(name)} ${signal} ${open ? 'open' : 'locked'}&`,
+  /** @param {number} count */
+  scanEnd: (count) => `%TLSCANEND ${count}&`,
+  /** @param {'ok' | 'password' | 'notfound' | 'other' | 'timeout'} cause */
+  joined: (cause) => `%TLJOINED ${cause}&`,
   /** @param {string | null} decoder @param {string} boot */
   id: (decoder, boot) => `%TLID ${decoder ?? '-'} ${boot}&`,
   /** @param {string} text */

@@ -270,6 +270,8 @@ test('decoders: listed without tokens, unpaired with confirmation', async () => 
   const list = await call(member, 'list_decoders');
   const listed = list.value.decoders.find((d) => d.id === 'dec-1');
   assert.ok(listed);
+  // The same rows as the route: with each decoder's cable and Wi-Fi.
+  assert.deepEqual([listed.cable, listed.wifi], [{ state: 'none' }, { state: 'unknown', at: null }]);
   assert.doesNotMatch(JSON.stringify(list.value), /hhhh|token/i);
   const refused = await call(member, 'unpair_decoder', { decoder: 'dec-1' });
   assert.equal(refused.value.problem, 'forbidden', 'unpairing needs the delete permission');

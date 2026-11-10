@@ -20,6 +20,8 @@ export interface Batch {
   now?: number;
   /** The decoder holds no passing it has not sent. */
   quiet?: boolean;
+  /** From the bridge: false when the page sends it with no port open to the decoder (an earlier tab's, or after an unplug). */
+  cable?: boolean;
 }
 
 /** The decoder-time position of a passing, for lap arithmetic. */
@@ -99,6 +101,13 @@ export type ZroundMessage =
   | { type: 'pair'; decoder: string; token: string }
   | { type: 'wifi'; ssid: string; password: string }
   | { type: 'server'; url: string }
+  | { type: 'net-query' }
+  | { type: 'scan' }
+  | { type: 'join'; name: string; password: string }
+  | { type: 'net'; state: 'off' | 'joining' | 'connected' | 'failed'; name: string; signal: number; cause: 'none' | 'password' | 'notfound' | 'other' }
+  | { type: 'ap'; name: string; signal: number; open: boolean }
+  | { type: 'scan-end'; count: number }
+  | { type: 'joined'; cause: 'ok' | 'password' | 'notfound' | 'other' | 'timeout' }
   | { type: 'ok' }
   | { type: 'error'; text: string }
   | { type: 'unknown'; raw: string };
@@ -121,4 +130,8 @@ export type DecoderEvent =
   | { type: 'ok' }
   | { type: 'error'; text: string }
   | { type: 'log'; line: string; boot: boolean }
-  | { type: 'noise'; detail: string };
+  | { type: 'noise'; detail: string }
+  | { type: 'net'; state: 'off' | 'joining' | 'connected' | 'failed'; name: string; signal: number; cause: 'none' | 'password' | 'notfound' | 'other' }
+  | { type: 'ap'; name: string; signal: number; open: boolean }
+  | { type: 'scan-end'; count: number }
+  | { type: 'joined'; cause: 'ok' | 'password' | 'notfound' | 'other' | 'timeout' };

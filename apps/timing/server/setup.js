@@ -43,7 +43,7 @@ async function putTransponder(request, match) {
   return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
 }
 
-const listDecoders = (request) => json(200, { decoders: request.store.decoders(request.workspaceId) }, NO_STORE);
+const listDecoders = (request) => json(200, { decoders: request.engine.connectionsOf(request.workspaceId) }, NO_STORE);
 
 async function addDecoder(request) {
   const { body, error } = await readJson(request);

@@ -97,7 +97,15 @@ export function createHandler(options) {
   const log = typeof options.log === 'function' ? options.log : options.log === false ? null : (line) => console.log(line);
   const now = options.now ?? Date.now;
   const limits = { ...LIMITS, ...options.limits };
+  /** Open board streams per workspace: the ingest answer says whether anyone is watching. */
+  const viewers = new Map();
+  const boardViewers = {
+    add: (workspaceId) => viewers.set(workspaceId, (viewers.get(workspaceId) ?? 0) + 1),
+    remove: (workspaceId) => (viewers.get(workspaceId) > 1 ? viewers.set(workspaceId, viewers.get(workspaceId) - 1) : viewers.delete(workspaceId)),
+    count: (workspaceId) => viewers.get(workspaceId) ?? 0,
+  };
   const context = {
+    boardViewers,
     store: options.store ?? null,
     engine: options.engine ?? null,
     hub: options.hub ?? null,

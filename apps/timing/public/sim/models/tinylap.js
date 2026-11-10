@@ -12,13 +12,14 @@ const encode = (line) => new TextEncoder().encode(line);
 
 /**
  * @param {{ lapMs?: number, cars?: number, random?: () => number, decoder?: string | null, resetOnOpen?: boolean, uptimeMs?: number,
+ *   networks?: { name: string, signal: number, open: boolean }[], wifiPassword?: string,
  *   nvs?: { load: () => { decoder: string, token: string } | null, save: (pairing: { decoder: string, token: string }) => void } }} [options]
  */
-export function tinylapModel({ lapMs = 8000, cars = 3, random, decoder = null, resetOnOpen = true, uptimeMs = 60_000, nvs } = {}) {
+export function tinylapModel({ lapMs = 8000, cars = 3, random, decoder = null, resetOnOpen = true, uptimeMs = 60_000, networks, wifiPassword, nvs } = {}) {
   const stored = nvs?.load() ?? null;
   const sim = createSimulator({
     cars: Array.from({ length: cars }, (_, i) => ({ transponder: (0x20 + i).toString(16).toUpperCase(), lapMs: lapMs + i * 300 })),
-    random, decoder: stored?.decoder ?? decoder, token: stored?.token ?? null, uptimeMs,
+    random, decoder: stored?.decoder ?? decoder, token: stored?.token ?? null, uptimeMs, networks, wifiPassword,
   });
   const lines = createReader();
   const text = new TextDecoder();

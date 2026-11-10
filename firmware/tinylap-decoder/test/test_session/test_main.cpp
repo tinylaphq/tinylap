@@ -42,6 +42,14 @@ struct FakeStore : Store {
   }
 };
 
+struct FakeNet : NetControl {
+  int queries = 0, scans = 0;
+  std::vector<std::pair<std::string, std::string>> joins;
+  void query() override { queries++; }
+  void scan() override { scans++; }
+  void join(const std::string& n, const std::string& p) override { joins.push_back({n, p}); }
+};
+
 struct Lines : Sink {
   std::vector<std::string> got;
   void write(const std::string& l) override { got.push_back(l); }
@@ -49,6 +57,7 @@ struct Lines : Sink {
 
 struct Rig {
   FakeStore store;
+  FakeNet net;
   Lines out;
   std::vector<bool> boots;
   std::vector<std::string> sinkAtBoot;   // what the sink held when onBoot ran
@@ -59,7 +68,7 @@ struct Rig {
     s = new Session(store, nextRandom, out, [this](bool on) {
       boots.push_back(on);
       sinkAtBoot.push_back(out.got.empty() ? "" : out.got.back());
-    });
+    }, &net);
     s->begin(nowUs);
     out.got.clear();
   }
@@ -222,6 +231,52 @@ static void test_server_vectors() {
   expectReply(a, "%TLSERVER aHR0cHM6Ly94&", "%TLERR store&");
 }
 
+// Spec §4: the three commands go to the net side; the replies come from there, never from Session.
+static void test_net_commands_reach_the_net_side() {
+  Rig a; a.start();
+  a.send("%TLNET&");
+  a.send("%TLSCAN&");
+  TEST_ASSERT_EQUAL(1, a.net.queries);
+  TEST_ASSERT_EQUAL(1, a.net.scans);
+  TEST_ASSERT_EQUAL(0, a.out.got.size());
+  TEST_ASSERT_EQUAL(0, a.net.joins.size());
+}
+
+static void test_join_vectors() {
+  Rig a; a.start();
+  size_t accepted = 0;
+  for (JsonObjectConst v : vectors["join"].as<JsonArrayConst>()) {
+    if (std::string(v["direction"].as<const char*>()) != "toDecoder" || !v["message"]["type"].is<const char*>() ||
+        std::string(v["message"]["type"].as<const char*>()) != "join")
+      continue;
+    a.out.got.clear();
+    a.send(v["line"].as<std::string>());
+    if (v["reply"].isNull()) {
+      TEST_ASSERT_EQUAL(0, a.out.got.size());
+      TEST_ASSERT_EQUAL(++accepted, a.net.joins.size());
+      TEST_ASSERT_EQUAL_STRING(v["message"]["name"].as<const char*>(), a.net.joins.back().first.c_str());
+      TEST_ASSERT_EQUAL_STRING(v["message"]["password"].as<const char*>(), a.net.joins.back().second.c_str());
+    } else {
+      TEST_ASSERT_EQUAL(1, a.out.got.size());
+      TEST_ASSERT_EQUAL_STRING(v["reply"].as<const char*>(), a.out.got[0].c_str());
+      TEST_ASSERT_EQUAL(accepted, a.net.joins.size());
+    }
+  }
+  TEST_ASSERT_EQUAL(3, accepted);
+  TEST_ASSERT_EQUAL(0, a.store.wifis);   // a join does not store anything
+}
+
+// Without a NetControl (a board without Wi-Fi) the commands are ignored.
+static void test_net_commands_without_net_control() {
+  FakeStore store; Lines out;
+  Session s(store, nextRandom, out);
+  s.begin(0);
+  out.got.clear();
+  std::string m = "%TLNET&%TLSCAN&" + std::string("%TLJOIN bmV0 &");
+  s.onBytes(m.data(), m.size(), 0);
+  TEST_ASSERT_EQUAL(0, out.got.size());
+}
+
 static void test_wifi_bytes_reach_the_store_exactly() {
   Rig a; a.start();
   const std::string ssid("a\0b\xC3\xA9", 5);
@@ -287,6 +342,9 @@ int main() {
   RUN_TEST(test_wifi_bounds);
   RUN_TEST(test_wifi_vectors);
   RUN_TEST(test_wifi_bytes_reach_the_store_exactly);
+  RUN_TEST(test_net_commands_reach_the_net_side);
+  RUN_TEST(test_join_vectors);
+  RUN_TEST(test_net_commands_without_net_control);
   RUN_TEST(test_server_vectors);
   RUN_TEST(test_longest_pairing_round_trips);
   RUN_TEST(test_stop_and_unknown_are_silent);

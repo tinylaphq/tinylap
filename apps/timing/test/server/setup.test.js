@@ -95,6 +95,7 @@ test('pairing a decoder answers its token once', async () => {
   assert.deepEqual(app.store.decoderByTokenHash(tokenHash(decoder.token)), { id: decoder.id, workspaceId: office.id });
   const { decoders } = await (await app.api(member, 'GET', path('decoders'))).json();
   assert.deepEqual(decoders.map((d) => [d.id, d.name, 'token' in d]), [[decoder.id, 'Start line', false]]);
+  assert.deepEqual([decoders[0].cable, decoders[0].wifi, decoders[0].lastSeenAt], [{ state: 'none' }, { state: 'unknown', at: null }, null]);
   await problemOf(await app.api(member, 'DELETE', path(`decoders/${decoder.id}`)), 403, 'forbidden');
   assert.equal((await app.api(admin, 'DELETE', path(`decoders/${decoder.id}`))).status, 204);
   assert.equal(app.store.decoderByTokenHash(tokenHash(decoder.token)), null);

@@ -177,8 +177,13 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
 
   /** Decoders that report over Wi-Fi and have not said they are going quiet, by id. */
   const expected = new Map();
-  /** Each workspace's offline list as last published, to publish only changes. */
+  /** Each workspace's offline list and header as last published, to publish only changes. */
   const offlineShown = new Map();
+  /**
+   * What each decoder's batches say since the server started: the last over Wi-Fi (and whether it said quiet), the last
+   * over a cable, and whether the bridge said that cable closed since.
+   */
+  const heard = new Map();
 
   function offlineOf(workspaceId, t = now()) {
     const list = [];
@@ -191,11 +196,60 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return list;
   }
 
+  /** A decoder's connections as the Bridge page and the bridge see them (connections spec §3). */
+  function connectionsOf(workspaceId, t = now()) {
+    const offline = new Set(offlineOf(workspaceId, t).map((d) => d.id));
+    return store.decoders(workspaceId).map((d) => {
+      const h = heard.get(d.id);
+      const netAt = h?.netAt ?? null;
+      const state = netAt !== null && t - netAt < OFFLINE_AFTER_MS ? 'reporting' : h?.quiet ? 'idle' : offline.has(d.id) ? 'offline' : 'unknown';
+      return {
+        ...d,
+        cable: { state: onCable(h, t) ? 'other' : 'none' },
+        wifi: { state, at: netAt },
+      };
+    });
+  }
+
+  /** Whether a bridge's cable is on the decoder: a batch over one within 25 s, and that cable not closed since. */
+  const onCable = (h, t) => h?.cableAt != null && !h.cableClosed && t - h.cableAt < OFFLINE_AFTER_MS;
+
+  /** One state per decoder heard in the last 30 minutes, for the board's header (connections spec §6). */
+  function headerOf(workspaceId, t = now()) {
+    const offline = new Set(offlineOf(workspaceId, t).map((d) => d.id));
+    const list = [];
+    for (const [id, h] of heard) {
+      const decoder = store.decoder(id);
+      if (h.workspaceId !== workspaceId || decoder?.workspaceId !== workspaceId) continue;
+      const last = Math.max(h.netAt ?? 0, h.cableAt ?? 0);
+      if (t - last >= EXPECTED_FOR_MS) continue;
+      const live = (h.netAt !== null && t - h.netAt < OFFLINE_AFTER_MS) || onCable(h, t);
+      const state = live ? 'reporting' : h.quiet ? 'idle' : offline.has(id) || (h.lastVia === 'serial' && h.cableLogs) ? 'offline' : null;
+      if (state) list.push({ id, name: decoder.name, state });
+    }
+    return list.sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
+  }
+
   /** Stores a batch (spec §5). Repeating it is safe. */
   function ingest({ workspaceId, decoder, via, batch }) {
     const receivedAt = now();
+    const h = heard.get(decoder) ?? { workspaceId, netAt: null, quiet: false, cableAt: null, cableClosed: false, lastVia: null, cableLogs: false };
+    h.workspaceId = workspaceId;
+    if (via === 'net') {
+      h.netAt = receivedAt;
+      h.quiet = batch.quiet === true;
+    } else if (via === 'serial' && batch.cable !== false) {
+      // A batch the page sent with no port open to the decoder (cable: false) says nothing of a cable.
+      h.cableAt = receivedAt;
+      h.cableClosed = false;
+      // A TinyLap decoder's cable batches carry its log lines; a plain ZRound decoder's carry passings only.
+      h.cableLogs = batch.logs?.length > 0;
+    }
+    if (via === 'net' || (via === 'serial' && batch.cable !== false)) h.lastVia = via;
+    heard.set(decoder, h);
     if (batch.quiet) expected.delete(decoder);
-    else if (via === 'net' || expected.has(decoder)) expected.set(decoder, { workspaceId, lastAt: receivedAt });
+    // Nor is it news from the decoder now.
+    else if (via === 'net' || (expected.has(decoder) && batch.cable !== false)) expected.set(decoder, { workspaceId, lastAt: receivedAt });
     const sorted = [...batch.passings].sort((a, b) => a.t - b.t);
     noteOffsets(decoder, batch.boot, sorted, receivedAt, batch.now);
     return store.transaction(() => {
@@ -216,6 +270,26 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       if (seen) publishUnknown(workspaceId);
       return { stored, duplicates: sorted.length - stored, through: store.through(decoder, batch.boot) };
     });
+  }
+
+  /**
+   * The bridge says its cable to the decoder closed (unplugged, or the tab let go of it): the cable is gone now, not
+   * 25 s after its last batch (connections spec §3, §6). Boards hear it at once.
+   */
+  function cableClosed(workspaceId, decoder) {
+    const h = heard.get(decoder);
+    if (!h || h.workspaceId !== workspaceId || h.cableClosed) return;
+    h.cableClosed = true;
+    publishDecoders(workspaceId, now());
+  }
+
+  /** Publishes a workspace's offline list and header when they changed since last published. */
+  function publishDecoders(workspaceId, t) {
+    const offline = offlineOf(workspaceId, t);
+    const key = JSON.stringify({ offline, header: headerOf(workspaceId, t) });
+    if (key === (offlineShown.get(workspaceId) ?? '{"offline":[],"header":[]}')) return;
+    offlineShown.set(workspaceId, key);
+    hub.publish(workspaceId, 'decoders', { offline, decoders: headerOf(workspaceId, t) });
   }
 
   /** A passing by hand (spec §4): a virtual decoder per workspace, a boot per session, server time. */
@@ -284,12 +358,11 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       // An unpaired decoder is no longer expected.
       if (t - e.lastAt >= EXPECTED_FOR_MS || store.decoder(id)?.workspaceId !== e.workspaceId) expected.delete(id);
     }
-    for (const workspaceId of new Set([...offlineShown.keys(), ...[...expected.values()].map((e) => e.workspaceId)])) {
-      const offline = offlineOf(workspaceId, t);
-      const key = JSON.stringify(offline);
-      if (key === (offlineShown.get(workspaceId) ?? '[]')) continue;
-      offlineShown.set(workspaceId, key);
-      hub.publish(workspaceId, 'decoders', { offline });
+    for (const [id, h] of heard) {
+      if (store.decoder(id)?.workspaceId !== h.workspaceId) heard.delete(id);
+    }
+    for (const workspaceId of new Set([...offlineShown.keys(), ...[...expected.values()].map((e) => e.workspaceId), ...[...heard.values()].map((h) => h.workspaceId)])) {
+      publishDecoders(workspaceId, t);
     }
     for (const workspaceId of recordNews.keys()) {
       if (!recordNewOf(workspaceId, t)) clearRecord(workspaceId);
@@ -371,6 +444,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       fastest: session ? [] : store.fastest(workspaceId, track.id, ws.direction, FASTEST),
       recordNew,
       offline: offlineOf(workspaceId),
+      decoders: headerOf(workspaceId),
       lastResults: ended && { session: publicSession(ended), standings: endedRows },
       ...(watcher ? {} : { unknown: unknownOf(workspaceId), idle: idleOf(workspaceId), driven: session !== null || store.driven(workspaceId) }),
     };
@@ -398,5 +472,5 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return { session: publicSession(session), standings: standingsOf(session), crossings: store.crossings(sessionId).map(memberCrossing) };
   }
 
-  return { ingest, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, idleOf, driverCount, bestsOf, sessionDetail };
+  return { ingest, cableClosed, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail };
 }

@@ -41,7 +41,7 @@ async function plainPage(t, who = member) {
   // The bridge page shows its "unsupported" notice only when no script ran: with scripts on, Chrome has Web Serial and the notice is replaced.
   await page.goto('/personal/bridge');
   await page.getByText(/needs Chrome or Edge/).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), false);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), false);
   return page;
 }
 

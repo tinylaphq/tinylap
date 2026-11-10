@@ -80,7 +80,7 @@ test('D14b: a connect GET that never answers is given up after 3 s, as a failed 
   // A TinyLap decoder still reaches its pairing form: the 3 s cap, the 1.5 s open delay and its handshake.
   app.simulate = 'tinylap,fast';
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor({ timeout: 10_000 });
 });
 
