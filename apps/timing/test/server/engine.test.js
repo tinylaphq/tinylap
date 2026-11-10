@@ -455,3 +455,21 @@ test('a closed cable of another club or a decoder never heard changes nothing', 
   engine.cableClosed(W, 'nope');
   assert.equal(connection(engine).cable.state, 'other');
 });
+
+test('a cable:false batch after a close keeps the cable closed and stores the passing', () => {
+  const { engine, clock, store } = withDecoder();
+  beat(engine, 'serial', { logs: ['boot'] });
+  clock.now = T0 + 1_000;
+  engine.cableClosed(W, 'd1');
+  clock.now = T0 + 2_000;
+  const answer = beat(engine, 'serial', { passings: [{ transponder: '0A', t: 500 }], logs: ['stat'], cable: false });
+  assert.equal(answer.stored, 1);
+  assert.equal(connection(engine).cable.state, 'none');
+  assert.equal(connection(engine).lastSeenAt, T0 + 2_000);
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline']);
+  // Never on a cable: it stays so.
+  store.addDecoder(W, { id: 'd2', name: 'Pit', tokenHash: 'h2', createdAt: T0 });
+  engine.ingest({ workspaceId: W, decoder: 'd2', via: 'serial', batch: { boot: BOOT, passings: [{ transponder: '0B', t: 1 }], cable: false } });
+  assert.equal(connection(engine, 'd2').cable.state, 'none');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.id), ['d1']);
+});

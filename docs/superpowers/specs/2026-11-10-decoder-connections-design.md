@@ -61,7 +61,10 @@ Per decoder, in the engine's memory since the server started (no schema change):
 
 **The Cable row** for a decoder not on this tab's cable: **Connected on another laptop** (green) when `cableAt` is within 25 s (`OFFLINE_AFTER_MS`) and no bridge has said since that its cable closed, otherwise **Not connected** (neutral).
 
-**A cable that closes:** when this tab's cable to a decoder closes (unplugged, or the tab closes or leaves the page), `tl-bridge` posts `state=closed` to `<space>/decoders/<id>/cable` (`keepalive`). The engine then counts the decoder as on no cable until its next batch over one, publishes `decoders` if the board header changed (§6), and the answer, a 303 to the Bridge page, gives the bridge the cards to swap in. The bridge writes no words of its own for this; a post that never arrives leaves the 25 s rule.
+**A cable that closes:** when this tab's cable to a decoder closes (unplugged, or the tab closes or leaves the page), `tl-bridge` posts `state=closed` to `<space>/decoders/<id>/cable` (`keepalive`). The engine then counts the decoder as on no cable until its next batch over one, publishes `decoders` if the board header changed (§6), and the answer, a 303 to the Bridge page, gives the bridge the cards to swap in. The address is `#bridge`'s `data-cable-closed` (`<space>/decoders/{id}/cable`). After an unplug the post waits for a batch already on its way (3 s at most); on leaving the page it goes at once. Until the answer comes, the card keeps what it showed; the bridge writes no words of its own for this.
+
+- Batches the page sends with no port open to their decoder (an earlier tab's outbox, or what still waits after an unplug) carry `cable: false`: the server stores their passings and touches `last_seen_at`, but they are no news of a cable (or of Wi-Fi: they don't keep an expected decoder fresh).
+- A post that fails (offline, a 5xx, signed out) leaves the server's old words: "Connected on another laptop" and "reporting" for up to 25 s after the cable's last batch, until the 25 s rule ends them.
 
 **The Wi-Fi row** without this tab's cable, first match:
 1. **Reporting** (green): `netAt` within 25 s.

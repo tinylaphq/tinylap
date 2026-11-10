@@ -850,6 +850,47 @@ test('the decoder on the cable comes first, and goes back to its place when unpl
   assert.deepEqual(errors, []);
 });
 
+test('an unplug while the server fails posts: the card stays Not connected once the laps go again', async (t) => {
+  const { page, errors, decoders, row } = await cabledPage(t, { names: ['Zebra gate'] });
+  const servedCable = () => page.evaluate((id) => document.querySelector('tl-bridge').served.get(id)?.querySelector('[data-row="cable"] [data-slot="state"]')?.textContent, decoders[0].id);
+  // The server fails every post of passings (a fetch that answers 503 in the page; Playwright's routes hold keepalive posts).
+  await page.evaluate(() => {
+    const real = window.fetch;
+    window.__failed = 0;
+    window.__failing = true;
+    window.fetch = (url, options) => {
+      if (!window.__failing || !String(url).endsWith('/passings')) return real(url, options);
+      window.__failed += 1;
+      return Promise.resolve(new Response('{"title":"Unavailable","status":503}', { status: 503, headers: { 'content-type': 'application/problem+json' } }));
+    };
+  });
+  // Something waits in the outbox: a refused batch.
+  await page.waitForFunction(() => window.__failed > 0, null, { timeout: 20_000 });
+  const told = page.waitForResponse((res) => res.request().method() === 'POST' && res.url().endsWith(`/decoders/${decoders[0].id}/cable`));
+  await page.evaluate(() => window.__port.unplug());
+  assert.equal((await told).status(), 303);
+  const cable = row(decoders[0], 'cable');
+  await cable.locator('[data-slot="state"]', { hasText: /^Not connected$/ }).waitFor({ timeout: 5000 });
+  // The server is back: the waiting laps go, saying they came with no port open.
+  const sent = page.waitForResponse((res) => res.url().endsWith(`/decoders/${decoders[0].id}/passings`) && res.status() === 200, { timeout: 20_000 });
+  await page.evaluate(() => { window.__failing = false; });
+  assert.equal((await sent).request().postDataJSON().cable, false);
+  await page.evaluate(() => document.querySelector('tl-bridge').refresh(document.querySelector('tl-bridge').run));
+  assert.equal(await servedCable(), 'Not connected');
+  assert.equal(await cable.locator('[data-slot="state"]').innerText(), 'Not connected');
+  assert.deepEqual(errors, []);
+});
+
+test('a bridge taken off the page tells the server its cable closed', async (t) => {
+  const { page, errors, decoders, who } = await cabledPage(t, { names: ['Zebra gate'] });
+  const told = page.waitForResponse((res) => res.request().method() === 'POST' && res.url().endsWith(`/personal/decoders/${decoders[0].id}/cable`));
+  await page.evaluate(() => document.querySelector('tl-bridge').remove());
+  assert.equal((await told).status(), 303);
+  const body = await (await app.api(who, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  assert.doesNotMatch(body, /Connected on another laptop/);
+  assert.deepEqual(errors, []);
+});
+
 test('pulling the cable closes the dialog, with focus on the card\'s name', async (t) => {
   const { page, errors, board, card } = await cabledPage(t);
   await openWifi(page, card(board));

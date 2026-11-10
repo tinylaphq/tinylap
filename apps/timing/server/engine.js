@@ -238,16 +238,18 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     if (via === 'net') {
       h.netAt = receivedAt;
       h.quiet = batch.quiet === true;
-    } else if (via === 'serial') {
+    } else if (via === 'serial' && batch.cable !== false) {
+      // A batch the page sent with no port open to the decoder (cable: false) says nothing of a cable.
       h.cableAt = receivedAt;
       h.cableClosed = false;
       // A TinyLap decoder's cable batches carry its log lines; a plain ZRound decoder's carry passings only.
       h.cableLogs = batch.logs?.length > 0;
     }
-    if (via === 'net' || via === 'serial') h.lastVia = via;
+    if (via === 'net' || (via === 'serial' && batch.cable !== false)) h.lastVia = via;
     heard.set(decoder, h);
     if (batch.quiet) expected.delete(decoder);
-    else if (via === 'net' || expected.has(decoder)) expected.set(decoder, { workspaceId, lastAt: receivedAt });
+    // Nor is it news from the decoder now.
+    else if (via === 'net' || (expected.has(decoder) && batch.cable !== false)) expected.set(decoder, { workspaceId, lastAt: receivedAt });
     const sorted = [...batch.passings].sort((a, b) => a.t - b.t);
     noteOffsets(decoder, batch.boot, sorted, receivedAt, batch.now);
     return store.transaction(() => {

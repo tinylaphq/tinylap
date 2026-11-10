@@ -76,3 +76,10 @@ test('readBatch refuses a bad now or quiet', () => {
   for (const now of [-1, 1.5, '5', null]) assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], now }).ok, false);
   assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], quiet: 'yes' }).ok, false);
 });
+
+test('readBatch takes cable when it is true or false, and refuses anything else', () => {
+  assert.deepEqual(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], cable: false }), { ok: true, batch: { boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], logs: [], cable: false } });
+  assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], cable: true }).batch.cable, true);
+  assert.equal('cable' in readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }] }).batch, false);
+  for (const cable of ['false', 0, null]) assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], cable }).ok, false);
+});

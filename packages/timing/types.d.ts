@@ -20,6 +20,8 @@ export interface Batch {
   now?: number;
   /** The decoder holds no passing it has not sent. */
   quiet?: boolean;
+  /** From the bridge: false when the page sends it with no port open to the decoder (an earlier tab's, or after an unplug). */
+  cable?: boolean;
 }
 
 /** The decoder-time position of a passing, for lap arithmetic. */

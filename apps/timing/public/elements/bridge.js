@@ -58,6 +58,8 @@ const KIND_TEXT = {
 const LIST_TIMEOUT_MS = 3000;
 /** The decoder cards come fresh from the server this often (connections spec §3). */
 const REFRESH_MS = 15_000;
+/** After an unplug, a batch posted while the port was open may still be on its way: the close waits for it this long at most. */
+const SETTLE_MS = 3000;
 
 const quoted = (name) => `“${name}”`;
 /**
@@ -127,6 +129,8 @@ async function decoderList(root) {
 }
 
 const post = (decoderId, batch) => api('POST', `/decoders/${encodeURIComponent(decoderId)}/passings`, batch);
+/** A batch this page sends with no port open to its decoder (an earlier tab's, or after an unplug): no news of a cable. */
+const postOffCable = (decoderId, batch) => post(decoderId, { ...batch, cable: false });
 
 /** "1 passing", "2 passings from earlier": the subject of a sentence about `n` passings. @param {number} n @param {string} [from] */
 const passings = (n, from = '') => `${n} ${n === 1 ? 'passing' : 'passings'}${from}`;
@@ -206,6 +210,8 @@ class TlBridge extends HTMLElement {
   served = new Map();
   /** The bridges whose closed cable the server has been told of, once each. @type {WeakSet<Bridge>} */
   told = new WeakSet();
+  /** The decoders whose closed cable is being told: their cards wait for the server's answer. @type {Set<string>} */
+  closing = new Set();
 
   connectedCallback() { this.start(); }
 
@@ -307,6 +313,8 @@ class TlBridge extends HTMLElement {
     }
     // Leaving the page closes the port.
     if (event.type === 'pagehide') {
+      // Into the back/forward cache, the page (and its port) stays.
+      if (/** @type {PageTransitionEvent} */ (event).persisted) return;
       if (this.run?.bridge) this.cableClosed(this.run, this.run.bridge);
       return;
     }
@@ -522,11 +530,13 @@ class TlBridge extends HTMLElement {
     const protocol = chosen === 'hid' ? robitronicProtocol() : zroundProtocol();
     // The lock goes with the device: when the bridge closes it, or it is unplugged.
     const held = { ...transport, close: () => transport.close().finally(release) };
-    const next = new Bridge({ link: { transport: held, protocol }, outbox, post, openDelayMs: chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
+    // Only what comes while its port is open is news of the cable; the rest of the outbox, and anything after, is not.
+    const viaCable = (decoderId, batch) => (next.decoder === decoderId && next.state !== 'disconnected' && !this.told.has(next) ? post(decoderId, batch) : postOffCable(decoderId, batch));
+    const next = new Bridge({ link: { transport: held, protocol }, outbox, post: viaCable, openDelayMs: chosen === 'hid' ? 0 : SERIAL_OPEN_DELAY_MS });
     next.addEventListener('state', () => {
       if (next.state === 'disconnected') {
         void release();
-        this.cableClosed(run, next);
+        this.cableClosed(run, next, { settle: true });
       }
       if (run.bridge !== next) return;
       this.paint(run);
@@ -675,6 +685,8 @@ class TlBridge extends HTMLElement {
 
   /** The cable left this card: back to the server's copy, or a fresh one when there is none. @param {Run} run @param {HTMLElement} card */
   uncable(run, card) {
+    // The server's copy still says the cable is on (another laptop): its answer to the close brings the cards.
+    if (this.closing.has(card.dataset.decoder ?? '')) return;
     const served = this.served.get(card.dataset.decoder ?? '');
     if (!served) {
       void this.refresh(run);
@@ -749,22 +761,29 @@ class TlBridge extends HTMLElement {
   /**
    * This tab's cable to `bridge`'s decoder closed (unplugged, replaced, or the page let go of it): the server hears it,
    * once, and answers with the Bridge page, whose cards say what it now knows (AGENTS.md: the client reports the fact,
-   * the server decides the words). keepalive, so it goes even as the tab closes. A post that fails changes nothing:
-   * the server forgets the cable 25 s after its last batch anyway.
-   * @param {Run} run @param {Bridge} bridge
+   * the server decides the words). The address is #bridge's data-cable-closed. keepalive, so it goes even as the tab
+   * closes. A post that fails changes nothing: the server forgets the cable 25 s after its last batch anyway.
+   * @param {Run} run @param {Bridge} bridge @param {{ settle?: boolean }} [options] settle: after an unplug
    */
-  cableClosed(run, bridge) {
+  cableClosed(run, bridge, { settle = false } = {}) {
     const id = bridge.decoder;
-    if (!id || this.told.has(bridge)) return;
+    const template = run.root.dataset.cableClosed;
+    if (!id || !template || this.told.has(bridge)) return;
+    // From here its batches say they came with no port open.
     this.told.add(bridge);
-    // The page is <space>/bridge; the decoder's cable is <space>/decoders/<id>/cable.
-    const url = new URL(`decoders/${encodeURIComponent(id)}/cable`, location.href);
+    this.closing.add(id);
     void (async () => {
-      const res = await fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: true, redirect: 'follow', headers: { accept: 'text/html' }, body: new URLSearchParams({ state: 'closed' }) });
+      // After an unplug, the close goes once a batch posted while the port was open has landed (or SETTLE_MS have passed).
+      if (settle) await Promise.race([bridge.flush(), new Promise((done) => { setTimeout(done, SETTLE_MS); })]);
+      const res = await fetch(template.replace('{id}', encodeURIComponent(id)), { method: 'POST', credentials: 'same-origin', keepalive: true, redirect: 'follow', headers: { accept: 'text/html' }, body: new URLSearchParams({ state: 'closed' }) });
       // A refresh fetched before the server heard this would bring the cable back: this answer goes after it.
       await run.refreshing;
       await this.swap(run, res);
-    })().catch(() => {});
+    })().catch(() => {}).finally(() => {
+      // Swapped, or not: the card goes back to the server's copy either way.
+      this.closing.delete(id);
+      if (run === this.run) this.paint(run);
+    });
   }
 
   /** Change Wi-Fi on the card of the decoder on this tab's cable. @param {Run} run @param {HTMLElement} button */
@@ -795,7 +814,7 @@ class TlBridge extends HTMLElement {
     if (count === 0) return;
     say(count, 'Sending them now…');
     // A failure after a drop carries the drop with it (sendOutbox), so the note tells both.
-    const { failure, refusal, dropped, blocked } = await sendOutbox(outbox, post, async () => say(await outbox.count(), 'Sending them now…'))
+    const { failure, refusal, dropped, blocked } = await sendOutbox(outbox, postOffCable, async () => say(await outbox.count(), 'Sending them now…'))
       .then((sent) => ({ failure: null, ...sent }), (caught) => ({ failure: caught, refusal: caught?.refusal ?? null, dropped: caught?.dropped ?? 0, blocked: caught?.blocked ?? 0 }));
     count = await outbox.count();
     /** @type {(string | Node)[]} */
