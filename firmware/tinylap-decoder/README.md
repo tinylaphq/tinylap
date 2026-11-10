@@ -69,9 +69,15 @@ esptool.py --port /dev/cu.usbserial-XXXX write_flash 0 backup.bin    # to restor
 Pairing in the timing app stores the decoder id and token (`%TLPAIR`), where to post (`%TLSERVER`, the server's public address) and the Wi-Fi name and password (`%TLWIFI`). With Wi-Fi stored the board joins the network at power-up (station mode, rejoining with back-off from 1 s to 30 s) and a new `%TLWIFI` reconnects at once. With none stored, Wi-Fi stays off and it works over the cable only.
 
 - **The outbox** holds the last 2000 passings in RAM, not in flash; when full the oldest goes. A batch of up to 500 is posted to `<server>/decoders/<id>/passings` as soon as passings wait, one request at a time, over HTTPS checked against the ESP-IDF certificate bundle (`http://` works for a local server). What a batch carried leaves the outbox once an answer's `through` covers it, so cable and Wi-Fi together store each passing once.
-- **In use:** for 15 minutes after joining Wi-Fi and after each passing, the board posts the `stat` line every 10 s, which tells the server it is alive. Then it sends one batch with `quiet` and stays silent until the next passing.
+- **In use:** for 15 minutes after joining Wi-Fi, after each passing and after each answer with `"watched": true` (someone has the board on screen), the board posts the `stat` line every 10 s, which tells the server it is alive. Then it sends one batch with `quiet` and stays silent until the next passing.
 - **Answers:** `401` pauses sending until the board is paired again; `404` and `422` drop the batch; `429` waits `Retry-After`; anything else retries with back-off from 1 s to 30 s.
 - **Tasks:** the IR task runs on core 1 at priority 10, above everything else there, so Wi-Fi does not delay the frame stamps. The network task runs on core 1 too, at `loop()`'s priority: the first HTTPS handshake computes for about 6 s while the two take turns, and on core 0 it would starve the idle task until the task watchdog reset the board (`boot reason=wdt`). Later posts reuse the connection.
+
+Over the cable, for the bridge page's Wi-Fi card and its Change Wi-Fi dialog (`docs/timing.md`):
+
+- `%TLNET <state> <name> <signal> <cause>&`: `off`, `joining`, `connected` or `failed`, the stored network's name (base64url), dBm when connected, and why it failed (`password`, `notfound` or `other`). Sent at every boot after the boot line, on `%TLNET&`, and when the state, name or cause changes; a failing network stays `failed` with its first cause through the retries until it connects. The card shows the state and the signal as strong (≥ −60), fair (≥ −72) or weak.
+- `%TLSCAN&` scans all channels (connected, the link pauses briefly) and answers one `%TLAP <name> <signal> <open|locked>&` per name, the strongest access point of each, strongest first, at most 30, then `%TLSCANEND <count>&`. The dialog lists them.
+- `%TLJOIN <name> <password>&` tries new settings once (20 s at most) before keeping them: joined, they are stored and it answers `%TLJOINED ok&`; otherwise it goes back to the stored network and answers `%TLJOINED password|notfound|timeout|other&`, and the dialog keeps the typed password. A board without stored settings has nothing to go back to.
 
 Reading the logs (serial monitor or the bridge):
 

@@ -134,6 +134,7 @@ void onBoot(bool powerOn) {
     std::string line = bootLine("reset", fw.c_str(), nullptr);
     sink.write(line);
     net::bootLine(line);
+    net::control()->query();   // after the boot line (connections spec §4.1); the power-up's is in setup()
     crossings.reset();
   }
 }
@@ -165,7 +166,7 @@ struct NetStore : Store {
 Session session(store, bootRandom, sink, [](bool powerOn) {
   net::boot(session.boot(), session.bootStartUs());
   onBoot(powerOn);
-});
+}, net::control());
 
 // A confirmed passing goes out over the cable and into the outbox (Wi-Fi spec §3.3).
 void passed(const Passing& p) {
@@ -257,7 +258,9 @@ void setup() {
   if (store.nvs.load(decoder, store.config.token) && validDecoderId(decoder)) store.config.decoder = decoder;
   store.nvs.loadServer(store.config.server);
   if (!store.nvs.loadWifi(ssid, password)) ssid.clear();
-  net::begin(store.config, ssid, password);
+  // A %TLJOIN that joined is stored without NetStore's setWifi: the net task is on it already.
+  net::begin(store.config, ssid, password, [](const std::string& s, const std::string& p) { return store.nvs.saveWifi(s, p); });
+  net::control()->query();   // the power-up's %TLNET, after %TLID and the boot line, once begin knows the settings
 
   queue = xQueueCreate(64, sizeof(QueuedFrame));
   // Without the queue or the receiver there is nothing to read; the stat lines then show batches=0.

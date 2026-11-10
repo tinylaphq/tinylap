@@ -376,6 +376,36 @@ static void test_read_through_null_and_number() {
   TEST_ASSERT_FALSE(readThrough("", t));
 }
 
+// The server says a board stream is open: kept awake as a passing would (connections spec §6).
+static void test_watched_restarts_the_in_use_window() {
+  Uplink u; ready(u);
+  Request r;
+  u.onConnected(0);
+  const int64_t end = Uplink::kInUseUs;
+  u.onStat("stat up=890", end - 10 * kS);
+  TEST_ASSERT_TRUE(u.next(end - 10 * kS, r));
+  u.answer(200, "{\"stored\":0,\"duplicates\":0,\"through\":null,\"watched\" : true}", end - 10 * kS);
+  u.onStat("stat up=910", end + 10 * kS);
+  TEST_ASSERT_TRUE(u.next(end + 10 * kS, r));
+  TEST_ASSERT_FALSE(has(r.body, "\"quiet\""));   // still a heartbeat
+  TEST_ASSERT_TRUE(readWatched("{\"watched\":true}"));
+  TEST_ASSERT_FALSE(readWatched("{\"watched\":false}"));
+  TEST_ASSERT_FALSE(readWatched("{\"through\":null}"));
+}
+
+static void test_watched_false_changes_nothing() {
+  Uplink u; ready(u);
+  Request r;
+  u.onConnected(0);
+  const int64_t end = Uplink::kInUseUs;
+  u.onStat("stat up=890", end - 10 * kS);
+  TEST_ASSERT_TRUE(u.next(end - 10 * kS, r));
+  u.answer(200, "{\"stored\":0,\"duplicates\":0,\"through\":null,\"watched\":false}", end - 10 * kS);
+  u.onStat("stat up=910", end + 10 * kS);
+  TEST_ASSERT_TRUE(u.next(end + 10 * kS, r));
+  TEST_ASSERT_TRUE(has(r.body, "\"quiet\":true"));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_passing_goes_out_at_once);
@@ -401,5 +431,7 @@ int main() {
   RUN_TEST(test_nothing_without_server_or_pairing);
   RUN_TEST(test_batch_body_escapes_log_lines);
   RUN_TEST(test_read_through_null_and_number);
+  RUN_TEST(test_watched_restarts_the_in_use_window);
+  RUN_TEST(test_watched_false_changes_nothing);
   return UNITY_END();
 }
