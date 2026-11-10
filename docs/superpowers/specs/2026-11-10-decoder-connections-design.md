@@ -81,7 +81,7 @@ Two new cable-only exchanges, in `docs/timing.md`'s table, `packages/timing/zrou
 
 - PC → decoder `%TLNET&`; decoder → PC `%TLNET <state> <base64url name> <signal> <cause>&`, on request and unprompted on every change.
 - `state`: `off` (no settings), `joining`, `connected`, `failed`. `name`: the stored network's name (empty for `off`). `signal`: dBm when connected, else `0`. `cause`: `none`, `password` (reasons 2, 15, 202, 204), `notfound` (201), `other`.
-- The board sends one after `%TLID` at every boot, so a freshly connected bridge has it at once.
+- The board sends one at every boot (power-up and `%I&`), after `%TLID` and the boot's `%TLLOG boot` line, so a freshly connected bridge has it at once without breaking the bridge's rule that the boot line follows `%TLID` directly.
 - The page maps `signal` to strong (≥ −60), fair (≥ −72), weak (call).
 
 ### 4.2 The networks it sees: `%TLSCAN`
