@@ -188,7 +188,9 @@ test('decoder cards: every server state in its words, lamp and action (connectio
   assert.match(off, /status-warning/);
   assert.equal(slot(off, 'status'), `<p>If it's on, its laps wait on it. Connect the cable to see why.</p><p>Last heard <time datetime="${iso(T - 120_000)}" data-when>2 min ago</time>.</p>`);
   assert.equal(lamp(rowOf(off, 'wifi')), 'fail');
-  assert.equal(slot(rowOf(off, 'wifi'), 'state'), `Not reporting since <time datetime="${iso(T - 120_000)}" data-when>2 min ago</time>`);
+  // "since 2 min ago" doesn't read: the state stays short, and when goes in the detail.
+  assert.equal(slot(rowOf(off, 'wifi'), 'state'), 'Not reporting');
+  assert.equal(slot(rowOf(off, 'wifi'), 'detail'), `Last heard <time datetime="${iso(T - 120_000)}" data-when>2 min ago</time>.`);
   assert.equal(slot(rowOf(off, 'cable'), 'detail'), 'Plug the decoder in by USB, then connect it.');
   assert.match(slot(rowOf(off, 'cable'), 'action'), /btn-primary/);
 
@@ -238,7 +240,10 @@ test('the Change Wi-Fi dialog: closed, one hidden step each, in the spec\'s word
   ]) assert.ok(out.includes(words), words);
   assert.equal(out.match(/TinyLap never sees the password/g).length, 1, 'said once');
   assert.match(out, /<template data-wifi-row><li><button type="button" class="net" data-signal="">/);
-  assert.match(out, /<ul class="nets-list" data-slot="networks" tabindex="0" aria-labelledby="wifi-nets-title"><\/ul>/);
+  assert.match(out, /<ul class="nets-list" data-slot="networks" aria-labelledby="wifi-nets-title"><\/ul>/, 'its rows are buttons: no tab stop of its own');
+  // Never sent to the server: a submit that slips past the client closes the dialog, nothing in a URL.
+  assert.deepEqual([...out.matchAll(/<form ([^>]*)>/g)].map((m) => /method="dialog"/.test(m[1])), [true, true]);
+  assert.match(out, /<input type="text" id="wifi-another-name" name="ssid" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="wifi-another-name-hint">/);
   // The Show button inside the password field: palace's .input-action, a real button, no aria-pressed.
   assert.equal(out.match(/<div class="input-action"><input type="password"/g).length, 2);
   assert.match(out, /<button type="button" class="btn btn-sm btn-outline" data-wifi-show aria-controls="wifi-password" aria-label="Show password">Show<\/button>/);

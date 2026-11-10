@@ -47,7 +47,8 @@ const connectionRow = ({ which, name, state, icon, words, detail, action }) => h
 const WIFI_ROW = {
   reporting: { state: 'ok', words: () => 'Reporting', detail: (request, at) => (at === null ? null : html`Last heard ${when(request, at)}.`) },
   idle: { state: 'idle', words: () => 'Idle', detail: () => 'Wakes up with the next lap.' },
-  offline: { state: 'fail', words: (request, at) => (at === null ? 'Not reporting' : html`Not reporting since ${when(request, at)}`), detail: () => null },
+  // The state stays short; when it was last heard is the detail ("since 2 min ago" doesn't read).
+  offline: { state: 'fail', words: () => 'Not reporting', detail: (request, at) => (at === null ? null : html`Last heard ${when(request, at)}.`) },
   unknown: { state: 'unknown', words: () => null, detail: () => 'Connect the cable to see its Wi-Fi.' },
 };
 
@@ -135,7 +136,7 @@ const outline = (label, action) => html`<button type="button" class="btn btn-out
  * [data-slot="network"] the network's name, [data-slot="signal"] strong |
  * fair | weak. Buttons: [data-wifi-action="cancel" | "again" | "another" |
  * "back" | "done"], the forms [data-wifi-form="password" | "another"] (submit
- * is Join network), [data-wifi-show] the Show/Hide button (text and
+ * is Join network; method="dialog", so nothing ever reaches a URL), [data-wifi-show] the Show/Hide button (text and
  * aria-label change together). The list: ul[data-slot="networks"] takes
  * clones of template[data-wifi-row], whose button.net carries data-signal and
  * holds [data-slot="name"], [data-slot="note"] (Current network or Open,
@@ -161,24 +162,28 @@ export function wifiDialog() {
       <p class="subtitle">${decoder}</p>
       <div class="nets">
         <div class="nets-head"><h3 class="nets-title" id="wifi-nets-title">Networks near the decoder</h3><button type="button" class="btn btn-sm btn-outline" data-wifi-action="again">Look again</button></div>
-        <ul class="nets-list" data-slot="networks" tabindex="0" aria-labelledby="wifi-nets-title"></ul>
+        <ul class="nets-list" data-slot="networks" aria-labelledby="wifi-nets-title"></ul>
         <template data-wifi-row><li><button type="button" class="net" data-signal=""><span class="net-name"><span data-slot="name"></span><span class="net-note" data-slot="note" hidden></span></span><span class="net-meta"><span data-slot="signal"></span>${safe(BARS_ICON)}</span>${safe(CHEVRON_ICON)}</button></li></template>
         <p class="wifi-hint">Only 2.4 GHz networks show here.</p>
       </div>
       <div class="nets-other"><p>Not in the list, or its name is hidden?</p><button type="button" class="btn btn-sm btn-outline" data-wifi-action="another">Another network</button></div>
       ${menu(outline('Cancel', 'cancel'))}
     </section>
-    <form class="wifi-step" data-step="password" data-wifi-form="password" hidden>
+    <form class="wifi-step" data-step="password" data-wifi-form="password" method="dialog" hidden>
       <h2 id="wifi-title-password" class="cut-words">${network}</h2>
       <p class="subtitle">Signal <span data-slot="signal"></span></p>
       <p class="status status-error" role="alert" data-slot="error" hidden></p>
       ${passwordField({ id: 'wifi-password' })}
       ${menu(outline('Back to the list', 'back'), html`<button type="submit" class="btn btn-primary">Join network</button>`)}
     </form>
-    <form class="wifi-step" data-step="another" data-wifi-form="another" hidden>
+    <form class="wifi-step" data-step="another" data-wifi-form="another" method="dialog" hidden>
       <h2 id="wifi-title-another">Another network</h2>
       <p class="subtitle">Wi-Fi for ${decoder}</p>
-      ${textField({ label: 'Network name', name: 'ssid', id: 'wifi-another-name', hint: 'Exactly as it is written, capitals included.' })}
+      <div class="field">
+        <label for="wifi-another-name">Network name</label>
+        <input type="text" id="wifi-another-name" name="ssid" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="wifi-another-name-hint">
+        <p class="field-hint" id="wifi-another-name-hint">Exactly as it is written, capitals included.</p>
+      </div>
       ${passwordField({ id: 'wifi-another-password', hint: 'Leave empty for an open network.' })}
       ${menu(outline('Back', 'back'), html`<button type="submit" class="btn btn-primary">Join network</button>`)}
     </form>
