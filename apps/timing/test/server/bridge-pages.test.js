@@ -119,3 +119,47 @@ test('a wrong port is never a trap: the pair, re-pair and choose steps offer Try
     assert.match(section, /<button type="button" class="btn [a-z- ]+" data-bridge-connect="last">Try another device<\/button>/, state);
   }
 });
+
+test('a cable closed on this tab: Not connected at once, then back to the Bridge page', async () => {
+  const ana = await app.signUp('Dora');
+  const club = app.club(ana, 'Kerbs');
+  const dora = await app.login(ana);
+  const gate = await (await app.api(dora, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+  const sent = await app.api(dora, 'POST', `/decoders/${gate.id}/passings`, { boot: 'b00tb00t', passings: [], logs: ['boot'] });
+  assert.equal(sent.status, 200);
+  const base = `/clubs/${club.id}`;
+  const bridge = async () => (await app.api(dora, 'GET', `${base}/bridge`, undefined, { accept: 'text/html' })).text();
+  assert.match(await bridge(), /Connected on another laptop/);
+  const res = await app.form(dora, `${base}/decoders/${gate.id}/cable`, { state: 'closed' });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), `${base}/bridge`);
+  const body = await bridge();
+  assert.doesNotMatch(body, /Connected on another laptop/);
+  assert.match(body, /Not connected/);
+  assert.deepEqual(app.engine.headerOf(club.id).map((d) => d.state), ['offline']);
+  // A GET on it (after a reload) goes to the Bridge page.
+  const get = await app.api(dora, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { accept: 'text/html' });
+  assert.equal(get.status, 303);
+  assert.equal(get.headers.get('location'), `${base}/bridge`);
+});
+
+test('a closed cable: another club\'s decoder or an unknown one is not found; a bad state, another site or a stranger are refused', async () => {
+  const ana = await app.signUp('Eve');
+  const mine = app.club(ana, 'Mine');
+  const theirs = app.club(ana, 'Theirs');
+  const eve = await app.login(ana);
+  const other = await (await app.api(eve, 'POST', `/workspaces/${theirs.id}/decoders`, { name: 'Theirs' })).json();
+  const gate = await (await app.api(eve, 'POST', `/workspaces/${mine.id}/decoders`, { name: 'Gate' })).json();
+  const base = `/clubs/${mine.id}`;
+  assert.equal((await app.form(eve, `${base}/decoders/${other.id}/cable`, { state: 'closed' })).status, 404);
+  assert.equal((await app.form(eve, `${base}/decoders/nope/cable`, { state: 'closed' })).status, 404);
+  const bad = await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'open' });
+  assert.equal(bad.status, 422);
+  assert.equal((await bad.json()).type.endsWith('/problems/invalid-request'), true);
+  assert.equal((await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'closed' }, { origin: 'https://elsewhere.example' })).status, 403);
+  const stranger = await app.login(await app.signUp('Finn'));
+  assert.equal((await app.form(stranger, `${base}/decoders/${gate.id}/cable`, { state: 'closed' })).status, 404);
+  const out = await app.form(null, `${base}/decoders/${gate.id}/cable`, { state: 'closed' });
+  assert.equal(out.status, 303);
+  assert.match(out.headers.get('location'), /^\/auth\/login\?/);
+});

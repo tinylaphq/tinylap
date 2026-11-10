@@ -59,7 +59,9 @@ Per decoder, in the engine's memory since the server started (no schema change):
 - `cableAt`: the last batch from a bridge (`via: 'serial'`). The bridge flushes log lines within 10 s (bridge spec §2.4), so a TinyLap decoder on any laptop's cable keeps it fresh; a plain ZRound decoder only while laps flow.
 - The existing expected set (Wi-Fi spec §6) and `last_seen_at` (stored, either path).
 
-**The Cable row** for a decoder not on this tab's cable: **Connected on another laptop** (green) when `cableAt` is within 25 s (`OFFLINE_AFTER_MS`), otherwise **Not connected** (neutral).
+**The Cable row** for a decoder not on this tab's cable: **Connected on another laptop** (green) when `cableAt` is within 25 s (`OFFLINE_AFTER_MS`) and no bridge has said since that its cable closed, otherwise **Not connected** (neutral).
+
+**A cable that closes:** when this tab's cable to a decoder closes (unplugged, or the tab closes or leaves the page), `tl-bridge` posts `state=closed` to `<space>/decoders/<id>/cable` (`keepalive`). The engine then counts the decoder as on no cable until its next batch over one, publishes `decoders` if the board header changed (§6), and the answer, a 303 to the Bridge page, gives the bridge the cards to swap in. The bridge writes no words of its own for this; a post that never arrives leaves the 25 s rule.
 
 **The Wi-Fi row** without this tab's cable, first match:
 1. **Reporting** (green): `netAt` within 25 s.

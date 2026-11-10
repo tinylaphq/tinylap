@@ -549,7 +549,7 @@ async function cabledPage(t, { names = ['Finish line'], viewport, connect = true
     await card(board).getByRole('button', { name: 'Connect decoder' }).click();
     await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
   }
-  return { ...opened, decoders, board, card, row };
+  return { ...opened, who, decoders, board, card, row };
 }
 
 /** Opens Change Wi-Fi (or Set up Wi-Fi) on the cabled card and waits for the list. */
@@ -815,7 +815,7 @@ test('a scan that finds nothing says so; one the decoder refuses says it couldn\
 });
 
 test('the decoder on the cable comes first, and goes back to its place when unplugged', async (t) => {
-  const { page, errors, decoders, row } = await cabledPage(t, { names: ['Zebra gate', 'Alpha gate'] });
+  const { page, errors, decoders, row, who } = await cabledPage(t, { names: ['Zebra gate', 'Alpha gate'] });
   const order = () => page.locator('#bridge-decoders [data-decoder] [data-slot="name"]').allTextContents();
   assert.deepEqual(await order(), ['Zebra gate', 'Alpha gate']);
   // The bridge posts what comes over the cable, so the server's copy says the cable is on another laptop.
@@ -825,12 +825,22 @@ test('the decoder on the cable comes first, and goes back to its place when unpl
     assert.ok(Date.now() < end, 'the server hears the cable');
     await refresh();
   }
+  // The bridge tells the server its cable closed, and swaps in the cards of the page the server answers with.
+  const told = page.waitForResponse((res) => res.request().method() === 'POST' && res.url().endsWith(`/personal/decoders/${decoders[0].id}/cable`));
   await page.evaluate(() => window.__port.unplug());
+  assert.equal((await told).status(), 303);
   const cable = row(decoders[0], 'cable');
-  // At once, not once the server forgets the cable 25 s later.
+  // At once, not once the server forgets the cable 25 s later, and in the server's words.
   await cable.locator('[data-slot="state"]', { hasText: /^Not connected$/ }).waitFor({ timeout: 5000 });
+  for (const end = Date.now() + 5000; await servedCable() !== 'Not connected';) {
+    assert.ok(Date.now() < end, 'the server\'s copy says Not connected');
+    await page.waitForTimeout(50);
+  }
   assert.deepEqual(await order(), ['Alpha gate', 'Zebra gate']);
-  // A copy fetched since still says another laptop (it heard this one): the page never claims the cable it lost.
+  // The board header doesn't say it is reporting.
+  const board = await (await app.api(who, 'GET', '/personal/board', undefined, { accept: 'text/html' })).text();
+  assert.doesNotMatch(board, /Zebra gate: reporting/);
+  // A copy fetched since says the same.
   await refresh();
   assert.equal(await cable.locator('[data-slot="state"]').innerText(), 'Not connected');
   assert.equal(await cable.locator('.lamp').getAttribute('data-state'), 'off');

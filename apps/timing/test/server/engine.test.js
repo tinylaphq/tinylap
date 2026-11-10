@@ -413,3 +413,45 @@ test('a passings-only cable decoder disappears after 25 s', () => {
   clock.now = T0 + 25_000;
   assert.deepEqual(engine.headerOf(W), []);
 });
+
+test('a closed cable clears the cable state and the header at once', () => {
+  const { engine, clock, events } = withDecoder();
+  beat(engine, 'serial', { logs: ['boot'] });
+  engine.tick();
+  const count = () => offlineEvents(events).length;
+  const first = count();
+  clock.now = T0 + 5_000;
+  engine.cableClosed(W, 'd1');
+  assert.equal(connection(engine).cable.state, 'none');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline'], 'a TinyLap decoder whose cable is gone is not reporting');
+  assert.equal(count(), first + 1, 'published at once');
+  assert.deepEqual(offlineEvents(events).at(-1).data.decoders.map((d) => d.state), ['offline']);
+  engine.tick();
+  assert.equal(count(), first + 1, 'and not again');
+  // A batch over a cable again (this tab or another) opens it again.
+  beat(engine, 'serial', { logs: ['stat'] });
+  assert.equal(connection(engine).cable.state, 'other');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
+});
+
+test('a closed cable leaves Wi-Fi reporting, and a passings-only decoder shows nothing', () => {
+  const { engine, clock, store } = withDecoder();
+  store.addDecoder(W, { id: 'd2', name: 'Pit', tokenHash: 'h2', createdAt: T0 });
+  beat(engine, 'net');
+  beat(engine, 'serial', { logs: ['boot'] });
+  engine.ingest({ workspaceId: W, decoder: 'd2', via: 'serial', batch: { boot: BOOT, passings: [{ transponder: '0A', t: 1 }] } });
+  clock.now = T0 + 1_000;
+  engine.cableClosed(W, 'd1');
+  engine.cableClosed(W, 'd2');
+  assert.equal(connection(engine).cable.state, 'none');
+  assert.equal(connection(engine).wifi.state, 'reporting');
+  assert.deepEqual(engine.headerOf(W), [{ id: 'd1', name: 'Start line', state: 'reporting' }]);
+});
+
+test('a closed cable of another club or a decoder never heard changes nothing', () => {
+  const { engine } = withDecoder();
+  beat(engine, 'serial', { logs: ['boot'] });
+  engine.cableClosed('other-club', 'd1');
+  engine.cableClosed(W, 'nope');
+  assert.equal(connection(engine).cable.state, 'other');
+});
