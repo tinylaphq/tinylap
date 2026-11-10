@@ -127,6 +127,7 @@ At the track the question is "are laps counted right now?". Every live board (th
 - **Reporting** (green): a batch within 25 s over the cable or Wi-Fi.
 - **Idle** (neutral): its last Wi-Fi batch said `quiet`: "wakes up with the next lap".
 - **Not reporting** (red): in the expected set and offline; the existing banner (Wi-Fi spec §6) says the rest.
+- **Not reporting** (red) also for a decoder whose last batch came over the cable and carried log lines (a TinyLap decoder: the bridge flushes its log lines within 10 s), silent for 25 s and not quiet: its cable path is gone. A decoder that only ever sent passings over the cable (a plain ZRound decoder or an EasyLap) can't be told apart from one between laps, so it shows nothing once silent for 25 s.
 
 Decoders silent for longer show nothing; a tap-only club shows nothing. The words are "<name>: reporting|idle|not reporting", short enough for a phone. The item is part of `#board-live`, so the board stream keeps it current; the engine publishes `decoders` (Wi-Fi spec §6) on any change of these states, not only of the offline set.
 
