@@ -309,13 +309,13 @@ export const TOOLS = [
   {
     name: 'list_decoders',
     title: 'List decoders',
-    description: 'The paired decoders, with when each was last heard from. Pairing a new one happens on the bridge page, over the decoder\'s cable.',
+    description: 'The paired decoders, with when each was last heard from and what the server knows of its cable (on another laptop or not) and its Wi-Fi (reporting, idle, offline or unknown). Pairing a new one happens on the bridge page, over the decoder\'s cable.',
     action: 'timing.run',
     route: 'GET /workspaces/{workspace}/decoders',
     annotations: READ,
     input: z.object({ space }),
     output: z.object({ decoders: z.array(z.looseObject({ id: z.string(), name: z.string() })) }),
-    run: ({ request }) => ({ value: { decoders: request.store.decoders(request.workspaceId) } }),
+    run: ({ request }) => ({ value: { decoders: request.engine.connectionsOf(request.workspaceId) } }),
   },
   {
     name: 'unpair_decoder',
