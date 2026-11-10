@@ -801,12 +801,12 @@ test('a %TLOK or another %TLERR during a scan does not end it; only %TLERR scan 
   await assert.rejects(again, /couldn't look for networks/);
 });
 
-test('a try ends only on %TLJOINED or its own byte-check %TLERR, and leaves the reply queue alone', async (t) => {
+test('a try ends only on %TLJOINED, its byte-check %TLERR or %TLERR store, and leaves the reply queue alone', async (t) => {
   const { send, bridge } = await quietWifi(t);
   let settled = false;
   const joining = bridge.join('Clubhaus', 'tinylap!');
   joining.then(() => { settled = true; }, () => { settled = true; });
-  send(commands.error('store'));
+  send(commands.error('server'));
   send(commands.ok);
   await wait(50);
   assert.equal(settled, false);
@@ -815,6 +815,10 @@ test('a try ends only on %TLJOINED or its own byte-check %TLERR, and leaves the 
   const refused = bridge.join('Clubhaus', 'tinylap!');
   send(commands.error('Wi-Fi password length'));
   await assert.rejects(refused, (e) => e.reason === 'Wi-Fi password length');
+  // Joined, but the settings couldn't be stored (firmware net.cpp): its own failure, not a 30 s wait.
+  const unstored = bridge.join('Clubhaus', 'tinylap!');
+  send(commands.error('store'));
+  await assert.rejects(unstored, (e) => e.unstored === true);
 });
 
 test('an unplug rejects a scan and a try that wait on it', async (t) => {

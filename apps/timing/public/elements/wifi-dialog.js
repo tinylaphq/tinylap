@@ -219,7 +219,8 @@ export class WifiWizard {
     const failure = this.$('[data-scan="failed"]');
     failure.hidden = !failed;
     this.$('[data-scan="empty"]').hidden = failed || this.#networks.length > 0;
-    this.#show('list', failed ? failure.textContent ?? '' : undefined);
+    // A failure is said by its own alert; the status region stays quiet, so it isn't said twice.
+    this.#show('list', failed ? '' : undefined);
   }
 
   /** A network from the list: its password, or straight to the try for an open one. @param {Network | undefined} network */
@@ -286,7 +287,8 @@ export class WifiWizard {
     const why = cause === 'password' ? `${name} refused the password.`
       : cause === 'notfound' ? `Can't find ${name} from here.`
         : cause ? `Can't join ${name}.`
-          : typeof error?.reason === 'string' ? `The decoder refused it: ${error.reason}.` : String(error?.message ?? error);
+          : error?.unstored ? `The decoder joined ${name} but couldn't keep the settings. Try again.`
+            : typeof error?.reason === 'string' ? `The decoder refused it: ${error.reason}.` : String(error?.message ?? error);
     const back = before?.state === 'connected' && before.name !== chosen.name ? ` The decoder is back on ${quoted(before.name)}.` : '';
     return this.#password(password, why + back);
   }

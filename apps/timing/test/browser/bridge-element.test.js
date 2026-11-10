@@ -787,7 +787,7 @@ test('a scan that finds nothing says so; one the decoder refuses says it couldn\
   await failed.waitFor();
   assert.equal(await failed.innerText(), "The decoder couldn't look for networks. Look again.");
   assert.equal(await empty.isVisible(), false);
-  assert.equal(await page.locator('#wifi-dialog [data-wifi-live]').textContent(), "The decoder couldn't look for networks. Look again.");
+  assert.equal(await page.locator('#wifi-dialog [data-wifi-live]').textContent(), '', 'said once, by the alert');
   assert.equal(await dialog.getByRole('button', { name: 'Another network' }).isVisible(), true);
   assert.deepEqual(errors, []);
 });
@@ -820,5 +820,21 @@ test('a decoder that never answers %TLNET& reads neutral, without Change Wi-Fi',
   await row(board, 'wifi').locator('[data-slot="detail"]', { hasText: "This decoder doesn't report its Wi-Fi." }).waitFor({ timeout: 10_000 });
   assert.equal(await row(board, 'wifi').locator('.lamp').getAttribute('data-state'), 'unknown');
   assert.equal(await row(board, 'wifi').locator('[data-bridge-wifi]').isVisible(), false);
+  assert.deepEqual(errors, []);
+});
+
+test('a join the decoder couldn\'t keep says so on the password step', async (t) => {
+  const [script, prefixes] = dropping(['%TLJOIN']);
+  const { page, errors, board, card } = await cabledPage(t, { init: [{ content: `(${script})(${JSON.stringify(prefixes)})` }] });
+  const dialog = await openWifi(page, card(board));
+  await dialog.getByRole('button', { name: /^Clubhaus/ }).click();
+  await page.locator('#wifi-password').fill('tinylap!');
+  await dialog.getByRole('button', { name: 'Join network' }).click();
+  await dialog.locator('[data-step="joining"]:not([hidden])').waitFor();
+  await page.evaluate(() => window.__port.send(new TextEncoder().encode('%TLNET connected Q2x1YmhhdXM -48 none&%TLERR store&')));
+  const alert = dialog.getByRole('alert');
+  await alert.waitFor({ timeout: 5000 });
+  assert.equal(await alert.innerText(), 'The decoder joined “Clubhaus” but couldn\'t keep the settings. Try again.');
+  assert.equal(await page.locator('#wifi-password').inputValue(), 'tinylap!');
   assert.deepEqual(errors, []);
 });

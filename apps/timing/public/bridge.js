@@ -353,6 +353,8 @@ export class Bridge extends EventTarget {
       case 'error':
         if (this.#scanning && event.text === 'scan') return this.#scanning.done(new Error("The decoder couldn't look for networks."));
         if (this.#joining && JOIN_REFUSALS.has(event.text)) return this.#joining.fail(Object.assign(new Error(`The decoder said: ${event.text}`), { reason: event.text }));
+        // Joined, but the board couldn't store the settings: it stays on the new network until its next reset.
+        if (this.#joining && event.text === 'store') return this.#joining.fail(Object.assign(new Error('The decoder joined but couldn\'t keep the settings.'), { unstored: true }));
         this.#replies.shift()?.(event);
         return undefined;
       case 'ok':
@@ -682,7 +684,8 @@ export class Bridge extends EventTarget {
   /**
    * Has the decoder try a network, keeping its old one if that fails (connections spec §4.3): resolves with
    * %TLJOINED's cause (ok, password, notfound, other, timeout). Rejects on the decoder's byte checks (before
-   * anything is sent), a %TLERR, or no answer within joinMs.
+   * anything is sent), their %TLERR (`reason`), %TLERR store for a join it couldn't keep (`unstored`), or no answer
+   * within joinMs (`timeout`).
    * @param {string} name @param {string} password @returns {Promise<'ok' | 'password' | 'notfound' | 'other' | 'timeout'>}
    */
   async join(name, password) {
