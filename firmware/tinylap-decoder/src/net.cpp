@@ -58,6 +58,7 @@ bool (*save_)(const std::string&, const std::string&) = nullptr;
 // The PC's requests not yet taken by the net task, and whether it died at the start (then nobody would answer).
 bool scanWanted_ = false, tryWanted_ = false, broken_ = false;
 std::string tryName_, tryPassword_;
+int64_t tryAskedUs_ = 0;   // when the %TLJOIN came: its 20 s count from there, not from when the task is free
 // What the last %TLNET said; a new one goes out only when its state, name or cause changes (connections spec §4.3).
 struct Shown { const char* state; std::string name; int signal; const char* cause; } shown_{"off", "", 0, "none"};
 
@@ -324,11 +325,14 @@ void netTask(void*) {
           password = tryPassword;
           haveWifi = true;
           bool (*save)(const std::string&, const std::string&);
+          bool overtaken;   // a %TLWIFI came meanwhile: it is stored already, and the try must not overwrite it
           {
             Lock lock;
             save = save_;
+            overtaken = wifiChanged_;
           }
-          reply = save && save(ssid, password) ? line::joined("ok") : line::error("store");
+          if (overtaken) reply = line::joined("other");
+          else reply = save && save(ssid, password) ? line::joined("ok") : line::error("store");
         }
         {
           Lock lock;
@@ -385,6 +389,7 @@ void netTask(void*) {
     }
 
     // A scan waits while a join runs (the driver's own scan); a %TLSCAN while one runs gets its answer.
+    // One that came during a post has waited for it too (up to 10 s, 20 s with the retry); it still runs.
     bool scan;
     {
       Lock lock;
@@ -402,21 +407,29 @@ void netTask(void*) {
 
     // A %TLJOIN: leave the network and try the new settings once (connections spec §4.3).
     bool tryNow = false;
+    int64_t askedUs = 0;
     if (!trying) {
       Lock lock;
       if (tryWanted_) {
         tryName = tryName_;
         tryPassword = tryPassword_;
+        askedUs = tryAskedUs_;
         tryWanted_ = false;
         tryNow = true;
       }
+    }
+    // Waited its 20 s behind a post or an earlier try: answered as one that ran out, so %TLJOINED
+    // always comes within 20 s of the %TLJOIN.
+    if (tryNow && now - askedUs >= kTryUs) {
+      tryNow = false;
+      answerLine(line::joined("timeout"));
     }
     if (tryNow) {
       if (joining || connected) leaving = true;
       esp_wifi_disconnect();
       setStation(tryName, tryPassword);
       trying = true;
-      tryStartUs = now;
+      tryStartUs = askedUs;
       connected = false;
       state_ = NetState::Connecting;
       {
@@ -490,6 +503,7 @@ struct Control : NetControl {
       }
       tryName_ = name;   // a second %TLJOIN during a try runs after it, the last one only
       tryPassword_ = password;
+      tryAskedUs_ = esp_timer_get_time();
       tryWanted_ = true;
     }
     start();
