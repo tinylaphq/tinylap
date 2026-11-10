@@ -44,7 +44,7 @@ test('the TinyLap model answers as today\'s simulated decoder', () => {
 
 test('the TinyLap model resets on open, or runs on for uptimeMs', () => {
   const reset = tinylapModel({ cars: 0 });
-  assert.equal(text(reset.start(0)), `%TLID - ${reset.sim.boot}&%TLNET off  0 none&%TLLOG boot reason=poweron fw=sim&`);
+  assert.equal(text(reset.start(0)), `%TLID - ${reset.sim.boot}&%TLLOG boot reason=poweron fw=sim&%TLNET off  0 none&`);
   assert.equal(text(reset.tick(1000)), '%T3E8&');
   const running = tinylapModel({ resetOnOpen: false });
   assert.deepEqual(running.start(0), []);

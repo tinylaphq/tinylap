@@ -61,7 +61,7 @@ const DEFAULT_NETWORKS = [
   ['Kabel-7721', -74, false], ['Familie Meier', -75, false], ['iPhone von Anna', -76, false], ['HUAWEI-B525', -78, false], ['Netgear56', -79, false],
   ['WLAN-Nachbar', -81, false], ['FRITZ!Box 6660 Cable', -82, false], ['Hotspot', -83, true], ['EasyBox-8812', -84, false], ['Pixel_4412', -85, false],
   ['Vodafone-Hotspot', -86, true], ['Sky-Wifi', -87, false], ['A1-3D5F', -88, false], ['Unitymedia WifiSpot', -89, true],
-  ['TinyLap-Testnetz-mit-langem-Namen-32', -90, false],
+  ['TinyLap-Testnetz-langer-Name-032', -90, false],
 ].map(([name, signal, open]) => ({ name: /** @type {string} */ (name), signal: /** @type {number} */ (signal), open: /** @type {boolean} */ (open) }));
 
 /** The counters of a `stat` line, in the firmware's order (docs/timing.md, Diagnostics). */
@@ -136,7 +136,7 @@ export function createSimulator({ cars, jitterMs = 150, random = Math.random, de
       powerUp = now;
       nextStat = now + STAT_EVERY_MS;
       passings = 0;
-      return [commands.id(paired, boot), commands.net(net), '%TLLOG boot reason=poweron fw=sim&'];
+      return [commands.id(paired, boot), '%TLLOG boot reason=poweron fw=sim&', commands.net(net)];
     },
     /** The lines due up to `now`, in time order: a `%L` (with its `pass` line) before a `%T` of the same millisecond, then `stat`. @param {number} now @returns {string[]} */
     tick(now) {
@@ -203,7 +203,7 @@ export function createSimulator({ cars, jitterMs = 150, random = Math.random, de
         case 'reset':
           newBoot(now);
           // A TinyLap decoder says who it is whenever its boot changes (spec §5); the stat timer runs on.
-          return [commands.id(paired, boot), '%TLLOG boot reason=reset fw=sim&'];
+          return [commands.id(paired, boot), '%TLLOG boot reason=reset fw=sim&', commands.net(net)];
         default:
           return [];
       }

@@ -101,7 +101,7 @@ test('the serial mode answers commands and writes laps', async () => {
   const sim = createSimulator({ cars: carsOf(1), jitterMs: 0, random: () => 0 });
   const serial = runSerial({ input, output, sim, clock: () => now });
   await settle();
-  assert.equal(text, `%TLID - ${sim.boot}&%TLNET off  0 none&%TLLOG boot reason=poweron fw=sim&`, 'the power-up lines first');
+  assert.equal(text, `%TLID - ${sim.boot}&%TLLOG boot reason=poweron fw=sim&%TLNET off  0 none&`, 'the power-up lines first');
   input.write('%TLHE');
   input.write('LLO&%C&');
   await settle();

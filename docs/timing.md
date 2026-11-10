@@ -30,7 +30,7 @@ TinyLap's own commands, which ZRound never sends (fields separated by one space)
 | PC → decoder | `%TLWIFI <base64url ssid> <base64url password>&` | store Wi-Fi; answer `%TLOK&` |
 | PC → decoder | `%TLSERVER <base64url url>&` | store where to post; answer `%TLOK&`, or `%TLERR server&` unless it starts `http://` or `https://` and is at most 128 bytes |
 | PC → decoder | `%TLNET&` | what is your Wi-Fi state? Cable only: the bridge never forwards it |
-| decoder → PC | `%TLNET <state> <base64url name> <signal> <cause>&` | the Wi-Fi state, on request, at every boot after `%TLID`, and on a change. `state` is `off`, `joining`, `connected` or `failed`; `signal` is dBm (`0` when not connected); `cause` is `none`, `password`, `notfound` or `other`. Cable only |
+| decoder → PC | `%TLNET <state> <base64url name> <signal> <cause>&` | the Wi-Fi state, on request, at every boot (after `%TLID` and the boot's `%TLLOG boot` line), and on a change. `state` is `off`, `joining`, `connected` or `failed`; `signal` is dBm (`0` when not connected); `cause` is `none`, `password`, `notfound` or `other`. Cable only |
 | PC → decoder | `%TLSCAN&` | scan for networks. Cable only |
 | decoder → PC | `%TLAP <base64url name> <signal> <open\|locked>&` | one network seen, strongest first; ends with `%TLSCANEND <count>&`, or `%TLERR scan&`. Cable only |
 | PC → decoder | `%TLJOIN <base64url name> <base64url password>&` | try new Wi-Fi settings, with `%TLWIFI`'s checks; stored only if the join works. Cable only |
