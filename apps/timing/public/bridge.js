@@ -35,6 +35,8 @@ const STARTS = 3;
 /** The EasyLap start fallback, at most STARTS times, this far apart (spec §2.4). */
 const ROBITRONIC_START_EVERY_MS = 500;
 const BROWSER_ASSIGNED = new Set(['zround', 'easylap']);
+/** The %TLERR texts that answer a %TLJOIN: its byte checks, as for %TLWIFI (connections spec §4.3). */
+const JOIN_REFUSALS = new Set(['Wi-Fi name too long', 'Wi-Fi password length']);
 /** At most this many %TLLOG lines are held and queued together, oldest dropped first (spec §2.4). */
 const LOGS_MAX = 256;
 
@@ -102,9 +104,13 @@ export class Bridge extends EventTarget {
   #againAlone = false;
   /** A normal flush was asked for while one was in flight: the rerun is a normal one, so no passing waits for the log timer. */
   #againFull = false;
-  /** The scan running: the access points so far, and how it ends (connections spec §4.2). @type {{ aps: { name: string, signal: number, open: boolean }[], done: (error: Error | null) => void, promise: Promise<{ name: string, signal: number, open: boolean }[]> } | null} */
+  /**
+   * The scan running: the access points so far, and how it ends (connections spec §4.2). Kept out of #replies: only
+   * %TLSCANEND or %TLERR scan ends it, so a %TLOK or %TLERR for another request can't.
+   * @type {{ aps: { name: string, signal: number, open: boolean }[], done: (error: Error | null) => void, promise: Promise<{ name: string, signal: number, open: boolean }[]> } | null}
+   */
   #scanning = null;
-  /** The %TLJOIN waiting for its %TLJOINED (connections spec §4.3). @type {((cause: string) => void) | null} */
+  /** The %TLJOIN waiting for %TLJOINED, or for a %TLERR of its byte checks (connections spec §4.3); kept out of #replies too. @type {{ joined: (cause: string) => void, fail: (error: Error) => void } | null} */
   #joining = null;
   /** queryNet()s waiting for the next %TLNET. @type {((net: any) => void)[]} */
   #netWaiters = [];
@@ -317,6 +323,7 @@ export class Bridge extends EventTarget {
       }
     } finally {
       this.#stopTimers();
+      this.#abandon();
       if (!this.#closed) this.#set('disconnected');
     }
     if (broken) await this.transport.close().catch(() => {});
@@ -343,8 +350,12 @@ export class Bridge extends EventTarget {
         // A boot line parseLog rejects still marks a boot, so a malformed fw= can't switch the rule off.
         if (event.detail.startsWith('TLLOG boot ')) return this.#bootLine(afterBootChange);
         return undefined;
-      case 'ok':
       case 'error':
+        if (this.#scanning && event.text === 'scan') return this.#scanning.done(new Error("The decoder couldn't look for networks."));
+        if (this.#joining && JOIN_REFUSALS.has(event.text)) return this.#joining.fail(Object.assign(new Error(`The decoder said: ${event.text}`), { reason: event.text }));
+        this.#replies.shift()?.(event);
+        return undefined;
+      case 'ok':
         this.#replies.shift()?.(event);
         return undefined;
       // Cable-only (connections spec §4): kept here and told to the page, never queued for the server.
@@ -362,7 +373,7 @@ export class Bridge extends EventTarget {
         this.#scanning?.done(null);
         return undefined;
       case 'joined':
-        this.#joining?.(event.cause);
+        this.#joining?.joined(event.cause);
         return undefined;
       default: return undefined;
     }
@@ -623,9 +634,11 @@ export class Bridge extends EventTarget {
   async queryNet() {
     let timer;
     const answer = new Promise((resolve, reject) => {
+      /** @param {any} net null when the port is gone */
       const waiter = (net) => {
         clearTimeout(timer);
-        resolve(net);
+        if (net) resolve(net);
+        else reject(new Error('The decoder is disconnected. Connect it again.'));
       };
       timer = setTimeout(() => {
         this.#netWaiters = this.#netWaiters.filter((w) => w !== waiter);
@@ -648,20 +661,19 @@ export class Bridge extends EventTarget {
     const aps = [];
     let finish;
     const promise = new Promise((resolve, reject) => {
-      /** @param {any} message */
-      const refused = (message) => { if (message.type === 'error') finish(new Error(`The decoder said: ${message.text}`)); };
       const timer = setTimeout(() => finish(new Error("The decoder didn't answer.")), this.scanMs);
       /** @param {Error | null} error */
       finish = (error) => {
         clearTimeout(timer);
-        const i = this.#replies.indexOf(refused);
-        if (i !== -1) this.#replies.splice(i, 1);
-        this.#scanning = null;
+        if (this.#scanning?.promise === promise) this.#scanning = null;
         if (error) reject(error);
         else resolve([...aps].sort((a, b) => b.signal - a.signal));
       };
-      this.#replies.push(refused);
     });
+    if (this.#ended()) {
+      finish(new Error('The decoder is disconnected. Connect it again.'));
+      return promise;
+    }
     this.#scanning = { aps, done: finish, promise };
     this.#write(encode(commands.scan)).catch((error) => finish(error));
     return promise;
@@ -677,21 +689,17 @@ export class Bridge extends EventTarget {
     const wrong = wifiError(name, password);
     if (wrong) throw Object.assign(new Error(`The decoder would refuse it: ${wrong}`), { reason: wrong });
     if (this.#joining) throw new Error('The decoder is already trying a network.');
+    if (this.#ended()) throw new Error('The decoder is disconnected. Connect it again.');
     let finish;
     const answer = new Promise((resolve, reject) => {
-      /** @param {any} message */
-      const refused = (message) => { if (message.type === 'error') finish(Object.assign(new Error(`The decoder said: ${message.text}`), { reason: message.text })); };
-      const timer = setTimeout(() => finish(new Error("The decoder didn't answer.")), this.joinMs);
+      const timer = setTimeout(() => finish(Object.assign(new Error("The decoder didn't answer."), { timeout: true })), this.joinMs);
       finish = (error, cause) => {
         clearTimeout(timer);
-        const i = this.#replies.indexOf(refused);
-        if (i !== -1) this.#replies.splice(i, 1);
         this.#joining = null;
         if (error) reject(error);
         else resolve(cause);
       };
-      this.#replies.push(refused);
-      this.#joining = (cause) => finish(null, cause);
+      this.#joining = { joined: (cause) => finish(null, cause), fail: (error) => finish(error) };
     });
     try {
       await this.#write(encode(commands.join(name, password)));
@@ -779,7 +787,16 @@ export class Bridge extends EventTarget {
     return this.#flushing;
   }
 
+  /** The port is gone or closed: a scan or a try waiting on it never gets its answer. */
+  #abandon() {
+    const gone = () => new Error('The decoder is disconnected. Connect it again.');
+    this.#scanning?.done(gone());
+    this.#joining?.fail(gone());
+    for (const waiter of this.#netWaiters.splice(0)) waiter(null);
+  }
+
   async close() {
+    this.#abandon();
     this.#closed = true;
     clearTimeout(this.#retryTimer);
     this.#stopTimers();

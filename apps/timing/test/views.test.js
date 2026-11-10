@@ -240,6 +240,9 @@ test('the Change Wi-Fi dialog: closed, one hidden step each, in the spec\'s word
   ]) assert.ok(out.includes(words), words);
   assert.equal(out.match(/TinyLap never sees the password/g).length, 1, 'said once');
   assert.match(out, /<template data-wifi-row><li><button type="button" class="net" data-signal="">/);
+  assert.match(out, /^<dialog [^>]*>\s*<p class="visually-hidden" role="status" data-wifi-live><\/p>/, 'its own live region: showModal makes the page inert');
+  assert.match(out, /<p class="status status-error" role="alert" data-scan="failed" hidden>The decoder couldn't look for networks\. Look again\.<\/p>/);
+  assert.match(out, /<p class="wifi-empty" data-scan="empty" hidden>No networks near the decoder\. Look again, or enter another network\.<\/p>/);
   assert.match(out, /<ul class="nets-list" data-slot="networks" aria-labelledby="wifi-nets-title"><\/ul>/, 'its rows are buttons: no tab stop of its own');
   // Never sent to the server: a submit that slips past the client closes the dialog, nothing in a URL.
   assert.deepEqual([...out.matchAll(/<form ([^>]*)>/g)].map((m) => /method="dialog"/.test(m[1])), [true, true]);

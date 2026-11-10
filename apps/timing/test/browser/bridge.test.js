@@ -108,9 +108,13 @@ test('the ready panel: name, aligned preview with headings, one live region', as
   await page.getByText('Lap', { exact: true }).waitFor();
   assert.ok((await page.locator('[data-bridge-preview] li', { hasText: 'first pass' }).count()) > 0);
   assert.equal(await page.locator('[data-bridge-preview] li', { hasText: '—' }).count(), 0);
+  // One live region for the page; the Change Wi-Fi dialog, inert-making when open, has its own.
   const live = page.locator('#bridge > [role="status"]');
   assert.equal(await live.count(), 1);
+  assert.equal(await page.locator('#bridge [role="status"]:not(#wifi-dialog *)').count(), 1);
   assert.equal(await page.locator('#bridge section [role="status"]').count(), 0);
+  assert.equal(await page.locator('#wifi-dialog > [role="status"][data-wifi-live]').count(), 1);
+  assert.equal(await page.locator('#wifi-dialog [role="status"]').count(), 1);
   assert.match(await live.textContent(), /Forwarding from Gate/);
   assert.deepEqual(errors, []);
 });

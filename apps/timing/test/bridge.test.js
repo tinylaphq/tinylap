@@ -752,7 +752,7 @@ test('a scan the decoder refuses rejects', async (t) => {
   t.after(() => bridge.close());
   await bridge.start();
   await until(() => bridge.state === 'ready');
-  await assert.rejects(bridge.scan(), /scan/);
+  await assert.rejects(bridge.scan(), /couldn't look for networks/);
 });
 
 test('join resolves with the joined cause, times out at 30 s', async (t) => {
@@ -770,4 +770,59 @@ test('join resolves with the joined cause, times out at 30 s', async (t) => {
   t.after(() => quiet.close());
   await quiet.start();
   await assert.rejects(quiet.join('Clubhaus', 'tinylap!'), /didn't answer/);
+});
+
+/** A paired decoder that answers %TLSCAN and %TLJOIN with nothing, so the test sends the answers. */
+async function quietWifi(t) {
+  const sim = createSimulator({ cars: [], decoder: 'dec_1' });
+  const { port, send, end } = fakePort({ reply: (message, now) => (message.type === 'scan' || message.type === 'join' ? [] : sim.reply(message, now)) });
+  const bridge = new Bridge({ port, outbox: memoryOutbox(), post: async () => ({ through: null }) });
+  t.after(() => bridge.close());
+  await bridge.start();
+  await until(() => bridge.state === 'ready');
+  return { send, end, bridge };
+}
+
+test('a %TLOK or another %TLERR during a scan does not end it; only %TLERR scan does', async (t) => {
+  const { send, bridge } = await quietWifi(t);
+  let settled = false;
+  const scanning = bridge.scan();
+  scanning.then(() => { settled = true; }, () => { settled = true; });
+  send(commands.ok);
+  send(commands.error('store'));
+  send(commands.ap({ name: 'Clubhaus', signal: -50, open: false }));
+  await wait(50);
+  assert.equal(settled, false);
+  send(commands.scanEnd(1));
+  assert.deepEqual(await scanning, [{ name: 'Clubhaus', signal: -50, open: false }]);
+  const again = bridge.scan();
+  send(commands.error('store'));
+  send(commands.error('scan'));
+  await assert.rejects(again, /couldn't look for networks/);
+});
+
+test('a try ends only on %TLJOINED or its own byte-check %TLERR, and leaves the reply queue alone', async (t) => {
+  const { send, bridge } = await quietWifi(t);
+  let settled = false;
+  const joining = bridge.join('Clubhaus', 'tinylap!');
+  joining.then(() => { settled = true; }, () => { settled = true; });
+  send(commands.error('store'));
+  send(commands.ok);
+  await wait(50);
+  assert.equal(settled, false);
+  send(commands.joined('password'));
+  assert.equal(await joining, 'password');
+  const refused = bridge.join('Clubhaus', 'tinylap!');
+  send(commands.error('Wi-Fi password length'));
+  await assert.rejects(refused, (e) => e.reason === 'Wi-Fi password length');
+});
+
+test('an unplug rejects a scan and a try that wait on it', async (t) => {
+  const { end, bridge } = await quietWifi(t);
+  const scanning = bridge.scan();
+  const joining = bridge.join('Clubhaus', 'tinylap!');
+  end();
+  await assert.rejects(scanning, /disconnected/);
+  await assert.rejects(joining, /disconnected/);
+  await assert.rejects(bridge.scan(), /disconnected/);
 });

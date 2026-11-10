@@ -12,7 +12,10 @@
 //   reason on top; one the decoder never answers ends on "didn't answer".
 // - Cancel during a try waits for the decoder's answer, then closes: the
 //   board is never left half-way (spec §4.3).
-// - Closing clears both passwords and gives focus back to the card's button.
+// - Closing clears both passwords and gives focus back to the card's button
+//   (or the card's name, when the cable was pulled and the button is gone).
+// - showModal() makes the page outside inert, so while it is open the dialog
+//   speaks through its own live region ([data-wifi-live]).
 import { signalWord } from '@tinylap/timing';
 
 const quoted = (name) => `“${name}”`;
@@ -21,7 +24,7 @@ const capital = (word) => word[0].toUpperCase() + word.slice(1);
 /**
  * @typedef {{ name: string, signal: number | null, open: boolean }} Network
  * @typedef {{ bridge: () => import('../bridge.js').Bridge | null, announce: (text: string) => void,
- *   opener: (decoderId: string) => HTMLElement | null, problem: (ssid: string, password: string) => { field: 'ssid' | 'password', text: string } | null }} Host
+ *   refocus: (decoderId: string) => void, problem: (ssid: string, password: string) => { field: 'ssid' | 'password', text: string } | null }} Host
  */
 export class WifiWizard {
   /** Bumped by every open, look and close: an answer for an older one changes nothing. */
@@ -49,6 +52,14 @@ export class WifiWizard {
 
   /** @param {string} selector */
   $(selector) { return /** @type {HTMLElement} */ (this.dialog.querySelector(selector)); }
+
+  /** Says it once: in the dialog's own live region while it is open, the page's otherwise. @param {string} text */
+  #say(text) {
+    const live = this.dialog.open ? this.dialog.querySelector('[data-wifi-live]') : null;
+    if (!live) return this.host.announce(text);
+    if (live.textContent !== text) live.textContent = text;
+    return undefined;
+  }
 
   /** @param {string} slot @param {string} text */
   #fill(slot, text) {
@@ -79,7 +90,7 @@ export class WifiWizard {
     } else if (event.type === 'close') {
       const decoder = this.decoder;
       this.#cleanUp();
-      if (decoder) this.host.opener(decoder)?.focus();
+      if (decoder) this.host.refocus(decoder);
     }
   }
 
@@ -154,12 +165,12 @@ export class WifiWizard {
     const n = this.#networks.length;
     const words = {
       looking: 'Looking for networks near the decoder…',
-      list: n === 0 ? 'The decoder found no networks. Look again, or enter another network.' : `${n} ${n === 1 ? 'network' : 'networks'} near the decoder.`,
+      list: n === 0 ? 'No networks near the decoder. Look again, or enter another network.' : `${n} ${n === 1 ? 'network' : 'networks'} near the decoder.`,
       password: `Password for ${name}.`,
       another: 'Another network: its name and password.',
       joining: `Joining ${name}…`,
     };
-    this.host.announce(said ?? words[step] ?? '');
+    this.#say(said ?? words[step] ?? '');
     const focus = {
       looking: '[data-step="looking"] [data-wifi-action="cancel"]',
       list: this.#networks.length ? '[data-step="list"] button.net' : '[data-step="list"] [data-wifi-action="again"]',
@@ -177,10 +188,14 @@ export class WifiWizard {
     this.#show('looking');
     /** @type {Network[]} */
     let found = [];
+    let failed = false;
     try {
-      found = (await this.host.bridge()?.scan()) ?? [];
+      const bridge = this.host.bridge();
+      if (!bridge) throw new Error('The decoder is disconnected.');
+      found = await bridge.scan();
     } catch {
-      // A failed scan shows an empty list: Look again, or Another network.
+      // A %TLERR scan, no answer, or no decoder: the list says the scan couldn't run, not that it found nothing.
+      failed = true;
     }
     if (token !== this.#token || !this.dialog.open) return;
     this.#networks = [...found].sort((a, b) => (b.signal ?? 0) - (a.signal ?? 0));
@@ -200,7 +215,11 @@ export class WifiWizard {
       note.hidden = note.textContent === '';
       return li;
     }));
-    this.#show('list');
+    this.$('[data-slot="networks"]').hidden = this.#networks.length === 0;
+    const failure = this.$('[data-scan="failed"]');
+    failure.hidden = !failed;
+    this.$('[data-scan="empty"]').hidden = failed || this.#networks.length > 0;
+    this.#show('list', failed ? failure.textContent ?? '' : undefined);
   }
 
   /** A network from the list: its password, or straight to the try for an open one. @param {Network | undefined} network */
@@ -245,8 +264,9 @@ export class WifiWizard {
     } catch (caught) {
       error = caught;
     }
-    this.#joining = false;
+    // A close since (or an unplug) cleaned up already, and a newer try may be running: only this one's own state.
     if (token !== this.#token || !this.dialog.open) return;
+    this.#joining = false;
     if (this.#closeAfterJoin) return this.close();
     const name = quoted(chosen.name);
     if (cause === 'ok') {
@@ -257,14 +277,16 @@ export class WifiWizard {
       this.$('[data-result="timeout"]').hidden = true;
       return this.#show('result', `Joined ${name}.`);
     }
-    if (!cause && typeof error?.reason !== 'string') {
+    if (!cause && error?.timeout) {
       this.$('[data-result="joined"]').hidden = true;
       this.$('[data-result="timeout"]').hidden = false;
-      return this.#show('result', error?.message ?? "The decoder didn't answer.");
+      return this.#show('result', "The decoder didn't answer.");
     }
+    // A refusal of the try (its cause), of its bytes (a reason), or anything else (its own words): back to the password.
     const why = cause === 'password' ? `${name} refused the password.`
       : cause === 'notfound' ? `Can't find ${name} from here.`
-        : cause ? `Can't join ${name}.` : `The decoder refused it: ${error.reason}.`;
+        : cause ? `Can't join ${name}.`
+          : typeof error?.reason === 'string' ? `The decoder refused it: ${error.reason}.` : String(error?.message ?? error);
     const back = before?.state === 'connected' && before.name !== chosen.name ? ` The decoder is back on ${quoted(before.name)}.` : '';
     return this.#password(password, why + back);
   }
@@ -273,7 +295,7 @@ export class WifiWizard {
     if (!this.#joining) return this.close();
     this.#closeAfterJoin = true;
     for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (this.dialog.querySelectorAll('[data-step="joining"] [data-wifi-action="cancel"]'))) b.disabled = true;
-    this.host.announce('Closing once the decoder answers…');
+    this.#say('Closing once the decoder answers…');
     return undefined;
   }
 
@@ -283,6 +305,7 @@ export class WifiWizard {
     this.#networks = [];
     this.#chosen = null;
     this.#closeAfterJoin = false;
+    this.#joining = false;
     this.decoder = null;
     for (const step of /** @type {NodeListOf<HTMLElement>} */ (this.dialog.querySelectorAll('[data-step]'))) step.hidden = true;
     for (const input of /** @type {NodeListOf<HTMLInputElement>} */ (this.dialog.querySelectorAll('input'))) {
@@ -296,7 +319,9 @@ export class WifiWizard {
     }
     for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (this.dialog.querySelectorAll('[data-wifi-action="cancel"]'))) b.disabled = false;
     this.$('[data-slot="error"]').hidden = true;
-    for (const result of /** @type {NodeListOf<HTMLElement>} */ (this.dialog.querySelectorAll('[data-result]'))) result.hidden = true;
+    for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.dialog.querySelectorAll('[data-result], [data-scan]'))) el.hidden = true;
+    const live = this.dialog.querySelector('[data-wifi-live]');
+    if (live) live.textContent = '';
     this.$('[data-slot="networks"]').replaceChildren();
     this.dialog.setAttribute('aria-labelledby', 'wifi-title-looking');
   }

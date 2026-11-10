@@ -526,17 +526,23 @@ test('E3e: a double click on Connect, and a click while the decoder-list GET is 
 // %TLNET, %TLSCAN (25 networks) and %TLJOIN, and takes the password tinylap!.
 
 /** A fresh member whose personal space has `names` as decoders; the simulated board is paired as the first one. */
-async function cabledPage(t, { names = ['Finish line'], viewport, connect = true } = {}) {
+async function cabledPage(t, { names = ['Finish line'], viewport, connect = true, init = [] } = {}) {
   const who = await app.login(await app.signUp(`Cable ${Math.random().toString(36).slice(2, 8)}`));
   const ws = (await (await app.api(who, 'GET', '/auth/me')).json()).workspaces[0].id;
   const decoders = [];
   for (const name of names) decoders.push(await (await app.api(who, 'POST', `/workspaces/${ws}/decoders`, { name })).json());
   const opened = await pageAs(browser, app, who, viewport ? { viewport } : {});
   t.after(() => opened.context.close());
+  for (const script of init) await opened.page.addInitScript(script);
   const [board] = decoders;
   await opened.page.addInitScript((pairing) => localStorage.setItem('tinylap-sim-decoder', JSON.stringify(pairing)), { decoder: board.id, token: board.token });
   simulating(t, 'tinylap,fast');
   await opened.page.goto('/personal/bridge');
+  // The simulated port, for its unplug() and send() (sim/serial-port.js).
+  await opened.page.evaluate(() => {
+    const real = navigator.serial.requestPort;
+    navigator.serial.requestPort = async (...args) => { window.__port = await real(...args); return window.__port; };
+  });
   const card = (d) => opened.page.locator(`[data-decoder="${d.id}"]`);
   const row = (d, which) => card(d).locator(`[data-row="${which}"]`);
   if (connect) {
@@ -632,9 +638,11 @@ test('joining the right password ends joined', async (t) => {
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'wifi-password');
   await page.locator('#wifi-password').fill('tinylap!');
   await dialog.getByRole('button', { name: 'Join network' }).click();
-  await dialog.getByText('Joined “Clubhaus”').waitFor();
+  await dialog.getByText('Joined “Clubhaus”', { exact: true }).waitFor();
   assert.equal(await dialog.locator('[data-result="joined"] .decoder-row-help').innerText(), 'Signal strong. Laps now also get through over Wi-Fi.');
-  assert.equal(await page.locator('[data-bridge-live]').textContent(), 'Joined “Clubhaus”.');
+  // The page outside a modal dialog is inert: the dialog speaks through its own live region, exposed while open.
+  assert.equal(await page.locator('#wifi-dialog [data-wifi-live]').textContent(), 'Joined “Clubhaus”.');
+  assert.match(await dialog.ariaSnapshot(), /- status: Joined “Clubhaus”\./);
   await dialog.getByRole('button', { name: 'Done' }).click();
   assert.equal(await page.locator('#wifi-dialog').evaluate((x) => x.open), false);
   assert.equal(await row(board, 'wifi').locator('[data-slot="state"]').innerText(), 'Connected to “Clubhaus”');
@@ -674,7 +682,7 @@ test('another network by name', async (t) => {
   await dialog.getByLabel('Network name').fill('Rennstrecke');
   await page.locator('#wifi-another-password').fill('tinylap!');
   await dialog.getByRole('button', { name: 'Join network' }).click();
-  await dialog.getByText('Joined “Rennstrecke”').waitFor();
+  await dialog.getByText('Joined “Rennstrecke”', { exact: true }).waitFor();
   await dialog.getByRole('button', { name: 'Done' }).click();
   assert.equal(await row(board, 'wifi').locator('[data-slot="state"]').innerText(), 'Connected to “Rennstrecke”');
   assert.deepEqual(errors, []);
@@ -685,7 +693,7 @@ test('open network skips the password', async (t) => {
   const dialog = await openWifi(page, card(board));
   await recordSteps(page);
   await dialog.getByRole('button', { name: /^Gäste/ }).click();
-  await dialog.getByText('Joined “Gäste”').waitFor();
+  await dialog.getByText('Joined “Gäste”', { exact: true }).waitFor();
   assert.deepEqual(await page.evaluate(() => window.__steps), ['joining', 'result']);
   assert.deepEqual(errors, []);
 });
@@ -715,10 +723,6 @@ test('no change wifi without the cable', async (t) => {
   await card(board).getByRole('button', { name: 'Connect decoder' }).waitFor();
   assert.equal(await page.locator('[data-bridge-wifi]').evaluateAll((xs) => xs.every((x) => x.hidden)), true, 'hidden on every card');
   assert.equal(await row(board, 'wifi').locator('[data-slot="detail"]').innerText(), 'Connect the cable to see its Wi-Fi.');
-  await page.evaluate(() => {
-    const real = navigator.serial.requestPort;
-    navigator.serial.requestPort = async (...args) => { window.__port = await real(...args); return window.__port; };
-  });
   await card(board).getByRole('button', { name: 'Connect decoder' }).click();
   await row(board, 'wifi').getByRole('button', { name: 'Set up Wi-Fi' }).waitFor();
   assert.equal(await row(decoders[1], 'wifi').locator('[data-bridge-wifi]').isVisible(), false, 'only on the cabled card');
@@ -746,5 +750,75 @@ test('show toggles the password', async (t) => {
   assert.equal(await field.getAttribute('type'), 'password');
   assert.equal(await dialog.getByRole('button', { name: 'Show password' }).textContent(), 'Show');
   assert.equal(await field.inputValue(), 'secret12');
+  assert.deepEqual(errors, []);
+});
+
+/** The simulated board never hears these commands, so the test answers for it through the port. @param {string[]} prefixes */
+const dropping = (prefixes) => [(list) => {
+  const Original = window.WritableStream;
+  window.WritableStream = class extends Original {
+    constructor(sink, ...rest) {
+      super(sink && { ...sink, write: (chunk, c) => {
+        if (list.some((p) => new TextDecoder().decode(chunk).startsWith(p))) return undefined;
+        return sink.write(chunk, c);
+      } }, ...rest);
+    }
+  };
+}, prefixes];
+
+test('a scan that finds nothing says so; one the decoder refuses says it couldn\'t look', async (t) => {
+  const [script, prefixes] = dropping(['%TLSCAN']);
+  const { page, errors, board, card } = await cabledPage(t, { init: [{ content: `(${script})(${JSON.stringify(prefixes)})` }] });
+  const answer = (line) => page.evaluate((l) => window.__port.send(new TextEncoder().encode(l)), line);
+  await card(board).locator('[data-bridge-wifi]').click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('[data-step="looking"]:not([hidden])').waitFor();
+  await answer('%TLSCANEND 0&');
+  await dialog.locator('[data-step="list"]:not([hidden])').waitFor();
+  const empty = dialog.locator('[data-scan="empty"]');
+  assert.equal(await empty.innerText(), 'No networks near the decoder. Look again, or enter another network.');
+  assert.equal(await dialog.locator('[data-scan="failed"]').isVisible(), false);
+  assert.equal(await dialog.locator('[data-slot="networks"]').isVisible(), false, 'no blank box');
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Look again');
+  await dialog.getByRole('button', { name: 'Look again' }).click();
+  await dialog.locator('[data-step="looking"]:not([hidden])').waitFor();
+  await answer('%TLERR scan&');
+  const failed = dialog.getByRole('alert');
+  await failed.waitFor();
+  assert.equal(await failed.innerText(), "The decoder couldn't look for networks. Look again.");
+  assert.equal(await empty.isVisible(), false);
+  assert.equal(await page.locator('#wifi-dialog [data-wifi-live]').textContent(), "The decoder couldn't look for networks. Look again.");
+  assert.equal(await dialog.getByRole('button', { name: 'Another network' }).isVisible(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('the decoder on the cable comes first, and goes back to its place when unplugged', async (t) => {
+  const { page, errors, decoders, row } = await cabledPage(t, { names: ['Zebra gate', 'Alpha gate'] });
+  const order = () => page.locator('#bridge-decoders [data-decoder] [data-slot="name"]').allTextContents();
+  assert.deepEqual(await order(), ['Zebra gate', 'Alpha gate']);
+  await page.evaluate(() => window.__port.unplug());
+  await row(decoders[0], 'cable').locator('[data-slot="state"]', { hasText: /^(Not connected|Connected on another laptop)$/ }).waitFor();
+  assert.deepEqual(await order(), ['Alpha gate', 'Zebra gate']);
+  assert.deepEqual(errors, []);
+});
+
+test('pulling the cable closes the dialog, with focus on the card\'s name', async (t) => {
+  const { page, errors, board, card } = await cabledPage(t);
+  await openWifi(page, card(board));
+  await page.evaluate(() => window.__port.unplug());
+  await page.locator('#wifi-dialog:not([open])').waitFor({ state: 'attached' });
+  // Focus moves in the dialog's close event, a task after close().
+  await page.waitForFunction(() => document.activeElement !== document.body);
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-slot')), 'name');
+  assert.equal(await page.evaluate(() => document.activeElement?.closest('[data-decoder]')?.getAttribute('data-decoder')), board.id);
+  assert.deepEqual(errors, []);
+});
+
+test('a decoder that never answers %TLNET& reads neutral, without Change Wi-Fi', async (t) => {
+  const [script, prefixes] = dropping(['%TLNET']);
+  const { errors, board, row } = await cabledPage(t, { init: [{ content: `(${script})(${JSON.stringify(prefixes)})` }] });
+  await row(board, 'wifi').locator('[data-slot="detail"]', { hasText: "This decoder doesn't report its Wi-Fi." }).waitFor({ timeout: 10_000 });
+  assert.equal(await row(board, 'wifi').locator('.lamp').getAttribute('data-state'), 'unknown');
+  assert.equal(await row(board, 'wifi').locator('[data-bridge-wifi]').isVisible(), false);
   assert.deepEqual(errors, []);
 });

@@ -62,7 +62,7 @@ test('two Connect buttons, the serial one first; the missing-API notes hidden; t
   assert.match(body, /<p>An EasyLap\? Use Connect EasyLap: it doesn't show up in the decoder list\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-missing="serial" hidden>This browser can't reach USB decoders, only an EasyLap\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-missing="hid" hidden>This browser can't reach an EasyLap, only other USB decoders\.<\/p>/);
-  assert.equal(body.match(/data-bridge-connect="last"/g).length, 2, 'Try another device and Connect again');
+  assert.equal(body.match(/data-bridge-connect="last"/g).length, 5, 'Try another device (listening, unpaired, unknown, choose) and Connect again');
   assert.match(body, /<label for="bridge-choose-name">Name for the new decoder<\/label>/);
   assert.equal(body.match(/>Decoder name</g).length, 1, 'exactly one "Decoder name" label');
   assert.match(body, /<h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this\?<\/h2>/, 'focusable, for focus after Connect');
@@ -110,4 +110,12 @@ test('the decoder cards: every decoder of the club by name, above the connect fl
   assert.equal(body.match(/data-bridge-wifi hidden>Change Wi-Fi</g).length, 2, 'a member who may pair has it, hidden until the cable is in');
   assert.match(body, /<dialog id="wifi-dialog"/);
   assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="disconnected"'), 'outside the cards, so a swap keeps it');
+});
+
+test('a wrong port is never a trap: the pair, re-pair and choose steps offer Try another device', async () => {
+  const body = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  for (const state of ['unpaired', 'unknown', 'choose', 'listening']) {
+    const section = new RegExp(`<section data-bridge-state="${state}"[\\s\\S]*?</section>`).exec(body)[0];
+    assert.match(section, /<button type="button" class="btn [a-z- ]+" data-bridge-connect="last">Try another device<\/button>/, state);
+  }
 });

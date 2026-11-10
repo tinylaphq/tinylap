@@ -60,10 +60,11 @@ const REFRESH_MS = 15_000;
 const quoted = (name) => `“${name}”`;
 /**
  * The Wi-Fi row of the decoder on this tab's cable, from its %TLNET (connections spec §2.1), or null before one came.
- * @param {Bridge['net']} net @param {boolean} mayChange
+ * @param {Bridge['net']} net @param {boolean} mayChange @param {boolean} [silent] it didn't answer %TLNET& (firmware without it)
  * @returns {{ state: string, signal?: string, words: string, detail: string }}
  */
-function netRow(net, mayChange) {
+function netRow(net, mayChange, silent = false) {
+  if (!net && silent) return { state: 'unknown', words: '', detail: "This decoder doesn't report its Wi-Fi." };
   if (!net) return { state: 'unknown', words: '', detail: 'Asking the decoder about its Wi-Fi…' };
   const name = quoted(net.name);
   if (net.state === 'off') return { state: 'off', words: 'Not set up', detail: 'With Wi-Fi, laps get through even with the cable out.' };
@@ -194,7 +195,7 @@ async function pick(which) {
  * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any,
  *   transport: 'serial' | 'hid' | null, list: { decoders: { id: string, name: string, lastSeenAt: number | null }[], serverNow: number | null } | null,
  *   remembered: string | null, devices: any, connecting: boolean, refreshing: Promise<void> | null, missing: string | null,
- *   timer: ReturnType<typeof setInterval> | null, wizard: WifiWizard | null }} Run
+ *   timer: ReturnType<typeof setInterval> | null, wizard: WifiWizard | null, silent: Bridge | null }} Run
  */
 
 class TlBridge extends HTMLElement {
@@ -211,7 +212,7 @@ class TlBridge extends HTMLElement {
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root || !supported) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
-      refreshing: null, missing: null, timer: null, wizard: null };
+      refreshing: null, missing: null, timer: null, wizard: null, silent: null };
     this.run = run;
     this.reset(run);
     const dialog = this.$(run, '#wifi-dialog');
@@ -219,7 +220,7 @@ class TlBridge extends HTMLElement {
       run.wizard = new WifiWizard(dialog, {
         bridge: () => (run === this.run ? run.bridge : null),
         announce: (text) => { if (run === this.run) this.announce(run, text); },
-        opener: (id) => this.$(run, `#bridge-decoders [data-decoder="${CSS.escape(id)}"] [data-bridge-wifi]`),
+        refocus: (id) => { if (run === this.run) this.refocus(run, { id, which: '[data-bridge-wifi]' }); },
         problem: (ssid, password) => this.wifiProblem(ssid, password),
       });
     }
@@ -514,7 +515,13 @@ class TlBridge extends HTMLElement {
       if (run.bridge !== next) return;
       this.paint(run);
       // A TinyLap decoder sends %TLNET at boot; one connected while running hasn't, so it is asked once it says who it is.
-      if (next.state === 'ready' && next.kind === 'tinylap' && !next.net) next.queryNet().catch(() => {});
+      if (next.state === 'ready' && next.kind === 'tinylap' && !next.net) {
+        next.queryNet().catch(() => {
+          if (run.bridge !== next || next.net) return;
+          run.silent = next;
+          this.paint(run);
+        });
+      }
       const state = next.state === 'idle' ? 'connecting' : next.state;
       if (state !== 'choose') {
         this.show(run, state);
@@ -569,12 +576,13 @@ class TlBridge extends HTMLElement {
       if (card.dataset.decoder !== id) this.uncable(run, card);
     }
     const card = id ? /** @type {HTMLElement | null} */ (list.querySelector(`[data-decoder="${CSS.escape(id)}"]`)) : null;
-    if (card && bridge) this.cable(card, bridge);
+    if (card && bridge) this.cable(card, bridge, run.silent === bridge);
     else if (id && run.missing !== id) {
       // A decoder paired since this page was rendered: its card comes from a fresh copy, once.
       run.missing = id;
       void this.refresh(run);
     }
+    this.arrange(run, list, card && bridge ? id : null);
     const busy = run.connecting || (bridge !== null && bridge.state !== 'disconnected');
     for (const button of /** @type {NodeListOf<HTMLButtonElement>} */ (list.querySelectorAll('[data-bridge-connect]'))) button.disabled = busy;
     for (const time of /** @type {NodeListOf<HTMLTimeElement>} */ (list.querySelectorAll('time[data-when]'))) {
@@ -597,9 +605,9 @@ class TlBridge extends HTMLElement {
   /**
    * Paints the decoder on this tab's cable over its card (connections spec §2.1, with the cable): Connected, and for a
    * TinyLap decoder its own Wi-Fi with Change Wi-Fi; a plain ZRound decoder or EasyLap has no Wi-Fi row.
-   * @param {HTMLElement} card @param {Bridge} bridge
+   * @param {HTMLElement} card @param {Bridge} bridge @param {boolean} [silent]
    */
-  cable(card, bridge) {
+  cable(card, bridge, silent = false) {
     card.dataset.cabled = '';
     /** @param {Element | null} row @param {{ state: string, signal?: string, words: string, detail: string }} view */
     const fill = (row, { state, signal, words, detail }) => {
@@ -621,7 +629,7 @@ class TlBridge extends HTMLElement {
     if (wifiRow) wifiRow.hidden = !tinylap;
     const change = /** @type {HTMLButtonElement | null} */ (wifiRow?.querySelector('[data-bridge-wifi]') ?? null);
     if (wifiRow && tinylap) {
-      fill(wifiRow, netRow(bridge.net, change !== null));
+      fill(wifiRow, netRow(bridge.net, change !== null, silent));
       for (const hint of /** @type {NodeListOf<HTMLElement>} */ (wifiRow.querySelectorAll('[data-slot="action"] > .decoder-row-help'))) hint.hidden = true;
       if (change) {
         change.hidden = !bridge.net;
@@ -637,6 +645,21 @@ class TlBridge extends HTMLElement {
       if (first && first.textContent !== text) first.textContent = text;
       for (const p of rest) p.remove();
     }
+  }
+
+  /**
+   * The decoder on the cable first, then the server's order (connections spec §2). Moves cards only when the order is
+   * off, keeping focus where it was. @param {Run} run @param {Element} list @param {string | null} cabled
+   */
+  arrange(run, list, cabled) {
+    const cards = /** @type {HTMLElement[]} */ ([...list.querySelectorAll(':scope > [data-decoder]')]);
+    const rank = new Map([...this.served.keys()].map((id, i) => [id, i]));
+    const place = (card) => (card.dataset.decoder === cabled ? -1 : rank.get(card.dataset.decoder ?? '') ?? rank.size);
+    const wanted = [...cards].sort((a, b) => place(a) - place(b));
+    if (wanted.every((card, i) => card === cards[i])) return;
+    const focus = this.focusOf(list);
+    list.append(...wanted);
+    this.refocus(run, focus);
   }
 
   /** The cable left this card: back to the server's copy, or a fresh one when there is none. @param {Run} run @param {HTMLElement} card */

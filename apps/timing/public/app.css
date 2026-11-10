@@ -403,6 +403,9 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .nets-title { font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--p-text); margin: 0; }
 .container .nets-list { list-style: none; padding: 0; margin: 0; }
 .container .nets-list > li { margin: 0; }
+.nets-list[hidden] { display: none; }
+.wifi-empty { font-size: 14px; color: var(--p-text-secondary); padding: var(--p-space-md); border: var(--p-border-width) dashed var(--p-border-dashed); }
+.nets [data-scan][hidden] { display: none; }
 .nets-list { border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); max-height: max(10rem, min(24rem, calc(100dvh - 26rem))); overflow-y: auto; overscroll-behavior: contain; }
 .nets-list > li + li { border-top: var(--p-border-thin) solid var(--p-border); }
 .net { display: grid; grid-template-columns: minmax(0, 1fr) 5.25rem 16px; gap: var(--p-space-sm); align-items: center; width: 100%; padding: var(--p-space-sm) var(--p-space-md); min-height: 48px; border: 0; background: none; font: 600 14px/1.35 var(--p-font); text-transform: none; letter-spacing: 0; color: var(--p-text); text-align: left; transition: none; }

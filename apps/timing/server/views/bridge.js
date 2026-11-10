@@ -17,6 +17,9 @@ export function bridgeImportMap(request) {
   return { tag: html`<script type="importmap">${safe(text)}</script>\n`, hash: `sha256-${createHash('sha256').update(text).digest('base64')}` };
 }
 
+// In the pair, re-pair and choose steps: a wrong port is never a trap (connections spec §2).
+const anotherDevice = html`<p><button type="button" class="btn btn-outline" data-bridge-connect="last">Try another device</button></p>`;
+
 /** @param {string} label @param {'serial' | 'hid' | 'last'} which @param {string} [style] */
 const connect = (label, which, style = 'btn-primary') => html`<button type="button" class="btn ${style} btn-lg" data-bridge-connect="${which}">${label}</button>`;
 
@@ -143,14 +146,17 @@ const outline = (label, action) => html`<button type="button" class="btn btn-out
  * hidden when neither) and [data-slot="signal"] (Strong, Fair, Weak). The
  * password step's [data-slot="error"] (hidden) takes a refusal. The result
  * step has [data-result="joined"] and [data-result="timeout"], both hidden.
- * The page has one live region ([data-bridge-live]): announce each step's
- * state there, as the rest of the bridge does.
+ * The list step's [data-scan="empty"] and [data-scan="failed"] (hidden) say
+ * that a scan found nothing or couldn't run. showModal() makes the page
+ * outside the dialog inert, so the dialog has its own live region
+ * ([data-wifi-live]): announce each step's state there while it is open.
  */
 export function wifiDialog() {
   const decoder = html`<span data-slot="decoder"></span>`;
   const network = html`<span data-slot="network"></span>`;
   const busy = (text) => html`<div class="wifi-state">${lamp('busy', WIFI_ICON)}<p class="decoder-row-state">${text}</p></div>`;
   return html`<dialog id="wifi-dialog" class="wifi-dialog" aria-labelledby="wifi-title-looking">
+    <p class="visually-hidden" role="status" data-wifi-live></p>
     <section class="wifi-step" data-step="looking" hidden>
       <h2 id="wifi-title-looking">Change Wi-Fi</h2>
       <p class="subtitle">${decoder}</p>
@@ -162,6 +168,8 @@ export function wifiDialog() {
       <p class="subtitle">${decoder}</p>
       <div class="nets">
         <div class="nets-head"><h3 class="nets-title" id="wifi-nets-title">Networks near the decoder</h3><button type="button" class="btn btn-sm btn-outline" data-wifi-action="again">Look again</button></div>
+        <p class="status status-error" role="alert" data-scan="failed" hidden>The decoder couldn't look for networks. Look again.</p>
+        <p class="wifi-empty" data-scan="empty" hidden>No networks near the decoder. Look again, or enter another network.</p>
         <ul class="nets-list" data-slot="networks" aria-labelledby="wifi-nets-title"></ul>
         <template data-wifi-row><li><button type="button" class="net" data-signal=""><span class="net-name"><span data-slot="name"></span><span class="net-note" data-slot="note" hidden></span></span><span class="net-meta"><span data-slot="signal"></span>${safe(BARS_ICON)}</span>${safe(CHEVRON_ICON)}</button></li></template>
         <p class="wifi-hint">Only 2.4 GHz networks show here.</p>
@@ -254,6 +262,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
         <div class="field"><label for="bridge-password">Wi-Fi password</label><input type="password" id="bridge-password" name="password" autocomplete="off"></div>
         <button type="submit" class="btn btn-primary">Pair</button>
       </form>
+      ${anotherDevice}
     </section>
     <section data-bridge-state="unknown" hidden class="card-static stack-md">
       <p class="status status-warning" data-bridge-unknown>This decoder's pairing isn't known here. Its passings before you pair it again weren't recorded.</p>
@@ -262,6 +271,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
         <div class="field"><label for="bridge-repair-name">Name for this decoder</label><input type="text" id="bridge-repair-name" name="name" value="Decoder" maxlength="60" required></div>
         <button type="submit" class="btn btn-primary">Pair again</button>
       </form>
+      ${anotherDevice}
     </section>
     <section data-bridge-state="choose" hidden class="card-static stack-md">
       <h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this?</h2>
@@ -274,6 +284,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
         ${textField({ label: 'Name for the new decoder', name: 'name', id: 'bridge-choose-name', maxlength: 60 })}
         <button type="submit" class="btn btn-primary">Use this decoder</button>
       </form>
+      ${anotherDevice}
     </section>
     <section data-bridge-state="ready" hidden class="stack-md">
       <div class="bridge-state" data-bridge-status-box>
