@@ -55,6 +55,7 @@ Today the IR task runs on core 0 (`main.cpp`, `xTaskCreatePinnedToCore(..., 0)`)
 ### 3.2 The Wi-Fi connection (`src/net.cpp`)
 
 - At power-up, if NVS holds Wi-Fi settings, the board joins that network in station mode and keeps rejoining with back-off (1 s, doubling to 30 s) when it drops.
+- It scans all channels and joins the **strongest** access point of that name, with PMF capable. A network often has several access points; ESP-IDF's default fast scan takes the first one heard, which may be distant and refuse the association (reason 203).
 - A new `%TLWIFI` replaces the settings and reconnects at once; no reboot.
 - With no settings stored, Wi-Fi stays off and the board works as today over the cable.
 - Power save: `WIFI_PS_MIN_MODEM` (the default) (call). Turning it off costs power but not accuracy, since the IR task no longer shares a core with Wi-Fi; the bench check in §3.1 may change this.

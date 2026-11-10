@@ -225,6 +225,12 @@ void netTask(void*) {
       wifi_config_t c = {};
       memcpy(c.sta.ssid, ssid.data(), std::min(ssid.size(), sizeof c.sta.ssid));
       memcpy(c.sta.password, password.data(), std::min(password.size(), sizeof c.sta.password));
+      // The strongest access point of that name, not the first one heard: a club or office network
+      // has several, and a distant one refuses the association (reason 203). PMF capable, so a
+      // WPA2/WPA3 network can use it.
+      c.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+      c.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+      c.sta.pmf_cfg.capable = true;
       esp_wifi_set_config(WIFI_IF_STA, &c);
       haveWifi = true;
       joining = connected = false;
