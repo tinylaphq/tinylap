@@ -217,7 +217,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       if (h.workspaceId !== workspaceId || decoder?.workspaceId !== workspaceId) continue;
       const last = Math.max(h.netAt ?? 0, h.cableAt ?? 0);
       if (t - last >= EXPECTED_FOR_MS) continue;
-      const state = t - last < OFFLINE_AFTER_MS ? 'reporting' : h.quiet ? 'idle' : offline.has(id) ? 'offline' : null;
+      const state = t - last < OFFLINE_AFTER_MS ? 'reporting' : h.quiet ? 'idle' : offline.has(id) || (h.lastVia === 'serial' && h.cableLogs) ? 'offline' : null;
       if (state) list.push({ id, name: decoder.name, state });
     }
     return list.sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
@@ -226,14 +226,17 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   /** Stores a batch (spec §5). Repeating it is safe. */
   function ingest({ workspaceId, decoder, via, batch }) {
     const receivedAt = now();
-    const h = heard.get(decoder) ?? { workspaceId, netAt: null, quiet: false, cableAt: null };
+    const h = heard.get(decoder) ?? { workspaceId, netAt: null, quiet: false, cableAt: null, lastVia: null, cableLogs: false };
     h.workspaceId = workspaceId;
     if (via === 'net') {
       h.netAt = receivedAt;
       h.quiet = batch.quiet === true;
     } else if (via === 'serial') {
       h.cableAt = receivedAt;
+      // A TinyLap decoder's cable batches carry its log lines; a plain ZRound decoder's carry passings only.
+      h.cableLogs = batch.logs?.length > 0;
     }
+    if (via === 'net' || via === 'serial') h.lastVia = via;
     heard.set(decoder, h);
     if (batch.quiet) expected.delete(decoder);
     else if (via === 'net' || expected.has(decoder)) expected.set(decoder, { workspaceId, lastAt: receivedAt });
@@ -333,7 +336,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       const key = JSON.stringify({ offline, header: headerOf(workspaceId, t) });
       if (key === (offlineShown.get(workspaceId) ?? '{"offline":[],"header":[]}')) continue;
       offlineShown.set(workspaceId, key);
-      hub.publish(workspaceId, 'decoders', { offline });
+      hub.publish(workspaceId, 'decoders', { offline, decoders: headerOf(workspaceId, t) });
     }
     for (const workspaceId of recordNews.keys()) {
       if (!recordNewOf(workspaceId, t)) clearRecord(workspaceId);

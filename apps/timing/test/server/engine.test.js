@@ -238,7 +238,7 @@ test('a wifi decoder silent for 25 s shows offline, and its next batch clears it
   engine.tick();
   assert.deepEqual(engine.snapshot(W).offline, [{ id: 'd1', name: 'Start line' }]);
   assert.deepEqual(engine.snapshot(W, { watcher: true }).offline, [{ id: 'd1', name: 'Start line' }]);
-  assert.deepEqual(offlineEvents(events).at(-1).data, { offline: [{ id: 'd1', name: 'Start line' }] });
+  assert.deepEqual(offlineEvents(events).at(-1).data, { offline: [{ id: 'd1', name: 'Start line' }], decoders: [{ id: 'd1', name: 'Start line', state: 'offline' }] });
   beat(engine);
   engine.tick();
   assert.deepEqual(engine.snapshot(W).offline, []);
@@ -315,7 +315,7 @@ test('the decoders event goes to watchers too', () => {
   beat(engine);
   clock.now = T0 + 25_000;
   engine.tick();
-  assert.deepEqual(offlineEvents(seen).map((e) => e.data), [{ offline: [{ id: 'd1', name: 'Start line' }] }]);
+  assert.deepEqual(offlineEvents(seen).map((e) => e.data), [{ offline: [{ id: 'd1', name: 'Start line' }], decoders: [{ id: 'd1', name: 'Start line', state: 'offline' }] }]);
 });
 
 const connection = (engine, id = 'd1') => engine.connectionsOf(W).find((d) => d.id === id);
@@ -394,4 +394,22 @@ test('decoders event on a state change only', () => {
   assert.equal(count(), first + 1);
   engine.tick();
   assert.equal(count(), first + 1);
+});
+
+test('a tinylap decoder silent on the cable reads not reporting', () => {
+  const { engine, clock } = withDecoder();
+  beat(engine, 'serial', { logs: ['boot'] });
+  clock.now = T0 + 24_000;
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
+  clock.now = T0 + 25_000;
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline']);
+  clock.now = T0 + 30 * 60_000;
+  assert.deepEqual(engine.headerOf(W), []);
+});
+
+test('a passings-only cable decoder disappears after 25 s', () => {
+  const { engine, clock } = withDecoder();
+  beat(engine, 'serial');
+  clock.now = T0 + 25_000;
+  assert.deepEqual(engine.headerOf(W), []);
 });
