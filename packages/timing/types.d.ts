@@ -99,6 +99,13 @@ export type ZroundMessage =
   | { type: 'pair'; decoder: string; token: string }
   | { type: 'wifi'; ssid: string; password: string }
   | { type: 'server'; url: string }
+  | { type: 'net-query' }
+  | { type: 'scan' }
+  | { type: 'join'; name: string; password: string }
+  | { type: 'net'; state: 'off' | 'joining' | 'connected' | 'failed'; name: string; signal: number; cause: 'none' | 'password' | 'notfound' | 'other' }
+  | { type: 'ap'; name: string; signal: number; open: boolean }
+  | { type: 'scan-end'; count: number }
+  | { type: 'joined'; cause: 'ok' | 'password' | 'notfound' | 'other' | 'timeout' }
   | { type: 'ok' }
   | { type: 'error'; text: string }
   | { type: 'unknown'; raw: string };

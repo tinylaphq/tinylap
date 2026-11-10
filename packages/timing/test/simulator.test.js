@@ -71,12 +71,12 @@ test('noise: a double read comes 50 to 300 ms later, and a miss drops the crossi
 const vectors = JSON.parse(readFileSync(new URL('./zround-vectors.json', import.meta.url), 'utf8'));
 const stat = (up, pass) => `%TLLOG stat up=${up} batches=${pass * 8} frames=${pass * 8} rej.start=0 rej.bit=0 rej.stop=0 rej.short=0 rej.burst=0 rej.long=0 rej.parity=0 overflow=0 ringlow=8192 qdrop=0 pass=${pass} single=0 quiet=0 minlap=0 rxdrop=0 suppressed=0 heap=200000&`;
 
-test('start gives %TLID, then %TLLOG boot', () => {
+test('start gives %TLID, %TLNET, then %TLLOG boot', () => {
   const sim = createSimulator({ cars: [], decoder: 'dec_1' });
   const before = sim.boot;
   const lines = sim.start(0);
   assert.notEqual(sim.boot, before, 'a new boot');
-  assert.deepEqual(lines, [`%TLID dec_1 ${sim.boot}&`, '%TLLOG boot reason=poweron fw=sim&']);
+  assert.deepEqual(lines, [`%TLID dec_1 ${sim.boot}&`, '%TLNET off  0 none&', '%TLLOG boot reason=poweron fw=sim&']);
 });
 
 test('%T3E8& comes first, then one a second, caught up after a late tick', () => {
@@ -148,4 +148,44 @@ test('%TLSERVER answers through the server vectors', () => {
   for (const { url, reply } of vectors.server) {
     assert.deepEqual(sim.reply(parseMessage(`TLSERVER ${url}`), 0), [reply], url);
   }
+});
+
+const network = (name, signal, open = false) => ({ name, signal, open });
+const lineOf = (m) => parseMessage(m.slice(1, -1));
+
+test('a scan lists networks then ends', () => {
+  const sim = createSimulator({ cars: [], networks: [network('Weak', -80), network('Clubhaus', -50, true), network('Büro', -65)] });
+  const lines = sim.reply({ type: 'scan' }, 0).map(lineOf);
+  assert.deepEqual(lines, [
+    { type: 'ap', name: 'Clubhaus', signal: -50, open: true },
+    { type: 'ap', name: 'Büro', signal: -65, open: false },
+    { type: 'ap', name: 'Weak', signal: -80, open: false },
+    { type: 'scan-end', count: 3 },
+  ]);
+  assert.equal(createSimulator({ cars: [] }).reply({ type: 'scan' }, 0).length > 25, true, 'the default list has 25 networks');
+});
+
+test('a wrong password keeps the old network', () => {
+  const sim = createSimulator({ cars: [], networks: [network('Clubhaus', -50), network('Open', -60, true)], wifiPassword: 'tinylap!' });
+  assert.deepEqual(sim.reply({ type: 'net-query' }, 0).map(lineOf), [{ type: 'net', state: 'off', name: '', signal: 0, cause: 'none' }]);
+  assert.deepEqual(sim.reply({ type: 'join', name: 'Clubhaus', password: 'tinylap!' }, 0).map(lineOf).at(-1), { type: 'joined', cause: 'ok' });
+  const wrong = sim.reply({ type: 'join', name: 'Clubhaus', password: 'wrong-pass' }, 1).map(lineOf);
+  assert.deepEqual(wrong, [
+    { type: 'net', state: 'joining', name: 'Clubhaus', signal: 0, cause: 'none' },
+    { type: 'net', state: 'connected', name: 'Clubhaus', signal: -50, cause: 'none' },
+    { type: 'joined', cause: 'password' },
+  ]);
+  assert.deepEqual(sim.reply({ type: 'join', name: 'Nowhere', password: 'tinylap!' }, 2).map(lineOf).at(-1), { type: 'joined', cause: 'notfound' });
+  assert.deepEqual(sim.reply({ type: 'join', name: 'Open', password: '' }, 3).map(lineOf).at(-1), { type: 'joined', cause: 'ok' });
+  assert.deepEqual(sim.reply({ type: 'net-query' }, 4).map(lineOf), [{ type: 'net', state: 'connected', name: 'Open', signal: -60, cause: 'none' }]);
+  assert.deepEqual(sim.reply({ type: 'join', name: 'x', password: 'short' }, 5), ['%TLERR Wi-Fi password length&']);
+});
+
+test('net is sent after every boot', () => {
+  const sim = createSimulator({ cars: [] });
+  const lines = sim.start(0);
+  assert.equal(lines[0], `%TLID - ${sim.boot}&`);
+  assert.deepEqual(lineOf(lines[1]), { type: 'net', state: 'off', name: '', signal: 0, cause: 'none' });
+  const again = sim.start(1000);
+  assert.deepEqual(lineOf(again[1]), { type: 'net', state: 'off', name: '', signal: 0, cause: 'none' });
 });
