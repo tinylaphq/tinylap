@@ -538,6 +538,8 @@ test('every live board says whether each decoder is reporting, idle or not repor
   for (const body of await Promise.all(await pages())) {
     assert.match(body, /<li class="board-decoder is-offline">Start &lt;b&gt;: not reporting<\/li>/);
     assert.match(body, /<li class="board-decoder is-idle">Pit: idle<\/li>/, 'its last batch said quiet');
+    assert.ok(body.indexOf('Pit: idle') < body.indexOf('Start &lt;b&gt;: not reporting'), 'sorted by name');
+    assert.match(body, /<ul class="board-decoders" role="list" aria-label="Decoders">/);
   }
   app.engine.start(club.id, { kind: 'practice', replace: true });
   for (const body of await Promise.all(await pages())) assert.match(body, /Start &lt;b&gt;: not reporting/, 'during a session');

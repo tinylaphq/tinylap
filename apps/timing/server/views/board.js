@@ -33,7 +33,7 @@ const recordLine = (snap, r) => html`<span class="num board-track-time">${format
 function decoderStates(snap) {
   const words = { reporting: 'reporting', idle: 'idle', offline: 'not reporting' };
   if (!snap.decoders?.length) return null;
-  return html`<ul class="board-decoders">${snap.decoders.map((d) => html`<li class="board-decoder is-${d.state}">${d.name}: ${words[d.state]}</li>`)}</ul>`;
+  return html`<ul class="board-decoders" role="list" aria-label="Decoders">${snap.decoders.map((d) => html`<li class="board-decoder is-${d.state}">${d.name}: ${words[d.state]}</li>`)}</ul>`;
 }
 
 /**

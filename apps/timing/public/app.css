@@ -855,6 +855,7 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .board-decoder { display: inline-flex; align-items: center; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
 .board-decoder::before { content: ''; flex: none; width: 0.6em; height: 0.6em; margin-right: 0.4em; background: var(--p-text-secondary); }
 .board-decoder.is-reporting::before { background: var(--p-success); }
+.board-decoder.is-offline { color: var(--p-error-text); }
 .board-decoder.is-offline::before { background: var(--p-error); }
 .board-decoder.is-idle { color: var(--p-text-secondary); }
 .board-track.is-record .board-decoder { color: inherit; }
