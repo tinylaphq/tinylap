@@ -317,6 +317,104 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 [data-state="error"] .tap-state { background: var(--p-error); color: var(--p-text); }
 .tap-bar:has(#tap-alert > *) .tap-result:empty { display: none; }
 
+/* The decoder cards (connections spec §2): one card per decoder, one row per
+   connection: a lamp, what it is, its state in words, one line of help, at
+   most one action. One spacing scale: md between the card's blocks, lg
+   between rows, sm inside a row. */
+#bridge-decoders { margin-bottom: var(--p-space-lg); }
+#bridge > [data-bridge-state="unsupported"] { margin-bottom: var(--p-space-lg); }
+.decoder-card { display: grid; gap: var(--p-space-md); }
+.decoder-card > h2, .decoder-card > .status { margin: 0; }
+.decoder-card > .status p { margin: 0; }
+.decoder-card > .status p + p { margin-top: var(--p-space-xs); font-weight: 400; }
+.container .decoder-rows { list-style: none; padding: 0; margin: 0; }
+.container .decoder-rows > li { margin: 0; }
+.decoder-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: var(--p-space-md); align-items: start; padding-block: var(--p-space-lg); }
+.decoder-row + .decoder-row { border-top: var(--p-border-thin) solid var(--p-border); }
+.decoder-row:first-child { padding-top: 0; }
+.decoder-row:last-child { padding-bottom: 0; }
+.decoder-row-name { font-size: 13px; color: var(--p-text-muted); margin: 0; }
+.decoder-row-state { font-size: 1.0625rem; font-weight: 700; line-height: 1.3; margin: 0; overflow-wrap: anywhere; }
+.decoder-row-help { font-size: 0.875rem; line-height: 1.45; color: var(--p-text-secondary); margin: var(--p-space-xs) 0 0; }
+.decoder-row-state:empty, .decoder-row-help:empty, .decoder-row-action:empty { display: none; }
+.decoder-row time { white-space: nowrap; }
+/* The one action sits under its words. */
+.decoder-row-action { grid-column: 2; display: grid; justify-items: start; gap: var(--p-space-sm); }
+.decoder-row-action > .btn { margin-top: var(--p-space-sm); }
+.decoder-row-action > .decoder-row-help + .btn { margin-top: 0; }
+/* Where the browser can't reach USB decoders (or tl-bridge can't run), no Connect decoder: it couldn't work. */
+#bridge:has([data-bridge-missing="serial"]:not([hidden]), [data-bridge-state="unsupported"]:not([hidden])) #bridge-decoders [data-bridge-connect] { display: none; }
+.decoder-empty > p { margin: 0; }
+.decoder-empty > p + p { margin-top: var(--p-space-md); }
+.bridge-more p { margin-bottom: 0; }
+
+/* The lamp: always a 44px square. Each state shows in colour, icon shape and
+   the row's words, never colour alone. Red only for a fault. */
+.lamp { box-sizing: border-box; flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); color: var(--p-text); }
+.lamp svg { display: block; width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.lamp[data-state="ok"] { background: var(--p-success); }
+.lamp[data-state="busy"] { background: var(--p-info); }
+/* A fault: red, and the device's own "no signal", the dot with its arcs empty. */
+.lamp[data-state="fail"] { background: var(--p-error); }
+.lamp[data-state="fail"] .wifi-arc, .lamp[data-state="unknown"] .wifi-arc { opacity: .3; }
+/* Off or not set up is not a fault: no colour, a dashed edge, the icon faint. */
+.lamp[data-state="off"] { background: var(--p-surface-inset); border-style: dashed; border-color: var(--p-border-dashed); color: var(--p-text-faint); }
+.wifi-dot { fill: currentColor; stroke: none; }
+.lamp[data-signal="fair"] .wifi-a3, .lamp[data-signal="weak"] .wifi-a3, .lamp[data-signal="weak"] .wifi-a2 { opacity: .3; }
+.lamp[data-state="busy"] .wifi-arc { animation: wifi-join 1.2s steps(1) infinite; }
+.lamp[data-state="busy"] .wifi-a2 { animation-delay: .3s; }
+.lamp[data-state="busy"] .wifi-a3 { animation-delay: .6s; }
+@keyframes wifi-join { 0% { opacity: .25; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .lamp[data-state="busy"] .wifi-arc { animation: none; } }
+/* The cable: in, the plug is filled; out, it hangs apart from its socket. */
+.lamp[data-state="ok"] .plug-body { fill: currentColor; }
+.lamp[data-state="off"] .plug { transform: translateY(4px); }
+
+/* The Change Wi-Fi dialog (connections spec §5). One rhythm: palace's dialog
+   padding on every side; title, subtitle, then the step's blocks md apart;
+   the actions below, right-aligned, the primary last. Never taller than the window. */
+.wifi-dialog:modal { max-height: calc(100dvh - 2 * var(--p-space-md)); max-width: min(var(--p-container-narrow), calc(100vw - 2 * var(--p-space-md))); overflow-y: auto; }
+.wifi-step { display: grid; gap: var(--p-space-md); }
+.wifi-step[hidden] { display: none; }
+.wifi-step > h2, .wifi-step > .subtitle { margin: 0; }
+.wifi-step > .subtitle { margin-top: calc(var(--p-space-xs) - var(--p-space-md)); }
+.wifi-step p { margin: 0; }
+.wifi-dialog .wifi-menu { justify-content: flex-end; flex-wrap: wrap; margin: var(--p-space-sm) 0 0; }
+.wifi-dialog .wifi-menu .btn { flex: none; }
+.wifi-hint { font-size: 13px; color: var(--p-text-muted); }
+.wifi-dialog > .wifi-note { margin: var(--p-space-lg) 0 0; }
+.wifi-state { display: flex; gap: var(--p-space-md); align-items: center; padding: var(--p-space-md); border: var(--p-border-width) solid var(--p-text); }
+.wifi-state[hidden] { display: none; }
+.wifi-state:has(> .lamp[data-state="busy"]) { border-style: dashed; border-color: var(--p-border-dashed); }
+.wifi-dialog .field-hint { font-size: 13px; font-weight: 400; color: var(--p-text-muted); margin: 0; }
+.wifi-dialog .field { gap: var(--p-space-sm); }
+
+/* The networks: one box, rows under thin rules; a row is a button, hover and
+   focus its only states. Its signal is a fixed column, so bars and chevrons
+   line up; the name takes what is left and wraps under itself. */
+.nets { display: grid; gap: var(--p-space-sm); min-width: 0; }
+.nets-head { display: flex; justify-content: space-between; align-items: center; gap: var(--p-space-md); }
+.nets-title { font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--p-text); margin: 0; }
+.container .nets-list { list-style: none; padding: 0; margin: 0; }
+.container .nets-list > li { margin: 0; }
+.nets-list { border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); max-height: max(10rem, min(24rem, calc(100dvh - 26rem))); overflow-y: auto; overscroll-behavior: contain; }
+.nets-list > li + li { border-top: var(--p-border-thin) solid var(--p-border); }
+.net { display: grid; grid-template-columns: minmax(0, 1fr) 5.25rem 16px; gap: var(--p-space-sm); align-items: center; width: 100%; padding: var(--p-space-sm) var(--p-space-md); min-height: 48px; border: 0; background: none; font: 600 14px/1.35 var(--p-font); text-transform: none; letter-spacing: 0; color: var(--p-text); text-align: left; transition: none; }
+.net:hover { background: var(--p-hover-bg); transform: none; box-shadow: none; }
+.net:focus-visible { outline: var(--p-border-width) solid var(--p-accent-2); outline-offset: -4px; transform: none; box-shadow: none; }
+.net-name { overflow-wrap: anywhere; }
+.net-note { display: block; font-size: 12px; font-weight: 400; color: var(--p-text-muted); margin-top: 2px; }
+.net-note[hidden] { display: none; }
+.net-meta { display: flex; justify-content: flex-end; align-items: center; gap: var(--p-space-sm); font-size: 12px; font-weight: 400; color: var(--p-text-muted); white-space: nowrap; }
+.bars { flex: none; width: 16px; height: 14px; fill: currentColor; }
+.bars rect { opacity: .25; }
+[data-signal="strong"] .bars rect, [data-signal="fair"] .bars rect:nth-child(-n+2), [data-signal="weak"] .bars rect:first-child { opacity: 1; }
+.chev { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--p-text-muted); }
+/* Outside the list's box: a sentence and its button on the list's right edge; on a phone, the button goes under. */
+.nets-other { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--p-space-sm) var(--p-space-md); font-size: 14px; }
+.nets-other .btn { margin-left: auto; }
+@media (max-width: 420px) { .net { padding-inline: var(--p-space-sm); } }
+
 /* The two Connect buttons share a line when they fit, and keep a gap when they wrap. */
 p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); }
 

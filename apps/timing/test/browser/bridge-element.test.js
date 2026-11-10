@@ -120,7 +120,7 @@ async function toPairing(t, { viewport, init = [] } = {}) {
   for (const script of init) await who.page.addInitScript(script);
   simulating(t, 'tinylap,fast');
   await who.page.goto('/personal/bridge');
-  await who.page.getByRole('button', { name: 'Connect decoder' }).click();
+  await who.page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await who.page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   return who;
 }
@@ -142,7 +142,7 @@ test('E1a: tl-bridge starts the page, and Connect opens one port', async (t) => 
   await page.addInitScript(COUNT);
   simulating(t, 'tinylap,fast');
   await page.goto('/personal/bridge');
-  const connect = page.getByRole('button', { name: 'Connect decoder' });
+  const connect = page.getByRole('button', { name: 'Connect decoder' }).first();
   await connect.waitFor();
   assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-bridge'))), true);
   assert.equal((await counts(page)).opened, 0);
@@ -222,7 +222,7 @@ test('E3a: a removal right after the click opens nothing', async (t) => {
   await page.addInitScript(COUNT);
   simulating(t, 'tinylap,fast');
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().waitFor();
   const seen = apiRequests(page);
   await page.evaluate(() => {
     const el = document.querySelector('tl-bridge');
@@ -243,7 +243,7 @@ test('E3b: a removal during the start writes nothing and closes the port it open
   await page.addInitScript(COUNT);
   simulating(t, 'tinylap,fast');
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().waitFor();
   await page.evaluate(() => {
     const el = document.querySelector('tl-bridge');
     window.__el = el;
@@ -279,7 +279,7 @@ test('E3b: a removal during the start writes nothing and closes the port it open
 
 /** E4's checks after a move or a swap, from a failed pairing, then a fresh Connect and Pair. */
 async function afterRestart(page, name) {
-  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().waitFor();
   assert.equal(await page.getByRole('alert').count(), 0, 'no alert');
   assert.equal(await page.locator('#bridge-name').evaluate((x) => x.readOnly), false, 'the name is editable');
   assert.equal(await page.locator('[data-bridge-pair] button[type="submit"]').evaluate((x) => x.disabled), false, 'Pair is enabled');
@@ -287,7 +287,7 @@ async function afterRestart(page, name) {
   const before = app.store.decoders(personal).length;
   const { opened } = await counts(page);
   const seen = apiRequests(page);
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   assert.equal((await counts(page)).opened, opened + 1, 'one click, one port');
   await page.getByLabel('Decoder name').fill(name);
@@ -332,13 +332,13 @@ test('E4c: after a move, one click opens one picker, and closing it is no error'
   t.after(() => context.close());
   await page.addInitScript(SERIAL);
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().waitFor();
   await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.waitForTimeout(300);
   assert.equal(await page.evaluate(() => window.__picks), 1, 'one click, one picker');
   assert.equal(await page.getByRole('alert').count(), 0);
-  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), true);
   assert.deepEqual(errors, []);
 });
 
@@ -362,7 +362,7 @@ test('E6: a pairing answer that lands after a move writes nothing', async (t) =>
   release();
   await finished;
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), true);
   assert.equal(await page.getByLabel('Decoder name').isEditable(), true);
   assert.equal(await page.getByRole('alert').count(), 0);
   assert.equal(app.store.decoders(personal).length, before + 1);
@@ -382,7 +382,7 @@ test('E7: after a move, the old pairing\'s answer leaves the new pairing\'s butt
   await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await posted(1);
   await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   await page.getByLabel('Decoder name').fill('New run');
   await page.getByRole('button', { name: 'Pair', exact: true }).click();
@@ -408,7 +408,7 @@ test('E3c: a removal while the decoder-list GET is held opens nothing', async (t
   await page.route('**/workspaces/*/decoders', async (route) => { if (route.request().method() === 'GET') await held; await route.continue(); });
   simulating(t, 'zround,fast');
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().waitFor();
   const listed = page.waitForRequest((r) => r.method() === 'GET' && /^\/workspaces\/[^/]+\/decoders$/.test(new URL(r.url()).pathname));
   await page.evaluate(() => {
     const el = document.querySelector('tl-bridge');
@@ -439,13 +439,13 @@ test('E4d: a move puts the choose form back as the server rendered it', async (t
   await page.goto('/personal/bridge');
   await page.evaluate(async ([w, id]) => (await (await import('/public/devices.js')).openDevices()).remember(w, 'serial:1027:24577', id), [personal, mine.id]);
   await page.reload();
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Is this Mine 4d?' }).waitFor({ timeout: 30_000 });
   assert.equal(await page.locator(`#bridge-choose option[value="${busy.id}"]`).isDisabled(), true);
   assert.equal(await page.locator('#bridge-choose').inputValue(), mine.id);
   assert.equal(await page.locator(`#bridge-choose option[value="${mine.id}"]`).innerText(), 'Mine 4d (in use)');
   await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
-  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().waitFor();
   const form = await page.evaluate(() => ({
     heading: document.querySelector('[data-bridge-choose-heading]').textContent,
     options: [...document.querySelectorAll('#bridge-choose option')].map((o) => [o.textContent, /** @type {HTMLOptionElement} */ (o).disabled, o.getAttribute('data-name')]),
@@ -471,7 +471,7 @@ test('E6c: a choose POST that lands after a move writes nothing: no remember, no
   });
   simulating(t, 'zround,fast');
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 30_000 });
   await page.getByLabel('Name for the new decoder').fill('Late plain');
   await page.getByRole('button', { name: 'Use this decoder' }).click();
@@ -482,7 +482,7 @@ test('E6c: a choose POST that lands after a move writes nothing: no remember, no
   const request = await finished;
   assert.equal((await request.response()).status(), 201, 'the held POST made the decoder');
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), true);
   assert.equal(await page.getByText('Forwarding from Late plain').count(), 0);
   const remembered = await page.evaluate(async (w) => (await (await import('/public/devices.js')).openDevices()).recall(w, 'serial:1027:24577'), personal);
   assert.equal(remembered, null);
@@ -497,7 +497,7 @@ test('E3e: a double click on Connect, and a click while the decoder-list GET is 
   await page.route('**/workspaces/*/decoders', async (route) => { if (route.request().method() === 'GET') await held; await route.continue(); });
   simulating(t, 'zround,fast');
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).waitFor();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().waitFor();
   await page.evaluate(() => {
     Object.assign(window, { __picks: 0, __opens: 0 });
     const real = navigator.serial.requestPort;
@@ -510,7 +510,7 @@ test('E3e: a double click on Connect, and a click while the decoder-list GET is 
     };
   });
   const listed = page.waitForRequest((r) => r.method() === 'GET' && /^\/workspaces\/[^/]+\/decoders$/.test(new URL(r.url()).pathname));
-  await page.getByRole('button', { name: 'Connect decoder' }).dblclick();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().dblclick();
   await listed;
   assert.deepEqual(await page.evaluate(`(${shownIn})(document.querySelector('tl-bridge'))`), ['connecting'], 'connecting shows while the GET is held');
   await page.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('[data-bridge-connect="serial"]')).click());

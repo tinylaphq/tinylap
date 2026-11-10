@@ -14,7 +14,7 @@ test('with WebHID only, just Connect EasyLap is offered, and the note says USB d
   await page.addInitScript(() => { delete Navigator.prototype.serial; });
   await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect EasyLap' }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), false);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), false);
   assert.equal(await page.getByText("This browser can't reach USB decoders, only an EasyLap.").isVisible(), true);
   assert.equal(await page.getByText("This browser can't reach an EasyLap, only other USB decoders.").isVisible(), false);
   assert.deepEqual(errors, []);
@@ -24,7 +24,7 @@ test('D7: a device that says nothing is listening, not an error, and Try another
   const { page, errors } = await fresh(t);
   await page.addInitScript(SILENT_SERIAL);
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByText('Connected, but nothing has come from this device yet.').waitFor({ timeout: 20_000 });
   assert.equal(await page.getByRole('alert').count(), 0);
   await page.getByRole('button', { name: 'Try another device' }).click();
@@ -39,9 +39,9 @@ test('D8: with the setting easylap,fast, Connect decoder is a closed picker, bot
   await page.goto('/personal/bridge');
   assert.equal(await page.getByText("This browser can't reach USB decoders, only an EasyLap.").isVisible(), false);
   assert.equal(await page.getByText("This browser can't reach an EasyLap, only other USB decoders.").isVisible(), false);
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.waitForTimeout(500);
-  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), true);
   assert.equal(await page.getByRole('alert').count(), 0);
   await page.getByRole('button', { name: 'Connect EasyLap' }).click();
   await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
@@ -205,7 +205,7 @@ test('a TinyLap decoder that disconnects keeps the gap note hidden', async (t) =
   await page.addInitScript(UNPLUG);
   simulating(t, 'tinylap,fast');
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor({ timeout: 20_000 });
   await page.getByLabel('Decoder name').fill('Gate');
   await page.getByRole('button', { name: 'Pair' }).click();
@@ -226,7 +226,7 @@ test('a plain ZRound decoder that disconnects while still undecided shows no gap
     } } });
   });
   await page.goto('/personal/bridge');
-  await page.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByText('Connected, but nothing has come from this device yet.').waitFor({ timeout: 20_000 });
   await page.evaluate(() => /** @type {any} */ (window).__unplug());
   await page.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor({ timeout: 10_000 });

@@ -92,3 +92,22 @@ test('the choose list: the club\'s decoders, escaped, "A new decoder" last; none
   // data-known names every decoder the server knew, the one on Wi-Fi too, so tl-bridge doesn't take it for a new one.
   assert.match(body, new RegExp(`<select id="bridge-choose" name="decoder" data-known="${gate.id} ${wifi.id}" aria-describedby="bridge-choose-hint">`));
 });
+
+test('the decoder cards: every decoder of the club by name, above the connect flow, with the Wi-Fi dialog closed beside them', async () => {
+  const ana = await app.signUp('Cara');
+  const club = app.club(ana, 'Pits');
+  const cara = await app.login(ana);
+  const zed = await (await app.api(cara, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Zed' })).json();
+  const gate = await (await app.api(cara, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+  const sent = await fetch(`${app.base}/decoders/${zed.id}/passings`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${zed.token}` }, body: JSON.stringify({ boot: 'b00tb00t', passings: [{ transponder: '0A', t: 1000 }] }) });
+  assert.equal(sent.status, 200);
+  const body = await (await app.api(cara, 'GET', `/clubs/${club.id}/bridge`, undefined, { accept: 'text/html' })).text();
+  assert.deepEqual([...body.matchAll(/data-decoder="([^"]+)"/g)].map((m) => m[1]), [gate.id, zed.id], 'by name');
+  const cards = body.indexOf('<div id="bridge-decoders">');
+  assert.ok(cards > body.indexOf('data-bridge-error') && cards < body.indexOf('data-bridge-state="connect"'), 'under the error, above the flow');
+  assert.match(body, /Laps get through over Wi-Fi\./);
+  assert.match(body, /If it's on, its laps wait on it\. Connect the cable to see why\./);
+  assert.equal(body.match(/data-bridge-wifi hidden>Change Wi-Fi</g).length, 2, 'a member who may pair has it, hidden until the cable is in');
+  assert.match(body, /<dialog id="wifi-dialog"/);
+  assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="disconnected"'), 'outside the cards, so a swap keeps it');
+});
