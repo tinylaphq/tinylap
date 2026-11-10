@@ -4,7 +4,7 @@
 #include "diag.h"
 #include "uplink.h"
 
-// Wi-Fi delivery (Wi-Fi spec §3): a task on core 0 owns the Wi-Fi and the HTTP client, and every
+// Wi-Fi delivery (Wi-Fi spec §3): a task on core 1, beside loop(), owns the Wi-Fi and the HTTP client, and every
 // Uplink call goes through one mutex. These are setup()'s and loop()'s; none writes Serial (spec §2.4).
 namespace net {
 
