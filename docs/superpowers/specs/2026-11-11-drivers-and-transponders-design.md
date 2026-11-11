@@ -1,6 +1,6 @@
 # Drivers and transponders: design
 
-Assigning a transponder to a driver takes one form wherever you come from: the board's warning, Setup, or a page that collects all new transponders at once. A driver can have several transponders, and an optional short label tells them apart. Drivers get an avatar (initials on their colour, or a picture). The top of the live board and Setup's current track stop using a left bar, which in palace means a selected list item. Paths are relative to the repository root.
+Assigning a transponder to a driver takes one form wherever you come from: the board's warning, Setup, or a page that collects all new transponders at once. A driver can have several transponders, and an optional short label tells them apart. Drivers get an avatar: their initials on their colour. There are no pictures: a big club's members or a public race day's drivers would not upload any. The top of the live board and Setup's current track stop using a left bar, which in palace means a selected list item. Paths are relative to the repository root.
 
 Mark: **(call)** a choice made here that a builder may revisit if it fights the code.
 
@@ -23,7 +23,7 @@ Non-goals:
 
 No migration: there are no production users; the schema changes in place (call: reset the production database at deploy, after asking the owner).
 - `transponder` gains `label TEXT` (optional, at most 24 characters). `driver_id` stays: a driver has any number of transponders.
-- `driver` keeps `colour`. A new table `driver_picture (workspace_id, driver_id, type, bytes, updated_at)` holds an optional picture: JPEG, PNG or WebP, at most 2 MB, stored as uploaded (call: no resizing on the server; the page shows it at a fixed size with `object-fit: cover`). Served at `<space>/drivers/<id>/picture` with an ETag; members of the club only.
+- `driver` keeps `colour`; nothing else changes on it.
 - Forgetting a transponder deletes its row; its passings stay (they keep the code).
 
 ## 3. Pages
@@ -58,7 +58,7 @@ Assigning a transponder that belongs to another driver asks first. On the form (
 
 ### 3.5 The driver's page
 
-`<space>/drivers/<id>`, for members only: avatar or picture (upload or remove), name, colour, their transponders each with a label field and Remove, and **Best laps here**: for a driver with two or more labelled transponders, one line per transponder with its best lap, label and date, the best first ("7.701 Red Losi 9 Oct"); otherwise one line, without a label. This is the only place that says which transponder a lap was set with. Under the name the page keeps its normal spacing (the card's stack), with no inline margin overriding it. Every member has Setup rights (`timing.setup` for owner, admin and member), so there is no read-only variant; watchers never see it (§4).
+`<space>/drivers/<id>`, for members only: avatar, name, colour, their transponders each with a label field and Remove, and **Best laps here**: for a driver with two or more labelled transponders, one line per transponder with its best lap, label and date, the best first ("7.701 Red Losi 9 Oct"); otherwise one line, without a label. This is the only place that says which transponder a lap was set with. Under the name the page keeps its normal spacing (the card's stack), with no inline margin overriding it. Every member has Setup rights (`timing.setup` for owner, admin and member), so there is no read-only variant; watchers never see it (§4).
 
 ### 3.6 Collect: all new transponders in one go
 
@@ -69,7 +69,7 @@ Assigning a transponder that belongs to another driver asks first. On the form (
 - **Idle (no session), one unassigned transponder on the track:** the record card's right side shows the live "Transponder 41 is on the track", and quietly under it "Transponder 41 isn't assigned yet. **Assign it**" (to §3.3 with `returnTo` the board).
 - **Idle, several:** "Transponder 52 is on the track" (the latest crossing), and "3 transponders aren't assigned yet. **Assign them**" (to §3.6). No yellow box when idle: nothing is lost without a session.
 - **During a session:** the yellow box "Transponder 41 isn't assigned yet, so its laps aren't counted. **Assign it**" (or "Transponders 41 and 52 … **Assign them**").
-- **Rows:** the driver's colour marker and name, as today; no pictures on the board; the big board shows name and colour.
+- **Rows:** the driver's colour marker and name, as today; the big board shows name and colour.
 - **No transponder on the board.** Which transponder a lap was set with is shown only on the driver's page (§3.5). Watchers see no transponder numbers and nothing of unassigned transponders, as today (`watcherCrossing`).
 - **The crown belongs to the person, the mark column to the lap.** In standings (the leaderboard, the big board, a session's final table) the record holder's name is followed by the crown, from the moment they set the record; a long name is cut with "…" before it, so the crown always shows. It sits as far after the name as a mark sits after its time (`--mark-gap`, which scales on the big board), and lines up with the marks. It is a flat SVG crown, not the emoji: `--p-warning` fill, outlined like a mark's border, exactly as tall as a mark. In a flex row it needs a nudge onto the marks' line, since `vertical-align` does nothing there. Lap lists show no crown (one row per lap would repeat it), and the record card none (it says whose record it is).
 - **The mark column holds one mark at most: TR, SB or PB, the widest that is true** (track, then session, then personal). A record lap shows TR; the session's fastest lap shows SB, also when it is a PB. The column stays one mark wide. Marks sit `--p-space-sm` after their time (on the big board, a share of the board's font).
@@ -83,7 +83,7 @@ Assigning a transponder that belongs to another driver asks first. On the form (
 
 ## 5. Scope
 
-Page routes only. The JSON API (`PUT /transponders/{code}`), `openapi.json` and the MCP tools keep their current behaviour; the shared operation `ops.assignTransponder` keeps its signature, and new operations (label, remove, forget, move, assign to a new driver, pictures) are added beside it for the pages (call: API and MCP follow later).
+Page routes only. The JSON API (`PUT /transponders/{code}`), `openapi.json` and the MCP tools keep their current behaviour; the shared operation `ops.assignTransponder` keeps its signature, and new operations (label, remove, forget, move, assign to a new driver) are added beside it for the pages (call: API and MCP follow later).
 
 ## 6. Words
 
@@ -91,12 +91,11 @@ Assign, Move, Remove, Forget, Assign it, Assign them, Add 41 to Simon, SB (Sessi
 
 ## 7. Tests
 
-- Store/operations: assign, add a second, label only stored when given, move between drivers, remove (back to unassigned), forget (row gone, passings kept); picture upload limits and types; members-only picture route.
+- Store/operations: assign, add a second, label only stored when given, move between drivers, remove (back to unassigned), forget (row gone, passings kept).
 - Pages: each Setup state (one transponder inline; two with labels; none known), the add list's order and groups, each row's own form and button ("Add 41 to Simon", "Give it to Simon"), the move question, the form's 303/422 and `returnTo` checks, the confirm pages, collect, the driver page's best laps (labelled and not).
 - Board: the idle single and several lines with their links, the session warning, the box language (no left bar), the crown after the holder's name in standings only, one mark per row (TR, else SB, else PB), SB in lap lists and race standings but not in tables sorted by best lap, the crown moving to a new holder at once, no crown on the record card, no leader bar, Pos width with and without flags.
 - Browser: from the board's warning to the form and back; collect with a simulated crossing lighting up its row and assigning it; at 390 px.
 
 ## 8. Open guesses
 
-- 2 MB pictures stored as uploaded are fine for a club's handful of drivers.
 - The existing live events are enough to light "Crossing now" on collect without a new stream.
