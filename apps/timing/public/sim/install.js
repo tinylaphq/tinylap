@@ -6,7 +6,10 @@
 // own scripts, only while the server's TINYLAP_SIMULATE is set; the server doesn't even serve it
 // otherwise. It stands in for Web Serial's and WebHID's pickers: the configured model's transport
 // returns a fresh simulated device when the member clicks Connect, and the other transport acts as a
-// closed picker. tl-bridge calls the real APIs, unaware of it.
+// closed picker. tl-bridge calls the real APIs, unaware of it. A picked serial port stays permitted
+// (getPorts) while it is plugged in: its unplug() takes it out of the list, and its replug() puts it back
+// and fires navigator.serial's connect event, as Chrome does for a port the page may use.
+// plugIn() puts it back without the event.
 import { simulatedDevice, simulation } from './models.js';
 
 /** @param {any} nav the page's navigator, or a stand-in @param {string | null | undefined} value `<model>[,fast]` */
@@ -15,12 +18,32 @@ export function install(nav, value) {
   if (!sim) return;
   const serial = nav.serial ?? new EventTarget();
   const hid = nav.hid ?? new EventTarget();
+  /** @type {Set<any>} */
+  const permitted = new Set();
   Object.assign(serial, {
     requestPort: async () => {
       if (sim.transport !== 'serial') throw new DOMException('No port selected by the user.', 'NotFoundError');
-      return simulatedDevice(sim);
+      const port = simulatedDevice(sim);
+      const unplug = port.unplug;
+      Object.assign(port, {
+        unplug() {
+          permitted.delete(port);
+          unplug();
+        },
+        plugIn() {
+          permitted.add(port);
+          return port;
+        },
+        replug() {
+          permitted.add(port);
+          serial.dispatchEvent(new Event('connect'));
+          return port;
+        },
+      });
+      permitted.add(port);
+      return port;
     },
-    getPorts: async () => [],
+    getPorts: async () => [...permitted],
   });
   Object.assign(hid, {
     requestDevice: async () => (sim.transport === 'hid' ? [simulatedDevice(sim, { hid })] : []),

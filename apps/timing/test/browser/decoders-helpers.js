@@ -101,7 +101,7 @@ export const ZROUND_DEVICE = 'serial:1027:24577';
 
 /** Connects the simulated plain decoder and waits for the choose form. */
 export async function toChoose(page, heading = 'Which decoder is this?') {
-  await page.getByRole('button', { name: /^Connect (decoder|again)$/ }).first().click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: heading }).waitFor({ timeout: 30_000 });
 }
 

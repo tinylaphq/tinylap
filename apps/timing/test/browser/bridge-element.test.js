@@ -1029,3 +1029,84 @@ test('a replaced bridge\'s close waits for the batch it has in flight', async (t
   assert.equal(closes.length, 1);
   assert.deepEqual(errors, []);
 });
+
+// The cable has one place, its card (issue #81): after an unplug it says what a replug does, and the port this tab
+// last had is opened again without the picker, on its own when it comes back, or by the card's Connect decoder.
+
+/** Counts the picker's openings from now on. */
+const countPicks = (page) => page.evaluate(() => {
+  window.__picks = 0;
+  const real = navigator.serial.requestPort;
+  navigator.serial.requestPort = (...args) => { window.__picks += 1; return real(...args); };
+});
+
+/** Unplugs the simulated board and waits for its card to say Not connected, in the server's words. */
+async function unplugged(page, row, board) {
+  await page.evaluate(() => window.__port.unplug());
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Not connected$/ }).waitFor({ timeout: 8000 });
+}
+
+test('an unplug is said on the card only, and the port reconnects on its own when it comes back', async (t) => {
+  const { page, errors, board, row } = await cabledPage(t, { init: [COUNT] });
+  await countPicks(page);
+  const opened = await page.evaluate(() => window.__opened);
+  await unplugged(page, row, board);
+  const cable = row(board, 'cable');
+  await cable.getByText('It reconnects when you plug it back in.').waitFor();
+  assert.equal(await cable.locator('[data-slot="detail"]').isVisible(), false, 'instead of "plug it in, then connect it"');
+  assert.equal(await cable.locator('[data-cable-note="gap"]').isVisible(), false, 'a TinyLap decoder has Wi-Fi');
+  assert.equal(await page.locator('[data-bridge-live]').textContent(), 'Decoder disconnected.', 'said once, by the page\'s status region');
+  assert.equal(await page.locator('.status', { hasText: 'Decoder disconnected.' }).count(), 0, 'no box of its own');
+  assert.equal(await page.getByRole('button', { name: 'Connect again' }).count(), 0);
+  // Plugged back in: no click, no picker.
+  await page.evaluate(() => window.__port.replug());
+  await cable.locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 10_000 });
+  assert.equal(await page.evaluate(() => window.__picks), 0);
+  assert.equal(await page.evaluate(() => window.__opened), opened + 1, 'the same port, opened once more');
+  assert.equal(await cable.locator('[data-cable-note="back"]').isVisible(), false);
+  assert.deepEqual(errors, []);
+});
+
+test('the card\'s Connect decoder opens the port this tab had without the picker, and the picker when it is gone', async (t) => {
+  const { page, errors, board, card, row } = await cabledPage(t);
+  await countPicks(page);
+  await unplugged(page, row, board);
+  // Back, but its connect event was missed: the button finds it among the permitted ports.
+  await page.evaluate(() => window.__port.plugIn());
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 10_000 });
+  assert.equal(await page.evaluate(() => window.__picks), 0);
+  // Unplugged and not back: the picker.
+  await unplugged(page, row, board);
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 10_000 });
+  assert.equal(await page.evaluate(() => window.__picks), 1);
+  assert.deepEqual(errors, []);
+});
+
+test('a port another tab holds is never opened by the reconnect', async (t) => {
+  const { page, errors, board, row } = await cabledPage(t);
+  await countPicks(page);
+  await unplugged(page, row, board);
+  // Another tab has it now: opening it fails, as Web Serial refuses a port that is open elsewhere.
+  await page.evaluate(() => {
+    window.__port.open = async () => { throw new DOMException('The port is already open.', 'InvalidStateError'); };
+    window.__port.replug();
+  });
+  await page.waitForTimeout(1500);
+  assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Not connected');
+  assert.equal(await page.evaluate(() => window.__picks), 0, 'no picker without a click');
+  assert.equal(await page.locator('[data-bridge-error]').isVisible(), false);
+  assert.deepEqual(errors, []);
+});
+
+test('a removed tl-bridge stops listening for ports', async (t) => {
+  const { page, errors, board, row } = await cabledPage(t, { init: [COUNT] });
+  await unplugged(page, row, board);
+  const opened = await page.evaluate(() => window.__opened);
+  await page.evaluate(() => document.querySelector('tl-bridge').remove());
+  await page.evaluate(() => window.__port.replug());
+  await page.waitForTimeout(1000);
+  assert.equal(await page.evaluate(() => window.__opened), opened);
+  assert.deepEqual(errors, []);
+});

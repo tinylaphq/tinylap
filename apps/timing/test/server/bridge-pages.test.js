@@ -23,7 +23,7 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
   assert.match(body, new RegExp(`<div id="bridge" data-workspace="${me.workspaces[0].id}" data-server=`));
   assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+" data-cable-closed="\/personal\/decoders\/\{id\}\/cable">/, 'the page carries the address the decoder posts to, and where a closed cable is told');
-  for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready', 'disconnected']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
+  for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
   assert.doesNotMatch(body, /not-tinylap/);
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
   assert.match(body, /The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID\./);
@@ -62,7 +62,9 @@ test('two Connect buttons, the serial one first; the missing-API notes hidden; t
   assert.match(body, /<p>An EasyLap\? Use Connect EasyLap: it doesn't show up in the decoder list\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-missing="serial" hidden>This browser can't reach USB decoders, only an EasyLap\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-missing="hid" hidden>This browser can't reach an EasyLap, only other USB decoders\.<\/p>/);
-  assert.equal(body.match(/data-bridge-connect="last"/g).length, 5, 'Try another device (listening, unpaired, unknown, choose) and Connect again');
+  assert.equal(body.match(/data-bridge-connect="last"/g).length, 4, 'Try another device (listening, unpaired, unknown, choose)');
+  // The cable has one place, its card: no section of its own after an unplug, and no Connect again.
+  assert.doesNotMatch(body, /data-bridge-state="disconnected"|Connect again|data-bridge-gap/);
   assert.match(body, /<label for="bridge-choose-name">Name for the new decoder<\/label>/);
   assert.equal(body.match(/>Decoder name</g).length, 1, 'exactly one "Decoder name" label');
   assert.match(body, /<h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this\?<\/h2>/, 'focusable, for focus after Connect');
@@ -74,7 +76,6 @@ test('two Connect buttons, the serial one first; the missing-API notes hidden; t
   assert.match(body, /<p class="status status-warning" data-bridge-listening>Connected, but nothing has come from this device yet\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-unreadable hidden>Data is coming, but it can't be read\. Report this device\.<\/p>/);
   assert.match(body, /<p>A decoder answers within a few seconds\. If this is the wrong device, try another\.<\/p>/);
-  assert.match(body, /<p data-bridge-gap hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again\.<\/p>/);
 });
 
 test('the choose list: the club\'s decoders, escaped, "A new decoder" last; none that sends over Wi-Fi', async () => {
@@ -109,7 +110,7 @@ test('the decoder cards: every decoder of the club by name, above the connect fl
   assert.match(body, /If it's on, its laps wait on it\. Connect the cable to see why\./);
   assert.equal(body.match(/data-bridge-wifi hidden>Change Wi-Fi</g).length, 2, 'a member who may pair has it, hidden until the cable is in');
   assert.match(body, /<dialog id="wifi-dialog"/);
-  assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="disconnected"'), 'outside the cards, so a swap keeps it');
+  assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="ready"'), 'outside the cards, so a swap keeps it');
 });
 
 test('a wrong port is never a trap: the pair, re-pair and choose steps offer Try another device', async () => {

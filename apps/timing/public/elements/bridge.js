@@ -27,6 +27,11 @@
 //   painting the cable over it again. When the cable closes it tells the
 //   server, and swaps in the cards of the page it answers with. Change Wi-Fi
 //   opens ./wifi-dialog.js.
+// - The cable has one place, its card (connections spec §2): after an
+//   unplug the card shows the server's notes for a decoder this tab had, and
+//   when the serial port this tab last had comes back (navigator.serial's
+//   connect event), it is opened again without the picker. That card's
+//   Connect decoder tries the same port first, and the picker after.
 // The Bridge class itself (serial, outbox, retries) is ../bridge.js.
 import { signalWord, wifiError } from '@tinylap/timing';
 import { Bridge, ServerUnconfirmedError, WifiRefusedError, WifiUnconfirmedError, sendOutbox } from '../bridge.js';
@@ -142,6 +147,23 @@ const needsSignIn = (error) => error?.status === 401;
 /** Says that `n` passings wait for a club this sign-in has no access to (a 403). Signing in again doesn't help. @param {number} n */
 const blockedText = (n) => `${passings(n)} ${n === 1 ? 'is' : 'are'} for a decoder in a club you don't have access to, so ${n === 1 ? 'it waits' : 'they wait'} here.`;
 
+/** The serial port this tab last had, and whether `port` is it: the same object, or the same USB chip. @param {any} port @param {{ port: any, device: string } | null} last */
+const isLast = (port, last) => Boolean(last) && (port === last?.port || serialTransport(port).device === last?.device);
+
+/**
+ * The port this page may open without the picker that is the one it last had: the same SerialPort when it is
+ * still listed, else the one port with the same USB chip; null when there is none (or more than one).
+ * @param {{ port: any, device: string } | null} last
+ */
+async function permittedPort(last) {
+  const serial = /** @type {any} */ (navigator).serial;
+  if (!last || typeof serial?.getPorts !== 'function') return null;
+  const ports = await serial.getPorts().catch(() => []);
+  if (ports.includes(last.port)) return last.port;
+  const same = ports.filter((port) => isLast(port, last));
+  return same.length === 1 ? same[0] : null;
+}
+
 const STATE_TEXT = {
   connect: 'Ready to connect.',
   connecting: 'Talking to the decoder.',
@@ -201,7 +223,11 @@ async function pick(which) {
  * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any,
  *   transport: 'serial' | 'hid' | null, list: { decoders: { id: string, name: string, lastSeenAt: number | null }[], serverNow: number | null } | null,
  *   remembered: string | null, devices: any, connecting: boolean, refreshing: Promise<void> | null, missing: string | null,
- *   timer: ReturnType<typeof setInterval> | null, wizard: WifiWizard | null, silent: Bridge | null }} Run
+ *   timer: ReturnType<typeof setInterval> | null, wizard: WifiWizard | null, silent: Bridge | null,
+ *   last: { port: any, device: string, decoder: string | null } | null, gone: { decoder: string, kind: string, serial: boolean } | null,
+ *   onPort: ((event: Event) => void) | null }} Run
+ * `last` is the serial port this tab last had (and its decoder once known); `gone` the decoder this tab had
+ * when its cable was pulled, until a decoder is on the cable again.
  */
 
 class TlBridge extends HTMLElement {
@@ -226,7 +252,7 @@ class TlBridge extends HTMLElement {
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root || !supported) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
-      refreshing: null, missing: null, timer: null, wizard: null, silent: null };
+      refreshing: null, missing: null, timer: null, wizard: null, silent: null, last: null, gone: null, onPort: null };
     this.run = run;
     this.reset(run);
     const dialog = this.$(run, '#wifi-dialog');
@@ -254,6 +280,8 @@ class TlBridge extends HTMLElement {
     this.addEventListener('input', this);
     addEventListener('beforeunload', this);
     addEventListener('pagehide', this);
+    run.onPort = (event) => { if (run === this.run) void this.portBack(run, event); };
+    /** @type {any} */ (navigator).serial?.addEventListener?.('connect', run.onPort);
     void this.sendEarlier(run).catch(() => {});
   }
 
@@ -266,6 +294,7 @@ class TlBridge extends HTMLElement {
     this.removeEventListener('input', this);
     removeEventListener('beforeunload', this);
     removeEventListener('pagehide', this);
+    if (run.onPort) /** @type {any} */ (navigator).serial?.removeEventListener?.('connect', run.onPort);
     clearInterval(run.timer);
     run.wizard?.stop();
     const bridge = run.bridge;
@@ -292,7 +321,6 @@ class TlBridge extends HTMLElement {
     this.$(run, '[data-bridge-taken]').hidden = true;
     this.$(run, '[data-bridge-listening]').hidden = false;
     this.$(run, '[data-bridge-unreadable]').hidden = true;
-    this.$(run, '[data-bridge-gap]').hidden = true;
     this.resetChoose(run);
   }
 
@@ -344,7 +372,11 @@ class TlBridge extends HTMLElement {
       if (wifi instanceof HTMLElement && this.contains(wifi)) return this.openWifi(run, wifi);
       const button = event.target instanceof Element ? event.target.closest('[data-bridge-connect]') : null;
       if (button && this.contains(button)) {
-        this.connect(run, /** @type {any} */ (button).dataset.bridgeConnect || 'serial').then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
+        let which = /** @type {any} */ (button).dataset.bridgeConnect || 'serial';
+        // The card of the decoder this tab last had (or the one Connect decoder of an empty list) tries its port first.
+        const card = /** @type {HTMLElement | null} */ (button.closest('[data-decoder]'));
+        if (which === 'serial' && run.last && (!card || card.dataset.decoder === run.last.decoder)) which = 'again';
+        this.connect(run, which).then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
       }
     } else if (event.type === 'submit') {
       const form = event.target;
@@ -400,8 +432,9 @@ class TlBridge extends HTMLElement {
 
   /** @param {Run} run */
   show(run, state) {
-    for (const section of /** @type {NodeListOf<HTMLElement>} */ (run.root.querySelectorAll('[data-bridge-state]'))) section.hidden = section.dataset.bridgeState !== state;
-    if (state === 'disconnected') this.$(run, '[data-bridge-gap]').hidden = !BROWSER_ASSIGNED.has(run.bridge?.kind);
+    // Unplugged: the card says so; below the cards, the ways to connect, as before any connect.
+    const shown = state === 'disconnected' ? 'connect' : state;
+    for (const section of /** @type {NodeListOf<HTMLElement>} */ (run.root.querySelectorAll('[data-bridge-state]'))) section.hidden = section.dataset.bridgeState !== shown;
     if (state === 'ready') this.update(run);
     // The unknown pairing's warning is said by the live region only, in the server's words.
     else if (state === 'unknown') this.announce(run, this.$(run, '[data-bridge-unknown]').textContent);
@@ -467,17 +500,28 @@ class TlBridge extends HTMLElement {
     }
   }
 
-  /** @param {Run} run @param {'serial' | 'hid' | 'last'} which */
-  async connect(run, which) {
+  /**
+   * 'again' opens the serial port this tab last had without the picker, and falls back to the picker when it isn't
+   * there or won't open; 'auto' (the port came back) only tries it, quietly.
+   * @param {Run} run @param {'serial' | 'hid' | 'last' | 'again' | 'auto'} which @param {any} [port] for 'auto': the port that came back
+   */
+  async connect(run, which, port = null) {
     // One connect at a time until its bridge exists: a second click would put a second bridge on the picked port.
     if (run.connecting) return;
     run.connecting = true;
     this.paint(run);
-    const next = await this.prepare(run, which).finally(() => {
+    const mine = which === 'again' || which === 'auto';
+    const remembered = mine ? port ?? await permittedPort(run.last) : null;
+    if (which === 'auto' && !remembered) {
+      run.connecting = false;
+      if (run === this.run) this.paint(run);
+      return undefined;
+    }
+    const next = await this.prepare(run, mine ? 'serial' : which, remembered).finally(() => {
       run.connecting = false;
       if (run === this.run) this.paint(run);
     });
-    if (!next) return;
+    if (!next) return undefined;
     try {
       await next.start();
       if (run !== this.run) await next.close();
@@ -485,17 +529,39 @@ class TlBridge extends HTMLElement {
       await next.close();
       if (run.bridge === next) run.bridge = null;
       if (run === this.run) this.show(run, 'connect');
+      // Held by another tab, say: a click goes on to the picker; a port that came back is left alone.
+      if (remembered && which === 'again' && run === this.run) return this.connect(run, 'serial');
+      if (which === 'auto') return undefined;
       throw caught;
     }
+    return undefined;
   }
 
-  /** Picks the device and makes its bridge, or null when the picker was closed or the run ended. @param {Run} run @param {'serial' | 'hid' | 'last'} which */
-  async prepare(run, which) {
+  /**
+   * A port came back (navigator.serial's connect event): when it is the one this tab last had, its decoder's cable was
+   * pulled, and nothing else is on the cable or connecting, it is opened again, without the picker (connections spec §2).
+   * @param {Run} run @param {Event} event
+   */
+  async portBack(run, event) {
+    if (!run.gone?.serial || run.connecting || (run.bridge && run.bridge.state !== 'disconnected')) return;
+    const target = /** @type {any} */ (event.target);
+    const port = target && typeof target.getInfo === 'function' ? (isLast(target, run.last) ? target : null) : await permittedPort(run.last);
+    if (!port || run !== this.run) return;
+    await this.connect(run, 'auto', port).catch(() => {});
+  }
+
+  /**
+   * Picks the device (or takes `port`, a permitted one) and makes its bridge, or null when the picker was closed or the run ended.
+   * @param {Run} run @param {'serial' | 'hid' | 'last'} which @param {any} [port]
+   */
+  async prepare(run, which, port = null) {
     const chosen = which === 'last' ? run.transport ?? 'serial' : which;
-    const transport = await pick(chosen);
+    const transport = port ? serialTransport(port) : await pick(chosen);
     if (run !== this.run) return null;
     if (!transport) return null;
     run.transport = chosen;
+    // The same port keeps its decoder until the cable says otherwise, so a reopen that fails leaves its card's button to it.
+    if (chosen === 'serial') run.last = { port: transport.port, device: transport.device, decoder: run.last?.port === transport.port ? run.last.decoder : null };
     if (run.made && run.made.device !== transport.device) this.forget(run);
     this.$(run, '[data-bridge-taken]').hidden = true;
     // A batch the replaced bridge has in flight lands first, so the close comes after it.
@@ -544,8 +610,14 @@ class TlBridge extends HTMLElement {
       if (next.state === 'disconnected') {
         void release();
         this.cableClosed(run, next, { settle: true });
+        // Unplugged, not replaced: its card says what a replug does.
+        if (run.bridge === next && next.decoder) run.gone = { decoder: next.decoder, kind: next.kind, serial: chosen === 'serial' };
       }
       if (run.bridge !== next) return;
+      if (next.state === 'ready') {
+        run.gone = null;
+        if (chosen === 'serial' && run.last?.port === transport.port) run.last.decoder = next.decoder;
+      }
       this.paint(run);
       // A TinyLap decoder sends %TLNET at boot; one connected while running hasn't, so it is asked once it says who it is.
       if (next.state === 'ready' && next.kind === 'tinylap' && !next.net) {
@@ -615,6 +687,7 @@ class TlBridge extends HTMLElement {
       run.missing = id;
       void this.refresh(run);
     }
+    this.notes(run, list, card && bridge ? id : null);
     this.arrange(run, list, card && bridge ? id : null);
     const busy = run.connecting || (bridge !== null && bridge.state !== 'disconnected');
     for (const button of /** @type {NodeListOf<HTMLButtonElement>} */ (list.querySelectorAll('[data-bridge-connect]'))) button.disabled = busy;
@@ -625,6 +698,27 @@ class TlBridge extends HTMLElement {
     }
     // The dialog is for the decoder on the cable only.
     if (run.wizard?.dialog.open && run.wizard.decoder !== id) run.wizard.close();
+  }
+
+  /**
+   * The Cable row's notes for the decoder this tab had when its cable was pulled, as the server wrote them:
+   * [data-cable-note="back"] when its serial port reconnects on its own, and [data-cable-note="gap"] for a decoder
+   * without Wi-Fi (plain ZRound, EasyLap), whose crossings meanwhile are lost. The "plug it in" help gives way to them.
+   * @param {Run} run @param {Element} list @param {string | null} cabled
+   */
+  notes(run, list, cabled) {
+    for (const card of /** @type {NodeListOf<HTMLElement>} */ (list.querySelectorAll(':scope > [data-decoder]'))) {
+      // A card still painted for the cable (its close not answered yet) keeps what it showed.
+      if (card.dataset.decoder === cabled || card.hasAttribute('data-cabled')) continue;
+      const had = run.gone?.decoder === card.dataset.decoder ? run.gone : null;
+      const show = { back: Boolean(had?.serial), gap: Boolean(had && BROWSER_ASSIGNED.has(had.kind)) };
+      for (const note of /** @type {NodeListOf<HTMLElement>} */ (card.querySelectorAll('[data-row="cable"] [data-cable-note]'))) {
+        const hidden = !show[/** @type {'back' | 'gap'} */ (note.dataset.cableNote)];
+        if (note.hidden !== hidden) note.hidden = hidden;
+      }
+      const detail = /** @type {HTMLElement | null} */ (card.querySelector('[data-row="cable"] [data-slot="detail"]'));
+      if (detail && detail.hidden !== (show.back || show.gap)) detail.hidden = show.back || show.gap;
+    }
   }
 
   /**
@@ -649,6 +743,7 @@ class TlBridge extends HTMLElement {
     const cableRow = card.querySelector('[data-row="cable"]');
     fill(cableRow, { state: 'ok', words: 'Connected', detail: '' });
     for (const b of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-bridge-connect]') ?? [])) b.hidden = true;
+    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = true;
     const wifiRow = /** @type {HTMLElement | null} */ (card.querySelector('[data-row="wifi"]'));
     const tinylap = bridge.kind === 'tinylap';
     if (wifiRow) wifiRow.hidden = !tinylap;
