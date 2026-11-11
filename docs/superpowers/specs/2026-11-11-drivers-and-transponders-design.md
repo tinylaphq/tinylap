@@ -49,12 +49,12 @@ The approved mockup is `drivers-transponders.html` from the brainstorming sessio
 
 `<space>/transponders/<code>`, a page of its own (and a dialog when script runs, call).
 - Heading "Whose transponder is 41?"; if it is crossing now, a live line "It's on the track now."
-- A list of drivers (avatar and name), and **A new driver** with a name field. An optional label field when the chosen driver already has a transponder (shown by script; without script always shown, call).
-- **Assign**. One POST, then 303 back to where the form was opened from (`returnTo`, same-origin paths only); a failure returns the page with the error, the input kept, status 422.
+- **Each driver is a submit button** (`<button name="driver" value="…">`, avatar, name, what they have: "has 23, 31", and a quiet "Assign" at the end): one click assigns, with or without script, so there is no radio and no separate Assign button. Hover and focus show palace's selected-item bar (an inset left bar) and darken "Assign". The last row is **A new driver**: a name field with its own button, **Assign to a new driver**. No label field: a driver who already has a transponder simply gets another, and the label goes on later on their page (§3.5). "Not now" goes back.
+- One POST, then 303 back to where the form was opened from (`returnTo`, same-origin paths only); a failure returns the page with the error, the input kept, status 422.
 
 ### 3.4 Moving a transponder
 
-Assigning a transponder that belongs to another driver asks first. On the form (§3.3) and on collect: "Transponder 17 is Simon's." with **Give it to Mia** (primary) and **Keep it with Simon**. In Setup's add list (§3.1) the question is the row itself. Giving it moves it; Simon then has one fewer.
+Assigning a transponder that belongs to another driver asks first. On the form (§3.3) and on collect: "Transponder 17 is Simon's." with **Give it to Mia** (primary) and **Keep it with Simon**. In Setup's add list (§3.1) the question is the row itself. On the form the move question follows a click on a driver. Giving it moves it; Simon then has one fewer.
 
 ### 3.5 The driver's page
 
@@ -62,7 +62,7 @@ Assigning a transponder that belongs to another driver asks first. On the form (
 
 ### 3.6 Collect: all new transponders in one go
 
-`<space>/transponders/new`: one small form per unassigned transponder (a driver select, or a new driver's name, and Assign). A row shows "Crossing now" while its transponder crosses the line, so you can tell which car is which: the server renders the line hidden per row; the page shows it when the live stream reports a crossing or an idle passing of that code (call: the existing live events, `crossing` and `idle`). The whole list is one `tl-frame`. Assigning a row posts, the 303 comes back to the collect page with `?assigned=<code>`, and the page then shows the list without that row and, above it, one line "Transponder 41 is Lena's now. Change" (Change opens §3.3 for it) (call).
+`<space>/transponders/new`: one small form per unassigned transponder: one **Driver** field and **Assign**. Type a name: a driver of that name (trimmed, case ignored) gets the transponder; a new name adds the driver. The browser suggests the existing drivers from a `datalist`. No label here. A row shows "Crossing now" while its transponder crosses the line, so you can tell which car is which: the server renders the line hidden per row; the page shows it when the live stream reports a crossing or an idle passing of that code (call: the existing live events, `crossing` and `idle`). The whole list is one `tl-frame`. Assigning a row posts, the 303 comes back to the collect page with `?assigned=<code>`, and the page then shows the list without that row and, above it, one line "Transponder 41 is Lena's now. Change", or "Transponder 41 is Lena's now, a new driver. Change" when the name added one, so a typo shows at once (Change opens §3.3 for it) (call).
 
 ## 4. The board
 
@@ -87,12 +87,12 @@ Page routes only. The JSON API (`PUT /transponders/{code}`), `openapi.json` and 
 
 ## 6. Words
 
-Assign, Move, Remove, Forget, Assign it, Assign them, Add 41 to Simon, SB (Session best), Give it to Mia, Keep it with Simon, Best laps here, Add another transponder, Not in the list? Enter its number, Not assigned yet, Someone else's, Crossing now, crossed 2 min ago, Run its car over the line, and it shows up here. No "code" on screen: "transponder 41", "number".
+Assign, Move, Remove, Forget, Assign it, Assign them, Add 41 to Simon, Assign to a new driver, Not now, SB (Session best), Give it to Mia, Keep it with Simon, Best laps here, Add another transponder, Not in the list? Enter its number, Not assigned yet, Someone else's, Crossing now, crossed 2 min ago, Run its car over the line, and it shows up here. No "code" on screen: "transponder 41", "number".
 
 ## 7. Tests
 
 - Store/operations: assign, add a second, label only stored when given, move between drivers, remove (back to unassigned), forget (row gone, passings kept).
-- Pages: each Setup state (one transponder inline; two with labels; none known), the add list's order and groups, each row's own form and button ("Add 41 to Simon", "Give it to Simon"), the move question, the form's 303/422 and `returnTo` checks, the confirm pages, collect, the driver page's best laps (labelled and not).
+- Pages: each Setup state (one transponder inline; two with labels; none known), the add list's order and groups, each row's own form and button ("Add 41 to Simon", "Give it to Simon"), the form's driver buttons and new driver, collect's one field (existing name, new name, case and spaces), the move question, the form's 303/422 and `returnTo` checks, the confirm pages, collect, the driver page's best laps (labelled and not).
 - Board: the idle single and several lines with their links, the session warning, the box language (no left bar), the crown after the holder's name in standings only, one mark per row (TR, else SB, else PB), SB in lap lists and race standings but not in tables sorted by best lap, the crown moving to a new holder at once, no crown on the record card, no leader bar, Pos width with and without flags.
 - Browser: from the board's warning to the form and back; collect with a simulated crossing lighting up its row and assigning it; at 390 px.
 
