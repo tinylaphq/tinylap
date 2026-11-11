@@ -465,8 +465,10 @@ test('an opened cable counts as on a cable at once, clears a close, and is publi
   engine.cableOpened(W, 'd1');
   assert.equal(connection(engine).cable.state, 'other');
   assert.equal(count(), first + 2);
-  // Like a batch over a cable, it lasts 25 s without news.
-  clock.now = T0 + 2_000 + 25_000;
+  // Without batches it lasts 90 s, past a hidden tab's throttled timers.
+  clock.now = T0 + 2_000 + 80_000;
+  assert.equal(connection(engine).cable.state, 'other');
+  clock.now = T0 + 2_000 + 95_000;
   assert.equal(connection(engine).cable.state, 'none');
 });
 

@@ -24,6 +24,11 @@ const OFFSET_WINDOW_MS = 60_000;
 const FASTEST = 10;
 /** A Wi-Fi decoder that has been silent this long is offline (decoder Wi-Fi spec §6). */
 export const OFFLINE_AFTER_MS = 25_000;
+/**
+ * A bridge's word that its cable is open counts this long (connections spec §3). The bridge says it every 10 s, but a
+ * hidden tab's timers may run only once a minute; a laptop that dies without a close is on a cable this long at most.
+ */
+export const OPEN_FOR_MS = 90_000;
 /** After this long without a batch a decoder counts as switched off, and its banner goes. */
 export const EXPECTED_FOR_MS = 30 * 60_000;
 const ACTIVE = new Set(['countdown', 'running', 'finishing']);
@@ -211,8 +216,9 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     });
   }
 
-  /** Whether a bridge's cable is on the decoder: a batch over one within 25 s, and that cable not closed since. */
-  const onCable = (h, t) => h?.cableAt != null && !h.cableClosed && t - h.cableAt < OFFLINE_AFTER_MS;
+  /** Whether a bridge's cable is on the decoder: a batch over one within 25 s, or its open within 90 s, and that cable not closed since. */
+  const onCable = (h, t) => Boolean(h) && !h.cableClosed
+    && ((h.cableAt != null && t - h.cableAt < OFFLINE_AFTER_MS) || (h.openAt != null && t - h.openAt < OPEN_FOR_MS));
 
   /** One state per decoder heard in the last 30 minutes, for the board's header (connections spec §6). */
   function headerOf(workspaceId, t = now()) {
@@ -221,7 +227,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     for (const [id, h] of heard) {
       const decoder = store.decoder(id);
       if (h.workspaceId !== workspaceId || decoder?.workspaceId !== workspaceId) continue;
-      const last = Math.max(h.netAt ?? 0, h.cableAt ?? 0);
+      const last = Math.max(h.netAt ?? 0, h.cableAt ?? 0, h.openAt ?? 0);
       if (t - last >= EXPECTED_FOR_MS) continue;
       const live = (h.netAt !== null && t - h.netAt < OFFLINE_AFTER_MS) || onCable(h, t);
       const state = live ? 'reporting' : h.quiet ? 'idle' : offline.has(id) || (h.lastVia === 'serial' && h.cableLogs) ? 'offline' : null;
@@ -285,14 +291,13 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
 
   /**
    * The bridge says its cable to the decoder is open: the decoder said who it is on this tab's cable (connections spec
-   * §3). It counts as on a cable from now, as a batch over one does, so a quick re-plug never waits for a lap. Boards
-   * hear it at once.
+   * §3). It counts as on a cable from now, for OPEN_FOR_MS, so a quick re-plug never waits for a lap. Boards hear it at once.
    */
   function cableOpened(workspaceId, decoder) {
     const t = now();
     const h = heard.get(decoder) ?? { workspaceId, netAt: null, quiet: false, cableAt: null, cableClosed: false, lastVia: null, cableLogs: false };
     h.workspaceId = workspaceId;
-    h.cableAt = t;
+    h.openAt = t;
     h.cableClosed = false;
     h.lastVia = 'serial';
     heard.set(decoder, h);

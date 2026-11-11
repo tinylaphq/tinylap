@@ -1077,6 +1077,11 @@ test('an unplug is said on the card only, and the port reconnects on its own whe
   assert.equal(await page.evaluate(() => window.__port.opens), 1, 'the port that came back');
   await page.waitForFunction(() => document.activeElement !== document.body);
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-slot')), 'name', 'focus on the card\'s name');
+  // A new port of the chip came back after an unplug and opened without the picker: this browser remembers the chip.
+  assert.equal(await page.evaluate(() => localStorage.getItem('tinylap-bridge-reconnects')), JSON.stringify([await page.evaluate(() => {
+    const { usbVendorId, usbProductId } = window.__port.getInfo();
+    return `serial:${usbVendorId}:${usbProductId}`;
+  })]));
   // It came back once: from now on its card says it will.
   await unplugged(page, row, board);
   await cable.getByText('It reconnects when you plug it back in.').waitFor();
@@ -1291,4 +1296,48 @@ test('a plain ZRound decoder with no laps stays on the cable on other pages past
   assert.match(other, /Connected on another laptop/);
   assert.deepEqual(app.engine.headerOf(ws).map((d) => d.state), ['reporting']);
   assert.deepEqual(errors, []);
+});
+
+/** The page's posts of an open cable never get an answer; each gives up when its signal aborts. Counts them. */
+const SILENT_OPENS = () => {
+  const real = window.fetch;
+  Object.assign(window, { __opens: 0, __openAborts: 0, __openLive: 0, __openMost: 0 });
+  window.fetch = (url, options) => {
+    if (!String(options?.body ?? '').includes('state=open')) return real(url, options);
+    window.__opens += 1;
+    window.__openLive += 1;
+    window.__openMost = Math.max(window.__openMost, window.__openLive);
+    return new Promise((_, fail) => {
+      options?.signal?.addEventListener('abort', () => {
+        window.__openLive -= 1;
+        window.__openAborts += 1;
+        fail(options.signal.reason);
+      });
+    });
+  };
+};
+
+test('a close waits for an open of the same decoder still on its way', async (t) => {
+  const { page, errors, board } = await cabledPage(t, { init: [SILENT_OPENS] });
+  const closes = closesOf(page, board);
+  await page.waitForFunction(() => window.__opens === 1);
+  await page.evaluate(() => window.__port.unplug());
+  await page.waitForTimeout(1000);
+  assert.deepEqual(closes, [], 'not while the open is on its way');
+  // The open gives up within 5 s; then the close goes.
+  for (const end = Date.now() + 8000; closes.length === 0;) {
+    assert.ok(Date.now() < end, 'the close follows');
+    await page.waitForTimeout(100);
+  }
+  assert.equal(await page.evaluate(() => window.__openAborts), 1);
+  assert.deepEqual(errors.filter((e) => !/abort|timed? ?out/i.test(e)), []);
+});
+
+test('the opens never pile up: one at a time, each given up after 5 s', async (t) => {
+  const { page, errors } = await cabledPage(t, { init: [SILENT_OPENS] });
+  await page.waitForTimeout(22_000);
+  const seen = await page.evaluate(() => ({ opens: window.__opens, most: window.__openMost, aborts: window.__openAborts }));
+  assert.equal(seen.most, 1, 'never two on their way');
+  assert.ok(seen.opens >= 2 && seen.aborts >= 2, JSON.stringify(seen));
+  assert.deepEqual(errors.filter((e) => !/abort|timed? ?out/i.test(e)), []);
 });

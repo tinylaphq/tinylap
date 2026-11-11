@@ -67,6 +67,8 @@ const REFRESH_MS = 15_000;
 const SETTLE_MS = 3000;
 /** While a decoder is on this tab's cable, the server hears that the cable is still open this often: within its 25 s. */
 const OPEN_EVERY_MS = 10_000;
+/** An open the server doesn't answer within this long is given up, so they never pile up. */
+const OPEN_TIMEOUT_MS = 5000;
 
 const quoted = (name) => `“${name}”`;
 /**
@@ -267,7 +269,7 @@ async function pick(which) {
  *   timer: ReturnType<typeof setInterval> | null, wizard: WifiWizard | null, silent: Bridge | null,
  *   last: { port: any, device: string, decoder: string | null, refused?: boolean } | null,
  *   gone: { decoder: string, kind: string, serial: boolean, back: boolean, before: any[], port: any } | null,
- *   beat: { bridge: Bridge, timer: ReturnType<typeof setInterval> } | null,
+ *   beat: { bridge: Bridge, timer: ReturnType<typeof setInterval>, inFlight: Promise<unknown> | null } | null,
  *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null }} Run
  * `last` is the serial port this tab last had (and its decoder once known; `refused` once it wouldn't open, so the
  * button goes to the picker); `gone` the decoder this tab had when its cable was pulled, until a decoder is on the
@@ -972,6 +974,8 @@ class TlBridge extends HTMLElement {
     if (!id || !template || this.told.has(bridge)) return;
     // From here its batches say they came with no port open.
     this.told.add(bridge);
+    // An open of the same decoder on its way lands first, so the close is what the server hears last.
+    const beating = run.beat?.bridge.decoder === id ? run.beat.inFlight : null;
     if (run.beat?.bridge === bridge) {
       clearInterval(run.beat.timer);
       run.beat = null;
@@ -982,6 +986,7 @@ class TlBridge extends HTMLElement {
     close.done = (async () => {
       // After an unplug, the close goes once a batch posted while the port was open has landed (or SETTLE_MS have passed).
       if (settle) await Promise.race([bridge.flush(), new Promise((done) => { setTimeout(done, SETTLE_MS); })]);
+      await beating?.catch(() => {});
       // Plugged back in meanwhile, and the cable says it is the same decoder: it is on a cable, so nothing to tell.
       const now = this.run?.bridge;
       if (!close.sent && now && now !== bridge && now.decoder === id && now.state === 'ready') return;
@@ -1011,24 +1016,29 @@ class TlBridge extends HTMLElement {
     if (!id || !template || this.opened.has(bridge) || this.told.has(bridge)) return;
     this.opened.add(bridge);
     const url = template.replace('{id}', encodeURIComponent(id));
-    const open = () => fetch(url, { method: 'POST', credentials: 'same-origin', redirect: 'follow', headers: { accept: 'text/html' }, body: new URLSearchParams({ state: 'open' }) });
+    const open = () => fetch(url, { method: 'POST', credentials: 'same-origin', redirect: 'follow', headers: { accept: 'text/html' }, body: new URLSearchParams({ state: 'open' }), signal: AbortSignal.timeout(OPEN_TIMEOUT_MS) });
     const current = () => run === this.run && run.bridge === bridge && bridge.state === 'ready' && !this.told.has(bridge);
-    void (async () => {
+    clearInterval(run.beat?.timer);
+    /** @type {{ bridge: Bridge, timer: ReturnType<typeof setInterval>, inFlight: Promise<unknown> | null }} */
+    const beat = { bridge, timer: setInterval(() => {
+      if (!current()) {
+        clearInterval(beat.timer);
+        if (run.beat === beat) run.beat = null;
+        return;
+      }
+      // One at a time: a tick while the last one is on its way is skipped.
+      if (beat.inFlight) return;
+      beat.inFlight = open().catch(() => {}).finally(() => { beat.inFlight = null; });
+    }, OPEN_EVERY_MS), inFlight: null };
+    run.beat = beat;
+    // The first one, after any close of the same decoder still on its way; its answer is swapped in.
+    beat.inFlight = (async () => {
       await Promise.all([...this.pending].filter((close) => close.id === id).map((close) => close.done));
       if (!current()) return;
       const res = await open();
       await run.refreshing;
       if (current()) await this.swap(run, res);
-    })().catch(() => {});
-    clearInterval(run.beat?.timer);
-    const timer = setInterval(() => {
-      if (current()) void open().catch(() => {});
-      else {
-        clearInterval(timer);
-        if (run.beat?.timer === timer) run.beat = null;
-      }
-    }, OPEN_EVERY_MS);
-    run.beat = { bridge, timer };
+    })().catch(() => {}).finally(() => { beat.inFlight = null; });
   }
 
   /** Change Wi-Fi on the card of the decoder on this tab's cable. @param {Run} run @param {HTMLElement} button */
