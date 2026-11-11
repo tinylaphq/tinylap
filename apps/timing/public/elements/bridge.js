@@ -15,8 +15,8 @@
 // - On disconnect it stops: the port is closed, and the click, submit and
 //   beforeunload listeners are removed. Work in flight (the picker, a
 //   pairing request, a name lookup, earlier passings) finishes, unseen.
-// - Without #bridge, or without Web Serial and WebHID, it does nothing,
-//   and the server's "unsupported" notice stays.
+// - Without #bridge it does nothing. Without Web Serial and WebHID it only keeps
+//   the cards live (the cards stream); the server's "unsupported" notice stays.
 // - A plain ZRound decoder or an EasyLap is chosen on the choose form on
 //   every connect; the browser remembers only which decoder a device was,
 //   and offers that one to confirm.
@@ -288,10 +288,18 @@ class TlBridge extends HTMLElement {
   start() {
     if (this.run) return;
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
-    if (!root || !supported) return;
+    if (!root) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
       wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, retryMs: STREAM_RETRY_MS };
     this.run = run;
+    // Without Web Serial or WebHID only the live cards are on: no cable, no connect flow, the server's notice stays.
+    if (!supported) {
+      this.keep(run);
+      addEventListener('pagehide', this);
+      addEventListener('pageshow', this);
+      this.follow(run);
+      return;
+    }
     this.reset(run);
     const dialog = this.$(run, '#wifi-dialog');
     if (dialog instanceof HTMLDialogElement) {

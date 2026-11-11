@@ -1282,3 +1282,24 @@ test('after a reload, a connect event opens nothing: the reconnect needs the por
   assert.equal(await page.evaluate(() => window.__picks), 0);
   assert.deepEqual(errors, []);
 });
+
+test('without Web Serial or WebHID, the cards update live over the stream, and the notice stays', async (t) => {
+  const { who, errors, board, card, row } = await cabledPage(t, { connect: false });
+  const bare = await pageAs(browser, app, who, { viewport: { width: 390, height: 844 } });
+  t.after(() => bare.context.close());
+  await bare.page.addInitScript(() => { delete Navigator.prototype.serial; delete Navigator.prototype.hid; });
+  // The simulator would put a serial port back: this page is rendered without it.
+  app.simulate = null;
+  await bare.page.goto('/personal/bridge');
+  app.simulate = 'tinylap,fast';
+  await bare.page.getByText(/needs Chrome or Edge/).waitFor();
+  const theirs = bare.page.locator(`[data-decoder="${board.id}"] [data-row="cable"] [data-slot="state"]`);
+  assert.equal(await theirs.innerText(), 'Not connected');
+  // Another laptop connects it: the bare page says so without a reload.
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  await theirs.filter({ hasText: /^Connected on another laptop$/ }).waitFor({ timeout: 8000 });
+  assert.equal(await bare.page.getByText(/needs Chrome or Edge/).isVisible(), true);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(bare.errors, []);
+});
