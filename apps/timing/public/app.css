@@ -719,12 +719,16 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 
 /* A lap time's mark, in a narrow column after the time's (.mark-cell): the
  * time keeps its column's edge, and the mark sits on its baseline. The time's
- * cell gives up most of its right padding to bring the mark near. */
+ * cell gives up most of its right padding to bring the mark near. On the
+ * baseline its box hangs low (its smaller letters and their descender room), so
+ * it is lifted to centre on the time's digits; a relative nudge, because in a
+ * flex row (the lap feed) vertical-align does nothing. */
 .board-table th:has(+ .mark-cell), .board-table td:has(+ .mark-cell),
 .lap-table th:has(+ .mark-cell), .lap-table td:has(+ .mark-cell) { padding-right: var(--mark-gap); }
 .board-table .mark-cell, .lap-table .mark-cell { padding-left: 0; padding-right: var(--cell-x); white-space: nowrap; }
 .mark {
   display: inline-block; padding: 0.15em 0.35em; text-decoration: none; cursor: help;
+  position: relative; top: -0.16em;
   font: 700 0.8em/1 var(--p-font); letter-spacing: 0.04em; border: var(--p-border-thin) solid var(--p-text);
 }
 .mark-tr { background: var(--tl-record); color: var(--tl-record-ink); }
