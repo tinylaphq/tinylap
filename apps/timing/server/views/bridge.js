@@ -92,8 +92,10 @@ function decoderCard(request, d, mayPair) {
 /*
  * The decoder cards (connections spec §2, §3): every decoder of the club, by
  * name, as the server knows it, which is never this tab's cable. tl-bridge
- * swaps #bridge-decoders for the one in a fresh copy of this page, and
- * overlays what this tab's cable says. Its hooks:
+ * swaps in each #bridge-decoders its stream sends (#bridge's
+ * data-cable-stream, with {id}, while a decoder is on this tab's cable;
+ * data-cards-stream otherwise), and overlays what this tab's cable says.
+ * Its hooks:
  * - section[data-decoder="<id>"]: one card; [data-slot="name"] its name,
  *   [data-slot="status"] the status line (.status-success or .status-warning,
  *   one <p> per sentence).
@@ -237,7 +239,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     body: html`<div class="container stack-lg screen">
   <h1>Bridge</h1>
   <tl-bridge>
-  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-closed="${base}/decoders/{id}/cable" data-cable-open="${base}/decoders/{id}/cable">
+  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events">
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
     <p hidden data-bridge-say="disconnected">Decoder disconnected.</p>

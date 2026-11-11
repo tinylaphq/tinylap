@@ -293,16 +293,25 @@ test('a cable-only decoder never shows offline', () => {
   assert.deepEqual(offlineEvents(events), []);
 });
 
-test('cable batches keep an expected wifi decoder fresh', () => {
+test('cable batches keep an expected wifi decoder fresh while its cable is held, and not after', () => {
   const { engine, clock, store } = rig();
   store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
   beat(engine);
+  const release = engine.holdCable(W, 'd1');
   clock.now = T0 + 20_000;
   beat(engine, 'serial');
   clock.now = T0 + 40_000;
   engine.tick();
   assert.deepEqual(engine.snapshot(W).offline, []);
   clock.now = T0 + 45_000;
+  engine.tick();
+  assert.equal(engine.snapshot(W).offline.length, 1);
+  // Sent with no cable held (an outbox emptied later): not news from the decoder now.
+  release();
+  beat(engine);
+  clock.now = T0 + 60_000;
+  beat(engine, 'serial');
+  clock.now = T0 + 70_000;
   engine.tick();
   assert.equal(engine.snapshot(W).offline.length, 1);
 });
@@ -355,16 +364,6 @@ test('after a restart the wifi row claims nothing', () => {
   assert.equal(connection(engine).lastSeenAt, T0);
 });
 
-test('cable batch from another bridge reads as connected elsewhere', () => {
-  const { engine, clock } = withDecoder();
-  assert.equal(connection(engine).cable.state, 'none');
-  beat(engine, 'serial');
-  clock.now = T0 + 24_000;
-  assert.equal(connection(engine).cable.state, 'other');
-  clock.now = T0 + 25_000;
-  assert.equal(connection(engine).cable.state, 'none');
-});
-
 test('header lists decoders heard in 30 min with their state', () => {
   const { engine, clock, store } = withDecoder();
   store.addDecoder(W, { id: 'd2', name: 'Pit', tokenHash: 'h2', createdAt: T0 });
@@ -396,104 +395,84 @@ test('decoders event on a state change only', () => {
   assert.equal(count(), first + 1);
 });
 
-test('a tinylap decoder silent on the cable reads not reporting', () => {
-  const { engine, clock } = withDecoder();
-  beat(engine, 'serial', { logs: ['boot'] });
-  clock.now = T0 + 24_000;
-  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
-  clock.now = T0 + 25_000;
-  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline']);
-  clock.now = T0 + 30 * 60_000;
-  assert.deepEqual(engine.headerOf(W), []);
-});
-
-test('a passings-only cable decoder disappears after 25 s', () => {
-  const { engine, clock } = withDecoder();
-  beat(engine, 'serial');
-  clock.now = T0 + 25_000;
-  assert.deepEqual(engine.headerOf(W), []);
-});
-
-test('a closed cable clears the cable state and the header at once', () => {
+test('a held cable reads as on another laptop and reporting, for as long as it is held, and its own page leaves itself out', () => {
   const { engine, clock, events } = withDecoder();
-  beat(engine, 'serial', { logs: ['boot'] });
-  engine.tick();
   const count = () => offlineEvents(events).length;
-  const first = count();
-  clock.now = T0 + 5_000;
-  engine.cableClosed(W, 'd1');
   assert.equal(connection(engine).cable.state, 'none');
-  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline'], 'a TinyLap decoder whose cable is gone is not reporting');
-  assert.equal(count(), first + 1, 'published at once');
+  // A plain ZRound decoder just plugged in: no batch, no lap.
+  const release = engine.holdCable(W, 'd1');
+  assert.equal(connection(engine).cable.state, 'other');
+  assert.equal(engine.connectionsOf(W, { mine: 'd1' })[0].cable.state, 'none', 'the page holding it knows its own cable');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
+  assert.equal(count(), 1, 'published at once');
+  // No timers, no windows: an hour without a batch is still on the cable.
+  clock.now = T0 + 60 * 60_000;
+  engine.tick();
+  assert.equal(connection(engine).cable.state, 'other');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
+  assert.equal(count(), 1);
+  release();
+  assert.equal(connection(engine).cable.state, 'none');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline'], 'its cable just went: laps aren\'t being counted');
+  assert.equal(count(), 2, 'published at once');
   assert.deepEqual(offlineEvents(events).at(-1).data.decoders.map((d) => d.state), ['offline']);
+  release();
   engine.tick();
-  assert.equal(count(), first + 1, 'and not again');
-  // A batch over a cable again (this tab or another) opens it again.
-  beat(engine, 'serial', { logs: ['stat'] });
+  assert.equal(count(), 2, 'a second release changes nothing');
+  clock.now = T0 + 60 * 60_000 + 29 * 60_000;
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline']);
+  clock.now = T0 + 60 * 60_000 + 30 * 60_000;
+  assert.deepEqual(engine.headerOf(W), []);
+});
+
+test('two holders (two tabs) count once', () => {
+  const { engine, events } = withDecoder();
+  const count = () => offlineEvents(events).length;
+  const first = engine.holdCable(W, 'd1');
+  const second = engine.holdCable(W, 'd1');
+  assert.equal(count(), 1);
+  assert.equal(engine.connectionsOf(W, { mine: 'd1' })[0].cable.state, 'other', 'another holder than this page');
+  first();
+  first();
   assert.equal(connection(engine).cable.state, 'other');
-  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
-});
-
-test('a closed cable leaves Wi-Fi reporting, and a passings-only decoder shows nothing', () => {
-  const { engine, clock, store } = withDecoder();
-  store.addDecoder(W, { id: 'd2', name: 'Pit', tokenHash: 'h2', createdAt: T0 });
-  beat(engine, 'net');
-  beat(engine, 'serial', { logs: ['boot'] });
-  engine.ingest({ workspaceId: W, decoder: 'd2', via: 'serial', batch: { boot: BOOT, passings: [{ transponder: '0A', t: 1 }] } });
-  clock.now = T0 + 1_000;
-  engine.cableClosed(W, 'd1');
-  engine.cableClosed(W, 'd2');
+  assert.equal(count(), 1, 'one to none only');
+  second();
   assert.equal(connection(engine).cable.state, 'none');
-  assert.equal(connection(engine).wifi.state, 'reporting');
-  assert.deepEqual(engine.headerOf(W), [{ id: 'd1', name: 'Start line', state: 'reporting' }]);
+  assert.equal(count(), 2);
 });
 
-test('an opened cable counts as on a cable at once, clears a close, and is published', () => {
+test('a Wi-Fi decoder without a holder keeps its Wi-Fi states, and a holder is published even when the header stays', () => {
   const { engine, clock, events } = withDecoder();
   const count = () => offlineEvents(events).length;
-  // Never heard: a plain ZRound decoder just plugged in, no lap yet.
-  engine.cableOpened(W, 'd1');
-  assert.equal(connection(engine).cable.state, 'other');
-  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
+  beat(engine);
+  engine.tick();
   const first = count();
-  assert.ok(first > 0, 'published');
+  const release = engine.holdCable(W, 'd1');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
+  assert.equal(count(), first + 1, 'the cable changed: Bridge pages hear it');
   clock.now = T0 + 1_000;
-  engine.cableClosed(W, 'd1');
-  assert.equal(connection(engine).cable.state, 'none');
-  // Plugged back in before any lap: on the cable again at once, not at its next lap.
-  clock.now = T0 + 2_000;
-  engine.cableOpened(W, 'd1');
-  assert.equal(connection(engine).cable.state, 'other');
+  release();
   assert.equal(count(), first + 2);
-  // Without batches it lasts 90 s, past a hidden tab's throttled timers.
-  clock.now = T0 + 2_000 + 80_000;
-  assert.equal(connection(engine).cable.state, 'other');
-  clock.now = T0 + 2_000 + 95_000;
-  assert.equal(connection(engine).cable.state, 'none');
+  assert.equal(connection(engine).wifi.state, 'reporting');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting'], 'still reporting over Wi-Fi');
+  // Quiet over Wi-Fi: idle, not "not reporting".
+  beat(engine, 'net', { quiet: true });
+  clock.now = T0 + 60_000;
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['idle']);
+  // Expected, then silent: not reporting.
+  beat(engine);
+  clock.now = T0 + 90_000;
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline']);
 });
 
-test('a closed cable of another club or a decoder never heard changes nothing', () => {
+test('batches over the cable change no cable state, and store their passings', () => {
   const { engine } = withDecoder();
-  beat(engine, 'serial', { logs: ['boot'] });
-  engine.cableClosed('other-club', 'd1');
-  engine.cableClosed(W, 'nope');
-  assert.equal(connection(engine).cable.state, 'other');
-});
-
-test('a cable:false batch after a close keeps the cable closed and stores the passing', () => {
-  const { engine, clock, store } = withDecoder();
-  beat(engine, 'serial', { logs: ['boot'] });
-  clock.now = T0 + 1_000;
-  engine.cableClosed(W, 'd1');
-  clock.now = T0 + 2_000;
-  const answer = beat(engine, 'serial', { passings: [{ transponder: '0A', t: 500 }], logs: ['stat'], cable: false });
+  const answer = beat(engine, 'serial', { passings: [{ transponder: '0A', t: 500 }], logs: ['boot'] });
   assert.equal(answer.stored, 1);
   assert.equal(connection(engine).cable.state, 'none');
-  assert.equal(connection(engine).lastSeenAt, T0 + 2_000);
-  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline']);
-  // Never on a cable: it stays so.
-  store.addDecoder(W, { id: 'd2', name: 'Pit', tokenHash: 'h2', createdAt: T0 });
-  engine.ingest({ workspaceId: W, decoder: 'd2', via: 'serial', batch: { boot: BOOT, passings: [{ transponder: '0B', t: 1 }], cable: false } });
-  assert.equal(connection(engine, 'd2').cable.state, 'none');
-  assert.deepEqual(engine.headerOf(W).map((d) => d.id), ['d1']);
+  assert.deepEqual(engine.headerOf(W), []);
+  const release = engine.holdCable(W, 'd1');
+  release();
+  beat(engine, 'serial', { logs: ['stat'] });
+  assert.equal(connection(engine).cable.state, 'none', 'a batch after the cable went opens nothing');
 });

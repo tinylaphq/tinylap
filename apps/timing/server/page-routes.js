@@ -8,6 +8,7 @@ import { withSession } from './auth.js';
 import { boardPageRoutes } from './board-pages.js';
 import { boardStreamRoutes } from './board-stream.js';
 import { bridgePageRoutes } from './bridge-pages.js';
+import { bridgeStreamRoutes } from './bridge-stream.js';
 import { SPACE_COOKIE, pageRoute, withAccount } from './page-access.js';
 import { page, seeOther } from './respond.js';
 import { sessionsPageRoutes } from './sessions-pages.js';
@@ -38,7 +39,7 @@ const home = withSession(async (request) => {
 }, { pages: true });
 
 /** @type {any[]} Feature tasks add their page and form routes here. */
-export const SCREEN_ROUTES = [...boardPageRoutes, ...boardStreamRoutes, ...setupPageRoutes, ...sessionsPageRoutes, ...tapPageRoutes, ...bridgePageRoutes];
+export const SCREEN_ROUTES = [...boardPageRoutes, ...boardStreamRoutes, ...setupPageRoutes, ...sessionsPageRoutes, ...tapPageRoutes, ...bridgePageRoutes, ...bridgeStreamRoutes];
 
 export const pageRoutes = [
   { pattern: /^\/$/, credentials: true, methods: { GET: home } },

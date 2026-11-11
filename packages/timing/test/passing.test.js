@@ -77,9 +77,9 @@ test('readBatch refuses a bad now or quiet', () => {
   assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], quiet: 'yes' }).ok, false);
 });
 
-test('readBatch takes cable when it is true or false, and refuses anything else', () => {
-  assert.deepEqual(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], cable: false }), { ok: true, batch: { boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], logs: [], cable: false } });
-  assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], cable: true }).batch.cable, true);
-  assert.equal('cable' in readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }] }).batch, false);
-  for (const cable of ['false', 0, null]) assert.equal(readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], cable }).ok, false);
+test('readBatch knows no cable field: the cable is the Bridge page\'s stream, not a batch\'s', () => {
+  for (const cable of [false, true, 'false']) {
+    const read = readBatch({ boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], cable });
+    assert.deepEqual(read, { ok: true, batch: { boot: 'b00tb00t', passings: [{ transponder: '1', t: 1 }], logs: [] } });
+  }
 });
