@@ -23,7 +23,9 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const body = await res.text();
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
   assert.match(body, new RegExp(`<div id="bridge" data-workspace="${me.workspaces[0].id}" data-server=`));
-  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+" data-cable-stream="\/personal\/decoders\/\{id\}\/cable" data-cards-stream="\/personal\/bridge\/events">/, 'the page carries the address the decoder posts to, and the streams it holds');
+  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+" data-cable-stream="\/personal\/decoders\/\{id\}\/cable" data-cards-stream="\/personal\/bridge\/events" data-page="[A-Za-z0-9_-]{16}">/, 'the page carries the address the decoder posts to, the streams it holds, and its own id');
+  const again = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  assert.notEqual(/data-page="([^"]+)"/.exec(again)[1], /data-page="([^"]+)"/.exec(body)[1], 'one id per render');
   assert.match(body, /<p hidden data-bridge-say="disconnected">Decoder disconnected\.<\/p>/, 'the words the page announces on an unplug');
   for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
   assert.doesNotMatch(body, /not-tinylap/);
@@ -207,6 +209,47 @@ test('the cable stream: another club\'s decoder or an unknown one is not found; 
   assert.equal(get.headers.get('location'), `${base}/bridge`);
   // The old form post is gone.
   assert.equal((await app.form(who, `${base}/decoders/${gate.id}/cable`, { state: 'open' })).status, 405);
+});
+
+test('holders are pages: a page\'s cards leave out its own, and its dead connection plus its reconnect count once', async () => {
+  const { who, gate, base, cableOf } = await clubWithGate('Hal');
+  const PAGE = 'pageAAAAAAAAAAAAAAAA';
+  const dead = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable?page=${PAGE}`, undefined, SSE), { raw: true });
+  await next(dead, 'bridge');
+  const reconnect = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable?page=${PAGE}`, undefined, SSE), { raw: true });
+  assert.doesNotMatch((await next(reconnect, 'bridge')).data, /Connected on another laptop/, 'one page, one holder');
+  // After an unplug the same page holds its cards stream, maybe before the server saw the cable stream close.
+  const mine = events(await app.api(who, 'GET', `${base}/bridge/events?page=${PAGE}`, undefined, SSE), { raw: true });
+  assert.doesNotMatch((await next(mine, 'bridge')).data, /Connected on another laptop/);
+  const theirs = events(await app.api(who, 'GET', `${base}/bridge/events?page=pageBBBBBBBBBBBBBBBB`, undefined, SSE), { raw: true });
+  assert.match((await next(theirs, 'bridge')).data, /Connected on another laptop/);
+  await dead.return();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(cableOf(), 'other', 'the reconnect still holds it');
+  await reconnect.return();
+  assert.ok(await until(() => cableOf() === 'none'));
+  await mine.return();
+  await theirs.return();
+});
+
+test('a member who may pair holds a stream that ends when pairing is no longer theirs', async () => {
+  const watched = [];
+  const rig = await startTiming({ streams: { watch: (_request, _ws, action, _watcher, end) => { watched.push({ action, end }); return () => {}; } } });
+  try {
+    const user = await rig.signUp('Jo');
+    const club = rig.club(user, 'Pairs');
+    const jo = await rig.login(user);
+    const gate = await (await rig.api(jo, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+    const it = events(await rig.api(jo, 'GET', `/clubs/${club.id}/decoders/${gate.id}/cable`, undefined, SSE), { raw: true });
+    assert.match((await next(it, 'bridge')).data, /data-bridge-wifi hidden>Change Wi-Fi/);
+    assert.deepEqual(watched.map((w) => w.action), ['timing.run', 'timing.setup']);
+    watched[1].end();
+    assert.equal(await next(it, 'bridge'), null, 'ended: the page reconnects and gets the cards it may have now');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(rig.engine.connectionsOf(club.id)[0].cable.state, 'none');
+  } finally {
+    await rig.close();
+  }
 });
 
 test('a cable stream whose setup throws ends, logs once, and counts nothing', async () => {

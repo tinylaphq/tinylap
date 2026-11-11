@@ -297,7 +297,7 @@ test('cable batches keep an expected wifi decoder fresh while its cable is held,
   const { engine, clock, store } = rig();
   store.addDecoder(W, { id: 'd1', name: 'Start line', tokenHash: 'h', createdAt: T0 });
   beat(engine);
-  const release = engine.holdCable(W, 'd1');
+  const release = engine.holdCable(W, 'd1', 'p1');
   clock.now = T0 + 20_000;
   beat(engine, 'serial');
   clock.now = T0 + 40_000;
@@ -400,9 +400,9 @@ test('a held cable reads as on another laptop and reporting, for as long as it i
   const count = () => offlineEvents(events).length;
   assert.equal(connection(engine).cable.state, 'none');
   // A plain ZRound decoder just plugged in: no batch, no lap.
-  const release = engine.holdCable(W, 'd1');
+  const release = engine.holdCable(W, 'd1', 'p1');
   assert.equal(connection(engine).cable.state, 'other');
-  assert.equal(engine.connectionsOf(W, { mine: 'd1' })[0].cable.state, 'none', 'the page holding it knows its own cable');
+  assert.equal(engine.connectionsOf(W, { page: 'p1' })[0].cable.state, 'none', 'the page holding it knows its own cable');
   assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
   assert.equal(count(), 1, 'published at once');
   // No timers, no windows: an hour without a batch is still on the cable.
@@ -428,10 +428,10 @@ test('a held cable reads as on another laptop and reporting, for as long as it i
 test('two holders (two tabs) count once', () => {
   const { engine, events } = withDecoder();
   const count = () => offlineEvents(events).length;
-  const first = engine.holdCable(W, 'd1');
-  const second = engine.holdCable(W, 'd1');
+  const first = engine.holdCable(W, 'd1', 'p1');
+  const second = engine.holdCable(W, 'd1', 'p2');
   assert.equal(count(), 1);
-  assert.equal(engine.connectionsOf(W, { mine: 'd1' })[0].cable.state, 'other', 'another holder than this page');
+  assert.equal(engine.connectionsOf(W, { page: 'p1' })[0].cable.state, 'other', 'another holder than this page');
   first();
   first();
   assert.equal(connection(engine).cable.state, 'other');
@@ -441,13 +441,50 @@ test('two holders (two tabs) count once', () => {
   assert.equal(count(), 2);
 });
 
+test('holders are pages: one page\'s dead connection and its reconnect count once, and that page leaves out only its own', () => {
+  const { engine, events } = withDecoder();
+  const count = () => offlineEvents(events).length;
+  const dead = engine.holdCable(W, 'd1', 'p1');
+  // The page's stream dropped without the server noticing, and EventSource reconnected.
+  const again = engine.holdCable(W, 'd1', 'p1');
+  assert.equal(count(), 1);
+  assert.equal(engine.connectionsOf(W, { page: 'p1' })[0].cable.state, 'none', 'both are this page\'s');
+  assert.equal(engine.connectionsOf(W, { page: 'p2' })[0].cable.state, 'other');
+  // The cards stream of the same page, after an unplug, before the server saw the cable stream close.
+  assert.equal(engine.connectionsOf(W, { page: 'p1' })[0].cable.state, 'none');
+  dead();
+  assert.equal(connection(engine).cable.state, 'other', 'the reconnect still holds it');
+  assert.equal(count(), 1);
+  again();
+  assert.equal(connection(engine).cable.state, 'none');
+  assert.equal(count(), 2);
+});
+
+test('a quiet from before the cable session doesn\'t make an unplugged decoder idle; one sent during it does', () => {
+  const { engine, clock } = withDecoder();
+  beat(engine, 'net', { quiet: true });
+  clock.now = T0 + 3 * 60 * 60_000;
+  const release = engine.holdCable(W, 'd1', 'p1');
+  clock.now += 60_000;
+  release();
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['offline'], 'its cable just went: not counted');
+  // Plugged in again, and it says quiet over Wi-Fi while on the cable.
+  const next = engine.holdCable(W, 'd1', 'p1');
+  clock.now += 60_000;
+  beat(engine, 'net', { quiet: true });
+  clock.now += 60_000;
+  next();
+  clock.now += 30_000;
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['idle']);
+});
+
 test('a Wi-Fi decoder without a holder keeps its Wi-Fi states, and a holder is published even when the header stays', () => {
   const { engine, clock, events } = withDecoder();
   const count = () => offlineEvents(events).length;
   beat(engine);
   engine.tick();
   const first = count();
-  const release = engine.holdCable(W, 'd1');
+  const release = engine.holdCable(W, 'd1', 'p1');
   assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
   assert.equal(count(), first + 1, 'the cable changed: Bridge pages hear it');
   clock.now = T0 + 1_000;
@@ -471,7 +508,7 @@ test('batches over the cable change no cable state, and store their passings', (
   assert.equal(answer.stored, 1);
   assert.equal(connection(engine).cable.state, 'none');
   assert.deepEqual(engine.headerOf(W), []);
-  const release = engine.holdCable(W, 'd1');
+  const release = engine.holdCable(W, 'd1', 'p1');
   release();
   beat(engine, 'serial', { logs: ['stat'] });
   assert.equal(connection(engine).cable.state, 'none', 'a batch after the cable went opens nothing');

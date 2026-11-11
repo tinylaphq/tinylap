@@ -181,13 +181,17 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const offlineShown = new Map();
   /**
    * What the server heard of each decoder since it started: the last batch over Wi-Fi (and whether it said quiet), and
-   * when its last cable holder went (cable presence spec §2).
+   * when its cable was first held and when its last holder went (cable presence spec §2).
    */
   const heard = new Map();
-  /** Open cable streams per decoder: a decoder is on a Bridge tab's cable while its count is above zero (cable presence spec §2). */
+  /**
+   * Open cable streams per decoder, by the Bridge page that holds them (page id → open streams): a decoder is on a cable
+   * while any page holds it (cable presence spec §2). One page's dead connection and its reconnect are one holder.
+   * @type {Map<string, Map<string, number>>}
+   */
   const cableHolders = new Map();
-  const held = (decoder) => (cableHolders.get(decoder) ?? 0) > 0;
-  const fresh = (workspaceId) => ({ workspaceId, netAt: null, quiet: false, cableGoneAt: null });
+  const held = (decoder) => (cableHolders.get(decoder)?.size ?? 0) > 0;
+  const fresh = (workspaceId) => ({ workspaceId, netAt: null, quiet: false, cableSince: null, cableGoneAt: null });
 
   function offlineOf(workspaceId, t = now()) {
     const list = [];
@@ -202,15 +206,16 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
 
   /**
    * A decoder's connections as the Bridge page and the bridge see them (connections spec §3): cable `other` while it has a
-   * holder that isn't the asking page, which holds `mine` itself and paints its own cable (cable presence spec §2).
-   * @param {string} workspaceId @param {{ mine?: string | null }} [options]
+   * holding page other than `page`, the asking Bridge page, which paints its own cable (cable presence spec §2).
+   * @param {string} workspaceId @param {{ page?: string | null }} [options]
    */
-  function connectionsOf(workspaceId, { mine = null } = {}) {
+  function connectionsOf(workspaceId, { page = null } = {}) {
     const t = now();
     const offline = new Set(offlineOf(workspaceId, t).map((d) => d.id));
     return store.decoders(workspaceId).map((d) => {
       const h = heard.get(d.id);
-      const others = (cableHolders.get(d.id) ?? 0) - (d.id === mine ? 1 : 0);
+      const pages = cableHolders.get(d.id);
+      const others = (pages?.size ?? 0) - (page !== null && pages?.has(page) ? 1 : 0);
       const netAt = h?.netAt ?? null;
       const state = netAt !== null && t - netAt < OFFLINE_AFTER_MS ? 'reporting' : h?.quiet ? 'idle' : offline.has(d.id) ? 'offline' : 'unknown';
       return {
@@ -234,7 +239,9 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       const live = (h.netAt !== null && t - h.netAt < OFFLINE_AFTER_MS) || onCable;
       // Its cable just went, and it isn't reporting over Wi-Fi: its laps aren't being counted.
       const cableGone = h.cableGoneAt !== null && t - h.cableGoneAt < EXPECTED_FOR_MS;
-      const state = live ? 'reporting' : h.quiet ? 'idle' : offline.has(id) || cableGone ? 'offline' : null;
+      // A quiet said before the cable was last held is older news than the cable going.
+      const quiet = h.quiet && !(cableGone && (h.netAt ?? 0) < (h.cableSince ?? 0));
+      const state = live ? 'reporting' : quiet ? 'idle' : offline.has(id) || cableGone ? 'offline' : null;
       if (state) list.push({ id, name: decoder.name, state });
     }
     return list.sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
@@ -280,24 +287,28 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
    * A Bridge tab holds a stream for the decoder on its cable (cable presence spec §2): from now until the returned release,
    * called once the stream closes by any path, it counts as on a cable. Each change between none and one is published,
    * so boards and other Bridge pages hear it at once. A second release changes nothing.
-   * @param {string} workspaceId @param {string} decoder @returns {() => void}
+   * @param {string} workspaceId @param {string} decoder @param {string} page the holding Bridge page's id
+   * @returns {() => void}
    */
-  function holdCable(workspaceId, decoder) {
+  function holdCable(workspaceId, decoder, page) {
     const h = heard.get(decoder) ?? fresh(workspaceId);
     h.workspaceId = workspaceId;
     heard.set(decoder, h);
-    const count = (cableHolders.get(decoder) ?? 0) + 1;
-    cableHolders.set(decoder, count);
-    if (count === 1) publishDecoders(workspaceId, now(), { force: true });
+    const pages = cableHolders.get(decoder) ?? new Map();
+    cableHolders.set(decoder, pages);
+    pages.set(page, (pages.get(page) ?? 0) + 1);
+    if (pages.size === 1 && pages.get(page) === 1) {
+      h.cableSince = now();
+      publishDecoders(workspaceId, h.cableSince, { force: true });
+    }
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      const left = (cableHolders.get(decoder) ?? 1) - 1;
-      if (left > 0) {
-        cableHolders.set(decoder, left);
-        return;
-      }
+      const left = (pages.get(page) ?? 1) - 1;
+      if (left > 0) pages.set(page, left);
+      else pages.delete(page);
+      if (pages.size > 0) return;
       cableHolders.delete(decoder);
       const t = now();
       h.cableGoneAt = t;

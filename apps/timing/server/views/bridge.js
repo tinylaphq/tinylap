@@ -5,7 +5,7 @@
 // The bridge (spec §6.5): the server renders every state, for both pickers;
 // tl-bridge shows the one that applies. Without JavaScript, or without Web
 // Serial and WebHID, the page says what the bridge needs.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { formatWhen } from '../../public/format.js';
 import { html, safe } from './html.js';
@@ -94,7 +94,8 @@ function decoderCard(request, d, mayPair) {
  * name, as the server knows it, which is never this tab's cable. tl-bridge
  * swaps in each #bridge-decoders its stream sends (#bridge's
  * data-cable-stream, with {id}, while a decoder is on this tab's cable;
- * data-cards-stream otherwise), and overlays what this tab's cable says.
+ * data-cards-stream otherwise; both with ?page= and #bridge's data-page,
+ * this render's own id), and overlays what this tab's cable says.
  * Its hooks:
  * - section[data-decoder="<id>"]: one card; [data-slot="name"] its name,
  *   [data-slot="status"] the status line (.status-success or .status-warning,
@@ -239,7 +240,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     body: html`<div class="container stack-lg screen">
   <h1>Bridge</h1>
   <tl-bridge>
-  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events">
+  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}">
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
     <p hidden data-bridge-say="disconnected">Decoder disconnected.</p>
