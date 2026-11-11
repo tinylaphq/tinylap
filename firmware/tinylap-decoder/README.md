@@ -109,7 +109,8 @@ Tick each when done and note what was seen.
 - [ ] **Right password:** the board joins, the dialog says so, and the new network is kept after a power cycle.
 - [x] **Power cycle:** the board sends `%TLNET` after its boot line (seen in the bridge log or serial monitor). Seen: `%TLNET` follows the boot line after a reset and at power-up.
 - [x] **Board page open:** with a live board on screen and no laps, the decoder stays "reporting" past 15 minutes; after the board is closed it goes idle 15 minutes later. Seen: with a live board on screen and no laps the decoder stayed reporting for 17 minutes.
-- [x] **Unplugging the cable** (which also cuts the board's power): the card says Not connected at once; live boards say not reporting about 25 s later.
+- [ ] **Unplugging the cable** (which also cuts the board's power): the card says Not connected at once, and so do other laptops' Bridge pages; live boards say not reporting at once.
+- [ ] **Laptop goes to sleep or loses Wi-Fi** with a decoder on its cable: time until other pages say Not connected.
 - [x] **Unknown network by name:** the dialog says it can't find it; the board is back on its network.
 - [ ] **Re-plug:** the cable reconnects without the picker.
 

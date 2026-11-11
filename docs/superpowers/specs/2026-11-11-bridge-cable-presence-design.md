@@ -22,17 +22,18 @@ Non-goals:
 ## 2. How it works
 
 **The stream.** `GET <space>/decoders/<id>/cable` with `Accept: text/event-stream`, `timing.run`, same origin, as the board stream (`apps/timing/server/board-stream.js`). While it is open, the decoder is on a cable (call: the path keeps the address the cable posts used).
-- The server counts open cable streams per decoder (`cableHolders`, as `boardViewers`). A decoder is on a cable while its count is above zero. The count drops when the connection closes, by any path; the stream's keep-alive (`HEARTBEAT_MS`, 15 s) makes the server notice a connection that died silently at its next write.
+- The server counts open cable streams per decoder (`cableHolders`, as `boardViewers`), by the Bridge page that holds them: each render of the page has its own id (`#bridge`'s `data-page`), sent as `?page=` on both streams, so one page's dead connection and its reconnect count once, and a page's own cards leave out its own holders. A decoder is on a cable while any page holds it. A holder goes when the server notices its connection is gone: at once for a closed tab or an unplug; a laptop that sleeps or loses its network can take longer, bounded by Fly's edge. The keep-alive (`HEARTBEAT_MS`, 15 s) writes into the connection, but a write succeeds into the kernel's buffer until TCP gives up, and on Fly the peer is the edge proxy.
 - On every change of the count between zero and one, the engine publishes `decoders`, so live boards and other Bridge pages update at once.
 - The stream sends the Bridge page's `#bridge-decoders`, rendered by the server, whenever the club's decoder states change (as the board stream sends `#board-live`), plus its keep-alive.
 
 **The page.** `tl-bridge` opens the stream (an `EventSource`) when a decoder on this tab's cable reaches `ready` (a TinyLap decoder identified; a plain ZRound or EasyLap after the choose step), and closes it when the port closes, the bridge is replaced or the element goes. Each message is swapped in for `#bridge-decoders`; the cable rows the tab fills in are re-applied (decoder connections spec §2.1, "with the cable"). The stream's URL comes from a server-rendered attribute on `#bridge` (`data-cable-stream`, with `{id}`).
+- A stream the server refuses (a 503 while it restarts, a sign-in redirect), which `EventSource` gives up on, is opened again after 1 s, doubling up to 30 s.
 - A page without a decoder on its cable opens no cable stream, so it needs another way to stay current: it opens the same stream without an id, `GET <space>/bridge/events`, which only sends `#bridge-decoders` and holds no cable (call). With a decoder on the cable, the page holds the decoder's stream instead; one stream per page at a time.
 - If a stream drops while the port is still open (server restart, network), `EventSource` reconnects by itself and the count comes back.
 
 **The engine.** The cable state is the count, nothing else.
 - `connectionsOf`: cable `other` when the decoder has a holder that isn't this page (the page knows its own cable and paints "Connected"); otherwise `none`.
-- `headerOf` (decoder connections spec §6): **reporting** while a holder exists or a Wi-Fi batch came within 25 s; **idle** for a quiet Wi-Fi decoder; **not reporting** for an expected Wi-Fi decoder gone silent, or for a decoder whose last holder went within the last 30 minutes while it isn't reporting over Wi-Fi (call: the cable path just ended, so laps aren't being counted).
+- `headerOf` (decoder connections spec §6): **reporting** while a holder exists or a Wi-Fi batch came within 25 s; **idle** for a quiet Wi-Fi decoder (a quiet sent before the cable was last held doesn't count once that cable goes); **not reporting** for an expected Wi-Fi decoder gone silent, or for a decoder whose last holder went within the last 30 minutes while it isn't reporting over Wi-Fi (call: the cable path just ended, so laps aren't being counted).
 - Batches no longer set any cable state. Passings from the cable are stored as before.
 
 ## 3. What goes
