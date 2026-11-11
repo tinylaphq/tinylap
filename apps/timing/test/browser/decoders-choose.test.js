@@ -116,7 +116,7 @@ test('D2: a remembered decoder is confirmed, not forwarded silently', async (t) 
   await page.getByRole('button', { name: 'Use this decoder' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   await page.evaluate(() => /** @type {any} */ (window).__unplug());
-  await page.getByRole('button', { name: 'Connect again' }).waitFor();
+  await page.locator('[data-bridge-live]', { hasText: 'Decoder disconnected.' }).waitFor({ state: 'attached' });
   const seen = apiRequests(page);
   await toChoose(page, 'Is this Gate?');
   const gate = decoderNamed(space, 'Gate');
@@ -142,7 +142,7 @@ test('D2c: a replaced bridge\'s late identity change forgets nothing the new con
     /** @type {any} */ (window).__old = /** @type {any} */ (document.querySelector('tl-bridge')).run.bridge;
     /** @type {any} */ (window).__unplug();
   });
-  await page.getByRole('button', { name: 'Connect again' }).waitFor();
+  await page.locator('[data-bridge-live]', { hasText: 'Decoder disconnected.' }).waitFor({ state: 'attached' });
   await toChoose(page, 'Is this Gate?');
   await page.getByRole('button', { name: 'Use this decoder' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();

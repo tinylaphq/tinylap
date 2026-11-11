@@ -121,8 +121,12 @@ test('an EasyLap unplugged while forwarding says so, with what a replug costs', 
   await page.getByRole('button', { name: 'Use this decoder' }).click();
   await page.getByText('Forwarding from Lap box', { exact: true }).first().waitFor();
   await page.evaluate(() => /** @type {any} */ (window).__device.unplug());
-  await page.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor();
-  assert.equal(await page.getByText("Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.").isVisible(), true);
+  await page.locator('[data-bridge-live]', { hasText: 'Decoder disconnected.' }).waitFor({ state: 'attached' });
+  // Said on its card, the one place for the cable: an EasyLap has no Wi-Fi, and no reconnect on its own.
+  const cable = page.locator('[data-decoder]', { hasText: 'Lap box' }).locator('[data-row="cable"]');
+  await cable.getByText("Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.").waitFor({ timeout: 10_000 });
+  assert.equal(await cable.locator('[data-cable-note="back"]').isVisible(), false);
+  assert.equal(await page.locator('.status', { hasText: 'Decoder disconnected.' }).count(), 0, 'no box of its own');
 });
 
 test('two tabs on one EasyLap: the second refuses before opening it, and connects once the first lets go', async (t) => {
@@ -146,13 +150,13 @@ test('two tabs on one EasyLap: the second refuses before opening it, and connect
 
   // An unplug in the first tab lets go of it.
   await first.evaluate(() => /** @type {any} */ (window).__devices[0].unplug());
-  await first.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor();
+  await first.locator('[data-bridge-live]', { hasText: 'Decoder disconnected.' }).waitFor({ state: 'attached' });
   await second.getByRole('button', { name: 'Connect EasyLap' }).click();
   await second.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
   assert.equal(await second.locator('p.status-warning', { hasText: taken }).isVisible(), false);
 
   // Now the first tab is refused, until the second navigates away.
-  await first.getByRole('button', { name: 'Connect again' }).click();
+  await first.getByRole('button', { name: 'Connect EasyLap' }).click();
   await first.locator('p.status-warning', { hasText: taken }).waitFor();
   await second.goto('/personal');
   await first.getByRole('button', { name: 'Connect EasyLap' }).click();
@@ -211,8 +215,9 @@ test('a TinyLap decoder that disconnects keeps the gap note hidden', async (t) =
   await page.getByRole('button', { name: 'Pair' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   await page.evaluate(() => /** @type {any} */ (window).__unplug());
-  await page.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor();
-  assert.equal(await page.locator('[data-bridge-gap]').isVisible(), false);
+  await page.locator('[data-bridge-live]', { hasText: 'Decoder disconnected.' }).waitFor({ state: 'attached' });
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('[data-cable-note="gap"]:visible').count(), 0);
 });
 
 test('a plain ZRound decoder that disconnects while still undecided shows no gap note', async (t) => {
@@ -229,7 +234,8 @@ test('a plain ZRound decoder that disconnects while still undecided shows no gap
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByText('Connected, but nothing has come from this device yet.').waitFor({ timeout: 20_000 });
   await page.evaluate(() => /** @type {any} */ (window).__unplug());
-  await page.locator('p.status-warning', { hasText: 'Decoder disconnected.' }).waitFor({ timeout: 10_000 });
-  assert.equal(await page.locator('[data-bridge-gap]').isVisible(), false);
+  await page.locator('[data-bridge-live]', { hasText: 'Decoder disconnected.' }).waitFor({ state: 'attached', timeout: 10_000 });
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('[data-cable-note="gap"]:visible').count(), 0);
 });
 

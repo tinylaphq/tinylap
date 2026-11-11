@@ -25,15 +25,27 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
       }
     }
   };
+  const writableStream = () => new WritableStream({ write(chunk) { send(model.write(chunk, clock())); } });
+  let writable = writableStream();
+  let opened = false;
+  let opens = 0;
   return {
     /** The current stream: a non-fatal error replaces it, as Web Serial does. */
     get readable() {
       return readable;
     },
-    writable: new WritableStream({ write(chunk) { send(model.write(chunk, clock())); } }),
+    get writable() {
+      return writable;
+    },
     async open() {
-      // The model's `now` starts again at every open. Every caller makes a fresh port per pick, so a
-      // re-open of the same port object, which would send the model's clock back, doesn't happen.
+      // A re-open (the same port plugged back in) gets fresh streams, as a real port does. The model's
+      // `now` starts again at every open, as the board's clock does after the reset an open makes.
+      if (opened) {
+        readable = stream();
+        writable = writableStream();
+      }
+      opened = true;
+      opens += 1;
       openedAt = performance.now();
       send(model.start(0));
       timer = setInterval(() => send(model.tick(clock())), tickMs);
@@ -42,6 +54,10 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
       clearInterval(timer);
     },
     getInfo: () => model.info,
+    /** How often it was opened, for tests. */
+    get opens() {
+      return opens;
+    },
     /** Bytes from the device's side, for tests. @param {Uint8Array} bytes */
     send: (bytes) => send([bytes]),
     /**

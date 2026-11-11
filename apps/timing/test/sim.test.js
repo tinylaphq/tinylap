@@ -215,7 +215,21 @@ test('install stands in for the pickers: the model\'s transport gets a fresh dev
   assert.deepEqual(port.getInfo(), { usbVendorId: 0x0403, usbProductId: 0x6001, simulated: true });
   assert.notEqual(await plain.serial.requestPort(), port, 'a fresh device for every pick');
   assert.deepEqual(await plain.hid.requestDevice({ filters: [] }), []);
-  assert.deepEqual(await plain.serial.getPorts(), []);
+  assert.deepEqual(await plain.serial.getPorts(), [port, (await plain.serial.getPorts())[1]], 'a picked port stays permitted');
+  // Unplugged, it leaves the list; plugged back in, it returns and the connect event fires.
+  let connects = 0;
+  plain.serial.addEventListener('connect', () => { connects += 1; });
+  let target = null;
+  plain.serial.addEventListener('connect', (event) => { target = event.target; });
+  port.unplug();
+  assert.equal((await plain.serial.getPorts()).includes(port), false);
+  // Back as Chrome shows it: a new port of the same chip, the connect event's target.
+  const back = port.replug();
+  assert.notEqual(back, port);
+  assert.deepEqual(back.getInfo(), port.getInfo());
+  assert.equal(target, back);
+  assert.equal((await plain.serial.getPorts()).includes(back), true);
+  assert.equal(connects, 1);
   const lap = {};
   install(lap, 'easylap');
   const [device] = await lap.hid.requestDevice({ filters: [] });

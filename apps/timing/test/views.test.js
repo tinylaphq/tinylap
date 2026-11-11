@@ -193,6 +193,8 @@ test('decoder cards: every server state in its words, lamp and action (connectio
   assert.equal(slot(rowOf(off, 'wifi'), 'state'), `Not reporting since <time datetime="${iso(T - 120_000)}" data-when>${formatWhen(T - 120_000, T)}</time>`);
   assert.equal(slot(rowOf(off, 'wifi'), 'detail'), '', 'no second "Last heard" in the row');
   assert.equal(slot(rowOf(off, 'cable'), 'detail'), 'Plug the decoder in by USB, then connect it.');
+  // What tl-bridge shows after this tab's cable to it was pulled, hidden until then.
+  assert.match(rowOf(off, 'cable'), /<p class="decoder-row-help" data-cable-note="back" hidden>It reconnects when you plug it back in\.<\/p><p class="decoder-row-help" data-cable-note="gap" hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again\.<\/p>/);
   assert.match(slot(rowOf(off, 'cable'), 'action'), /btn-primary/);
 
   const silent = cardOf(out, 'silent');
@@ -234,12 +236,17 @@ test('the Change Wi-Fi dialog: closed, one hidden step each, in the spec\'s word
   assert.deepEqual(steps, ['looking', 'list', 'password', 'another', 'joining', 'result']);
   for (const words of [
     'Looking for networks near the decoder…', 'Networks near the decoder', '>Look again<', 'Only 2.4 GHz networks show here.',
-    'Not in the list, or its name is hidden?', '>Another network<', '>Back to the list<', '>Join network<',
+    '>Another network…<', '>Back to the list<', '>Join network<',
     'Exactly as it is written, capitals included.', 'Leave empty for an open network.', '>Done<',
     'Laps now also get through over Wi-Fi.', "The decoder didn't answer",
     'TinyLap never sees the password: it goes from this laptop straight to the decoder.',
   ]) assert.ok(out.includes(words), words);
   assert.equal(out.match(/TinyLap never sees the password/g).length, 1, 'said once');
+  assert.doesNotMatch(out, /Not in the list/, 'the button says it');
+  // The two notes together, muted, under the list.
+  assert.match(out, /<ul class="nets-list"[^>]*><\/ul>[\s\S]*?<div class="wifi-notes"><p class="wifi-hint">Only 2\.4 GHz networks show here\.<\/p><p class="wifi-hint">TinyLap never sees the password: it goes from this laptop straight to the decoder\.<\/p><\/div>/);
+  // A typed network's failure comes back on its own step, above its fields.
+  assert.match(out, /data-step="another"[\s\S]*?<p class="status status-error" role="alert" data-slot="error" hidden><\/p>\s*<div class="field">\s*<label for="wifi-another-name">/);
   assert.match(out, /<template data-wifi-row><li><button type="button" class="net" data-signal="">/);
   assert.match(out, /^<dialog [^>]*>\s*<p class="visually-hidden" role="status" data-wifi-live><\/p>/, 'its own live region: showModal makes the page inert');
   assert.match(out, /<p class="status status-error" role="alert" data-scan="failed" hidden>The decoder couldn't look for networks\. Look again\.<\/p>/);
@@ -252,9 +259,14 @@ test('the Change Wi-Fi dialog: closed, one hidden step each, in the spec\'s word
   assert.equal(out.match(/<div class="input-action"><input type="password"/g).length, 2);
   assert.match(out, /<button type="button" class="btn btn-sm btn-outline" data-wifi-show aria-controls="wifi-password" aria-label="Show password">Show<\/button>/);
   assert.doesNotMatch(out, /aria-pressed/);
-  // Actions right-aligned, the primary last; Cancel and Back are outline.
-  for (const menu of out.matchAll(/<menu class="wifi-menu">([\s\S]*?)<\/menu>/g)) {
-    const buttons = [...menu[1].matchAll(/class="btn ([a-z-]+)"/g)].map((m) => m[1]);
-    assert.ok(buttons.slice(0, -1).every((b) => b === 'btn-outline'), menu[1]);
-  }
+  // One footer per step: the way back or aside on the left, the way on on the right (.wifi-menu-end), every button one size.
+  const footers = [...out.matchAll(/<menu class="wifi-menu">([\s\S]*?)<\/menu>/g)].map((menu) => [...menu[1].matchAll(/<li( class="wifi-menu-end")?><button [^>]*class="btn ([a-z- ]+)"[^>]*>([^<]+)</g)].map((m) => `${m[1] ? 'end' : 'start'}:${m[2]}:${m[3]}`));
+  assert.deepEqual(footers, [
+    ['end:btn-outline:Cancel'],
+    ['start:btn-outline:Another network…', 'end:btn-outline:Cancel'],
+    ['start:btn-outline:Back to the list', 'end:btn-primary:Join network'],
+    ['start:btn-outline:Back', 'end:btn-primary:Join network'],
+    ['end:btn-outline:Cancel'],
+    ['end:btn-primary:Done'],
+  ]);
 });

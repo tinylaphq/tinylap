@@ -378,17 +378,21 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 
 /* The Change Wi-Fi dialog (connections spec §5). One rhythm: palace's dialog
    padding on every side; title, subtitle, then the step's blocks md apart;
-   the actions below, right-aligned, the primary last. Never taller than the window. */
+   one footer per step: its way back or aside on the left, its way on on the
+   right, every button one size. Never taller than the window. */
 .wifi-dialog:modal { max-height: calc(100dvh - 2 * var(--p-space-md)); max-width: min(var(--p-container-narrow), calc(100vw - 2 * var(--p-space-md))); overflow-y: auto; }
 .wifi-step { display: grid; gap: var(--p-space-md); }
 .wifi-step[hidden] { display: none; }
 .wifi-step > h2, .wifi-step > .subtitle { margin: 0; }
 .wifi-step > .subtitle { margin-top: calc(var(--p-space-xs) - var(--p-space-md)); }
 .wifi-step p { margin: 0; }
-.wifi-dialog .wifi-menu { justify-content: flex-end; flex-wrap: wrap; margin: var(--p-space-sm) 0 0; }
+.wifi-dialog .wifi-menu { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--p-space-sm); list-style: none; padding: 0; margin: var(--p-space-sm) 0 0; }
+.wifi-dialog .wifi-menu > li { margin: 0; }
+.wifi-dialog .wifi-menu > .wifi-menu-end { margin-left: auto; }
 .wifi-dialog .wifi-menu .btn { flex: none; }
 .wifi-hint { font-size: 13px; color: var(--p-text-muted); }
-.wifi-dialog > .wifi-note { margin: var(--p-space-lg) 0 0; }
+/* Under the list, muted: what it can't show, and where the password goes. */
+.wifi-notes { display: grid; gap: var(--p-space-xs); }
 .wifi-state { display: flex; gap: var(--p-space-md); align-items: center; padding: var(--p-space-md); border: var(--p-border-width) solid var(--p-text); }
 .wifi-state[hidden] { display: none; }
 .wifi-state:has(> .lamp[data-state="busy"]) { border-style: dashed; border-color: var(--p-border-dashed); }
@@ -419,9 +423,6 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .bars rect { opacity: .25; }
 [data-signal="strong"] .bars rect, [data-signal="fair"] .bars rect:nth-child(-n+2), [data-signal="weak"] .bars rect:first-child { opacity: 1; }
 .chev { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--p-text-muted); }
-/* Outside the list's box: a sentence and its button on the list's right edge; on a phone, the button goes under. */
-.nets-other { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--p-space-sm) var(--p-space-md); font-size: 14px; }
-.nets-other .btn { margin-left: auto; }
 @media (max-width: 420px) { .net { padding-inline: var(--p-space-sm); } }
 
 /* The two Connect buttons share a line when they fit, and keep a gap when they wrap. */

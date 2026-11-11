@@ -6,6 +6,7 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { startTiming } from './helpers.js';
+import { events, next } from './sse.js';
 
 let app;
 let member;
@@ -22,8 +23,11 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const body = await res.text();
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
   assert.match(body, new RegExp(`<div id="bridge" data-workspace="${me.workspaces[0].id}" data-server=`));
-  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+" data-cable-closed="\/personal\/decoders\/\{id\}\/cable">/, 'the page carries the address the decoder posts to, and where a closed cable is told');
-  for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready', 'disconnected']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
+  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+" data-cable-stream="\/personal\/decoders\/\{id\}\/cable" data-cards-stream="\/personal\/bridge\/events" data-page="[A-Za-z0-9_-]{16}">/, 'the page carries the address the decoder posts to, the streams it holds, and its own id');
+  const again = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  assert.notEqual(/data-page="([^"]+)"/.exec(again)[1], /data-page="([^"]+)"/.exec(body)[1], 'one id per render');
+  assert.match(body, /<p hidden data-bridge-say="disconnected">Decoder disconnected\.<\/p>/, 'the words the page announces on an unplug');
+  for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
   assert.doesNotMatch(body, /not-tinylap/);
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
   assert.match(body, /The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID\./);
@@ -62,7 +66,9 @@ test('two Connect buttons, the serial one first; the missing-API notes hidden; t
   assert.match(body, /<p>An EasyLap\? Use Connect EasyLap: it doesn't show up in the decoder list\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-missing="serial" hidden>This browser can't reach USB decoders, only an EasyLap\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-missing="hid" hidden>This browser can't reach an EasyLap, only other USB decoders\.<\/p>/);
-  assert.equal(body.match(/data-bridge-connect="last"/g).length, 5, 'Try another device (listening, unpaired, unknown, choose) and Connect again');
+  assert.equal(body.match(/data-bridge-connect="last"/g).length, 4, 'Try another device (listening, unpaired, unknown, choose)');
+  // The cable has one place, its card: no section of its own after an unplug, and no Connect again.
+  assert.doesNotMatch(body, /data-bridge-state="disconnected"|Connect again|data-bridge-gap/);
   assert.match(body, /<label for="bridge-choose-name">Name for the new decoder<\/label>/);
   assert.equal(body.match(/>Decoder name</g).length, 1, 'exactly one "Decoder name" label');
   assert.match(body, /<h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this\?<\/h2>/, 'focusable, for focus after Connect');
@@ -74,7 +80,6 @@ test('two Connect buttons, the serial one first; the missing-API notes hidden; t
   assert.match(body, /<p class="status status-warning" data-bridge-listening>Connected, but nothing has come from this device yet\.<\/p>/);
   assert.match(body, /<p class="status status-warning" data-bridge-unreadable hidden>Data is coming, but it can't be read\. Report this device\.<\/p>/);
   assert.match(body, /<p>A decoder answers within a few seconds\. If this is the wrong device, try another\.<\/p>/);
-  assert.match(body, /<p data-bridge-gap hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again\.<\/p>/);
 });
 
 test('the choose list: the club\'s decoders, escaped, "A new decoder" last; none that sends over Wi-Fi', async () => {
@@ -109,7 +114,7 @@ test('the decoder cards: every decoder of the club by name, above the connect fl
   assert.match(body, /If it's on, its laps wait on it\. Connect the cable to see why\./);
   assert.equal(body.match(/data-bridge-wifi hidden>Change Wi-Fi</g).length, 2, 'a member who may pair has it, hidden until the cable is in');
   assert.match(body, /<dialog id="wifi-dialog"/);
-  assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="disconnected"'), 'outside the cards, so a swap keeps it');
+  assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="ready"'), 'outside the cards, so a swap keeps it');
 });
 
 test('a wrong port is never a trap: the pair, re-pair and choose steps offer Try another device', async () => {
@@ -120,46 +125,151 @@ test('a wrong port is never a trap: the pair, re-pair and choose steps offer Try
   }
 });
 
-test('a cable closed on this tab: Not connected at once, then back to the Bridge page', async () => {
-  const ana = await app.signUp('Dora');
-  const club = app.club(ana, 'Kerbs');
-  const dora = await app.login(ana);
-  const gate = await (await app.api(dora, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
-  const sent = await app.api(dora, 'POST', `/decoders/${gate.id}/passings`, { boot: 'b00tb00t', passings: [], logs: ['boot'] });
-  assert.equal(sent.status, 200);
+const SSE = { accept: 'text/event-stream' };
+/** Waits, briefly, until `check()` holds: a closed connection reaches the server a moment later. */
+async function until(check) {
+  for (const end = Date.now() + 2000; !check() && Date.now() < end;) await new Promise((resolve) => setTimeout(resolve, 10));
+  return check();
+}
+/** A club with one decoder, signed in as its owner. @param {string} name */
+async function clubWithGate(name) {
+  const user = await app.signUp(name);
+  const club = app.club(user, `${name}'s club`);
+  const who = await app.login(user);
+  const gate = await (await app.api(who, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
   const base = `/clubs/${club.id}`;
-  const bridge = async () => (await app.api(dora, 'GET', `${base}/bridge`, undefined, { accept: 'text/html' })).text();
+  const cableOf = () => app.engine.connectionsOf(club.id).find((d) => d.id === gate.id).cable.state;
+  return { user, club, who, gate, base, cableOf, bridge: async () => (await app.api(who, 'GET', `${base}/bridge`, undefined, { accept: 'text/html' })).text() };
+}
+
+test('a held cable stream: the decoder is on a cable for as long as it is open, and the stream sends this tab\'s cards', async () => {
+  const { club, who, gate, base, cableOf, bridge } = await clubWithGate('Dora');
+  assert.doesNotMatch(await bridge(), /Connected on another laptop/, 'never heard');
+  const res = await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/event-stream/);
+  const it = events(res, { raw: true });
+  const first = await next(it, 'bridge');
+  assert.match(first.data, /^<div id="bridge-decoders">/);
+  assert.match(first.data, new RegExp(`data-decoder="${gate.id}"`));
+  assert.doesNotMatch(first.data, /Connected on another laptop/, 'this tab paints its own cable');
+  // Without a batch: a plain ZRound decoder with no laps yet.
+  assert.equal(cableOf(), 'other');
   assert.match(await bridge(), /Connected on another laptop/);
-  const res = await app.form(dora, `${base}/decoders/${gate.id}/cable`, { state: 'closed' });
-  assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), `${base}/bridge`);
-  const body = await bridge();
-  assert.doesNotMatch(body, /Connected on another laptop/);
-  assert.match(body, /Not connected/);
+  assert.deepEqual(app.engine.headerOf(club.id).map((d) => d.state), ['reporting']);
+  await it.return();
+  assert.ok(await until(() => cableOf() === 'none'), 'the count drops when the tab lets go');
   assert.deepEqual(app.engine.headerOf(club.id).map((d) => d.state), ['offline']);
-  // A GET on it (after a reload) goes to the Bridge page.
-  const get = await app.api(dora, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { accept: 'text/html' });
-  assert.equal(get.status, 303);
-  assert.equal(get.headers.get('location'), `${base}/bridge`);
+  assert.doesNotMatch(await bridge(), /Connected on another laptop/);
 });
 
-test('a closed cable: another club\'s decoder or an unknown one is not found; a bad state, another site or a stranger are refused', async () => {
-  const ana = await app.signUp('Eve');
-  const mine = app.club(ana, 'Mine');
-  const theirs = app.club(ana, 'Theirs');
-  const eve = await app.login(ana);
+test('the cards stream holds nothing, and sends the cards again when a cable comes or goes', async () => {
+  const { who, gate, base, cableOf } = await clubWithGate('Gus');
+  const cards = events(await app.api(who, 'GET', `${base}/bridge/events`, undefined, SSE), { raw: true });
+  const first = await next(cards, 'bridge');
+  assert.match(first.data, /^<div id="bridge-decoders">/);
+  assert.doesNotMatch(first.data, /Connected on another laptop/);
+  assert.equal(cableOf(), 'none');
+  const cable = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE), { raw: true });
+  await next(cable, 'bridge');
+  assert.match((await next(cards, 'bridge')).data, /Connected on another laptop/, 'another tab connected it');
+  await cable.return();
+  assert.doesNotMatch((await next(cards, 'bridge')).data, /Connected on another laptop/, 'and unplugged it');
+  // Two tabs on one decoder count once, and each sees the other's.
+  const one = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE), { raw: true });
+  await next(one, 'bridge');
+  const two = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE), { raw: true });
+  assert.match((await next(two, 'bridge')).data, /Connected on another laptop/);
+  await one.return();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(cableOf(), 'other');
+  await two.return();
+  assert.ok(await until(() => cableOf() === 'none'));
+  await cards.return();
+});
+
+test('the cable stream: another club\'s decoder or an unknown one is not found; another site or a stranger are refused; a page load goes to the Bridge page', async () => {
+  const { user, gate, base, who, cableOf } = await clubWithGate('Eve');
+  const theirs = app.club(user, 'Theirs');
+  const eve = await app.login(user);
   const other = await (await app.api(eve, 'POST', `/workspaces/${theirs.id}/decoders`, { name: 'Theirs' })).json();
-  const gate = await (await app.api(eve, 'POST', `/workspaces/${mine.id}/decoders`, { name: 'Gate' })).json();
-  const base = `/clubs/${mine.id}`;
-  assert.equal((await app.form(eve, `${base}/decoders/${other.id}/cable`, { state: 'closed' })).status, 404);
-  assert.equal((await app.form(eve, `${base}/decoders/nope/cable`, { state: 'closed' })).status, 404);
-  const bad = await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'open' });
-  assert.equal(bad.status, 422);
-  assert.equal((await bad.json()).type.endsWith('/problems/invalid-request'), true);
-  assert.equal((await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'closed' }, { origin: 'https://elsewhere.example' })).status, 403);
+  assert.equal((await app.api(eve, 'GET', `${base}/decoders/${other.id}/cable`, undefined, SSE)).status, 404);
+  assert.equal((await app.api(eve, 'GET', `${base}/decoders/nope/cable`, undefined, SSE)).status, 404);
+  assert.equal((await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { ...SSE, origin: 'https://elsewhere.example' })).status, 403);
+  assert.equal((await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { ...SSE, 'sec-fetch-site': 'cross-site' })).status, 403);
   const stranger = await app.login(await app.signUp('Finn'));
-  assert.equal((await app.form(stranger, `${base}/decoders/${gate.id}/cable`, { state: 'closed' })).status, 404);
-  const out = await app.form(null, `${base}/decoders/${gate.id}/cable`, { state: 'closed' });
+  assert.equal((await app.api(stranger, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE)).status, 404);
+  assert.equal((await app.api(stranger, 'GET', `${base}/bridge/events`, undefined, SSE)).status, 404);
+  const out = await app.api(null, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE);
   assert.equal(out.status, 303);
   assert.match(out.headers.get('location'), /^\/auth\/login\?/);
+  assert.equal(cableOf(), 'none', 'none of them counts');
+  const get = await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { accept: 'text/html' });
+  assert.equal(get.status, 303);
+  assert.equal(get.headers.get('location'), `${base}/bridge`);
+  // The old form post is gone.
+  assert.equal((await app.form(who, `${base}/decoders/${gate.id}/cable`, { state: 'open' })).status, 405);
+});
+
+test('holders are pages: a page\'s cards leave out its own, and its dead connection plus its reconnect count once', async () => {
+  const { who, gate, base, cableOf } = await clubWithGate('Hal');
+  const PAGE = 'pageAAAAAAAAAAAAAAAA';
+  const dead = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable?page=${PAGE}`, undefined, SSE), { raw: true });
+  await next(dead, 'bridge');
+  const reconnect = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable?page=${PAGE}`, undefined, SSE), { raw: true });
+  assert.doesNotMatch((await next(reconnect, 'bridge')).data, /Connected on another laptop/, 'one page, one holder');
+  // After an unplug the same page holds its cards stream, maybe before the server saw the cable stream close.
+  const mine = events(await app.api(who, 'GET', `${base}/bridge/events?page=${PAGE}`, undefined, SSE), { raw: true });
+  assert.doesNotMatch((await next(mine, 'bridge')).data, /Connected on another laptop/);
+  const theirs = events(await app.api(who, 'GET', `${base}/bridge/events?page=pageBBBBBBBBBBBBBBBB`, undefined, SSE), { raw: true });
+  assert.match((await next(theirs, 'bridge')).data, /Connected on another laptop/);
+  await dead.return();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(cableOf(), 'other', 'the reconnect still holds it');
+  await reconnect.return();
+  assert.ok(await until(() => cableOf() === 'none'));
+  await mine.return();
+  await theirs.return();
+});
+
+test('a member who may pair holds a stream that ends when pairing is no longer theirs', async () => {
+  const watched = [];
+  const rig = await startTiming({ streams: { watch: (_request, _ws, action, _watcher, end) => { watched.push({ action, end }); return () => {}; } } });
+  try {
+    const user = await rig.signUp('Jo');
+    const club = rig.club(user, 'Pairs');
+    const jo = await rig.login(user);
+    const gate = await (await rig.api(jo, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+    const it = events(await rig.api(jo, 'GET', `/clubs/${club.id}/decoders/${gate.id}/cable`, undefined, SSE), { raw: true });
+    assert.match((await next(it, 'bridge')).data, /data-bridge-wifi hidden>Change Wi-Fi/);
+    assert.deepEqual(watched.map((w) => w.action), ['timing.run', 'timing.setup']);
+    watched[1].end();
+    assert.equal(await next(it, 'bridge'), null, 'ended: the page reconnects and gets the cards it may have now');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(rig.engine.connectionsOf(club.id)[0].cable.state, 'none');
+  } finally {
+    await rig.close();
+  }
+});
+
+test('a cable stream whose setup throws ends, logs once, and counts nothing', async () => {
+  const rig = await startTiming({ streams: { watch: () => { throw new Error('checks are down'); } } });
+  const logged = [];
+  const error = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    const user = await rig.signUp('Ivy');
+    const club = rig.club(user, 'Down');
+    const ivy = await rig.login(user);
+    const gate = await (await rig.api(ivy, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+    const res = await rig.api(ivy, 'GET', `/clubs/${club.id}/decoders/${gate.id}/cable`, undefined, SSE);
+    await res.text();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(logged.length, 1);
+    assert.equal(rig.engine.connectionsOf(club.id)[0].cable.state, 'none');
+    assert.deepEqual(rig.engine.headerOf(club.id), []);
+  } finally {
+    console.error = error;
+    await rig.close();
+  }
 });

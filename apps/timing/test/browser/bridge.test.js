@@ -412,7 +412,7 @@ async function replug(t, devices) {
   await page.getByRole('button', { name: 'Pair' }).click();
   await page.getByRole('alert').filter({ hasText: /didn't answer/ }).waitFor({ timeout: 10_000 });
   await page.evaluate(() => /** @type {any} */ (window).__unplug());
-  await page.getByRole('button', { name: 'Connect again' }).click();
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   return page;
 }

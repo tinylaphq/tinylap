@@ -5,7 +5,7 @@
 // The bridge (spec §6.5): the server renders every state, for both pickers;
 // tl-bridge shows the one that applies. Without JavaScript, or without Web
 // Serial and WebHID, the page says what the bridge needs.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { formatWhen } from '../../public/format.js';
 import { html, safe } from './html.js';
@@ -44,9 +44,9 @@ const when = (request, at) => html`<time datetime="${new Date(at).toISOString()}
 const clock = (request, at) => html`<time datetime="${new Date(at).toISOString()}" data-when>${formatWhen(at, request.now())}</time>`;
 
 /** One connection: lamp, name, state, one line of help, at most one action. */
-const connectionRow = ({ which, name, state, icon, words, detail, action }) => html`<li class="decoder-row" data-row="${which}">
+const connectionRow = ({ which, name, state, icon, words, detail, action, notes = null }) => html`<li class="decoder-row" data-row="${which}">
           ${lamp(state, icon)}
-          <div class="decoder-row-text"><p class="decoder-row-name">${name}</p><p class="decoder-row-state" data-slot="state">${words}</p><p class="decoder-row-help" data-slot="detail">${detail}</p></div>
+          <div class="decoder-row-text"><p class="decoder-row-name">${name}</p><p class="decoder-row-state" data-slot="state">${words}</p><p class="decoder-row-help" data-slot="detail">${detail}</p>${notes}</div>
           <div class="decoder-row-action" data-slot="action">${action}</div>
         </li>`;
 
@@ -57,6 +57,9 @@ const WIFI_ROW = {
   offline: { state: 'fail', words: (request, at) => (at === null ? 'Not reporting' : html`Not reporting since ${clock(request, at)}`), detail: () => null },
   unknown: { state: 'unknown', words: () => null, detail: () => 'Connect the cable to see its Wi-Fi.' },
 };
+
+// What the Cable row says after this tab's cable to the decoder was pulled; tl-bridge shows them (connections spec §2).
+const CABLE_NOTES = html`<p class="decoder-row-help" data-cable-note="back" hidden>It reconnects when you plug it back in.</p><p class="decoder-row-help" data-cable-note="gap" hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p>`;
 
 /** A decoder's card, as the server knows it: no cable on this tab (connections spec §3). @param {any} request @param {boolean} mayPair */
 function decoderCard(request, d, mayPair) {
@@ -80,7 +83,7 @@ function decoderCard(request, d, mayPair) {
       <h2 class="h3 cut-words" data-slot="name">${d.name}</h2>
       ${status}
       <ul class="decoder-rows">
-        ${connectionRow({ which: 'cable', name: 'Cable', icon: PLUG_ICON, ...cable })}
+        ${connectionRow({ which: 'cable', name: 'Cable', icon: PLUG_ICON, ...cable, notes: CABLE_NOTES })}
         ${connectionRow({ which: 'wifi', name: 'Wi-Fi', icon: WIFI_ICON, state: wifi.state, words: wifi.words(request, d.wifi.at), detail: wifi.detail(request, d.wifi.at), action: html`${hint}${change}` })}
       </ul>
     </section>`;
@@ -89,8 +92,11 @@ function decoderCard(request, d, mayPair) {
 /*
  * The decoder cards (connections spec §2, §3): every decoder of the club, by
  * name, as the server knows it, which is never this tab's cable. tl-bridge
- * swaps #bridge-decoders for the one in a fresh copy of this page, and
- * overlays what this tab's cable says. Its hooks:
+ * swaps in each #bridge-decoders its stream sends (#bridge's
+ * data-cable-stream, with {id}, while a decoder is on this tab's cable;
+ * data-cards-stream otherwise; both with ?page= and #bridge's data-page,
+ * this render's own id), and overlays what this tab's cable says.
+ * Its hooks:
  * - section[data-decoder="<id>"]: one card; [data-slot="name"] its name,
  *   [data-slot="status"] the status line (.status-success or .status-warning,
  *   one <p> per sentence).
@@ -100,6 +106,9 @@ function decoderCard(request, d, mayPair) {
  *   [data-slot="detail"] one line of help (an empty one takes no room),
  *   [data-slot="action"] at most one action.
  * - [data-bridge-connect="serial"]: Connect decoder, in the Cable row.
+ * - [data-cable-note="back" | "gap"] (hidden), in the Cable row: shown for the
+ *   decoder this tab had when its cable was pulled: it reconnects on its own,
+ *   and (no Wi-Fi) its crossings meanwhile are lost.
  * - [data-bridge-wifi]: Change Wi-Fi, hidden, in the Wi-Fi row, for members
  *   who may pair (timing.setup) only; shown while this decoder is on this
  *   tab's cable (named Set up Wi-Fi when it has none), with the help line
@@ -130,8 +139,8 @@ const passwordField = ({ id, hint = null }) => html`<div class="field">
             ${hint ? html`<p class="field-hint" id="${id}-hint">${hint}</p>` : null}
           </div>`;
 
-/** A step's buttons: right-aligned, the primary last. @param {...unknown} buttons */
-const menu = (...buttons) => html`<menu class="wifi-menu">${buttons.filter(Boolean).map((b) => html`<li>${b}</li>`)}</menu>`;
+/** A step's footer: its way back or aside on the left, its way on on the right, every button one size. @param {unknown} start @param {unknown} [end] */
+const menu = (start, end = null) => html`<menu class="wifi-menu">${start ? html`<li>${start}</li>` : null}${end ? html`<li class="wifi-menu-end">${end}</li>` : null}</menu>`;
 /** @param {string} label @param {string} action */
 const outline = (label, action) => html`<button type="button" class="btn btn-outline" data-wifi-action="${action}">${label}</button>`;
 
@@ -148,7 +157,7 @@ const outline = (label, action) => html`<button type="button" class="btn btn-out
  * clones of template[data-wifi-row], whose button.net carries data-signal and
  * holds [data-slot="name"], [data-slot="note"] (Current network or Open,
  * hidden when neither) and [data-slot="signal"] (Strong, Fair, Weak). The
- * password step's [data-slot="error"] (hidden) takes a refusal. The result
+ * password and another-network steps' [data-slot="error"] (hidden) take a refusal. The result
  * step has [data-result="joined"] and [data-result="timeout"], both hidden.
  * The list step's [data-scan="empty"] and [data-scan="failed"] (hidden) say
  * that a scan found nothing or couldn't run. showModal() makes the page
@@ -165,7 +174,7 @@ export function wifiDialog() {
       <h2 id="wifi-title-looking">Change Wi-Fi</h2>
       <p class="subtitle">${decoder}</p>
       ${busy('Looking for networks near the decoder…')}
-      ${menu(outline('Cancel', 'cancel'))}
+      ${menu(null, outline('Cancel', 'cancel'))}
     </section>
     <section class="wifi-step" data-step="list" hidden>
       <h2 id="wifi-title-list">Change Wi-Fi</h2>
@@ -176,10 +185,9 @@ export function wifiDialog() {
         <p class="wifi-empty" data-scan="empty" hidden>No networks near the decoder. Look again, or enter another network.</p>
         <ul class="nets-list" data-slot="networks" aria-labelledby="wifi-nets-title"></ul>
         <template data-wifi-row><li><button type="button" class="net" data-signal=""><span class="net-name"><span data-slot="name"></span><span class="net-note" data-slot="note" hidden></span></span><span class="net-meta"><span data-slot="signal"></span>${safe(BARS_ICON)}</span>${safe(CHEVRON_ICON)}</button></li></template>
-        <p class="wifi-hint">Only 2.4 GHz networks show here.</p>
+        <div class="wifi-notes"><p class="wifi-hint">Only 2.4 GHz networks show here.</p><p class="wifi-hint">TinyLap never sees the password: it goes from this laptop straight to the decoder.</p></div>
       </div>
-      <div class="nets-other"><p>Not in the list, or its name is hidden?</p><button type="button" class="btn btn-sm btn-outline" data-wifi-action="another">Another network</button></div>
-      ${menu(outline('Cancel', 'cancel'))}
+      ${menu(outline('Another network…', 'another'), outline('Cancel', 'cancel'))}
     </section>
     <form class="wifi-step" data-step="password" data-wifi-form="password" method="dialog" hidden>
       <h2 id="wifi-title-password" class="cut-words">${network}</h2>
@@ -191,6 +199,7 @@ export function wifiDialog() {
     <form class="wifi-step" data-step="another" data-wifi-form="another" method="dialog" hidden>
       <h2 id="wifi-title-another">Another network</h2>
       <p class="subtitle">Wi-Fi for ${decoder}</p>
+      <p class="status status-error" role="alert" data-slot="error" hidden></p>
       <div class="field">
         <label for="wifi-another-name">Network name</label>
         <input type="text" id="wifi-another-name" name="ssid" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="wifi-another-name-hint">
@@ -203,16 +212,15 @@ export function wifiDialog() {
       <h2 id="wifi-title-joining" class="cut-words">${network}</h2>
       <p class="subtitle">Wi-Fi for ${decoder}</p>
       ${busy(html`Joining “${network}”…`)}
-      ${menu(outline('Cancel', 'cancel'))}
+      ${menu(null, outline('Cancel', 'cancel'))}
     </section>
     <section class="wifi-step" data-step="result" hidden>
       <h2 id="wifi-title-result" class="cut-words">${network}</h2>
       <p class="subtitle">Wi-Fi for ${decoder}</p>
       <div class="wifi-state" data-result="joined" hidden>${lamp('ok', WIFI_ICON)}<div><p class="decoder-row-state">Joined “${network}”</p><p class="decoder-row-help">Signal <span data-slot="signal"></span>. Laps now also get through over Wi-Fi.</p></div></div>
       <div class="wifi-state" data-result="timeout" hidden>${lamp('fail', WIFI_ICON)}<p class="decoder-row-state">The decoder didn't answer</p></div>
-      ${menu(html`<button type="button" class="btn btn-primary" data-wifi-action="done">Done</button>`)}
+      ${menu(null, html`<button type="button" class="btn btn-primary" data-wifi-action="done">Done</button>`)}
     </section>
-    <p class="wifi-hint wifi-note">TinyLap never sees the password: it goes from this laptop straight to the decoder.</p>
   </dialog>`;
 }
 
@@ -232,9 +240,10 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     body: html`<div class="container stack-lg screen">
   <h1>Bridge</h1>
   <tl-bridge>
-  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-closed="${base}/decoders/{id}/cable">
+  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}">
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
+    <p hidden data-bridge-say="disconnected">Decoder disconnected.</p>
     <p class="status status-warning" data-bridge-earlier hidden></p>
     <template data-bridge-sign-in><a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}">Sign in again</a> to send them.</template>
     <section data-bridge-state="unsupported" class="card-static stack-md">
@@ -304,11 +313,6 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
         <template data-bridge-row="lap"><li><span class="bridge-code"></span><span class="num"></span></li></template>
       </div>
       <p class="empty" data-bridge-preview-empty>Passings show up here the moment the decoder reports them.</p>
-    </section>
-    <section data-bridge-state="disconnected" hidden class="card-static stack-md">
-      <p class="status status-warning">Decoder disconnected.</p>
-      <p data-bridge-gap hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p>
-      ${connect('Connect again', 'last')}
     </section>
     ${wifiDialog()}
   </div>
