@@ -7,6 +7,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
+import { events, next } from '../server/sse.js';
 import { openBrowser, pageAs, postPassings } from './browser.js';
 
 let app;
@@ -1166,7 +1167,8 @@ test('reopening a port that was never unplugged makes no promise of a reconnect'
   assert.deepEqual(errors, []);
 });
 
-test('a plain ZRound decoder with no laps stays on the cable past a minute in a hidden tab; closing the tab ends it', { timeout: 120_000 }, async (t) => {
+// The engine's tests show the cable has no time limit; here the page shows it uses no timer for it.
+test('a plain ZRound decoder with no laps stays on the cable in a hidden tab; closing the tab ends it', async (t) => {
   const { who, ws, page, errors, until } = await plainOnCable(t, 'Quiet');
   await until('other', 2000, 'on the cable');
   // The tab goes to the background. Nothing on the page counts time for the cable, so nothing there can be throttled.
@@ -1175,7 +1177,7 @@ test('a plain ZRound decoder with no laps stays on the cable past a minute in a 
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await page.waitForTimeout(65_000);
+  await page.waitForTimeout(3000);
   assert.equal(app.engine.connectionsOf(ws)[0].cable.state, 'other');
   const other = await (await app.api(who, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
   assert.match(other, /Connected on another laptop/);
@@ -1183,4 +1185,53 @@ test('a plain ZRound decoder with no laps stays on the cable past a minute in a 
   assert.deepEqual(errors, []);
   await page.close();
   await until('none', 2000, 'the stream ended with the tab');
+});
+
+test('a cable stream the server refuses (a restart) is opened again, and the decoder is on the cable again', async (t) => {
+  const { page, errors, board, card, row, ws } = await cabledPage(t, { connect: false });
+  let refused = 0;
+  let asked = 0;
+  await page.route((url) => url.pathname.endsWith(`/decoders/${board.id}/cable`), (route) => {
+    asked += 1;
+    if (refused > 0) return route.continue();
+    refused += 1;
+    return route.fulfill({ status: 503, contentType: 'text/html', body: '<p>Restarting</p>' });
+  });
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  for (const end = Date.now() + 5000; app.engine.connectionsOf(ws)[0].cable.state !== 'other';) {
+    assert.ok(Date.now() < end, 'the hold comes back');
+    await page.waitForTimeout(50);
+  }
+  assert.equal(refused, 1);
+  assert.equal(asked, 2, 'one more try, after a pause');
+  assert.deepEqual(errors.filter((e) => !/503|Service Unavailable|EventSource/i.test(e)), []);
+});
+
+test('this tab\'s own card never reads Connected on another laptop after an unplug, even with its old stream still counted', async (t) => {
+  const { page, errors, board, row, who, ws } = await cabledPage(t);
+  const onCable = () => app.engine.connectionsOf(ws)[0].cable.state;
+  for (const end = Date.now() + 5000; onCable() !== 'other';) {
+    assert.ok(Date.now() < end, 'on the cable');
+    await page.waitForTimeout(50);
+  }
+  // A connection of this page the server hasn't seen close yet (a dead one, or a close still on its way).
+  const pageId = await page.locator('#bridge').getAttribute('data-page');
+  const stale = events(await app.api(who, 'GET', `/personal/decoders/${board.id}/cable?page=${pageId}`, undefined, { accept: 'text/event-stream' }), { raw: true });
+  await next(stale, 'bridge');
+  t.after(() => stale.return());
+  const cable = row(board, 'cable').locator('[data-slot="state"]');
+  // What the card says, every 20 ms, from just before the unplug.
+  await page.evaluate((id) => {
+    window.__said = new Set();
+    window.__watch = setInterval(() => window.__said.add(document.querySelector(`[data-decoder="${id}"] [data-row="cable"] [data-slot="state"]`)?.textContent), 20);
+  }, board.id);
+  await page.evaluate(() => window.__port.unplug());
+  await cable.filter({ hasText: /^Not connected$/ }).waitFor({ timeout: 2000 });
+  await page.waitForTimeout(1500);
+  assert.equal(onCable(), 'other', 'the stale connection still holds it');
+  const said = await page.evaluate(() => { clearInterval(window.__watch); return [...window.__said]; });
+  assert.ok(!said.includes('Connected on another laptop'), JSON.stringify(said));
+  assert.equal(await cable.innerText(), 'Not connected');
+  assert.deepEqual(errors, []);
 });

@@ -65,6 +65,9 @@ const KIND_TEXT = {
 
 /** The decoder-list GET gives up after this long, as a failed one (F3). */
 const LIST_TIMEOUT_MS = 3000;
+/** A stream the server refused (a 503 while it restarts, a sign-in redirect) is opened again after this long, doubling up to the cap. */
+const STREAM_RETRY_MS = 1000;
+const STREAM_RETRY_MAX_MS = 30_000;
 
 const quoted = (name) => `“${name}”`;
 /**
@@ -260,14 +263,15 @@ async function pick(which) {
  * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any,
  *   transport: 'serial' | 'hid' | null, list: { decoders: { id: string, name: string, lastSeenAt: number | null }[], serverNow: number | null } | null,
  *   remembered: string | null, devices: any, connecting: boolean, wizard: WifiWizard | null, silent: Bridge | null,
- *   stream: { url: string, source: EventSource } | null,
+ *   stream: { url: string, source: EventSource, retry?: ReturnType<typeof setTimeout> } | null, retryMs: number,
  *   last: { port: any, device: string, decoder: string | null, refused?: boolean } | null,
  *   gone: { decoder: string, kind: string, serial: boolean, back: boolean, before: any[], port: any } | null,
  *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null }} Run
  * `last` is the serial port this tab last had (and its decoder once known; `refused` once it wouldn't open, so the
  * button goes to the picker); `gone` the decoder this tab had when its cable was pulled, until a decoder is on the
  * cable again: `back` when its chip has reconnected without the picker before, `before` the ports there already.
- * `stream` is the one stream the page holds (cable presence spec §2).
+ * `stream` is the one stream the page holds (cable presence spec §2), with the timer that opens it again after the
+ * server refused it; `retryMs` that timer's next wait.
  */
 
 class TlBridge extends HTMLElement {
@@ -284,7 +288,7 @@ class TlBridge extends HTMLElement {
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root || !supported) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
-      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null };
+      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, retryMs: STREAM_RETRY_MS };
     this.run = run;
     this.reset(run);
     const dialog = this.$(run, '#wifi-dialog');
@@ -883,28 +887,42 @@ class TlBridge extends HTMLElement {
   /**
    * Holds the one stream this page needs (cable presence spec §2): the cable stream of the decoder on this tab's cable
    * while it is ready (a TinyLap decoder that said who it is; a plain ZRound or EasyLap once chosen), for as long as the
-   * server should count it on a cable; otherwise the cards stream. A dropped stream reconnects by itself (EventSource);
-   * one the server refused is opened again at the next change. The addresses are #bridge's.
+   * server should count it on a cable; otherwise the cards stream. Both carry this render's page id (#bridge's
+   * data-page), so the server leaves this page's own cable out of its cards. A dropped stream reconnects by itself
+   * (EventSource); one the server refused, which EventSource gives up on, is opened again after STREAM_RETRY_MS,
+   * doubling to STREAM_RETRY_MAX_MS until a message comes. The addresses are #bridge's.
    * @param {Run} run
    */
   follow(run) {
     if (!('EventSource' in window)) return;
     const bridge = run.bridge;
     const id = bridge?.decoder && bridge.state === 'ready' ? bridge.decoder : null;
-    const url = id ? run.root.dataset.cableStream?.replace('{id}', encodeURIComponent(id)) : run.root.dataset.cardsStream;
-    if (!url) return;
+    const address = id ? run.root.dataset.cableStream?.replace('{id}', encodeURIComponent(id)) : run.root.dataset.cardsStream;
+    if (!address) return;
+    const page = run.root.dataset.page;
+    const url = page ? `${address}?${new URLSearchParams({ page })}` : address;
     if (run.stream?.url === url && run.stream.source.readyState !== EventSource.CLOSED) return;
     // One at a time: the old one closes first.
     this.unfollow(run);
     const source = new EventSource(url);
+    /** @type {NonNullable<Run['stream']>} */
+    const stream = { url, source };
     source.addEventListener('bridge', (event) => {
-      if (run === this.run && run.stream?.source === source) this.swap(run, /** @type {MessageEvent} */ (event).data);
+      if (run !== this.run || run.stream !== stream) return;
+      run.retryMs = STREAM_RETRY_MS;
+      this.swap(run, /** @type {MessageEvent} */ (event).data);
     });
-    run.stream = { url, source };
+    source.addEventListener('error', () => {
+      if (run !== this.run || run.stream !== stream || source.readyState !== EventSource.CLOSED || stream.retry) return;
+      stream.retry = setTimeout(() => { if (run === this.run && run.stream === stream) this.follow(run); }, run.retryMs);
+      run.retryMs = Math.min(run.retryMs * 2, STREAM_RETRY_MAX_MS);
+    });
+    run.stream = stream;
   }
 
   /** Closes the page's stream: a cable stream's decoder is on no cable from now, as far as this tab goes. @param {Run} run */
   unfollow(run) {
+    clearTimeout(run.stream?.retry);
     run.stream?.source.close();
     run.stream = null;
   }
