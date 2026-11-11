@@ -1235,3 +1235,71 @@ test('this tab\'s own card never reads Connected on another laptop after an unpl
   assert.equal(await cable.innerText(), 'Not connected');
   assert.deepEqual(errors, []);
 });
+
+// After a reload this tab has no port it last had; Chrome may still permit ports for the page.
+
+/** A page that has just been reloaded, `granted` ports permitted (the simulator forgets them on a load), the picker counted. */
+async function reloadedWith(t, granted) {
+  const made = await cabledPage(t, { connect: false });
+  await made.page.reload();
+  await made.page.evaluate(async (n) => { for (let i = 0; i < n; i += 1) await navigator.serial.requestPort(); }, granted);
+  await countPicks(made.page);
+  return made;
+}
+
+test('after a reload, Connect decoder opens the one permitted port without the picker', async (t) => {
+  const { page, errors, board, card, row } = await reloadedWith(t, 1);
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.evaluate(() => window.__picks), 0);
+  assert.deepEqual(errors, []);
+});
+
+test('after a reload, with two permitted ports, Connect decoder opens the picker', async (t) => {
+  const { page, errors, board, card, row } = await reloadedWith(t, 2);
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.evaluate(() => window.__picks), 1);
+  assert.deepEqual(errors, []);
+});
+
+test('after a reload, a connect event opens nothing: the reconnect needs the port this tab had', async (t) => {
+  const { page, errors, board, row } = await reloadedWith(t, 1);
+  await page.evaluate(() => {
+    const event = new Event('connect');
+    Object.defineProperty(event, 'target', { value: window.__port ?? null });
+    navigator.serial.dispatchEvent(event);
+  });
+  await page.evaluate(async () => {
+    const [port] = await navigator.serial.getPorts();
+    const event = new Event('connect');
+    Object.defineProperty(event, 'target', { value: port });
+    navigator.serial.dispatchEvent(event);
+  });
+  await page.waitForTimeout(1500);
+  assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Not connected');
+  assert.equal(await page.evaluate(async () => (await navigator.serial.getPorts())[0].opens), 0);
+  assert.equal(await page.evaluate(() => window.__picks), 0);
+  assert.deepEqual(errors, []);
+});
+
+test('without Web Serial or WebHID, the cards update live over the stream, and the notice stays', async (t) => {
+  const { who, errors, board, card, row } = await cabledPage(t, { connect: false });
+  const bare = await pageAs(browser, app, who, { viewport: { width: 390, height: 844 } });
+  t.after(() => bare.context.close());
+  await bare.page.addInitScript(() => { delete Navigator.prototype.serial; delete Navigator.prototype.hid; });
+  // The simulator would put a serial port back: this page is rendered without it.
+  app.simulate = null;
+  await bare.page.goto('/personal/bridge');
+  app.simulate = 'tinylap,fast';
+  await bare.page.getByText(/needs Chrome or Edge/).waitFor();
+  const theirs = bare.page.locator(`[data-decoder="${board.id}"] [data-row="cable"] [data-slot="state"]`);
+  assert.equal(await theirs.innerText(), 'Not connected');
+  // Another laptop connects it: the bare page says so without a reload.
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  await theirs.filter({ hasText: /^Connected on another laptop$/ }).waitFor({ timeout: 8000 });
+  assert.equal(await bare.page.getByText(/needs Chrome or Edge/).isVisible(), true);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(bare.errors, []);
+});

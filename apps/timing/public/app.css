@@ -323,8 +323,11 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
    between rows, sm inside a row. */
 #bridge-decoders { margin-bottom: var(--p-space-lg); }
 #bridge > [data-bridge-state="unsupported"] { margin-bottom: var(--p-space-lg); }
-.decoder-card { display: grid; gap: var(--p-space-md); }
+/* One gap (lg) between heading, status box and rows, and each side of a row divider; the status box's hard shadow
+   (4px, the xs step) is added under it so the gap to the first row is lg past the shadow too. */
+.decoder-card { display: grid; gap: var(--p-space-lg); }
 .decoder-card > h2, .decoder-card > .status { margin: 0; }
+.decoder-card > .status { margin-bottom: var(--p-space-xs); }
 .decoder-card > .status p { margin: 0; }
 .decoder-card > .status p + p { margin-top: var(--p-space-xs); font-weight: 400; }
 .container .decoder-rows { list-style: none; padding: 0; margin: 0; }

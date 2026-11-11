@@ -15,8 +15,8 @@
 // - On disconnect it stops: the port is closed, and the click, submit and
 //   beforeunload listeners are removed. Work in flight (the picker, a
 //   pairing request, a name lookup, earlier passings) finishes, unseen.
-// - Without #bridge, or without Web Serial and WebHID, it does nothing,
-//   and the server's "unsupported" notice stays.
+// - Without #bridge it does nothing. Without Web Serial and WebHID it only keeps
+//   the cards live (the cards stream); the server's "unsupported" notice stays.
 // - A plain ZRound decoder or an EasyLap is chosen on the choose form on
 //   every connect; the browser remembers only which decoder a device was,
 //   and offers that one to confirm.
@@ -169,12 +169,14 @@ const permittedPorts = async () => {
 /**
  * The port this page may open without the picker that is the one it last had: the same SerialPort when it is
  * still listed, else the one port with the same USB chip, leaving out `before` (ports that were there already,
- * so another decoder's); null when there is none, or more than one.
- * @param {{ port: any, device: string } | null} last @param {any[]} [before]
+ * so another decoder's); null when there is none, or more than one. With no `last` (after a reload) and `lone`
+ * (the member clicked), the one permitted port with USB ids.
+ * @param {{ port: any, device: string } | null} last @param {any[]} [before] @param {boolean} [lone]
  */
-async function permittedPort(last, before = []) {
-  if (!last) return null;
+async function permittedPort(last, before = [], lone = false) {
+  if (!last && !lone) return null;
   const ports = await permittedPorts();
+  if (!last) return ports.length === 1 && chipOf(ports[0]) !== null ? ports[0] : null;
   if (ports.includes(last.port)) return last.port;
   const same = ports.filter((port) => !before.includes(port) && isLast(port, last));
   return same.length === 1 ? same[0] : null;
@@ -286,10 +288,18 @@ class TlBridge extends HTMLElement {
   start() {
     if (this.run) return;
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
-    if (!root || !supported) return;
+    if (!root) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
       wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, retryMs: STREAM_RETRY_MS };
     this.run = run;
+    // Without Web Serial or WebHID only the live cards are on: no cable, no connect flow, the server's notice stays.
+    if (!supported) {
+      this.keep(run);
+      addEventListener('pagehide', this);
+      addEventListener('pageshow', this);
+      this.follow(run);
+      return;
+    }
     this.reset(run);
     const dialog = this.$(run, '#wifi-dialog');
     if (dialog instanceof HTMLDialogElement) {
@@ -410,9 +420,9 @@ class TlBridge extends HTMLElement {
       const button = event.target instanceof Element ? event.target.closest('[data-bridge-connect]') : null;
       if (button && this.contains(button)) {
         let which = /** @type {any} */ (button).dataset.bridgeConnect || 'serial';
-        // The card of the decoder this tab last had (or the one Connect decoder of an empty list) tries its port first.
+        // The card of the decoder this tab last had (or the one Connect decoder of an empty list) tries its port first; after a reload, with no port had, the one permitted port.
         const card = /** @type {HTMLElement | null} */ (button.closest('[data-decoder]'));
-        if (which === 'serial' && run.last && !run.last.refused && (!card || card.dataset.decoder === run.last.decoder)) which = 'again';
+        if (which === 'serial' && (!run.last || (!run.last.refused && (!card || card.dataset.decoder === run.last.decoder)))) which = 'again';
         this.connect(run, which).then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
       }
     } else if (event.type === 'submit') {
@@ -550,7 +560,7 @@ class TlBridge extends HTMLElement {
     run.connecting = true;
     this.paint(run);
     const mine = which === 'again' || which === 'auto';
-    const remembered = mine ? port ?? await permittedPort(run.last) : null;
+    const remembered = mine ? port ?? await permittedPort(run.last, [], which === 'again') : null;
     if (which === 'auto' && !remembered) {
       run.connecting = false;
       if (run === this.run) this.paint(run);
