@@ -60,17 +60,10 @@ Wi-Fi with the cable (§4): "Connected to “Clubhaus”" / "Signal strong|fair|
 
 Per decoder, in the engine's memory since the server started (no schema change):
 - `netAt`: the last batch over Wi-Fi (`via: 'net'`); `quiet`: whether that batch carried `quiet: true`;
-- `cableAt`: the last batch from a bridge (`via: 'serial'`). The bridge flushes log lines within 10 s (bridge spec §2.4), so a TinyLap decoder on any laptop's cable keeps it fresh; a plain ZRound decoder only while laps flow.
-- The existing expected set (Wi-Fi spec §6) and `last_seen_at` (stored, either path).
+- the cable: how many Bridge tabs hold an event stream for the decoder on their cable, and when the last of them let go (`2026-11-11-bridge-cable-presence-design.md`, the cable presence spec, §2). Batches over the cable say nothing of the cable.
+- The existing expected set (Wi-Fi spec §6) and `last_seen_at` (stored, either path). A batch over the cable keeps an expected decoder fresh only while its cable is held.
 
-**The Cable row** for a decoder not on this tab's cable: **Connected on another laptop** (green) when `cableAt` is within 25 s (`OFFLINE_AFTER_MS`) and no bridge has said since that its cable closed, otherwise **Not connected** (neutral).
-
-**A cable that closes:** when this tab's cable to a decoder closes (unplugged, or the tab closes or leaves the page), `tl-bridge` posts `state=closed` to `<space>/decoders/<id>/cable` (`keepalive`). The engine then counts the decoder as on no cable until its next batch over one, publishes `decoders` if the board header changed (§6), and the answer, a 303 to the Bridge page, gives the bridge the cards to swap in. The address is `#bridge`'s `data-cable-closed` (`<space>/decoders/{id}/cable`). **A cable that opens:** when a decoder on this tab's cable says who it is (the bridge is `ready`: a TinyLap decoder by `%TLID`, a plain ZRound or EasyLap once it is chosen), `tl-bridge` posts `state=open` to the same address, once per connection; the address is `#bridge`'s `data-cable-open`. The engine counts it as on a cable from then (`cableAt` now, any close cleared), as a batch over a cable does, and publishes `decoders` if the board header changed. A quick re-plug never waits for a lap to say so. A close of the same decoder still on its way goes first, so the server hears them in order. The answer is the Bridge page, whose cards are swapped in. While the decoder stays on the cable, the bridge says so again every 10 s, one at a time (one the server doesn't answer within 5 s is given up), so a plain ZRound decoder with no laps stays on a cable on other pages; those answers aren't swapped in, as the 15 s refresh brings the cards. It stops when the cable closes or the page lets go, and a close waits for an open of the same decoder still on its way, so the server hears the close last. An open counts for 90 s (`OPEN_FOR_MS`), not the 25 s of a batch: Chrome may run a hidden tab's timers only once a minute, and the Bridge tab is usually hidden while racing. So a laptop that dies or loses its network without a close shows "Connected on another laptop" for up to 90 s. The card promises a reconnect only after a port of its chip came back, re-enumerated, after an unplug and opened without the picker.
-
-After an unplug, or when another device replaces the one on the cable, the post waits for a batch already on its way (3 s at most); on leaving the page it goes at once, and so does any post still waiting. A post whose decoder is on this tab's cable again by then (connected and identified) is not sent. Until the answer comes, the card keeps what it showed, and a 15 s refresh leaves that card as it is; each close counts on its own, so a second close of the same decoder keeps the card until its own answer comes. The bridge writes no words of its own for this.
-
-- Batches the page sends with no port open to their decoder (an earlier tab's outbox, or what still waits after an unplug) carry `cable: false`: the server stores their passings and touches `last_seen_at`, but they are no news of a cable (or of Wi-Fi: they don't keep an expected decoder fresh).
-- A post that fails (offline, a 5xx, signed out) leaves the server's old words: "Connected on another laptop" and "reporting" for up to 25 s after the cable's last batch, until the 25 s rule ends them.
+**The Cable row** for a decoder not on this tab's cable: **Connected on another laptop** (green) while a Bridge tab other than this one holds its cable stream, otherwise **Not connected** (neutral). How a tab holds it, and when it lets go, is the cable presence spec's §2. The card promises a reconnect only after a port of its chip came back, re-enumerated, after an unplug and opened without the picker.
 
 **The Wi-Fi row** without this tab's cable, first match:
 1. **Reporting** (green): `netAt` within 25 s.
@@ -82,7 +75,7 @@ After an unplug, or when another device replaces the one on the cable, the post 
 
 The cards and the decoder list the bridge fetches (`GET /workspaces/<ws>/decoders`) carry this as `cable: { state: 'other'|'none' }` and `wifi: { state: 'reporting'|'idle'|'offline'|'unknown', at: number|null }`, plus `lastSeenAt`.
 
-**Keeping it current:** the card list is one element, `#bridge-decoders`. `tl-bridge` refreshes it every 15 s (call) by fetching the Bridge page and swapping that element in, as AGENTS.md's partial swap describes; the rows the cable fills in (§4) are re-applied after each swap. No new stream.
+**Keeping it current:** the card list is one element, `#bridge-decoders`. The page's one stream (the cable stream, or `<space>/bridge/events` without a decoder on its cable; cable presence spec §2) sends it, rendered by the server, whenever it changes, and `tl-bridge` swaps it in; the rows the cable fills in (§4) are re-applied after each swap.
 
 ## 4. What the decoder says (cable)
 
@@ -135,10 +128,10 @@ The byte checks of the existing pairing form (`wifiError`, bridge spec §5) appl
 ## 6. One status on every live board
 
 At the track the question is "are laps counted right now?". Every live board (the member's board, the big board, the watchers link) answers it in its header, in a row under the track name (apart from the navbar's Live state): one item per decoder that reported in the last 30 minutes, by either path:
-- **Reporting** (green): a batch within 25 s over the cable or Wi-Fi.
+- **Reporting** (green): its cable stream is held (cable presence spec §2), or a Wi-Fi batch came within 25 s.
 - **Idle** (neutral): its last Wi-Fi batch said `quiet`: "wakes up with the next lap".
 - **Not reporting** (red): in the expected set and offline; the existing banner (Wi-Fi spec §6) says the rest.
-- **Not reporting** (red) also for a decoder whose last batch came over the cable and carried log lines (a TinyLap decoder: the bridge flushes its log lines within 10 s), silent for 25 s and not quiet: its cable path is gone. A decoder that only ever sent passings over the cable (a plain ZRound decoder or an EasyLap) can't be told apart from one between laps, so it shows nothing once silent for 25 s.
+- **Not reporting** (red) also for a decoder whose last cable holder let go within the last 30 minutes, while it isn't reporting over Wi-Fi: its cable path just ended (cable presence spec §2).
 
 Decoders silent for longer show nothing; a tap-only club shows nothing. The words are "<name>: reporting|idle|not reporting", short enough for a phone. The item is part of `#board-live`, so the board stream keeps it current; the engine publishes `decoders` (Wi-Fi spec §6) on any change of these states, not only of the offline set.
 
@@ -153,7 +146,7 @@ Decoders silent for longer show nothing; a tap-only club shows nothing. The word
 
 - Shared vectors: `%TLNET` (each state and cause, a name with `&`, `%` and non-ASCII), `%TLSCAN`/`%TLAP`/`%TLSCANEND`, through `zround.test.js`, the simulator and `test_session`.
 - The simulator's TinyLap model (`packages/timing/simulator.js`, `apps/timing/public/sim/models/tinylap.js`) answers both, with a scripted network list and a password it accepts, so the browser tests cover the dialog.
-- Engine: the cable and Wi-Fi states and their order (§3), the board header states (§6), `watched` in the answer, with the rig's clock.
+- Engine: the cable and Wi-Fi states and their order (§3), the board header states (§6), `watched` in the answer, with the rig's clock. The cable's own tests are the cable presence spec's §4.
 - Firmware host tests: `%TLJOIN` validation and results, `%TLNET` sent only on a change, the uplink's `watched` rule.
 - Pages: the cards for each server state; `#bridge-decoders` swap keeps the cable rows.
 - Browser: connect → card shows Connected and the board's state; Change Wi-Fi → list (25 networks, scrolls) → password → joined; refused → back with the password kept; another network; no Change Wi-Fi without the cable.
@@ -163,4 +156,4 @@ Decoders silent for longer show nothing; a tap-only club shows nothing. The word
 
 - A scan while connected takes under 3 s and doesn't drop the link for longer than the outbox can hold (§4.2).
 - The signal thresholds (§4.1) match what people call strong/fair/weak.
-- Polling `#bridge-decoders` every 15 s is light enough for the server; a stream would be the next step.
+- The cards come over the page's one stream (cable presence spec §2), light enough for the server.
