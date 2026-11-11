@@ -210,8 +210,12 @@ class TlBridge extends HTMLElement {
   served = new Map();
   /** The bridges whose closed cable the server has been told of, once each. @type {WeakSet<Bridge>} */
   told = new WeakSet();
-  /** The decoders whose closed cable is being told: their cards wait for the server's answer. @type {Set<string>} */
-  closing = new Set();
+  /**
+   * The closes being told, one entry per close, so a second close of one decoder outlives the first: while one of a
+   * decoder's is here, its card waits for the server's answer. `send` posts it, once, whoever calls first.
+   * @type {Set<{ id: string, sent: Promise<Response> | null, send: () => Promise<Response> }>}
+   */
+  pending = new Set();
 
   connectedCallback() { this.start(); }
 
@@ -316,6 +320,8 @@ class TlBridge extends HTMLElement {
       // Into the back/forward cache, the page (and its port) stays.
       if (/** @type {PageTransitionEvent} */ (event).persisted) return;
       if (this.run?.bridge) this.cableClosed(this.run, this.run.bridge);
+      // A close still waiting for its settle goes now, keepalive, before the page is gone.
+      for (const close of this.pending) void close.send().catch(() => {});
       return;
     }
     const run = this.run;
@@ -492,7 +498,8 @@ class TlBridge extends HTMLElement {
     run.transport = chosen;
     if (run.made && run.made.device !== transport.device) this.forget(run);
     this.$(run, '[data-bridge-taken]').hidden = true;
-    if (run.bridge) this.cableClosed(run, run.bridge);
+    // A batch the replaced bridge has in flight lands first, so the close comes after it.
+    if (run.bridge) this.cableClosed(run, run.bridge, { settle: true });
     await run.bridge?.close();
     // From here the replaced bridge's late events find no bridge, and leaving the page isn't guarded.
     run.bridge = null;
@@ -686,7 +693,11 @@ class TlBridge extends HTMLElement {
   /** The cable left this card: back to the server's copy, or a fresh one when there is none. @param {Run} run @param {HTMLElement} card */
   uncable(run, card) {
     // The server's copy still says the cable is on (another laptop): its answer to the close brings the cards.
-    if (this.closing.has(card.dataset.decoder ?? '')) return;
+    // Change Wi-Fi needs the cable, so it goes now; the rest waits for that answer.
+    if (this.closingOf(card.dataset.decoder ?? '')) {
+      for (const b of /** @type {NodeListOf<HTMLElement>} */ (card.querySelectorAll('[data-bridge-wifi]'))) b.hidden = true;
+      return;
+    }
     const served = this.served.get(card.dataset.decoder ?? '');
     if (!served) {
       void this.refresh(run);
@@ -741,17 +752,33 @@ class TlBridge extends HTMLElement {
     return run.refreshing;
   }
 
+  /** Whether a close of decoder `id` other than `except` is still being told. @param {string} id @param {unknown} [except] */
+  closingOf(id, except = null) {
+    for (const close of this.pending) if (close.id === id && close !== except) return true;
+    return false;
+  }
+
   /**
    * The swap itself: `res` must be this page (a redirect elsewhere, say to sign in, is not), or nothing changes.
-   * @param {Run} run @param {Response} res
+   * A card whose close is still being told stays as it is, with its server's copy: that close's answer brings it.
+   * @param {Run} run @param {Response} res @param {unknown} [answering] the close this is the answer to
    */
-  async swap(run, res) {
+  async swap(run, res, answering = null) {
     if (!res.ok || new URL(res.url).pathname !== location.pathname) return;
     const fresh = new DOMParser().parseFromString(await res.text(), 'text/html').getElementById('bridge-decoders');
     const current = this.$(run, '#bridge-decoders');
     if (run !== this.run || !fresh || !current) return;
     const next = document.importNode(fresh, true);
+    const served = this.served;
     this.keep(run, next);
+    for (const card of /** @type {NodeListOf<HTMLElement>} */ (next.querySelectorAll(':scope > [data-decoder]'))) {
+      const id = card.dataset.decoder ?? '';
+      const mine = current.querySelector(`:scope > [data-decoder="${CSS.escape(id)}"]`);
+      if (!mine || !this.closingOf(id, answering)) continue;
+      card.replaceWith(mine);
+      const copy = served.get(id);
+      if (copy) this.served.set(id, copy);
+    }
     const focus = this.focusOf(current);
     current.replaceWith(next);
     this.paint(run);
@@ -771,17 +798,22 @@ class TlBridge extends HTMLElement {
     if (!id || !template || this.told.has(bridge)) return;
     // From here its batches say they came with no port open.
     this.told.add(bridge);
-    this.closing.add(id);
+    /** @type {{ id: string, sent: Promise<Response> | null, send: () => Promise<Response> }} */
+    const close = { id, sent: null, send: () => (close.sent ??= fetch(template.replace('{id}', encodeURIComponent(id)), { method: 'POST', credentials: 'same-origin', keepalive: true, redirect: 'follow', headers: { accept: 'text/html' }, body: new URLSearchParams({ state: 'closed' }) })) };
+    this.pending.add(close);
     void (async () => {
       // After an unplug, the close goes once a batch posted while the port was open has landed (or SETTLE_MS have passed).
       if (settle) await Promise.race([bridge.flush(), new Promise((done) => { setTimeout(done, SETTLE_MS); })]);
-      const res = await fetch(template.replace('{id}', encodeURIComponent(id)), { method: 'POST', credentials: 'same-origin', keepalive: true, redirect: 'follow', headers: { accept: 'text/html' }, body: new URLSearchParams({ state: 'closed' }) });
+      // Plugged back in meanwhile, and the cable says it is the same decoder: it is on a cable, so nothing to tell.
+      const now = this.run?.bridge;
+      if (!close.sent && now && now !== bridge && now.decoder === id && now.state === 'ready') return;
+      const res = await close.send();
       // A refresh fetched before the server heard this would bring the cable back: this answer goes after it.
       await run.refreshing;
-      await this.swap(run, res);
+      await this.swap(run, res, close);
     })().catch(() => {}).finally(() => {
-      // Swapped, or not: the card goes back to the server's copy either way.
-      this.closing.delete(id);
+      // Swapped, or not: the card goes back to the server's copy either way, once no later close of it is pending.
+      this.pending.delete(close);
       if (run === this.run) this.paint(run);
     });
   }

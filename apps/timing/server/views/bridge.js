@@ -148,7 +148,7 @@ const outline = (label, action) => html`<button type="button" class="btn btn-out
  * clones of template[data-wifi-row], whose button.net carries data-signal and
  * holds [data-slot="name"], [data-slot="note"] (Current network or Open,
  * hidden when neither) and [data-slot="signal"] (Strong, Fair, Weak). The
- * password step's [data-slot="error"] (hidden) takes a refusal. The result
+ * password and another-network steps' [data-slot="error"] (hidden) take a refusal. The result
  * step has [data-result="joined"] and [data-result="timeout"], both hidden.
  * The list step's [data-scan="empty"] and [data-scan="failed"] (hidden) say
  * that a scan found nothing or couldn't run. showModal() makes the page
@@ -191,6 +191,7 @@ export function wifiDialog() {
     <form class="wifi-step" data-step="another" data-wifi-form="another" method="dialog" hidden>
       <h2 id="wifi-title-another">Another network</h2>
       <p class="subtitle">Wi-Fi for ${decoder}</p>
+      <p class="status status-error" role="alert" data-slot="error" hidden></p>
       <div class="field">
         <label for="wifi-another-name">Network name</label>
         <input type="text" id="wifi-another-name" name="ssid" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="wifi-another-name-hint">

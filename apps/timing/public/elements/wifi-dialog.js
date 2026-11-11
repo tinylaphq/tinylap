@@ -9,7 +9,9 @@
 // %TLSCAN on open and on Look again, %TLJOIN for a try (connections spec §4).
 // - Picking an open network skips the password.
 // - A try that fails comes back to the password, kept and focused, with the
-//   reason on top; one the decoder never answers ends on "didn't answer".
+//   reason on top; for a network typed by name, back to its name and
+//   password, the name focused. One the decoder never answers ends on
+//   "didn't answer". A failure is said by its step's alert alone.
 // - Cancel during a try waits for the decoder's answer, then closes: the
 //   board is never left half-way (spec §4.3).
 // - Closing clears both passwords and gives focus back to the card's button
@@ -31,6 +33,8 @@ export class WifiWizard {
   #token = 0;
   /** @type {Network[]} */ #networks = [];
   /** @type {Network | null} */ #chosen = null;
+  /** The chosen network was typed under Another network, not picked from the list. */
+  #typed = false;
   #joining = false;
   #closeAfterJoin = false;
   /** @type {string | null} */ decoder = null;
@@ -106,7 +110,7 @@ export class WifiWizard {
     switch (action.dataset.wifiAction) {
       case 'cancel': return this.#cancel();
       case 'again': return void this.#look();
-      case 'another': return this.#show('another');
+      case 'another': return this.#fresh();
       case 'back': return this.#show('list');
       case 'done': return this.close();
       default: return undefined;
@@ -127,6 +131,7 @@ export class WifiWizard {
       if (wrong) return this.#refuse(field(wrong.field), wrong.text);
       const seen = this.#networks.find((n) => n.name === name);
       this.#chosen = { name, signal: seen?.signal ?? null, open: password === '' };
+      this.#typed = true;
     }
     const chosen = /** @type {Network} */ (this.#chosen);
     if (form.dataset.wifiForm === 'password') {
@@ -229,6 +234,7 @@ export class WifiWizard {
   #pick(network) {
     if (!network) return;
     this.#chosen = network;
+    this.#typed = false;
     if (network.open) return void this.#join('');
     this.#password('', null);
     return undefined;
@@ -245,7 +251,16 @@ export class WifiWizard {
     const field = /** @type {HTMLInputElement} */ (this.$('#wifi-password'));
     field.value = password;
     field.setCustomValidity('');
-    this.#show('password', error ?? undefined);
+    // A failure is said by the alert; the status region stays quiet, so it isn't said twice.
+    this.#show('password', error ? '' : undefined);
+  }
+
+  /** Step 3b again after a failed try of a typed network: its name and password kept, the reason on top. @param {string} error */
+  #another(error) {
+    const alert = this.$('[data-step="another"] [data-slot="error"]');
+    alert.textContent = error;
+    alert.hidden = false;
+    this.#show('another', '');
   }
 
   /** Steps 4 and 5: the try, then its result. @param {string} password */
@@ -293,7 +308,15 @@ export class WifiWizard {
             : typeof error?.reason === 'string' ? `The decoder refused it: ${error.reason}.` : String(error?.message ?? error);
     // Joined but not kept: it is on the new network, not back on the old one.
     const back = !error?.unstored && before?.state === 'connected' && before.name !== chosen.name ? ` The decoder is back on ${quoted(before.name)}.` : '';
+    // A typed name may be the mistake: back where it can be corrected, with the name and password as they were.
+    if (this.#typed) return this.#another(why + back);
     return this.#password(password, why + back);
+  }
+
+  /** Another network from the list, with no reason from an earlier try. */
+  #fresh() {
+    this.$('[data-step="another"] [data-slot="error"]').hidden = true;
+    this.#show('another');
   }
 
   #cancel() {
@@ -309,6 +332,7 @@ export class WifiWizard {
     this.#token += 1;
     this.#networks = [];
     this.#chosen = null;
+    this.#typed = false;
     this.#closeAfterJoin = false;
     this.#joining = false;
     this.decoder = null;
@@ -323,7 +347,7 @@ export class WifiWizard {
       button.setAttribute('aria-label', 'Show password');
     }
     for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (this.dialog.querySelectorAll('[data-wifi-action="cancel"]'))) b.disabled = false;
-    this.$('[data-slot="error"]').hidden = true;
+    for (const alert of /** @type {NodeListOf<HTMLElement>} */ (this.dialog.querySelectorAll('[data-slot="error"]'))) alert.hidden = true;
     for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.dialog.querySelectorAll('[data-result], [data-scan]'))) el.hidden = true;
     const live = this.dialog.querySelector('[data-wifi-live]');
     if (live) live.textContent = '';

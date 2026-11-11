@@ -651,7 +651,8 @@ test('joining the right password ends joined', async (t) => {
   assert.equal(await page.locator('#wifi-dialog').evaluate((x) => x.open), false);
   assert.equal(await row(board, 'wifi').locator('[data-slot="state"]').innerText(), 'Connected to “Clubhaus”');
   assert.equal(await page.evaluate(() => document.activeElement?.matches('[data-bridge-wifi]')), true, 'focus back on Change Wi-Fi');
-  assert.equal(await page.locator('#wifi-password').inputValue(), '', 'no password left in the page');
+  // The dialog's close event, a task after close(), clears the fields.
+  await page.waitForFunction(() => document.querySelector('#wifi-password').value === '', null, { timeout: 2000 });
   assert.deepEqual(errors, []);
 });
 
@@ -666,6 +667,7 @@ test('refused password returns with the password kept', async (t) => {
   const alert = dialog.getByRole('alert');
   await alert.waitFor();
   assert.equal(await alert.innerText(), '“Rennstrecke” refused the password. The decoder is back on “Clubhaus”.');
+  assert.equal(await page.locator('#wifi-dialog [data-wifi-live]').textContent(), '', 'said once, by the alert');
   assert.equal(await page.locator('#wifi-password').inputValue(), 'not-the-one');
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'wifi-password');
   assert.equal(await dialog.getAttribute('aria-labelledby'), 'wifi-title-password');
@@ -681,8 +683,13 @@ test('another network by name', async (t) => {
   await page.locator('#wifi-another-password').fill('whatever1');
   await dialog.getByRole('button', { name: 'Join network' }).click();
   await dialog.getByRole('alert').filter({ hasText: 'Can\'t find “Nowhere” from here.' }).waitFor();
-  await dialog.getByRole('button', { name: 'Back to the list' }).click();
-  await dialog.getByRole('button', { name: 'Another network' }).click();
+  // Back where the name can be corrected, with the name and password as they were, focus on the name.
+  assert.equal(await dialog.getAttribute('aria-labelledby'), 'wifi-title-another');
+  assert.equal(await dialog.locator('[data-step="another"]').isVisible(), true);
+  assert.equal(await dialog.getByLabel('Network name').inputValue(), 'Nowhere');
+  assert.equal(await page.locator('#wifi-another-password').inputValue(), 'whatever1');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'wifi-another-name');
+  assert.equal(await page.locator('#wifi-dialog [data-wifi-live]').textContent(), '', 'said once, by the alert');
   await dialog.getByLabel('Network name').fill('Rennstrecke');
   await page.locator('#wifi-another-password').fill('tinylap!');
   await dialog.getByRole('button', { name: 'Join network' }).click();
@@ -929,5 +936,96 @@ test('a join the decoder couldn\'t keep says so on the password step', async (t)
   await alert.waitFor({ timeout: 5000 });
   assert.equal(await alert.innerText(), 'The decoder joined “Clubhaus” but couldn\'t keep the settings. Try again.');
   assert.equal(await page.locator('#wifi-password').inputValue(), 'tinylap!');
+  assert.deepEqual(errors, []);
+});
+
+// The closes the bridge tells the server (issue #81). A stand-in for a replaced or unplugged bridge drives the settle
+// wait: its flush() settles when the test says, as a batch in flight would.
+
+/** Calls tl-bridge's cableClosed for a stand-in bridge of `decoderId` whose flush the page holds until window.__land[key](). */
+const closeHeld = (page, decoderId, key, settle = true) => page.evaluate(({ id, k, s }) => {
+  window.__land ??= {};
+  const held = new Promise((done) => { window.__land[k] = done; });
+  const tl = document.querySelector('tl-bridge');
+  tl.cableClosed(tl.run, { decoder: id, flush: () => held }, { settle: s });
+}, { id: decoderId, k: key, s: settle });
+
+/** The POSTs to a decoder's cable address, from now on. */
+const closesOf = (page, d) => {
+  const seen = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && r.url().endsWith(`/decoders/${d.id}/cable`)) seen.push(Date.now()); });
+  return seen;
+};
+
+test('a close for a decoder back on this tab\'s cable is never sent', async (t) => {
+  const { page, errors, board } = await cabledPage(t);
+  const closes = closesOf(page, board);
+  // An earlier bridge of the same decoder, unplugged just before this one came: its settle ends now.
+  await closeHeld(page, board.id, 'old');
+  await page.evaluate(() => window.__land.old());
+  await page.waitForTimeout(500);
+  assert.deepEqual(closes, [], 'the decoder is on the cable again');
+  assert.equal(await page.evaluate((id) => document.querySelector('tl-bridge').closingOf(id), board.id), false);
+  assert.deepEqual(errors, []);
+});
+
+test('leaving the page during a close\'s settle sends the close at once', async (t) => {
+  const { page, errors, board } = await cabledPage(t, { connect: false });
+  const closes = closesOf(page, board);
+  await closeHeld(page, board.id, 'old');
+  const told = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/decoders/${board.id}/cable`), { timeout: 1000 });
+  await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })));
+  await told;
+  // Its settle ending later sends it no second time.
+  await page.evaluate(() => window.__land.old());
+  await page.waitForTimeout(500);
+  assert.equal(closes.length, 1);
+  assert.deepEqual(errors, []);
+});
+
+test('two closes of one decoder: the card waits for the later one\'s answer, and a refresh meanwhile leaves it', async (t) => {
+  const { page, errors, board, decoders, card } = await cabledPage(t, { names: ['A gate', 'B gate'], connect: false });
+  const mark = () => card(board).evaluate((x) => { x.dataset.mark = ''; x.dataset.cabled = ''; });
+  const marked = () => page.locator(`[data-decoder="${board.id}"][data-mark]`).count();
+  await mark();
+  await closeHeld(page, board.id, 'first');
+  // A refresh while the close is pending: the other cards are fresh, this one stays.
+  await postPassings(app, decoders[1], [{ transponder: '0A', t: 1000 }]);
+  await page.evaluate(() => document.querySelector('tl-bridge').refresh(document.querySelector('tl-bridge').run));
+  assert.equal(await card(decoders[1]).locator('[data-row="wifi"] [data-slot="state"]').innerText(), 'Reporting', 'swapped');
+  assert.equal(await marked(), 1, 'the refresh left the closing card');
+  // Plugged back in and out again: a second close of the same decoder, still settling when the first one ends.
+  await closeHeld(page, board.id, 'second');
+  const first = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/decoders/${board.id}/cable`));
+  await page.evaluate(() => window.__land.first());
+  await first;
+  await page.waitForTimeout(300);
+  assert.equal(await marked(), 1, 'the first close\'s end left the card to the second');
+  const second = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/decoders/${board.id}/cable`));
+  await page.evaluate(() => window.__land.second());
+  await second;
+  await page.locator(`[data-decoder="${board.id}"][data-mark]`).waitFor({ state: 'detached', timeout: 3000 });
+  assert.equal(await card(board).locator('[data-row="cable"] [data-slot="state"]').innerText(), 'Not connected');
+  assert.deepEqual(errors, []);
+});
+
+test('a replaced bridge\'s close waits for the batch it has in flight', async (t) => {
+  const { page, errors, decoders } = await cabledPage(t, { names: ['A gate', 'B gate'], connect: false });
+  const [, other] = decoders;
+  const closes = closesOf(page, other);
+  // The bridge on the cable is B gate's, with a batch in flight; connecting another device replaces it.
+  await page.evaluate((id) => {
+    window.__land = {};
+    const held = new Promise((done) => { window.__land.batch = () => { window.__landed = Date.now(); done(); }; });
+    const tl = document.querySelector('tl-bridge');
+    tl.run.bridge = { decoder: id, state: 'ready', flush: () => held, close: async () => {} };
+    void tl.connect(tl.run, 'serial');
+  }, other.id);
+  await page.waitForTimeout(700);
+  assert.deepEqual(closes, [], 'not before the batch lands');
+  const told = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/decoders/${other.id}/cable`), { timeout: 2000 });
+  await page.evaluate(() => window.__land.batch());
+  await told;
+  assert.equal(closes.length, 1);
   assert.deepEqual(errors, []);
 });
