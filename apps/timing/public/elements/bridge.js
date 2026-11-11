@@ -169,12 +169,14 @@ const permittedPorts = async () => {
 /**
  * The port this page may open without the picker that is the one it last had: the same SerialPort when it is
  * still listed, else the one port with the same USB chip, leaving out `before` (ports that were there already,
- * so another decoder's); null when there is none, or more than one.
- * @param {{ port: any, device: string } | null} last @param {any[]} [before]
+ * so another decoder's); null when there is none, or more than one. With no `last` (after a reload) and `lone`
+ * (the member clicked), the one permitted port with USB ids.
+ * @param {{ port: any, device: string } | null} last @param {any[]} [before] @param {boolean} [lone]
  */
-async function permittedPort(last, before = []) {
-  if (!last) return null;
+async function permittedPort(last, before = [], lone = false) {
+  if (!last && !lone) return null;
   const ports = await permittedPorts();
+  if (!last) return ports.length === 1 && chipOf(ports[0]) !== null ? ports[0] : null;
   if (ports.includes(last.port)) return last.port;
   const same = ports.filter((port) => !before.includes(port) && isLast(port, last));
   return same.length === 1 ? same[0] : null;
@@ -410,9 +412,9 @@ class TlBridge extends HTMLElement {
       const button = event.target instanceof Element ? event.target.closest('[data-bridge-connect]') : null;
       if (button && this.contains(button)) {
         let which = /** @type {any} */ (button).dataset.bridgeConnect || 'serial';
-        // The card of the decoder this tab last had (or the one Connect decoder of an empty list) tries its port first.
+        // The card of the decoder this tab last had (or the one Connect decoder of an empty list) tries its port first; after a reload, with no port had, the one permitted port.
         const card = /** @type {HTMLElement | null} */ (button.closest('[data-decoder]'));
-        if (which === 'serial' && run.last && !run.last.refused && (!card || card.dataset.decoder === run.last.decoder)) which = 'again';
+        if (which === 'serial' && (!run.last || (!run.last.refused && (!card || card.dataset.decoder === run.last.decoder)))) which = 'again';
         this.connect(run, which).then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
       }
     } else if (event.type === 'submit') {
@@ -550,7 +552,7 @@ class TlBridge extends HTMLElement {
     run.connecting = true;
     this.paint(run);
     const mine = which === 'again' || which === 'auto';
-    const remembered = mine ? port ?? await permittedPort(run.last) : null;
+    const remembered = mine ? port ?? await permittedPort(run.last, [], which === 'again') : null;
     if (which === 'auto' && !remembered) {
       run.connecting = false;
       if (run === this.run) this.paint(run);

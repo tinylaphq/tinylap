@@ -1235,3 +1235,50 @@ test('this tab\'s own card never reads Connected on another laptop after an unpl
   assert.equal(await cable.innerText(), 'Not connected');
   assert.deepEqual(errors, []);
 });
+
+// After a reload this tab has no port it last had; Chrome may still permit ports for the page.
+
+/** A page that has just been reloaded, `granted` ports permitted (the simulator forgets them on a load), the picker counted. */
+async function reloadedWith(t, granted) {
+  const made = await cabledPage(t, { connect: false });
+  await made.page.reload();
+  await made.page.evaluate(async (n) => { for (let i = 0; i < n; i += 1) await navigator.serial.requestPort(); }, granted);
+  await countPicks(made.page);
+  return made;
+}
+
+test('after a reload, Connect decoder opens the one permitted port without the picker', async (t) => {
+  const { page, errors, board, card, row } = await reloadedWith(t, 1);
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.evaluate(() => window.__picks), 0);
+  assert.deepEqual(errors, []);
+});
+
+test('after a reload, with two permitted ports, Connect decoder opens the picker', async (t) => {
+  const { page, errors, board, card, row } = await reloadedWith(t, 2);
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.evaluate(() => window.__picks), 1);
+  assert.deepEqual(errors, []);
+});
+
+test('after a reload, a connect event opens nothing: the reconnect needs the port this tab had', async (t) => {
+  const { page, errors, board, row } = await reloadedWith(t, 1);
+  await page.evaluate(() => {
+    const event = new Event('connect');
+    Object.defineProperty(event, 'target', { value: window.__port ?? null });
+    navigator.serial.dispatchEvent(event);
+  });
+  await page.evaluate(async () => {
+    const [port] = await navigator.serial.getPorts();
+    const event = new Event('connect');
+    Object.defineProperty(event, 'target', { value: port });
+    navigator.serial.dispatchEvent(event);
+  });
+  await page.waitForTimeout(1500);
+  assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Not connected');
+  assert.equal(await page.evaluate(async () => (await navigator.serial.getPorts())[0].opens), 0);
+  assert.equal(await page.evaluate(() => window.__picks), 0);
+  assert.deepEqual(errors, []);
+});
