@@ -237,9 +237,10 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     body: html`<div class="container stack-lg screen">
   <h1>Bridge</h1>
   <tl-bridge>
-  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-closed="${base}/decoders/{id}/cable">
+  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-closed="${base}/decoders/{id}/cable" data-cable-open="${base}/decoders/{id}/cable">
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
+    <p hidden data-bridge-say="disconnected">Decoder disconnected.</p>
     <p class="status status-warning" data-bridge-earlier hidden></p>
     <template data-bridge-sign-in><a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}">Sign in again</a> to send them.</template>
     <section data-bridge-state="unsupported" class="card-static stack-md">

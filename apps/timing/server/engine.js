@@ -283,6 +283,22 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     publishDecoders(workspaceId, now());
   }
 
+  /**
+   * The bridge says its cable to the decoder is open: the decoder said who it is on this tab's cable (connections spec
+   * §3). It counts as on a cable from now, as a batch over one does, so a quick re-plug never waits for a lap. Boards
+   * hear it at once.
+   */
+  function cableOpened(workspaceId, decoder) {
+    const t = now();
+    const h = heard.get(decoder) ?? { workspaceId, netAt: null, quiet: false, cableAt: null, cableClosed: false, lastVia: null, cableLogs: false };
+    h.workspaceId = workspaceId;
+    h.cableAt = t;
+    h.cableClosed = false;
+    h.lastVia = 'serial';
+    heard.set(decoder, h);
+    publishDecoders(workspaceId, t);
+  }
+
   /** Publishes a workspace's offline list and header when they changed since last published. */
   function publishDecoders(workspaceId, t) {
     const offline = offlineOf(workspaceId, t);
@@ -472,5 +488,5 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return { session: publicSession(session), standings: standingsOf(session), crossings: store.crossings(sessionId).map(memberCrossing) };
   }
 
-  return { ingest, cableClosed, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail };
+  return { ingest, cableClosed, cableOpened, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail };
 }

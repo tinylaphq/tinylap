@@ -28,6 +28,7 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
   const writableStream = () => new WritableStream({ write(chunk) { send(model.write(chunk, clock())); } });
   let writable = writableStream();
   let opened = false;
+  let opens = 0;
   return {
     /** The current stream: a non-fatal error replaces it, as Web Serial does. */
     get readable() {
@@ -44,6 +45,7 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
         writable = writableStream();
       }
       opened = true;
+      opens += 1;
       openedAt = performance.now();
       send(model.start(0));
       timer = setInterval(() => send(model.tick(clock())), tickMs);
@@ -52,6 +54,10 @@ export function fakeSerialPort(model, { tickMs = 100 } = {}) {
       clearInterval(timer);
     },
     getInfo: () => model.info,
+    /** How often it was opened, for tests. */
+    get opens() {
+      return opens;
+    },
     /** Bytes from the device's side, for tests. @param {Uint8Array} bytes */
     send: (bytes) => send([bytes]),
     /**

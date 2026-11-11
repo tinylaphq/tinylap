@@ -219,10 +219,16 @@ test('install stands in for the pickers: the model\'s transport gets a fresh dev
   // Unplugged, it leaves the list; plugged back in, it returns and the connect event fires.
   let connects = 0;
   plain.serial.addEventListener('connect', () => { connects += 1; });
+  let target = null;
+  plain.serial.addEventListener('connect', (event) => { target = event.target; });
   port.unplug();
   assert.equal((await plain.serial.getPorts()).includes(port), false);
-  assert.equal(port.replug(), port);
-  assert.equal((await plain.serial.getPorts()).includes(port), true);
+  // Back as Chrome shows it: a new port of the same chip, the connect event's target.
+  const back = port.replug();
+  assert.notEqual(back, port);
+  assert.deepEqual(back.getInfo(), port.getInfo());
+  assert.equal(target, back);
+  assert.equal((await plain.serial.getPorts()).includes(back), true);
   assert.equal(connects, 1);
   const lap = {};
   install(lap, 'easylap');

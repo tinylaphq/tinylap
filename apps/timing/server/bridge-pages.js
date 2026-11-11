@@ -4,7 +4,7 @@
 
 // The bridge's page (spec §6.5). Everything else the bridge does goes over
 // the JSON API from tl-bridge, except the fact that this tab's cable to a
-// decoder closed: a form post, answered with the Bridge page.
+// decoder opened or closed: a form post, answered with the Bridge page.
 import { can } from '@tinylap/auth';
 import { readForm } from './form.js';
 import { pageRoute, toPage } from './page-access.js';
@@ -21,14 +21,16 @@ function showBridge(request) {
   return page(request, 200, bridgePage(request, map, request.store.choosableDecoders(ws), request.store.decoders(ws).map((d) => d.id), cards), { scriptHashes: [map.hash] });
 }
 
-/** The bridge's cable to a decoder closed (connections spec §3): the server stops saying it is on a cable now. */
+/** The bridge's cable to a decoder opened or closed (connections spec §3): the server says so now, not after a batch or 25 s. */
 async function closeCable(request, match) {
   const { form, error } = await readForm(request);
   if (error) return error;
   const decoder = request.store.decoder(match[2]);
   if (!decoder || decoder.workspaceId !== request.workspaceId) return page(request, 404, notFoundPage(request));
-  if (form.get('state') !== 'closed') return problem(request, 'invalid-request', 'Send state=closed: the only thing a bridge says of its cable.');
-  request.engine.cableClosed(request.workspaceId, decoder.id);
+  const state = form.get('state');
+  if (state !== 'closed' && state !== 'open') return problem(request, 'invalid-request', 'Send state=open or state=closed: the only things a bridge says of its cable.');
+  if (state === 'open') request.engine.cableOpened(request.workspaceId, decoder.id);
+  else request.engine.cableClosed(request.workspaceId, decoder.id);
   return seeOther(`${request.space.base}/bridge`);
 }
 

@@ -22,7 +22,7 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const body = await res.text();
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
   assert.match(body, new RegExp(`<div id="bridge" data-workspace="${me.workspaces[0].id}" data-server=`));
-  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+" data-cable-closed="\/personal\/decoders\/\{id\}\/cable">/, 'the page carries the address the decoder posts to, and where a closed cable is told');
+  assert.match(body, /<div id="bridge" data-workspace="[^"]*" data-server="http:\/\/[^"]+" data-cable-closed="\/personal\/decoders\/\{id\}\/cable" data-cable-open="\/personal\/decoders\/\{id\}\/cable">/, 'the page carries the address the decoder posts to, and where a closed cable is told');
   for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
   assert.doesNotMatch(body, /not-tinylap/);
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
@@ -144,6 +144,27 @@ test('a cable closed on this tab: Not connected at once, then back to the Bridge
   assert.equal(get.headers.get('location'), `${base}/bridge`);
 });
 
+test('a cable opened on this tab: Connected on another laptop on other pages at once, without a batch', async () => {
+  const ana = await app.signUp('Gus');
+  const club = app.club(ana, 'Chicane');
+  const gus = await app.login(ana);
+  const gate = await (await app.api(gus, 'POST', `/workspaces/${club.id}/decoders`, { name: 'Gate' })).json();
+  const base = `/clubs/${club.id}`;
+  const bridge = async () => (await app.api(gus, 'GET', `${base}/bridge`, undefined, { accept: 'text/html' })).text();
+  assert.doesNotMatch(await bridge(), /Connected on another laptop/, 'never heard');
+  const res = await app.form(gus, `${base}/decoders/${gate.id}/cable`, { state: 'open' });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), `${base}/bridge`);
+  assert.match(await bridge(), /Connected on another laptop/);
+  assert.match(await bridge(), /data-cable-open="\/clubs\/[^"]+\/decoders\/\{id\}\/cable"/);
+  assert.match(await bridge(), /<p hidden data-bridge-say="disconnected">Decoder disconnected\.<\/p>/, 'the words the page announces on an unplug');
+  // Closed, then opened again (a re-plug): the order the bridge sends them in wins.
+  await app.form(gus, `${base}/decoders/${gate.id}/cable`, { state: 'closed' });
+  assert.doesNotMatch(await bridge(), /Connected on another laptop/);
+  await app.form(gus, `${base}/decoders/${gate.id}/cable`, { state: 'open' });
+  assert.match(await bridge(), /Connected on another laptop/);
+});
+
 test('a closed cable: another club\'s decoder or an unknown one is not found; a bad state, another site or a stranger are refused', async () => {
   const ana = await app.signUp('Eve');
   const mine = app.club(ana, 'Mine');
@@ -154,7 +175,7 @@ test('a closed cable: another club\'s decoder or an unknown one is not found; a 
   const base = `/clubs/${mine.id}`;
   assert.equal((await app.form(eve, `${base}/decoders/${other.id}/cable`, { state: 'closed' })).status, 404);
   assert.equal((await app.form(eve, `${base}/decoders/nope/cable`, { state: 'closed' })).status, 404);
-  const bad = await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'open' });
+  const bad = await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'ajar' });
   assert.equal(bad.status, 422);
   assert.equal((await bad.json()).type.endsWith('/problems/invalid-request'), true);
   assert.equal((await app.form(eve, `${base}/decoders/${gate.id}/cable`, { state: 'closed' }, { origin: 'https://elsewhere.example' })).status, 403);

@@ -111,6 +111,7 @@ Tick each when done and note what was seen.
 - [x] **Board page open:** with a live board on screen and no laps, the decoder stays "reporting" past 15 minutes; after the board is closed it goes idle 15 minutes later. Seen: with a live board on screen and no laps the decoder stayed reporting for 17 minutes.
 - [x] **Unplugging the cable** (which also cuts the board's power): the card says Not connected at once; live boards say not reporting about 25 s later.
 - [x] **Unknown network by name:** the dialog says it can't find it; the board is back on its network.
+- [ ] **Re-plug:** the cable reconnects without the picker.
 
 ### The pairing and the token
 

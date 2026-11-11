@@ -448,6 +448,28 @@ test('a closed cable leaves Wi-Fi reporting, and a passings-only decoder shows n
   assert.deepEqual(engine.headerOf(W), [{ id: 'd1', name: 'Start line', state: 'reporting' }]);
 });
 
+test('an opened cable counts as on a cable at once, clears a close, and is published', () => {
+  const { engine, clock, events } = withDecoder();
+  const count = () => offlineEvents(events).length;
+  // Never heard: a plain ZRound decoder just plugged in, no lap yet.
+  engine.cableOpened(W, 'd1');
+  assert.equal(connection(engine).cable.state, 'other');
+  assert.deepEqual(engine.headerOf(W).map((d) => d.state), ['reporting']);
+  const first = count();
+  assert.ok(first > 0, 'published');
+  clock.now = T0 + 1_000;
+  engine.cableClosed(W, 'd1');
+  assert.equal(connection(engine).cable.state, 'none');
+  // Plugged back in before any lap: on the cable again at once, not at its next lap.
+  clock.now = T0 + 2_000;
+  engine.cableOpened(W, 'd1');
+  assert.equal(connection(engine).cable.state, 'other');
+  assert.equal(count(), first + 2);
+  // Like a batch over a cable, it lasts 25 s without news.
+  clock.now = T0 + 2_000 + 25_000;
+  assert.equal(connection(engine).cable.state, 'none');
+});
+
 test('a closed cable of another club or a decoder never heard changes nothing', () => {
   const { engine } = withDecoder();
   beat(engine, 'serial', { logs: ['boot'] });
