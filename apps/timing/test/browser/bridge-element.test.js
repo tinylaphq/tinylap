@@ -1205,3 +1205,90 @@ test('a plain ZRound decoder plugged back in within the close\'s settle reads as
   assert.match(other, /Connected on another laptop/);
   assert.deepEqual(errors, []);
 });
+
+test('reopening a port that was never unplugged makes no promise of a reconnect', async (t) => {
+  const { page, errors, board, card, row } = await cabledPage(t);
+  // The bridge lets go of the port without an unplug (another device replaced it, say), and Connect decoder reopens it.
+  await page.evaluate(async () => {
+    const tl = document.querySelector('tl-bridge');
+    const old = tl.run.bridge;
+    tl.run.bridge = null;
+    await old.close();
+    tl.paint(tl.run);
+  });
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 10_000 });
+  assert.equal(await page.evaluate(() => window.__port.opens), 2, 'the same port, without the picker');
+  assert.equal(await page.evaluate(() => localStorage.getItem('tinylap-bridge-reconnects')), null);
+  // So an unplug now still says to connect it.
+  await unplugged(page, row, board);
+  await page.waitForTimeout(300);
+  assert.equal(await row(board, 'cable').locator('[data-cable-note="back"]').isVisible(), false);
+  assert.deepEqual(errors, []);
+});
+
+/** Holds this page's posts of a closed cable while window.__holdCloses is set, until window.__releaseCloses(). */
+const HOLD_CLOSES = () => {
+  const real = window.fetch;
+  let release;
+  const gate = new Promise((done) => { release = done; });
+  window.__releaseCloses = () => { window.__holdCloses = false; release(); };
+  window.fetch = async (url, options) => {
+    if (window.__holdCloses && String(options?.body ?? '').includes('state=closed')) await gate;
+    return real(url, options);
+  };
+};
+
+test('an open waits for a close of the same decoder that is still on its way', async (t) => {
+  const { page, errors, board, row, ws } = await cabledPage(t, { init: [HOLD_CLOSES] });
+  const seen = [];
+  page.on('request', (r) => {
+    const body = r.postData() ?? '';
+    if (r.method() === 'POST' && r.url().endsWith(`/decoders/${board.id}/cable`)) seen.push(body.includes('state=open') ? 'open' : 'closed');
+  });
+  await page.evaluate(() => { window.__holdCloses = true; });
+  await page.evaluate(() => window.__port.unplug());
+  // Straight back in: the close is still on its way when the decoder says who it is again.
+  await page.evaluate(() => { window.__port = window.__port.replug(); });
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(1000);
+  assert.deepEqual(seen, [], 'no open while the close waits');
+  await page.evaluate(() => window.__releaseCloses());
+  for (const end = Date.now() + 5000; !seen.includes('open');) {
+    assert.ok(Date.now() < end, 'the open follows');
+    await page.waitForTimeout(50);
+  }
+  assert.deepEqual(seen.slice(0, 2), ['closed', 'open']);
+  // Heard in that order, the server says the decoder is on a cable.
+  for (const end = Date.now() + 5000; app.engine.connectionsOf(ws).find((d) => d.id === board.id).cable.state !== 'other';) {
+    assert.ok(Date.now() < end, 'on the cable');
+    await page.waitForTimeout(50);
+  }
+  assert.deepEqual(errors, []);
+});
+
+test('a plain ZRound decoder with no laps stays on the cable on other pages past 25 s', async (t) => {
+  const who = await app.login(await app.signUp(`Quiet ${Math.random().toString(36).slice(2, 8)}`));
+  const ws = (await (await app.api(who, 'GET', '/auth/me')).json()).workspaces[0].id;
+  const gate = await (await app.api(who, 'POST', `/workspaces/${ws}/decoders`, { name: 'Gate' })).json();
+  const { page, errors, context } = await pageAs(browser, app, who);
+  t.after(() => context.close());
+  // No lap reaches the server.
+  await page.addInitScript(() => {
+    const real = window.fetch;
+    window.fetch = (url, options) => (String(url).endsWith('/passings') ? new Promise(() => {}) : real(url, options));
+  });
+  simulating(t, 'zround,fast');
+  await page.goto('/personal/bridge');
+  const cable = page.locator(`[data-decoder="${gate.id}"] [data-row="cable"]`);
+  await cable.getByRole('button', { name: 'Connect decoder' }).click();
+  await page.getByRole('heading', { name: 'Which decoder is this?' }).waitFor({ timeout: 20_000 });
+  await page.locator('#bridge-choose').selectOption(gate.id);
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await cable.locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(30_000);
+  const other = await (await app.api(who, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  assert.match(other, /Connected on another laptop/);
+  assert.deepEqual(app.engine.headerOf(ws).map((d) => d.state), ['reporting']);
+  assert.deepEqual(errors, []);
+});

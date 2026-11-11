@@ -22,7 +22,7 @@ function showBridge(request) {
 }
 
 /** The bridge's cable to a decoder opened or closed (connections spec §3): the server says so now, not after a batch or 25 s. */
-async function closeCable(request, match) {
+async function setCable(request, match) {
   const { form, error } = await readForm(request);
   if (error) return error;
   const decoder = request.store.decoder(match[2]);
@@ -36,5 +36,5 @@ async function closeCable(request, match) {
 
 export const bridgePageRoutes = [
   { pattern: spacePath('bridge'), credentials: true, methods: { GET: pageRoute('timing.run', showBridge) } },
-  { pattern: spacePath('decoders/([^/]+)/cable'), credentials: true, methods: { GET: toPage('bridge'), POST: pageRoute('timing.run', closeCable, { write: true }) } },
+  { pattern: spacePath('decoders/([^/]+)/cable'), credentials: true, methods: { GET: toPage('bridge'), POST: pageRoute('timing.run', setCable, { write: true }) } },
 ];
