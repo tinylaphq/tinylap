@@ -280,7 +280,8 @@ test('an expected decoder that was unpaired leaves the offline list at the next 
   store.deleteDecoder(W, 'd1');
   engine.tick();
   assert.deepEqual(engine.snapshot(W).offline, []);
-  assert.deepEqual(offlineEvents(events).map((e) => e.data.offline.length), [1, 0]);
+  // The first event is the Wi-Fi batch making the header reporting.
+  assert.deepEqual(offlineEvents(events).map((e) => e.data.offline.length), [0, 1, 0]);
 });
 
 test('a cable-only decoder never shows offline', () => {
@@ -324,7 +325,7 @@ test('the decoders event goes to watchers too', () => {
   beat(engine);
   clock.now = T0 + 25_000;
   engine.tick();
-  assert.deepEqual(offlineEvents(seen).map((e) => e.data), [{ offline: [{ id: 'd1', name: 'Start line' }], decoders: [{ id: 'd1', name: 'Start line', state: 'offline' }] }]);
+  assert.deepEqual(offlineEvents(seen).slice(1).map((e) => e.data), [{ offline: [{ id: 'd1', name: 'Start line' }], decoders: [{ id: 'd1', name: 'Start line', state: 'offline' }] }]);
 });
 
 const connection = (engine, id = 'd1') => engine.connectionsOf(W).find((d) => d.id === id);
@@ -512,4 +513,24 @@ test('batches over the cable change no cable state, and store their passings', (
   release();
   beat(engine, 'serial', { logs: ['stat'] });
   assert.equal(connection(engine).cable.state, 'none', 'a batch after the cable went opens nothing');
+});
+
+test('a decoder held on a cable publishes decoders when its Wi-Fi state changes, and only then', () => {
+  const { engine, clock, hub } = withDecoder();
+  const seen = [];
+  hub.subscribe(W, { lastEventId: null, watcher: true }, (e) => seen.push(e));
+  engine.holdCable(W, 'd1', 'p1');
+  const count = () => offlineEvents(seen).length;
+  const held = count();
+  beat(engine);
+  assert.equal(count(), held + 1, 'the Wi-Fi batch changes unknown to reporting');
+  clock.now = T0 + 10_000;
+  beat(engine);
+  assert.equal(count(), held + 1, 'a heartbeat with no state change publishes nothing');
+  engine.tick();
+  assert.equal(count(), held + 1);
+  clock.now = T0 + 40_000;
+  engine.tick();
+  assert.equal(count(), held + 2, 'reporting runs out by time');
+  assert.notEqual(connection(engine).wifi.state, 'reporting');
 });
