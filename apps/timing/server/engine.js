@@ -261,6 +261,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     if (batch.quiet) expected.delete(decoder);
     // One sent with no cable held (an outbox emptied later) is not news from the decoder now.
     else if (via === 'net' || (expected.has(decoder) && held(decoder))) expected.set(decoder, { workspaceId, lastAt: receivedAt });
+    // A Wi-Fi batch can change what the Bridge cards say while the header stays.
+    if (via === 'net') publishDecoders(workspaceId, receivedAt);
     const sorted = [...batch.passings].sort((a, b) => a.t - b.t);
     noteOffsets(decoder, batch.boot, sorted, receivedAt, batch.now);
     return store.transaction(() => {
@@ -322,10 +324,13 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
    */
   function publishDecoders(workspaceId, t, { force = false } = {}) {
     const offline = offlineOf(workspaceId, t);
-    const key = JSON.stringify({ offline, header: headerOf(workspaceId, t) });
-    if (!force && key === (offlineShown.get(workspaceId) ?? '{"offline":[],"header":[]}')) return;
+    const header = headerOf(workspaceId, t);
+    // Each decoder's cable and Wi-Fi state too, not their timestamps: the Bridge cards say more than the header does.
+    const states = connectionsOf(workspaceId).map((d) => [d.id, d.cable.state, d.wifi.state]);
+    const key = JSON.stringify({ offline, header, states });
+    if (!force && key === (offlineShown.get(workspaceId) ?? '{"offline":[],"header":[],"states":[]}')) return;
     offlineShown.set(workspaceId, key);
-    hub.publish(workspaceId, 'decoders', { offline, decoders: headerOf(workspaceId, t) });
+    hub.publish(workspaceId, 'decoders', { offline, decoders: header });
   }
 
   /** A passing by hand (spec §4): a virtual decoder per workspace, a boot per session, server time. */

@@ -188,6 +188,17 @@ test('the cards stream holds nothing, and sends the cards again when a cable com
   await cards.return();
 });
 
+test('the cable stream sends new cards when only the decoder\'s Wi-Fi state changes', async () => {
+  const { club, who, gate, base } = await clubWithGate('Wim');
+  const cable = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE), { raw: true });
+  const first = await next(cable, 'bridge');
+  assert.doesNotMatch(first.data, />Reporting</);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  app.engine.ingest({ workspaceId: club.id, decoder: gate.id, via: 'net', batch: { boot: 'b1', passings: [] } });
+  assert.match((await next(cable, 'bridge')).data, />Reporting</);
+  await cable.return();
+});
+
 test('the cable stream: another club\'s decoder or an unknown one is not found; another site or a stranger are refused; a page load goes to the Bridge page', async () => {
   const { user, gate, base, who, cableOf } = await clubWithGate('Eve');
   const theirs = app.club(user, 'Theirs');
