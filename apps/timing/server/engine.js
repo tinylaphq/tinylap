@@ -22,6 +22,8 @@ export const RECORD_FRESH_MS = 60_000;
 const OFFSET_WINDOW_MS = 60_000;
 /** How many drivers the idle board's "Fastest on this track" lists. */
 const FASTEST = 10;
+/** How long an idle board lists an unassigned transponder after it last crossed. */
+const UNKNOWN_WINDOW_MS = 60 * 60_000;
 /** A Wi-Fi decoder that has been silent this long is offline (decoder Wi-Fi spec §6). */
 export const OFFLINE_AFTER_MS = 25_000;
 /** After this long without a batch a decoder counts as switched off, and its banner goes. */
@@ -85,7 +87,11 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     endedStandings.set(ended.workspaceId, { sessionId: ended.id, rows });
     return rows;
   }
-  const unknownOf = (workspaceId) => store.transponders(workspaceId).filter((t) => t.driverId === null).map((t) => t.code);
+  /** The unassigned codes that crossed in the running session, or in the last hour when none runs, newest first. */
+  const unknownOf = (workspaceId) => {
+    const session = store.runningSession(workspaceId);
+    return session ? store.unknownSince(workspaceId, 0, session.id) : store.unknownSince(workspaceId, now() - UNKNOWN_WINDOW_MS, null);
+  };
   const publishUnknown = (workspaceId) => hub.publish(workspaceId, 'setup', { unknown: unknownOf(workspaceId) }, null);
 
   const publishSession = (session) => hub.publish(session.workspaceId, 'session', { ...publicSession(session), now: now() });
@@ -435,9 +441,9 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     publishStandings(session);
   }
 
-  function assign(workspaceId, code, driverId) {
+  function assign(workspaceId, code, driverId, label = null) {
     store.transaction(() => {
-      store.assignTransponder(workspaceId, code, driverId, now());
+      store.assignTransponder(workspaceId, code, driverId, now(), label);
       if (driverId === null) return;
       const tracks = new Map();
       for (const id of store.assignCrossings(workspaceId, code, driverId)) {

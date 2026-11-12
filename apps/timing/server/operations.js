@@ -100,6 +100,64 @@ export function assignTransponder(request, { code: rawCode, driverId }) {
   return { value: { code, driverId } };
 }
 
+const MAX_LABEL = 24;
+/** A transponder's label: trimmed, null when empty, at most 24 characters; or an error. @param {unknown} value */
+const labelOf = (value) => {
+  const label = typeof value === 'string' ? value.trim() : '';
+  return label.length > MAX_LABEL ? invalid(`A label has at most ${MAX_LABEL} characters.`, 'label') : { value: label || null };
+};
+
+export function labelTransponder(request, { code: rawCode, label: rawLabel }) {
+  const code = transponderCode(rawCode);
+  if (!code) return invalid('A transponder code is 1 to 16 hex digits.', 'code');
+  const { value: label, error } = labelOf(rawLabel);
+  if (error) return { error };
+  if (!request.store.labelTransponder(request.workspaceId, code, label)) return missing('transponder');
+  return { value: { code, label } };
+}
+
+/** Unassigns a transponder and drops its label; its past crossings stay with their driver. */
+export function removeTransponder(request, { code: rawCode }) {
+  const code = transponderCode(rawCode);
+  if (!code) return invalid('A transponder code is 1 to 16 hex digits.', 'code');
+  request.engine.assign(request.workspaceId, code, null);
+  request.store.labelTransponder(request.workspaceId, code, null);
+  return { value: { code } };
+}
+
+/** Deletes a transponder's row; it comes back as unknown when it next passes. */
+export function forgetTransponder(request, { code: rawCode }) {
+  const code = transponderCode(rawCode);
+  if (!code) return invalid('A transponder code is 1 to 16 hex digits.', 'code');
+  if (!request.store.forgetTransponder(request.workspaceId, code)) return missing('transponder');
+  request.engine.publishUnknown(request.workspaceId);
+  return { value: { code } };
+}
+
+/** The page's assignment: to a driver, or to one created here from a name, with an optional label. */
+export function assignTransponderTo(request, { code: rawCode, driverId, label: rawLabel, newDriverName }) {
+  const code = transponderCode(rawCode);
+  if (!code) return invalid('A transponder code is 1 to 16 hex digits.', 'code');
+  const { value: label, error } = labelOf(rawLabel);
+  if (error) return { error };
+  const ws = request.workspaceId;
+  const creating = newDriverName !== undefined && newDriverName !== null;
+  if (creating === Boolean(driverId)) return invalid('Pick a driver, or name a new one.', 'driver');
+  if (creating && !nameOf(newDriverName)) return invalid('Name the new driver.', 'name');
+  if (!creating && (typeof driverId !== 'string' || !request.store.driver(ws, driverId))) return fail('not-found', 'That driver is gone.', 'driver');
+  let target = driverId;
+  let failure = null;
+  request.store.transaction(() => {
+    if (creating) {
+      const added = addDriver(request, { name: newDriverName });
+      if (added.error) { failure = added.error; return; }
+      target = added.value.id;
+    }
+    request.engine.assign(ws, code, target, label);
+  });
+  return failure ? { error: failure } : { value: { code, driverId: target, label } };
+}
+
 /** @type {Record<string, string>} */
 export const TRACK_PROBLEMS = { invalid: 'invalid-request', 'not-a-circuit': 'not-a-circuit', unavailable: 'planner-unavailable' };
 

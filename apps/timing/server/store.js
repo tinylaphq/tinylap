@@ -254,7 +254,10 @@ export function openStore(path) {
     forgetTransponder: q('DELETE FROM transponder WHERE workspace_id = ? AND code = ?'),
     unknownInSession: q(`SELECT t.code FROM transponder t JOIN crossing c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
       WHERE t.workspace_id = ? AND t.driver_id IS NULL AND c.session_id = ? GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`),
-    unknownSince: q(`SELECT t.code FROM transponder t JOIN crossing c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
+    // Idle passings make no crossing, so the passings count as well as the crossings.
+    unknownSince: q(`SELECT t.code FROM transponder t JOIN (
+        SELECT workspace_id, transponder, at FROM crossing UNION ALL SELECT workspace_id, transponder, received_at FROM passing
+      ) c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
       WHERE t.workspace_id = ? AND t.driver_id IS NULL AND c.at >= ? GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`),
     seeTransponder: q('INSERT INTO transponder (workspace_id, code, first_seen_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
     transponder: q('SELECT code, driver_id FROM transponder WHERE workspace_id = ? AND code = ?'),
