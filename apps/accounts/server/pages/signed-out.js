@@ -17,7 +17,7 @@ export function signedOutPage({ user, deleted }) {
       lede: `You are still signed in as ${escapeHtml(user.name)}.`,
       script: 'sign-out.js',
       body: `
-<form class="card-static stack-md" id="sign-out" novalidate>
+<form class="card-static space-md" id="sign-out" novalidate>
   <p>An app asked to sign you out. Signing out here means the next app you open asks for your passkey again.</p>
   <button type="submit" class="btn btn-primary btn-block">Sign out</button>
   <p class="status" id="status" role="status" hidden></p>
@@ -32,7 +32,7 @@ export function signedOutPage({ user, deleted }) {
     heading: deleted ? 'Your account is deleted' : 'You are signed out',
     lede: deleted ? 'Your name, passkeys and recovery codes are gone, and every device is signed out.' : 'The next time you sign in, TinyLap asks for your passkey.',
     body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   ${deleted ? '<p>You can remove the passkey from your device or password manager too: TinyLap no longer accepts it.</p>' : '<p>You can close this page.</p>'}
   <a href="${deleted ? '/sign-up' : '/sign-in'}" class="btn btn-outline btn-block">${deleted ? 'Create a new account' : 'Sign in again'}</a>
 </div>

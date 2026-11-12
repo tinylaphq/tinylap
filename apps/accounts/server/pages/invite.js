@@ -21,7 +21,7 @@ export function invitePage({ token, found, user, member }) {
       title: 'Invite link',
       heading: 'This invite does not work',
       body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   <p class="status status-error" role="alert">${escapeHtml(found?.problem ?? 'This invite link is not valid.')}</p>
   <p>Ask ${found ? `someone in <strong>${escapeHtml(found.workspace.name)}</strong>` : 'the club'} for a new invite link.</p>
 </div>
@@ -36,7 +36,7 @@ export function invitePage({ token, found, user, member }) {
       title: `Join ${found.workspace.name}`,
       lede: `You were invited to the TinyLap club <strong>${club}</strong>. Sign in to join it.`,
       body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   <a class="btn btn-primary btn-block" href="/sign-in${next}">Sign in to join</a>
   <a class="btn btn-outline btn-block" href="/sign-up${next}">Create an account</a>
 </div>`,
@@ -47,7 +47,7 @@ export function invitePage({ token, found, user, member }) {
       title: found.workspace.name,
       heading: `You are in ${found.workspace.name}`,
       body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   <p>You are already a member, so this link changes nothing.</p>
   <a class="btn btn-primary btn-block" href="${clubPath}">Open the club</a>
 </div>`,
@@ -59,7 +59,7 @@ export function invitePage({ token, found, user, member }) {
     script: 'club.js',
     data: { page: 'invite', token },
     body: `
-<form class="card-static stack-md" id="join" novalidate>
+<form class="card-static space-md" id="join" novalidate>
   <p>Its members will see your name, ${escapeHtml(user.name)}, and you will see the club's tracks.</p>
   <button type="submit" class="btn btn-primary btn-block">Join ${club}</button>
   <p class="status" id="status" role="status" hidden></p>

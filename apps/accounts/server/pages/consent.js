@@ -42,7 +42,7 @@ export function consentPage({ client, query, redirectUri, scopes, error }) {
     title: 'Allow access',
     heading: `Allow ${client.name} to run timing as you?`,
     body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   <p class="accounts-consent-host"><strong>${escapeHtml(client.host)}</strong></p>
   <p class="accounts-hint">This is the website that asks. The name above is the one it gives itself.${redirectHost ? ` It will send you back to <strong>${escapeHtml(redirectHost)}</strong>.` : ''}</p>
   ${local ? '<p class="status status-warning" role="note">This app runs on this computer: it gets the answer on a local address, which any program here could listen on. Allow it only if you just started it yourself.</p>' : ''}
@@ -50,7 +50,7 @@ export function consentPage({ client, query, redirectUri, scopes, error }) {
   <p>It can see which clubs you're in and your role in each, and read and change timing there as you can: drivers, transponders, tracks, decoders, sessions and the watchers link.</p>
   <p>It can't change your account or your clubs.</p>
   ${stays ? '<p><strong>Stays connected</strong> until you disconnect it on your account page.</p>' : ''}
-  <div class="stack-sm">
+  <div class="space-sm">
     ${form(true, 'Allow', 'btn-primary')}
     ${form(false, 'Cancel', 'btn-outline')}
   </div>
@@ -62,7 +62,7 @@ export function consentPage({ client, query, redirectUri, scopes, error }) {
 export const consentGonePage = () => layout({
   title: 'This request has expired',
   body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   <p>The app's request to connect is no longer valid. Go back to the app and connect again.</p>
   <p><a href="/account">Your account</a></p>
 </div>`,

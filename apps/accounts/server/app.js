@@ -134,7 +134,7 @@ const errorPage = (url) => layout({
   title: 'That request did not work',
   lede: 'The app that sent you here asked for something TinyLap Accounts does not allow. Go back to that app and try again.',
   body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   <p class="status status-error" role="alert"><code>${escapeHtml(url.searchParams.get('error') ?? 'unknown_error')}</code></p>
   <p>${escapeHtml(url.searchParams.get('error_description') ?? '')}</p>
   <p><a href="/sign-in">Back to sign-in</a></p>
@@ -145,7 +145,7 @@ const errorPage = (url) => layout({
 const notFoundPage = () => layout({
   title: 'Not found',
   body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   <p>There is no such club, or you are not a member of it.</p>
   <p><a href="/clubs">Your clubs</a></p>
 </div>`,
@@ -156,7 +156,7 @@ const recoveryOnlyPage = () => layout({
   title: 'Add a passkey first',
   lede: 'You signed in with a recovery code.',
   body: `
-<div class="card-static stack-md">
+<div class="card-static space-md">
   <p>Until you add a new passkey, your account can do nothing else.</p>
   <a href="/recover" class="btn btn-primary btn-block">Add a passkey</a>
 </div>`,

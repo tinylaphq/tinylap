@@ -44,7 +44,7 @@ export function accountPage({ user, passkeys, codesLeft, owned, plannerExport, c
       <span class="accounts-row-actions"><form method="post" action="/account/apps/disconnect"><input type="hidden" name="client" value="${escapeHtml(c.clientId)}"><button type="submit" class="btn btn-sm btn-outline">Disconnect</button></form></span>
     </li>`).join('');
   const apps = `
-<section class="stack-md" id="apps" aria-labelledby="apps-heading">
+<section class="space-md" id="apps" aria-labelledby="apps-heading">
   <h2 class="h3" id="apps-heading">Connected apps <span class="accounts-count">${connections.length}</span></h2>
   ${disconnected ? '<p class="status status-success" role="status">The app is disconnected. It can\'t use your account any more.</p>' : ''}
   ${connections.length
@@ -63,16 +63,16 @@ export function accountPage({ user, passkeys, codesLeft, owned, plannerExport, c
     wide: true,
     body: `<p class="accounts-back"><a href="/clubs">Your clubs</a></p>
 ${NOSCRIPT}
-<section class="stack-md" aria-labelledby="passkeys-heading">
+<section class="space-md" aria-labelledby="passkeys-heading">
   <h2 class="h3" id="passkeys-heading">Passkeys <span class="accounts-count">${passkeys.length}</span></h2>
   <ul class="accounts-list" id="passkeys">${passkeyRows}
   </ul>
   ${only ? '<p class="accounts-hint" id="only-passkey">Your only passkey cannot be removed. Add another one first.</p>' : ''}
   <p class="status" id="passkeys-status" role="status" hidden></p>
-  <form class="card-static stack-md accounts-add" id="add-passkey" novalidate>
+  <form class="card-static space-md accounts-add" id="add-passkey" novalidate>
     <h3 class="accounts-subhead">${only ? 'Add a second passkey' : 'Add a passkey'}</h3>
     <p>${only ? 'With a passkey on a second device, losing one device does not lock you out.' : 'Each device or password manager you sign in with can hold one.'}</p>
-    <div>
+    <div class="field">
       <label for="passkey-name">Name it</label>
       <input type="text" id="passkey-name" maxlength="40" placeholder="Work laptop" aria-describedby="passkey-name-hint">
       <p class="accounts-hint" id="passkey-name-hint">Only you see this name. You can leave it empty.</p>
@@ -82,7 +82,7 @@ ${NOSCRIPT}
   </form>
 </section>
 <hr class="divider">
-<section class="stack-md" aria-labelledby="codes-heading">
+<section class="space-md" aria-labelledby="codes-heading">
   <h2 class="h3" id="codes-heading">Recovery codes</h2>
   ${codesNote}
   <p>A new set replaces the old one: the codes you saved before stop working.</p>
@@ -100,14 +100,14 @@ ${NOSCRIPT}
   </div>
 </section>
 <hr class="divider">${apps}
-<section class="stack-md" aria-labelledby="sessions-heading">
+<section class="space-md" aria-labelledby="sessions-heading">
   <h2 class="h3" id="sessions-heading">Signed-in devices</h2>
   <p>Signs you out of TinyLap on every device and in every app, this one included. Use it if you lost a device or signed in on a computer that is not yours.</p>
   <button type="button" class="btn btn-outline" id="sign-out-everywhere">Sign out everywhere</button>
   <p class="status" id="sessions-status" role="status" hidden></p>
 </section>
 <hr class="divider">
-<section class="stack-md" aria-labelledby="data-heading">
+<section class="space-md" aria-labelledby="data-heading">
   <h2 class="h3" id="data-heading">Your data</h2>
   <ul class="accounts-list">
     <li class="accounts-row">
@@ -122,7 +122,7 @@ ${NOSCRIPT}
   <p class="accounts-hint">What TinyLap keeps and why: <a href="/privacy">Privacy</a>.</p>
 </section>
 <hr class="divider-danger">
-<div class="danger-zone stack-md">
+<div class="danger-zone space-md">
   <h2 class="h3">Delete your account</h2>
   ${owned.length
     ? `<p>You own ${quoteList(owned)}. Transfer ownership or delete ${owned.length === 1 ? 'that club' : 'those clubs'} first, on <a href="/clubs">your clubs</a>.</p>`
@@ -131,7 +131,7 @@ ${NOSCRIPT}
   <p class="status" id="danger-status" role="status" hidden></p>
 </div>
 <dialog class="card-static accounts-dialog" id="confirm" aria-labelledby="confirm-text">
-  <form method="dialog" class="stack-md">
+  <form method="dialog" class="space-md">
     <p id="confirm-text"></p>
     <div class="accounts-actions">
       <button type="submit" value="cancel" class="btn btn-outline" id="confirm-cancel">Cancel</button>
@@ -140,9 +140,9 @@ ${NOSCRIPT}
   </form>
 </dialog>
 <dialog class="card-static accounts-dialog" id="delete-dialog" aria-labelledby="delete-text">
-  <form method="dialog" class="stack-md" novalidate>
+  <form method="dialog" class="space-md" novalidate>
     <p id="delete-text">Delete your account for good? Type your display name, <strong>${escapeHtml(user.name)}</strong>, to confirm.</p>
-    <div>
+    <div class="field">
       <label for="delete-name">Display name</label>
       <input type="text" id="delete-name" autocomplete="off" spellcheck="false">
     </div>
@@ -153,7 +153,7 @@ ${NOSCRIPT}
   </form>
 </dialog>
 <dialog class="card-static accounts-dialog accounts-dialog-calm" id="reauth" aria-labelledby="reauth-text">
-  <form method="dialog" class="stack-md">
+  <form method="dialog" class="space-md">
     <p id="reauth-text">Confirm it is you with your passkey. TinyLap asks again when you signed in more than 10 minutes ago, so an old session on a lost device cannot change your account.</p>
     <div class="accounts-actions">
       <button type="submit" value="cancel" class="btn btn-outline" id="reauth-cancel">Cancel</button>

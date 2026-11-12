@@ -73,12 +73,12 @@ export function tapPage(request, { drivers, result = null, error = null, running
   </form>`)}</div>
 </div>
 ${tapTemplates(request)}</tl-tap>`
-      : html`<div class="container stack-lg screen">
+      : html`<div class="container space-lg screen">
   <h1>Tap</h1>
   ${error && error.problem !== 'no-session' ? html`<p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text">${error.message}</span></p>` : null}
   ${drivers.length
-    ? html`<div class="card-static stack-md"><p>${missed || error?.problem === 'no-session' ? 'That tap wasn’t counted: no session is running.' : 'No session is running.'}</p>${startPracticeForm(request, { from: 'tap' })}</div>`
-    : html`<div class="card-static stack-md"><p>Add drivers to tap their laps.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>`}
+    ? html`<div class="card-static space-md"><p>${missed || error?.problem === 'no-session' ? 'That tap wasn’t counted: no session is running.' : 'No session is running.'}</p>${startPracticeForm(request, { from: 'tap' })}</div>`
+    : html`<div class="card-static space-md"><p>Add drivers to tap their laps.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>`}
 </div>`,
   });
 }

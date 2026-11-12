@@ -15,7 +15,7 @@ export function signInPage(url) {
     lede: 'With the passkey you made for TinyLap.',
     script: 'sign-in.js',
     body: `
-<form class="card-static stack-md" id="sign-in" novalidate>
+<form class="card-static space-md" id="sign-in" novalidate>
   <p>Your device asks for your fingerprint, face or screen lock. There is no password and no username to type.</p>
   <button type="submit" class="btn btn-primary btn-block">Sign in with a passkey</button>
   <p class="status" id="status" role="status" hidden></p>

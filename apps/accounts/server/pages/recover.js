@@ -21,8 +21,8 @@ export function recoverPage(url, recovering) {
     data: recovering ? { step: 'passkey', name: recovering.name } : { step: 'code' },
     body: `
 ${progress([{ id: 'code', label: 'Recovery code' }, { id: 'passkey', label: 'New passkey' }], recovering ? 1 : 0)}
-<form class="card-static stack-md" id="code-form"${recovering ? ' hidden' : ''} novalidate>
-  <div>
+<form class="card-static space-md" id="code-form"${recovering ? ' hidden' : ''} novalidate>
+  <div class="field">
     <label for="code">Recovery code</label>
     <input type="text" id="code" name="code" class="accounts-mono" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required aria-describedby="code-hint">
     <p class="accounts-hint" id="code-hint">It looks like <span class="accounts-mono">Ab3x-9Qz.k2…</span>, with one dot. Each code works once.</p>
@@ -30,13 +30,13 @@ ${progress([{ id: 'code', label: 'Recovery code' }, { id: 'passkey', label: 'New
   <button type="submit" class="btn btn-primary btn-block">Use this code</button>
   <p class="status" id="status" role="status" hidden></p>
 </form>
-<form class="card-static stack-md" id="passkey-form"${recovering ? '' : ' hidden'} novalidate>
+<form class="card-static space-md" id="passkey-form"${recovering ? '' : ' hidden'} novalidate>
   <h2 class="h3">Add a passkey</h2>
   <p>Your code worked. Before anything else, create a passkey on this device: until you do, your account stays locked.</p>
   <button type="submit" class="btn btn-primary btn-block">Create a passkey</button>
   <p class="status" id="passkey-status" role="status" hidden></p>
 </form>
-<div class="card-static stack-md" id="done" hidden>
+<div class="card-static space-md" id="done" hidden>
   <p class="status status-success" role="status">Passkey added</p>
   <p>You are signed in. If you have few recovery codes left, make a new set from your account.</p>
 </div>

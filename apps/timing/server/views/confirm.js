@@ -13,9 +13,9 @@ export function confirmPage(request, { title, text, action, button, back, screen
   return layout(request, {
     title,
     screen,
-    body: html`<section class="container-narrow page-header stack-md">
+    body: html`<section class="container-narrow page-header space-md">
   <h1 class="cut-words" title="${title}">${title}</h1>
-  <div class="card-static stack-md">
+  <div class="card-static space-md">
     <p>${text}</p>
     <form method="post" action="${action}" class="button-row confirm-actions">
       ${fields.map(([name, value]) => html`<input type="hidden" name="${name}" value="${value}">`)}
@@ -38,10 +38,10 @@ export function changeLayoutPage(request, { track, link, back, error = null, nam
   return layout(request, {
     title,
     screen: 'setup',
-    body: html`<section class="container-narrow page-header stack-md">
+    body: html`<section class="container-narrow page-header space-md">
   <h1 class="cut-words" title="${title}">${title}</h1>
   <div id="page-status">${errorSummary(error, error?.field === 'name' ? 'new-track-name' : null)}</div>
-  <div class="card-static stack-md">
+  <div class="card-static space-md">
     <p class="cut-words">Records on ${track.name} stay and are compared with laps on the new layout. If the track itself changed, add it as a new track instead.</p>
     <form method="post" action="${action}">
       <input type="hidden" name="link" value="${link}">

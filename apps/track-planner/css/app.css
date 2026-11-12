@@ -580,9 +580,10 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 
 .library-form label { margin-bottom: var(--p-space-xs); }
 .library-form-row { display: flex; gap: var(--p-space-xs); align-items: stretch; flex-wrap: wrap; }
-.library-form-row input { flex: 1 1 12rem; width: auto; padding: 6px 10px; font-size: 14px; }
+/* As tall as the .btn-sm beside it. */
+.library-form-row input { flex: 1 1 12rem; width: auto; height: var(--p-control-height-sm); padding: 0 10px; font-size: 14px; }
 /* Leaves room on the right for palace's select arrow. */
-.library-form-row select { flex: 1 1 12rem; width: auto; padding: 6px 2.5rem 6px 10px; font-size: 14px; }
+.library-form-row select { flex: 1 1 12rem; width: auto; height: var(--p-control-height-sm); padding: 0 2.5rem 0 10px; font-size: 14px; }
 
 .library-foot { margin: var(--p-space-lg) 0 0; }
 

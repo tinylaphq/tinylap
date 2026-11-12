@@ -237,7 +237,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     screen: 'bridge',
     importMap: importMap.tag,
     scripts: ['elements/bridge.js'],
-    body: html`<div class="container stack-lg screen">
+    body: html`<div class="container space-lg screen">
   <h1>Bridge</h1>
   <tl-bridge>
   <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}">
@@ -246,12 +246,12 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     <p hidden data-bridge-say="disconnected">Decoder disconnected.</p>
     <p class="status status-warning" data-bridge-earlier hidden></p>
     <template data-bridge-sign-in><a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}">Sign in again</a> to send them.</template>
-    <section data-bridge-state="unsupported" class="card-static stack-md">
+    <section data-bridge-state="unsupported" class="card-static space-md">
       <p>The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID.</p>
       <p>Timing still works without it: the decoder can send its passings over Wi-Fi (<a href="${base}/setup">Pair over Wi-Fi only</a> on Setup), and you can <a href="${base}/tap">tap laps by hand</a>.</p>
     </section>
     ${decoderCards(request, connections, { mayPair })}
-    <section data-bridge-state="connect" hidden class="bridge-more stack-sm">
+    <section data-bridge-state="connect" hidden class="bridge-more space-sm">
       <p>Keep this tab open while racing; the board runs in any other tab or screen.</p>
       <p>An EasyLap? Use Connect EasyLap: it doesn't show up in the decoder list.</p>
       <p><button type="button" class="btn btn-outline" data-bridge-connect="hid">Connect EasyLap</button></p>
@@ -260,16 +260,16 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
       <p class="status status-warning" data-bridge-taken hidden>This decoder is connected in another tab.</p>
     </section>
     <section data-bridge-state="connecting" hidden class="card-static"><p>Talking to the decoder…</p></section>
-    <section data-bridge-state="listening" hidden class="card-static stack-md">
+    <section data-bridge-state="listening" hidden class="card-static space-md">
       <p class="status status-warning" data-bridge-listening>Connected, but nothing has come from this device yet.</p>
       <p class="status status-warning" data-bridge-unreadable hidden>Data is coming, but it can't be read. Report this device.</p>
       <p>A decoder answers within a few seconds. If this is the wrong device, try another.</p>
       ${connect('Try another device', 'last')}
     </section>
-    <section data-bridge-state="unpaired" hidden class="card-static stack-md">
+    <section data-bridge-state="unpaired" hidden class="card-static space-md">
       <h2 class="h3">Pair this decoder</h2>
       <p>It gets its own token for ${where}. Wi-Fi is optional: with it, the decoder also sends passings over the internet when the cable is out.</p>
-      <form data-bridge-pair class="stack-sm">
+      <form data-bridge-pair class="space-sm">
         <div class="field"><label for="bridge-name">Decoder name</label><input type="text" id="bridge-name" name="name" value="Decoder" maxlength="60" required></div>
         <div class="field"><label for="bridge-ssid">Wi-Fi name (optional)</label><input type="text" id="bridge-ssid" name="ssid" autocomplete="off"></div>
         <div class="field"><label for="bridge-password">Wi-Fi password</label><input type="password" id="bridge-password" name="password" autocomplete="off"></div>
@@ -277,20 +277,20 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
       </form>
       ${anotherDevice}
     </section>
-    <section data-bridge-state="unknown" hidden class="card-static stack-md">
+    <section data-bridge-state="unknown" hidden class="card-static space-md">
       <p class="status status-warning" data-bridge-unknown>This decoder's pairing isn't known here. Its passings before you pair it again weren't recorded.</p>
       <p>Its decoder may have been deleted, or it was paired with another TinyLap server. Pairing again makes a new decoder for ${where} and sends its token to the device over this cable.</p>
-      <form data-bridge-repair class="stack-sm">
+      <form data-bridge-repair class="space-sm">
         <div class="field"><label for="bridge-repair-name">Name for this decoder</label><input type="text" id="bridge-repair-name" name="name" value="Decoder" maxlength="60" required></div>
         <button type="submit" class="btn btn-primary">Pair again</button>
       </form>
       ${anotherDevice}
     </section>
-    <section data-bridge-state="choose" hidden class="card-static stack-md">
+    <section data-bridge-state="choose" hidden class="card-static space-md">
       <h2 class="h3" tabindex="-1" data-bridge-choose-heading>Which decoder is this?</h2>
       <p data-bridge-kind data-where="${where}"></p>
       <p>If it comes unplugged, crossings until you connect again are lost, and each car's lap starts over.</p>
-      <form data-bridge-choose class="stack-sm">
+      <form data-bridge-choose class="space-sm">
         ${selectField({ label: 'Decoder', name: 'decoder', id: 'bridge-choose', value: '', data: { known: known.join(' ') },
           hint: 'Choose an existing decoder only if it is this same device. A decoder that another laptop uses needs its own.',
           options: [...decoders.map((d) => ({ value: d.id, label: d.name, dataName: d.name })), { value: '', label: 'A new decoder' }] })}
@@ -299,7 +299,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
       </form>
       ${anotherDevice}
     </section>
-    <section data-bridge-state="ready" hidden class="stack-md">
+    <section data-bridge-state="ready" hidden class="space-md">
       <div class="bridge-state" data-bridge-status-box>
         <p data-bridge-status></p>
         <p class="bridge-stat"><span class="bridge-stat-label">Waiting to send</span><span class="bridge-outbox num" data-bridge-outbox>…</span></p>

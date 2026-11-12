@@ -55,8 +55,8 @@ export function recordsPage(request, { track, direction, rows, drivers, layoutOf
     title: 'Track records',
     screen: 'sessions',
     modules: ['pkg/design/elements/local-time.js'],
-    body: html`<div class="container sessions-screen stack-lg screen">
-  <div class="stack-xs">
+    body: html`<div class="container sessions-screen space-lg screen">
+  <div class="space-xs">
     <h1>Track records</h1>
     ${track ? html`<p class="subtitle cut-words"><a href="${href}">${track.name}</a>, ${DIRECTION[direction]}</p>` : null}
   </div>

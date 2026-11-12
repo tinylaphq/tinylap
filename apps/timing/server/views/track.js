@@ -52,26 +52,26 @@ export function trackPage(request, { track, layouts, current, direction, records
     title: track.name,
     screen: 'setup',
     modules: ['pkg/design/elements/local-time.js'],
-    body: html`<div class="container sessions-screen track-page stack-xl screen">
-  <div class="stack-sm">
+    body: html`<div class="container sessions-screen track-page space-xl screen">
+  <div class="space-sm">
     <p><a href="${base}/setup#track">Setup</a></p>
     <h1 class="cut-words" title="${track.name}">${track.name}</h1>
     ${current ? html`<p class="subtitle">The current track, ${direction === 'cw' ? 'clockwise' : 'anticlockwise'}.</p>` : null}
     ${track.archivedAt !== null ? html`<p class="subtitle">Archived ${safe(localTime(track.archivedAt, 'datetime-year'))}.</p>` : null}
   </div>
-  <section class="stack-md" aria-labelledby="layout-title">
+  <section class="space-md" aria-labelledby="layout-title">
     <h2 id="layout-title">Layout</h2>
     ${now ? figure(now, track.name, true)
     : track.archivedAt !== null ? html`<p class="empty">No layout.</p>`
       : html`<p class="empty">No layout. Attach one in <a href="${base}/setup#track">Setup</a>.</p>`}
   </section>
-  ${earlier.length > 0 ? html`<section class="stack-md" aria-labelledby="earlier-title">
+  ${earlier.length > 0 ? html`<section class="space-md" aria-labelledby="earlier-title">
     <h2 id="earlier-title">Earlier layouts</h2>
     <div class="track-drawings">${earlier.map((entry) => figure(entry, track.name, false))}</div>
   </section>` : null}
-  <section class="stack-lg" aria-labelledby="records-title">
+  <section class="space-lg" aria-labelledby="records-title">
     <h2 id="records-title">Records</h2>
-    ${order.map(([id, label]) => html`<section class="stack-sm" aria-labelledby="records-${id}">
+    ${order.map(([id, label]) => html`<section class="space-sm" aria-labelledby="records-${id}">
       <h3 id="records-${id}">${label}</h3>
       ${recordsTable(request, { track, rows: records[id], drivers, layoutOf: layouts.length > 0 ? layoutOf : null, dates: 'datetime-year' })}
     </section>`)}

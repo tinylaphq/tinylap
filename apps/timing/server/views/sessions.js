@@ -30,14 +30,14 @@ export const drivenMs = (session) => Math.max(0, (session.endedAt ?? session.ope
 function startForm(request, { drivers, errors, values }) {
   const base = request.space.base;
   if (drivers.length === 0) {
-    return html`<div class="card-static stack-md"><h3 class="h3">Qualifying or race</h3><p>Add drivers before you start a race.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>`;
+    return html`<div class="card-static space-md"><h3 class="h3">Qualifying or race</h3><p>Add drivers before you start a race.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>`;
   }
   const kind = values?.kind ?? 'race';
   const roster = values ? new Set(values.roster) : new Set(drivers.map((d) => d.id));
   const errorOf = (field) => errors.find((e) => e.field === field) ?? null;
   const rosterError = errorOf('roster')?.message;
   const kindError = errorOf('kind')?.message;
-  return html`<form method="post" action="${base}/sessions" class="card-static stack-md">
+  return html`<form method="post" action="${base}/sessions" class="card-static space-md">
   <h3 class="h3">Qualifying or race</h3>
   <fieldset${kindError ? html` aria-describedby="race-kind-error"` : null}>
     <legend>Session</legend>
@@ -68,7 +68,7 @@ function runningPanel(request, session, drivers, { reload }) {
   const time = html`<time class="race-clock-time" data-clock data-kind="${session.kind}" data-state="${session.state}" data-opens="${session.opensAt ?? ''}" data-closes="${session.closesAt ?? ''}" data-now="${now}">${formatClock(clock.ms)}</time>`;
   if (session.kind === 'practice') {
     // The clock counts up from the start; the label says when that was (records spec §5.3).
-    return html`<div class="card-static stack-md running-panel">
+    return html`<div class="card-static space-md running-panel">
   <h2>Practice, running</h2>
   <tl-countdown class="race-clock"${reload ? html` reload-on-phase` : null}><span class="stat-label">Started ${safe(localTime(session.opensAt, 'time'))}</span> ${time}</tl-countdown>
   <div class="button-row">
@@ -78,7 +78,7 @@ function runningPanel(request, session, drivers, { reload }) {
 </div>`;
   }
   const names = (session.roster ?? []).map((id) => drivers.find((d) => d.id === id)?.name ?? 'Former driver');
-  return html`<div class="card-static stack-md running-panel">
+  return html`<div class="card-static space-md running-panel">
   <h2>${KIND[session.kind]}, ${STATE[session.state] ?? session.state}</h2>
   <p>${names.join(', ')}. ${formatLength(session.durationMs ?? 0)}.</p>
   <tl-countdown class="race-clock"${reload ? html` reload-on-phase` : null}><span class="stat-label" data-clock-label>${clock.label}</span> ${time}</tl-countdown>
@@ -118,7 +118,7 @@ function historySection(request, { rows, older, newer }, drivers) {
     newer !== null ? html`<a class="btn btn-outline btn-sm" href="${base}/sessions${newer ? `?before=${newer}` : ''}#history">Newer sessions</a>` : null,
     older !== null ? html`<a class="btn btn-outline btn-sm" href="${base}/sessions?before=${older}#history">Older sessions</a>` : null,
   ].filter(Boolean);
-  return html`<section id="history" class="stack-md" aria-labelledby="history-title">
+  return html`<section id="history" class="space-md" aria-labelledby="history-title">
   <h2 id="history-title">History</h2>
   ${table}
   ${links.length ? html`<div class="button-row">${links}</div>` : null}
@@ -126,8 +126,8 @@ function historySection(request, { rows, older, newer }, drivers) {
 }
 
 function recordsSection(request, { track, direction, rows }, drivers) {
-  return html`<section class="stack-md" aria-labelledby="records-title">
-  <div class="stack-xs">
+  return html`<section class="space-md" aria-labelledby="records-title">
+  <div class="space-xs">
     <h2 id="records-title">Track record</h2>
     ${track ? html`<p class="subtitle cut-words">${trackName(track, direction)}</p>` : null}
   </div>
@@ -146,15 +146,15 @@ export function sessionsPage(request, { session, drivers, idle = null, history, 
     screen: 'sessions',
     scripts: session ? ['elements/countdown.js'] : [],
     modules: ['pkg/design/elements/local-time.js'],
-    body: html`<div class="container sessions-screen stack-xl screen">
+    body: html`<div class="container sessions-screen space-xl screen">
   <h1>Sessions</h1>
   ${errorsSummary(errors, (field) => FIELD_ID[field])}
   ${idleNotice(idle, drivers)}
   ${session ? runningPanel(request, session, drivers, { reload }) : null}
-  <section class="stack-md" aria-labelledby="start-title">
+  <section class="space-md" aria-labelledby="start-title">
     <h2 id="start-title">Start</h2>
     <div class="start-grid">
-      <div class="card-static stack-md start-practice-card">
+      <div class="card-static space-md start-practice-card">
         <h3 class="h3">Practice</h3>
         <p>Times everyone whose car has a driver, for as long as you like. It ends when you end it, or after an hour without a car.</p>
         ${startPracticeForm(request)}
