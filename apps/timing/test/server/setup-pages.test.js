@@ -492,8 +492,11 @@ test('drivers in Setup: one transponder sits beside the name, unlabelled, with a
   app.store.assignTransponder(ws, '8', gDriver('Haris').id, now - 50 * MIN);
   app.store.assignTransponder(ws, '23', gDriver('Mia Kraus').id, now - 40 * MIN, 'Red Losi');
   app.store.assignTransponder(ws, '31', gDriver('Mia Kraus').id, now - 30 * MIN, 'Buggy');
-  app.store.assignTransponder(ws, '66', null, now - 8 * MIN);
-  app.store.assignTransponder(ws, '41', null, now - 10_000);
+  // Both crossed the line: "crossed" comes from a passing, not from the row's creation.
+  for (const [code, at] of [['66', now - 8 * MIN], ['41', now - 20_000]]) {
+    app.store.assignTransponder(ws, code, null, at);
+    app.store.insertPassing({ decoder: 'd1', boot: 'b', transponder: code, t: 1, receivedAt: at, via: 'net', workspaceId: ws });
+  }
   const row = rowOf(await gSetup(), 'Simon');
   assert.match(row, /<span class="roster-name cut-words" title="Simon">Simon<\/span> <span class="tp" title="Transponder 17">17<\/span><form method="post" action="[^"]+\/transponders\/17\/remove" class="tp-remove">/);
   assert.match(row, new RegExp(`<input type="hidden" name="returnTo" value="${gBase}/setup#drivers">\\s*<button type="submit" class="driver-remove">Remove<span class="visually-hidden"> transponder 17 from Simon</span></button>`));

@@ -10,6 +10,7 @@ import { avatar } from './driver.js';
 import { html, safe } from './html.js';
 import { controlRow, copyable, errorSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
+import { crossingNow, liveSrc } from './transponder.js';
 
 const DIRECTIONS = [{ value: 'ccw', label: 'Anticlockwise' }, { value: 'cw', label: 'Clockwise' }];
 const DIRECTION_NAME = { cw: 'clockwise', ccw: 'anticlockwise' };
@@ -124,7 +125,7 @@ function addRow(request, m, d, own, t) {
   const asking = failed && owner && !error;
   const label = own.length ? textField({ id: `${prefix}-label`, label: 'Label', name: 'label', maxlength: 24, placeholder: 'Optional', hint: `Tells it apart from ${theirs(d, own)}.`, value: failed ? kept.label : '', error }) : null;
   const whose = owner ? `${owner.name}'s${t.label ? `, ${t.label}` : ''}` : null;
-  const ago = t ? html`<span class="meta"${whose ? html` title="${whose}"` : null}>${whose ?? html`<span class="crossing-now" hidden>Crossing now</span><span class="crossed">crossed <time datetime="${new Date(t.lastSeenAt).toISOString()}">${formatAgo(t.lastSeenAt, request.now())}</time></span>`}</span>` : null;
+  const ago = t ? html`<span class="meta"${whose ? html` title="${whose}"` : null}>${whose ?? html`<span class="crossing-now"${crossingNow(request, t.crossedAt) ? null : html` hidden`}>Crossing now</span>${t.crossedAt === null ? null : html`<span class="crossed">crossed <time datetime="${new Date(t.crossedAt).toISOString()}">${formatAgo(t.crossedAt, request.now())}</time></span>`}`}</span>` : null;
   return html`<details class="pick-row${t ? '' : ' is-other'}" name="add-${d.id}"${t ? html` data-code="${t.code}"` : null}${failed ? html` open` : null}>
     <summary>${t ? html`<span class="tp">${t.code}</span>${ago}` : 'Not in the list? Enter its number'}</summary>
     <form method="post" action="${base}/transponders${t ? `/${t.code}` : ''}" class="pick-act">
@@ -265,13 +266,15 @@ export function setupPage(request, model) {
   return layout(request, {
     title: 'Setup',
     screen: 'setup',
-    modules: ['pkg/design/elements/frame.js', 'pkg/design/elements/copy.js', 'pkg/design/elements/local-time.js'],
+    modules: ['pkg/design/elements/frame.js', 'pkg/design/elements/copy.js', 'pkg/design/elements/local-time.js', 'public/elements/crossing-now.js'],
     body: html`<div class="container space-xl screen">
   <h1>Setup</h1>
   <div id="page-status">${m.failed ? errorSummary(m.failed.error, m.failed.fieldId) : null}</div>
   <p class="visually-hidden" role="status" id="frame-status"></p>
   ${trackSection(request, m)}
+  <tl-crossing-now src="${liveSrc(request)}">
   ${driversSection(request, m)}
+  </tl-crossing-now>
   ${transpondersSection(request, m)}
   ${decodersSection(request, m)}
   ${watchersSection(request, m)}

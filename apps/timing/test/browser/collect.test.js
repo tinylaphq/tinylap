@@ -17,7 +17,11 @@ let app;
 let browser;
 let member;
 let decoder;
-let t = 1000;
+let personal;
+// The decoder's clock runs with real time, so a passing's server time is now.
+const T0 = Date.now();
+let last = 0;
+const tick = () => { last = Math.max(last + 1, Date.now() - T0 + 1000); return last; };
 
 before(async () => {
   app = await startTiming();
@@ -25,8 +29,9 @@ before(async () => {
   member = await app.login(await app.signUp('Ana'));
   for (const name of ['Ana', 'Ben Okafor']) await app.form(member, '/personal/drivers', { name });
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
+  personal = me.workspaces[0].id;
   decoder = await (await app.api(member, 'POST', `/workspaces/${me.workspaces[0].id}/decoders`, { name: 'Start line' })).json();
-  await postPassings(app, decoder, ['41', '52', '66'].map((transponder) => ({ transponder, t: t++ })));
+  await postPassings(app, decoder, ['41', '52', '66'].map((transponder) => ({ transponder, t: tick() })));
 });
 after(async () => {
   await browser?.close();
@@ -63,7 +68,7 @@ test('at 390 px a passing lights only its row, and assigning it swaps the list i
   await live;
   const row = (code) => page.locator(`.collect-row[data-code="${code}"]`);
   await assert.doesNotReject(row('52').locator('.crossing-now').waitFor({ state: 'hidden' }));
-  await postPassings(app, decoder, [{ transponder: '52', t: t++ }]);
+  await postPassings(app, decoder, [{ transponder: '52', t: tick() }]);
   await row('52').locator('.crossing-now').waitFor({ state: 'visible' });
   // The shadow eases in: read the rows once it has.
   await page.waitForFunction(() => getComputedStyle(document.querySelector('.collect-row[data-code="52"]')).transitionProperty === 'box-shadow'
@@ -98,5 +103,45 @@ test('at 390 px a passing lights only its row, and assigning it swaps the list i
   assert.deepEqual(posts, ['/personal/transponders/52']);
   assert.equal(new URL(page.url()).search, '?assigned=52');
   assert.equal(await page.locator('tl-crossing-now').count(), 1);
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Transponder 52 is Ben Okafor's now. Change", 'the line has the focus');
+  await page.locator('#frame-status', { hasText: 'New transponders saved' }).waitFor({ state: 'attached' });
   assert.deepEqual(errors, []);
+});
+
+/** Gives `code` to Ana behind the page's back, as another member would. */
+const takenMeanwhile = (code) => app.form(member, `/personal/transponders/${code}`, { driver: anaId(), name: '', returnTo: '/personal/setup' });
+const anaId = () => app.store.drivers(personal).find((d) => d.name === 'Ana').id;
+
+test("with script, a row whose number became someone else's asks in the row, then gives it", async (tc) => {
+  const { context, page, errors } = await pageAs(browser, app, member, { viewport: PHONE });
+  tc.after(() => context.close());
+  const posts = [];
+  page.on('request', (r) => { if (r.method() === 'POST') posts.push(new URL(r.url()).pathname); });
+  await page.goto('/personal/transponders/new');
+  assert.equal((await takenMeanwhile('66')).status, 303);
+  const row = page.locator('.collect-row[data-code="66"]');
+  await row.locator('select').selectOption({ label: 'Ben Okafor' });
+  await row.getByRole('button', { name: 'Assign transponder 66', exact: true }).click();
+  await row.getByText("Transponder 66 is Ana's. Giving it to Ben Okafor takes it off Ana.").waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Give it to Ben Okafor', 'the answer has the focus');
+  assert.equal(await page.locator('#frame-status').textContent(), '', 'nothing saved yet');
+  await page.getByRole('button', { name: 'Give it to Ben Okafor' }).click();
+  await page.locator('[role="status"]', { hasText: "Transponder 66 is Ben Okafor's now." }).waitFor();
+  assert.equal(await page.locator('.collect-row[data-code="66"]').count(), 0);
+  assert.deepEqual(posts, ['/personal/transponders/66', '/personal/transponders/66']);
+  assert.deepEqual(errors, []);
+});
+
+test("without script, the same question comes as the collect page, and Give it comes back to collect", async (tc) => {
+  const { context, page } = await pageAs(browser, app, member, { viewport: PHONE, javaScriptEnabled: false });
+  tc.after(() => context.close());
+  await page.goto('/personal/transponders/new');
+  assert.equal((await takenMeanwhile('41')).status, 303);
+  const row = page.locator('.collect-row[data-code="41"]');
+  await row.locator('input[name="name"]').fill('Lena');
+  await row.getByRole('button', { name: 'Add and assign transponder 41' }).click();
+  await page.getByText("Transponder 41 is Ana's. Giving it to Lena takes it off Ana.").waitFor();
+  await page.getByRole('button', { name: 'Give it to Lena' }).click();
+  await page.getByText("Transponder 41 is Lena's now, a new driver.").waitFor();
+  assert.equal(new URL(page.url()).pathname + new URL(page.url()).search, '/personal/transponders/new?assigned=41&added=1');
 });

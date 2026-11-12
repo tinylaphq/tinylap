@@ -8,6 +8,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from './helpers.js';
+import { events } from './sse.js';
 
 let app;
 let owner;
@@ -43,7 +44,7 @@ test('a row per unassigned transponder, newest first, each with a driver form an
   assert.match(body, /3 crossed the line and aren't assigned yet\./);
   assert.equal(rowOf(body, '17'), null, 'an assigned one has no row');
   assert.deepEqual([...body.matchAll(/data-code="(\w+)"/g)].map((m) => m[1]), ['66', '52', '41']);
-  assert.match(body, new RegExp(`<tl-crossing-now src="/workspaces/${office.id}/live">\\s*<tl-frame id="collect">`));
+  assert.match(body, new RegExp(`<tl-crossing-now src="${base}/live">\\s*<tl-frame id="collect">`));
   assert.match(body, /<script type="module" src="\/public\/elements\/crossing-now\.js"><\/script>/);
   const row = rowOf(body, '41');
   assert.match(row, /<span class="tp">41<\/span>/);
@@ -66,7 +67,7 @@ test('Assign gives it to the driver, and the page then says so, without its row'
   assert.equal(app.store.transponders(office.id).find((t) => t.code === '41').driverId, 'mia');
   const body = await (await get(back('41'))).text();
   const change = `${base}/transponders/41?returnTo=${encodeURIComponent(`${base}/transponders/new`)}`;
-  assert.match(body, new RegExp(`<p class="status status-success cut-words" role="status">Transponder 41 is Mia Kraus's now\\. <a href="${change.replace('?', '\\?')}">Change</a></p>`));
+  assert.match(body, new RegExp(`<p class="status status-success cut-words" role="status" tabindex="-1" autofocus>Transponder 41 is Mia Kraus's now\\. <a href="${change.replace('?', '\\?')}">Change</a></p>`));
   assert.equal(rowOf(body, '41'), null);
   assert.match(body, /2 crossed the line and aren't assigned yet\./);
 });
@@ -122,4 +123,70 @@ test('with every transponder assigned, the page says how one shows up', async ()
   assert.match(body, /Transponder 66 is Simon's now\./);
   assert.match(body, /<p class="empty">Run its car over the line, and it shows up here\.<\/p>/);
   assert.doesNotMatch(body, /crossed the line and/);
+});
+
+test('after an assign the line is what the page focuses', async () => {
+  const body = await (await get(back('66'))).text();
+  assert.match(body, /<p class="status status-success cut-words" role="status" tabindex="-1" autofocus>Transponder 66 is Simon's now\./);
+  assert.doesNotMatch((await (await get(`${base}/transponders/new`)).text()), /autofocus/);
+});
+
+test("a row's number that became someone else's meanwhile asks in the row: give it, or keep it", async () => {
+  app.store.seeTransponder(office.id, '7A', Date.now());
+  app.store.assignTransponder(office.id, '7A', 'simon', Date.now());
+  const res = await app.form(owner, `${base}/transponders/7A`, { returnTo: back('7A'), from: 'collect', driver: 'mia' });
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  const row = rowOf(body, '7A');
+  assert.ok(row, 'its row is there to ask in');
+  assert.match(row, /<p class="pick-move cut-words">Transponder 7A is Simon's\. Giving it to Mia Kraus takes it off Simon\.<\/p>/);
+  assert.match(row, new RegExp(`<form method="post" action="${base}/transponders/7A"`));
+  for (const [name, value] of [['driver', 'mia'], ['name', ''], ['from', 'collect'], ['confirm', '1'], ['returnTo', back('7A').replace('?', '\\?')]]) {
+    assert.match(row, new RegExp(`<input type="hidden" name="${name}" value="${value}">`), name);
+  }
+  assert.match(row, /<button type="submit" class="btn btn-primary" autofocus>Give it to Mia Kraus<\/button>/);
+  assert.match(row, new RegExp(`<a class="btn btn-outline" href="${base}/transponders/new">Keep it with Simon</a>`));
+  assert.doesNotMatch(row, /name="driver" aria|<select/, 'the question in place of the forms');
+  assert.equal(app.store.transponders(office.id).find((t) => t.code === '7A').driverId, 'simon', 'nothing moved yet');
+  const give = await app.form(owner, `${base}/transponders/7A`, { returnTo: back('7A'), from: 'collect', driver: 'mia', name: '', confirm: '1' });
+  assert.equal(give.status, 303);
+  assert.equal(app.store.transponders(office.id).find((t) => t.code === '7A').driverId, 'mia');
+});
+
+test('a new driver for a number someone else has meanwhile asks too, keeping the name', async () => {
+  app.store.seeTransponder(office.id, '7B', Date.now());
+  app.store.assignTransponder(office.id, '7B', 'simon', Date.now());
+  const res = await app.form(owner, `${base}/transponders/7B`, { returnTo: `${back('7B')}&added=1`, from: 'collect', name: 'Jonas' });
+  assert.equal(res.status, 200);
+  const row = rowOf(await res.text(), '7B');
+  assert.match(row, /Giving it to Jonas takes it off Simon\./);
+  assert.match(row, /<input type="hidden" name="name" value="Jonas">/);
+  assert.match(row, /<input type="hidden" name="returnTo" value="[^"]+\?assigned=7B&amp;added=1">/);
+});
+
+test('collect is for members: another club gets the not-found page, signed out signs in', async () => {
+  const ben = await app.signUp('Ben');
+  app.club(ben, 'Pits');
+  const outsider = await app.login(ben);
+  assert.equal((await app.api(outsider, 'GET', `${base}/transponders/new`, undefined, { accept: 'text/html' })).status, 404);
+  const out = await app.api(null, 'GET', `${base}/transponders/new`, undefined, { accept: 'text/html' });
+  assert.equal(out.status, 303);
+  assert.match(out.headers.get('location'), /^\/auth\/login\?returnTo=/);
+});
+
+test("the space's live stream, which the page listens to, is for members: a snapshot first", async () => {
+  const stop = new AbortController();
+  const res = await fetch(`${app.base}${base}/live`, { headers: { accept: 'text/event-stream', cookie: owner.jar.header() }, signal: stop.signal });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/event-stream/);
+  const first = await events(res).next();
+  assert.equal(first.value.type, 'snapshot');
+  assert.equal(typeof first.value.data.now, 'number');
+  stop.abort();
+  const ben = await app.signUp('Cleo');
+  app.club(ben, 'Garage');
+  const outsider = await app.login(ben);
+  assert.equal((await app.api(outsider, 'GET', `${base}/live`, undefined, { accept: 'text/event-stream' })).status, 404);
+  const out = await app.api(null, 'GET', `${base}/live`, undefined, { accept: 'text/event-stream' });
+  assert.notEqual(out.status, 200);
 });

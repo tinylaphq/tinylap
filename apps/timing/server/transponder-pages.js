@@ -14,11 +14,11 @@ import { retryHeaders } from './responses.js';
 import { safeReturnTo } from './return-to.js';
 import { renderSetup } from './setup-pages.js';
 import { spacePath } from './spaces.js';
+import { eventStream } from './stream.js';
 import { collectPage } from './views/collect.js';
 import { notFoundPage } from './views/notice.js';
-import { moveQuestionPage, transponderFormPage } from './views/transponder.js';
+import { crossingNow, moveQuestionPage, transponderFormPage } from './views/transponder.js';
 
-const CROSSING_NOW_MS = 10_000;
 const bare = (code) => code.replace(/^0+(?=.)/u, '');
 
 /**
@@ -38,12 +38,10 @@ const fallbackOf = (request) => `${request.space.base}/setup#transponders`;
 /** The form, with any error and what was typed. @param {any} request @param {number} status */
 function renderForm(request, status, transponder, { returnTo, values = {}, errors = null, headers = {} }) {
   const ws = request.workspaceId;
-  // Only a crossing or passing puts it on the track: a number typed in has crossed nothing.
-  const { crossedAt } = transponder;
   return page(request, status, transponderFormPage(request, {
     base: request.space.base,
     code: transponder.code,
-    crossingNow: crossedAt !== null && request.now() - crossedAt <= CROSSING_NOW_MS,
+    crossingNow: crossingNow(request, transponder.crossedAt),
     drivers: request.store.drivers(ws),
     transponders: request.store.transponders(ws),
     values,
@@ -76,17 +74,17 @@ function setupFailure(request, form, error, row) {
 
 /**
  * Collect (§3.6) with what the URL says was just assigned, and any refused form of a row.
- * @param {any} request @param {number} status @param {{ failed?: any, headers?: Record<string, string> }} [extras]
+ * @param {any} request @param {number} status @param {{ failed?: any, asking?: any, headers?: Record<string, string> }} [extras]
  */
-function renderCollect(request, status, { failed = null, headers = {} } = {}) {
+function renderCollect(request, status, { failed = null, asking = null, headers = {} } = {}) {
   const ws = request.workspaceId;
   const drivers = request.store.drivers(ws);
   const transponders = request.store.transponders(ws);
   const params = request.url.searchParams;
-  const assigned = status === 200 ? transponders.find((t) => t.code === params.get('assigned')) : null;
+  const assigned = status === 200 && !asking ? transponders.find((t) => t.code === params.get('assigned')) : null;
   const owner = assigned?.driverId ? drivers.find((d) => d.id === assigned.driverId) : null;
   const done = owner ? { code: assigned.code, name: owner.name, added: params.get('added') === '1' } : null;
-  return page(request, status, collectPage(request, { workspaceId: ws, drivers, transponders, done, failed }), { headers });
+  return page(request, status, collectPage(request, { drivers, transponders, done, failed, asking }), { headers });
 }
 
 const showCollect = (request) => renderCollect(request, 200);
@@ -126,6 +124,8 @@ function assignTo(request, form, raw, row) {
   if (owner && sound && chosen?.id !== owner.id && form.get('confirm') !== '1') {
     // In Setup's list the question is the row itself (§3.4): Setup with that row open, so a frame can swap it in.
     if (fromSetup) return renderSetup(request, 200, { values: { [`add:${driverId}`]: { row: transponder.code, label: label ?? '', number: '' } } });
+    // On collect the question is the row itself, too: collect with that row asking, for a frame to swap in.
+    if (fromCollect) return renderCollect(request, 200, { asking: { code: transponder.code, owner, to, driver: driverId, name, returnTo } });
     return page(request, 200, moveQuestionPage(request, { base: request.space.base, code: transponder.code, owner, to, driver: driverId, name, returnTo }));
   }
   const result = ops.assignTransponderTo(request, { code: transponder.code, driverId: driverId || null, label, newDriverName: name });
@@ -174,6 +174,8 @@ async function remove(request, match) {
 }
 
 export const transponderPageRoutes = [
+  // The live stream at the space's own address, for tl-crossing-now on its pages: members only.
+  { pattern: spacePath('live'), credentials: true, methods: { GET: pageRoute('timing.run', (request) => eventStream(request, request.workspaceId, { watcher: false })) } },
   { pattern: spacePath('transponders/new'), credentials: true, methods: { GET: pageRoute('timing.setup', showCollect) } },
   { pattern: spacePath('transponders'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', assignNumber, { write: true }) } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})/remove'), credentials: true, methods: { GET: pageRoute('timing.setup', toOwnerPage), POST: pageRoute('timing.setup', remove, { write: true }) } },

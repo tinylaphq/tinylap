@@ -11,6 +11,14 @@ import { html } from './html.js';
 import { layout } from './layout.js';
 
 const NAME_ID = 'new-driver-name';
+/** How long after a crossing or passing a page shows its transponder as crossing now. */
+export const CROSSING_NOW_MS = 10_000;
+
+/** Whether a transponder last crossed or passed `crossedAt` is crossing now: never for one that never crossed. @param {any} request @param {number | null} crossedAt */
+export const crossingNow = (request, crossedAt) => crossedAt !== null && request.now() - crossedAt <= CROSSING_NOW_MS;
+
+/** The live stream tl-crossing-now lights slots from. @param {any} request */
+export const liveSrc = (request) => `${request.space.base}/live`;
 const LIST_ID = 'assign-to';
 
 /** "has 23, 31": the numbers a driver has, or nothing. @param {string[]} codes */
@@ -34,9 +42,10 @@ export function transponderFormPage(request, { base, code, crossingNow, drivers,
   return layout(request, {
     title,
     screen: 'setup',
-    body: html`<section class="container-narrow page-header space-md">
+    modules: ['public/elements/crossing-now.js'],
+    body: html`<tl-crossing-now src="${liveSrc(request)}"><section class="container-narrow page-header space-md">
   <h1 title="${title}">Whose transponder is <span class="assign-big">${code}</span>?</h1>
-  <p class="subtitle pick-live" data-code="${code}"${crossingNow ? null : html` hidden`}>It's on the track now.</p>
+  <p class="subtitle pick-live crossing-now" data-code="${code}"${crossingNow ? null : html` hidden`}>It's on the track now.</p>
   <div id="page-status">${errorSummary(errors, fieldId)}</div>
   <form method="post" action="${base}/transponders/${code}" class="space-md">
     <input type="hidden" name="returnTo" value="${returnTo}">
@@ -54,7 +63,7 @@ export function transponderFormPage(request, { base, code, crossingNow, drivers,
     </div>
     <p><a href="${returnTo}">Not now</a></p>
   </form>
-</section>`,
+</section></tl-crossing-now>`,
   });
 }
 

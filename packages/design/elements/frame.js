@@ -5,9 +5,10 @@
 // <tl-frame id="…" refreshes="other ids">: submits the forms inside it with
 // fetch and swaps in the frame of the same id from the page the server
 // answers with, so a card saves in place and the page keeps its place.
-// The server answers as it does without script: a 303 to the page, the page
-// with the error, or (200, no redirect) the page asking something first, its
-// answer marked autofocus. Anything unexpected loads the form's page instead,
+// The server answers as it does without script: a 303 to the page (focus on
+// what it marks autofocus, else the form's field), the page with the error,
+// or (200, no redirect) the page asking something first, its answer marked
+// autofocus. Anything unexpected loads the form's page instead,
 // and a submit is never sent twice: a GET on a form target redirects to
 // its page.
 
@@ -144,9 +145,10 @@ class TlFrame extends HTMLElement {
     }
     const heading = this.querySelector('h1, h2, h3');
     if (res.ok && res.redirected) {
-      // A save is the followed 303. Back to the form's field, unless it is folded away now.
+      // A save is the followed 303. What the page it lands on marks autofocus (a line saying what
+      // was done), else back to the form's field, unless it is folded away now, else the heading.
       const field = fieldId ? this.querySelector(`#${CSS.escape(fieldId)}`) : null;
-      focusOn((field?.checkVisibility?.() ?? !!field) ? field : heading);
+      focusOn(this.querySelector('[autofocus]') ?? ((field?.checkVisibility?.() ?? !!field) ? field : heading));
       announce(`${heading?.textContent?.trim() ?? 'Changes'} saved`);
     } else if (res.ok) {
       // A page without a redirect is the server asking something: nothing was saved. Focus what it marked.

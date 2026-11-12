@@ -22,7 +22,7 @@ const lastEventIdOf = (req) => {
 };
 
 /** @param {any} request @param {string} workspaceId @param {{ watcher: boolean, tag?: string }} options */
-function eventStream(request, workspaceId, { watcher, tag }) {
+export function eventStream(request, workspaceId, { watcher, tag }) {
   return {
     status: 200,
     headers: SSE_HEADERS,
