@@ -218,6 +218,65 @@ test('assigning a transponder gives its unassigned crossings to the driver', () 
   assert.deepEqual(store.seeTransponder(W, '0C', 9), { code: '0C', driverId: null, created: true });
 });
 
+test('label is stored only when given and dropped on a move', () => {
+  const store = openStore(':memory:');
+  store.addDriver(W, { id: 'd1', name: 'Ana', colour: '#ff2d9b' });
+  store.addDriver(W, { id: 'd2', name: 'Ben', colour: '#2d9bff' });
+  const label = () => store.transponders(W).find((t) => t.code === '0A').label;
+  store.assignTransponder(W, '0A', 'd1', 1, 'Buggy');
+  assert.equal(label(), 'Buggy');
+  store.assignTransponder(W, '0A', 'd1', 2, undefined);
+  assert.equal(label(), 'Buggy');
+  store.assignTransponder(W, '0A', 'd2', 3);
+  assert.equal(label(), null);
+  assert.equal(store.labelTransponder(W, '0A', 'Truck'), true);
+  assert.equal(label(), 'Truck');
+  assert.equal(store.labelTransponder(W, '0A', null), true);
+  assert.equal(label(), null);
+  assert.equal(store.labelTransponder(W, '0Z', 'x'), false);
+});
+
+test('forget deletes the row and keeps the crossings', () => {
+  const store = openStore(':memory:');
+  practice(store);
+  store.seeTransponder(W, '0A', 1);
+  crossing(store, { t: 1, at: 1 });
+  assert.equal(store.forgetTransponder(W, '0A'), true);
+  assert.equal(store.forgetTransponder(W, '0A'), false);
+  assert.deepEqual(store.transponders(W), []);
+  assert.equal(store.crossings('s1')[0].transponder, '0A');
+  assert.equal(store.seeTransponder(W, '0A', 9).created, true);
+});
+
+test('lastSeenAt follows the latest crossing', () => {
+  const store = openStore(':memory:');
+  practice(store);
+  store.seeTransponder(W, '0A', 5);
+  store.seeTransponder(W, '0B', 6);
+  assert.equal(store.transponders(W)[0].lastSeenAt, 5);
+  crossing(store, { t: 1, at: 10 });
+  crossing(store, { t: 2, at: 30 });
+  crossing(store, { t: 3, at: 20 });
+  crossing(store, { transponder: '0B', t: 4, at: 7, workspaceId: 'ws-2' });
+  assert.deepEqual(store.transponders(W).map((t) => [t.code, t.lastSeenAt]), [['0A', 30], ['0B', 6]]);
+});
+
+test('unknownSince filters by session or by time', () => {
+  const store = openStore(':memory:');
+  practice(store);
+  practice(store, 's2');
+  store.addDriver(W, { id: 'ana', name: 'Ana', colour: '#ff2d9b' });
+  for (const c of ['0A', '0B', '0C', '0D']) store.seeTransponder(W, c, 1);
+  store.assignTransponder(W, '0D', 'ana', 1);
+  crossing(store, { transponder: '0A', t: 1, at: 10 });
+  crossing(store, { transponder: '0B', sessionId: 's2', t: 2, at: 20 });
+  crossing(store, { transponder: '0C', t: 3, at: 30 });
+  crossing(store, { transponder: '0D', t: 4, at: 40 });
+  assert.deepEqual(store.unknownSince(W, 0, 's1'), ['0C', '0A']);
+  assert.deepEqual(store.unknownSince(W, 15, null), ['0C', '0B']);
+  assert.deepEqual(store.unknownSince(W, 100, null), []);
+});
+
 test('deleting a driver unassigns their transponders and keeps their laps', () => {
   const store = openStore(':memory:');
   practice(store);

@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS driver (
 );
 CREATE INDEX IF NOT EXISTS driver_workspace ON driver (workspace_id);
 CREATE TABLE IF NOT EXISTS transponder (
-  workspace_id TEXT NOT NULL, code TEXT NOT NULL, driver_id TEXT, first_seen_at INTEGER NOT NULL,
+  workspace_id TEXT NOT NULL, code TEXT NOT NULL, driver_id TEXT, first_seen_at INTEGER NOT NULL, label TEXT,
   PRIMARY KEY (workspace_id, code)
 );
 CREATE TABLE IF NOT EXISTS decoder (
@@ -247,11 +247,21 @@ export function openStore(path) {
     updateDriver: q('UPDATE driver SET name = ?, colour = ? WHERE workspace_id = ? AND id = ?'),
     deleteDriver: q('DELETE FROM driver WHERE workspace_id = ? AND id = ?'),
     unassignDriver: q('UPDATE transponder SET driver_id = NULL WHERE workspace_id = ? AND driver_id = ?'),
-    transponders: q('SELECT code, driver_id, first_seen_at FROM transponder WHERE workspace_id = ? ORDER BY code'),
+    transponders: q(`SELECT t.code, t.driver_id, t.first_seen_at, t.label,
+      COALESCE((SELECT MAX(c.at) FROM crossing c WHERE c.workspace_id = t.workspace_id AND c.transponder = t.code), t.first_seen_at) AS last_seen_at
+      FROM transponder t WHERE t.workspace_id = ? ORDER BY t.code`),
+    labelTransponder: q('UPDATE transponder SET label = ? WHERE workspace_id = ? AND code = ?'),
+    forgetTransponder: q('DELETE FROM transponder WHERE workspace_id = ? AND code = ?'),
+    unknownInSession: q(`SELECT t.code FROM transponder t JOIN crossing c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
+      WHERE t.workspace_id = ? AND t.driver_id IS NULL AND c.session_id = ? GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`),
+    unknownSince: q(`SELECT t.code FROM transponder t JOIN crossing c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
+      WHERE t.workspace_id = ? AND t.driver_id IS NULL AND c.at >= ? GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`),
     seeTransponder: q('INSERT INTO transponder (workspace_id, code, first_seen_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
     transponder: q('SELECT code, driver_id FROM transponder WHERE workspace_id = ? AND code = ?'),
-    assignTransponder: q(`INSERT INTO transponder (workspace_id, code, driver_id, first_seen_at) VALUES (?, ?, ?, ?)
-      ON CONFLICT (workspace_id, code) DO UPDATE SET driver_id = excluded.driver_id`),
+    assignTransponder: q(`INSERT INTO transponder (workspace_id, code, driver_id, first_seen_at, label) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (workspace_id, code) DO UPDATE SET
+        label = CASE WHEN transponder.driver_id IS excluded.driver_id THEN COALESCE(?, transponder.label) ELSE excluded.label END,
+        driver_id = excluded.driver_id`),
     decoders: q('SELECT id, name, created_at, last_seen_at FROM decoder WHERE workspace_id = ? ORDER BY created_at, id'),
     netDecoders: q("SELECT DISTINCT decoder_id FROM passing WHERE workspace_id = ? AND via = 'net'"),
     decoder: q('SELECT id, workspace_id, name FROM decoder WHERE id = ?'),
@@ -503,14 +513,21 @@ export function openStore(path) {
       });
     },
 
-    transponders: (ws) => s.transponders.all(ws).map((r) => ({ code: String(r.code), driverId: str(r.driver_id), firstSeenAt: Number(r.first_seen_at) })),
+    transponders: (ws) => s.transponders.all(ws).map((r) => ({ code: String(r.code), driverId: str(r.driver_id), firstSeenAt: Number(r.first_seen_at), label: str(r.label), lastSeenAt: Number(r.last_seen_at) })),
+    /** Gives a transponder a label, or clears it with `null`; false when the club has no such transponder. */
+    labelTransponder: (ws, code, label) => s.labelTransponder.run(label, ws, code).changes === 1,
+    /** Deletes the transponder row only; its passings and crossings stay. */
+    forgetTransponder: (ws, code) => s.forgetTransponder.run(ws, code).changes === 1,
+    /** Unassigned codes that crossed in the session when given, else at or after `since`; newest crossing first. */
+    unknownSince: (ws, since, sessionId) => (sessionId === null ? s.unknownSince.all(ws, since) : s.unknownInSession.all(ws, sessionId)).map((r) => String(r.code)),
     seeTransponder(ws, code, at) {
       const created = s.seeTransponder.run(ws, code, at).changes === 1;
       const r = s.transponder.get(ws, code);
       return { code: String(r.code), driverId: str(r.driver_id), created };
     },
-    assignTransponder(ws, code, driverId, at) {
-      s.assignTransponder.run(ws, code, driverId, at);
+    /** A moved transponder loses its label; for the same driver `label` replaces it only when not `undefined`. */
+    assignTransponder(ws, code, driverId, at, label = null) {
+      s.assignTransponder.run(ws, code, driverId, at, label, label);
     },
 
     decoders: (ws) => s.decoders.all(ws).map((r) => ({ id: String(r.id), name: String(r.name), createdAt: Number(r.created_at), lastSeenAt: num(r.last_seen_at) })),
