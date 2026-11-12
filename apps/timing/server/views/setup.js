@@ -7,7 +7,7 @@
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
-import { copyable, errorSummary, selectField, textField } from './form-parts.js';
+import { controlRow, copyable, errorSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
 
 const DIRECTIONS = [{ value: 'ccw', label: 'Anticlockwise' }, { value: 'cw', label: 'Clockwise' }];
@@ -24,11 +24,11 @@ function trackEdit(request, m, t) {
   return html`<details class="track-edit"${open ? html` open` : null}>
     <summary>${t.layout ? 'Rename or change layout' : 'Rename or attach a layout'}</summary>
     <div class="track-edit-forms">
-    <form method="post" action="${base}/tracks/${t.id}" class="inline-form">
+    <form method="post" action="${base}/tracks/${t.id}" class="track-edit-form">
       ${textField({ id: `track-name-${t.id}`, label: `New name for ${t.name}`, labelHidden: true, name: 'name', maxlength: 60, required: true, value: m.values[rename]?.name ?? t.name, error: m.errors[rename] ?? null })}
       <button type="submit" class="btn btn-sm btn-outline">Rename</button>
     </form>
-    <form method="post" action="${base}/tracks/${t.id}/layout" class="inline-form" data-frame="off">
+    <form method="post" action="${base}/tracks/${t.id}/layout" class="track-edit-form" data-frame="off">
       ${textField({ id: `track-link-${t.id}`, label: `Planner link for ${t.name}`, labelHidden: true, name: 'link', type: 'url', required: true, placeholder: 'Planner link', value: m.values[attach]?.link ?? '', error: m.errors[attach] ?? null })}
       <button type="submit" class="btn btn-sm btn-outline">${t.layout ? 'Change layout' : 'Attach layout'}</button>
     </form>
@@ -54,10 +54,11 @@ function trackSection(request, m) {
   <h2 id="track-title">Track</h2>
   <div class="track-now space-sm">
     <p class="track-head cut-words">Now: <a href="${base}/tracks/${m.track.id}"><strong>${m.track.name}</strong></a>, ${DIRECTION_NAME[m.direction]}. ${layoutNote(m.track)}</p>
-    <form method="post" action="${base}/track" class="inline-form">
-      ${selectField({ id: 'current-track', label: 'Current track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: chosen, error })}
-      ${selectField({ id: 'current-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error })}
-      <button type="submit" class="btn btn-primary">Save</button>
+    <form method="post" action="${base}/track" class="space-sm">
+      ${controlRow([
+        { id: 'current-track', label: 'Current track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: chosen, error },
+        { id: 'current-direction', label: 'Direction', name: 'direction', options: DIRECTIONS, value: values.direction ?? m.direction, error },
+      ], html`<button type="submit" class="btn btn-primary">Save</button>`)}
     </form>
     ${trackEdit(request, m, m.track)}
   </div>
@@ -74,11 +75,10 @@ function trackSection(request, m) {
   </div>` : null}
   <form method="post" action="${base}/tracks" class="space-sm">
     <h3 class="track-subhead">Add a track</h3>
-    <div class="inline-form">
-      ${textField({ id: 'add-track-name', label: 'Name', name: 'name', maxlength: 60, required: true, value: add.name ?? '', error: addError })}
-      ${textField({ id: 'add-track-link', label: 'Planner link', name: 'link', type: 'url', placeholder: 'Optional', value: add.link ?? '', error: addError })}
-      <button type="submit" class="btn btn-outline">Add track</button>
-    </div>
+    ${controlRow([
+      { id: 'add-track-name', label: 'Name', name: 'name', maxlength: 60, required: true, value: add.name ?? '', error: addError },
+      { id: 'add-track-link', label: 'Planner link', name: 'link', type: 'url', placeholder: 'Optional', value: add.link ?? '', error: addError },
+    ], html`<button type="submit" class="btn btn-outline">Add track</button>`)}
   </form>
   ${m.archived.length ? html`<details class="track-archive"${m.archived.some((t) => m.errors[`track-restore:${t.id}`] || m.errors[`track-delete:${t.id}`]) ? html` open` : null}>
     <summary>Archived tracks (${m.archived.length})</summary>
@@ -104,7 +104,7 @@ function driversSection(request, m) {
     // The swatch shows a colour it can show: a refused one would turn it black.
     const colour = /^#[0-9a-f]{6}$/i.test(kept.colour ?? '') ? kept.colour : d.colour;
     return html`<li class="setup-row">
-    <form method="post" action="${base}/drivers/${d.id}" class="inline-form driver-form">
+    <form method="post" action="${base}/drivers/${d.id}" class="driver-form">
       ${textField({ id: `colour-${d.id}`, label: `Colour for ${d.name}`, labelHidden: true, name: 'colour', type: 'color', value: colour, error })}
       ${textField({ id: `rename-${d.id}`, label: `New name for ${d.name}`, labelHidden: true, name: 'name', maxlength: 60, required: true, value: kept.name ?? d.name, error })}
       <button type="submit" class="btn btn-sm btn-outline">Save</button>
@@ -112,9 +112,9 @@ function driversSection(request, m) {
     ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/drivers/${d.id}/delete">Delete</a>` : null}
   </li>`;
   })}</ul>` : html`<p class="empty">No drivers yet.</p>`}
-  <form method="post" action="${base}/drivers" class="inline-form">
-    ${textField({ id: 'add-driver-name', label: 'New driver', name: 'name', maxlength: 60, required: true, value: m.values['add-driver']?.name ?? '', error: addError })}
-    <button type="submit" class="btn btn-primary">Add driver</button>
+  <form method="post" action="${base}/drivers" class="space-sm">
+    ${controlRow([{ id: 'add-driver-name', label: 'New driver', name: 'name', maxlength: 60, required: true, value: m.values['add-driver']?.name ?? '', error: addError }],
+      html`<button type="submit" class="btn btn-primary">Add driver</button>`)}
   </form>
 </section></tl-frame>`;
 }
@@ -131,9 +131,9 @@ function transpondersSection(request, m) {
       const key = `transponder:${t.code}`;
       return html`<tr${t.driverId === null ? html` class="is-unknown"` : null}>
       <td class="num">${t.code}</td>
-      <td><form method="post" action="${base}/transponders/${t.code}" class="inline-form">
-        ${selectField({ id: `transponder-${t.code}`, label: `Driver for ${t.code}`, labelHidden: true, name: 'driver', options, value: m.values[key]?.driver ?? t.driverId ?? '', error: m.errors[key] ?? null })}
-        <button type="submit" class="btn btn-sm btn-outline">Assign</button>
+      <td><form method="post" action="${base}/transponders/${t.code}" class="space-sm">
+        ${controlRow([{ id: `transponder-${t.code}`, label: `Driver for ${t.code}`, labelHidden: true, name: 'driver', options, value: m.values[key]?.driver ?? t.driverId ?? '', error: m.errors[key] ?? null }],
+          html`<button type="submit" class="btn btn-sm btn-outline">Assign</button>`)}
       </form></td>
     </tr>`;
     })}</tbody>
@@ -161,9 +161,9 @@ function decodersSection(request, m) {
     ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/decoders/${d.id}/unpair">Unpair</a>` : null}
   </li>`)}</ul>` : null}
   <p>Pair a decoder by USB on the <a href="${base}/bridge">Bridge</a> page, or here if it only uses Wi-Fi:</p>
-  <form method="post" action="${base}/decoders" class="inline-form" data-frame="off">
-    ${textField({ id: 'pair-name', label: 'Decoder name', name: 'name', maxlength: 60, value: m.values.pair?.name ?? '', placeholder: 'Start line', error })}
-    <button type="submit" class="btn btn-outline">Pair over Wi-Fi only</button>
+  <form method="post" action="${base}/decoders" class="space-sm" data-frame="off">
+    ${controlRow([{ id: 'pair-name', label: 'Decoder name', name: 'name', maxlength: 60, value: m.values.pair?.name ?? '', placeholder: 'Start line', error }],
+      html`<button type="submit" class="btn btn-outline">Pair over Wi-Fi only</button>`)}
   </form>
 </section>`;
 }

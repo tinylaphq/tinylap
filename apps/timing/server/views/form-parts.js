@@ -16,29 +16,50 @@ const errorFor = (error, name) => (error && error.field === name ? error.message
  */
 export const copyable = (inner) => html`<tl-copy class="copy">${inner}<button type="button" class="btn btn-outline" hidden>Copy</button><span class="visually-hidden" role="status"></span><p class="field-hint copy-hint" hidden>Select it and copy it yourself.</p></tl-copy>`;
 
-export function textField({ label, name, value = '', error = null, type = 'text', required = false, maxlength = null, placeholder = null, readonly = false, labelHidden = false, min = null, max = null, inputmode = null, hint = null, copy = false, id }) {
+/**
+ * A field's hint and error. In a field of its own they follow the control; a
+ * field in a control row leaves them out (inRow), and controlRow puts them
+ * below the row, as palace's .control-row needs. @param {{ id: string, name: string, error?: { field?: string, message: string } | null, hint?: string | null }} field
+ */
+export function fieldNotes({ id, name, error = null, hint = null }) {
+  const message = errorFor(error, name);
+  return html`${hint ? html`<p class="field-hint" id="${id}-hint">${hint}</p>` : null}
+  ${message ? html`<p class="field-error" id="${id}-error">${message}</p>` : null}`;
+}
+
+export function textField({ label, name, value = '', error = null, type = 'text', required = false, maxlength = null, placeholder = null, readonly = false, labelHidden = false, min = null, max = null, inputmode = null, hint = null, copy = false, inRow = false, id }) {
   const message = errorFor(error, name);
   const described = [message ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(' ');
   const input = html`<input type="${type}" id="${id}" name="${name}" value="${value}"${required ? html` required` : null}${readonly ? html` readonly` : null}${min !== null ? html` min="${min}"` : null}${max !== null ? html` max="${max}"` : null}${maxlength ? html` maxlength="${maxlength}"` : null}${placeholder ? html` placeholder="${placeholder}"` : null}${inputmode ? html` inputmode="${inputmode}"` : null}${message ? html` aria-invalid="true"` : null}${described ? html` aria-describedby="${described}"` : null}>`;
   return html`<div class="field">
   <label for="${id}"${labelHidden ? html` class="visually-hidden"` : null}>${label}</label>
   ${copy ? copyable(input) : input}
-  ${hint ? html`<p class="field-hint" id="${id}-hint">${hint}</p>` : null}
-  ${message ? html`<p class="field-error" id="${id}-error">${message}</p>` : null}
+  ${inRow ? null : fieldNotes({ id, name, error, hint })}
 </div>`;
 }
 
-export function selectField({ label, name, options, value = '', error = null, labelHidden = false, hint = null, id, data = {} }) {
+export function selectField({ label, name, options, value = '', error = null, labelHidden = false, hint = null, inRow = false, id, data = {} }) {
   const message = errorFor(error, name);
   const described = [message ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean).join(' ');
   return html`<div class="field">
   <label for="${id}"${labelHidden ? html` class="visually-hidden"` : null}>${label}</label>
   <select id="${id}" name="${name}"${Object.entries(data).map(([key, v]) => html` data-${key}="${v}"`)}${message ? html` aria-invalid="true"` : null}${described ? html` aria-describedby="${described}"` : null}>
     ${options.map((o) => html`<option value="${o.value}"${o.dataName === undefined ? null : html` data-name="${o.dataName}"`}${o.value === value ? html` selected` : null}>${o.label}</option>`)}
-  </select>${hint ? html`<p class="field-hint" id="${id}-hint">${hint}</p>` : null}
-  ${message ? html`<p class="field-error" id="${id}-error">${message}</p>` : null}
+  </select>${inRow ? null : fieldNotes({ id, name, error, hint })}
 </div>`;
 }
+
+/**
+ * Fields and their actions on one line (palace's .control-row), each field's
+ * hint and error below the row, so the actions line up with the controls.
+ * A field with options is a select. Put it in a .space-sm, which spaces the
+ * notes from the row. @param {any[]} fields @param {unknown} actions
+ */
+export const controlRow = (fields, actions) => html`<div class="control-row">
+  ${fields.map((f) => (f.options ? selectField({ ...f, inRow: true }) : textField({ ...f, inRow: true })))}
+  ${actions}
+</div>
+${fields.map(fieldNotes)}`;
 
 /**
  * The page-level message for a failed form (spec §5): role="alert", with a link to

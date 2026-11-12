@@ -456,7 +456,7 @@ test('the setup page’s headings: the page, a plain h2 per section, an h3 withi
 
 test('a track’s fold holds its two forms in one grid', async () => {
   const body = await (await get(owner, `${base}/setup`)).text();
-  assert.match(body, /<details class="track-edit">\s*<summary>[^<]+<\/summary>\s*<div class="track-edit-forms">\s*<form method="post" action="[^"]+\/tracks\/[^"/]+" class="inline-form">[\s\S]*?<\/form>\s*<form method="post" action="[^"]+\/layout" class="inline-form" data-frame="off">[\s\S]*?<\/form>\s*<\/div>\s*<\/details>/);
+  assert.match(body, /<details class="track-edit">\s*<summary>[^<]+<\/summary>\s*<div class="track-edit-forms">\s*<form method="post" action="[^"]+\/tracks\/[^"/]+" class="track-edit-form">[\s\S]*?<\/form>\s*<form method="post" action="[^"]+\/layout" class="track-edit-form" data-frame="off">[\s\S]*?<\/form>\s*<\/div>\s*<\/details>/);
 });
 
 test('a refused current track that names none keeps the current one selected, not the list’s first', async () => {

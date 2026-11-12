@@ -232,9 +232,7 @@ body.big .navbar-right .btn { font-size: 16px; min-height: 44px; padding-inline:
  * and a word too long for its line ends in "…" instead of pushing the page
  * wider. The whole name stays in the text, for a screen reader, and in a title. */
 .cut-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.field { display: grid; gap: var(--p-space-xs); font-weight: 600; }
 .choice { display: flex; align-items: center; gap: var(--p-space-xs); min-width: 0; }
-.inline-form { display: flex; gap: var(--p-space-sm); align-items: flex-start; flex-wrap: wrap; }
 ul.setup-list { list-style: none; padding: 0; } /* the element selector outweighs palace's ul padding */
 /* No margin of its own, at no weight, so a stack's gap above the list wins. */
 :where(ul.setup-list) { margin: 0; }
@@ -399,8 +397,6 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .wifi-state { display: flex; gap: var(--p-space-md); align-items: center; padding: var(--p-space-md); border: var(--p-border-width) solid var(--p-text); }
 .wifi-state[hidden] { display: none; }
 .wifi-state:has(> .lamp[data-state="busy"]) { border-style: dashed; border-color: var(--p-border-dashed); }
-.wifi-dialog .field-hint { font-size: 13px; font-weight: 400; color: var(--p-text-muted); margin: 0; }
-.wifi-dialog .field { gap: var(--p-space-sm); }
 
 /* The networks: one box, rows under thin rules; a row is a button, hover and
    focus its only states. Its signal is a fixed column, so bars and chevrons
@@ -581,22 +577,12 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
   .navbar-right .live-status { padding-inline: 0; }
 }
 
-/* Forms and the setup page. Palace styles the inputs and labels; these lay them out. */
+/* Forms and the setup page. Palace styles the fields and lays out their rows
+   (.control-row); these lay out the setup page around them. */
 .field { min-width: 0; }
-.field-error { margin: 0; color: var(--p-error-text); font-size: 13px; font-weight: 600; }
-.field input[aria-invalid="true"], .field select[aria-invalid="true"] { border-color: var(--p-error); }
-.field label { margin-bottom: 0; }
-.field input[type="text"], .field input[type="url"] { max-width: 100%; }
-.inline-form > .field { flex: 1 1 14rem; }
-.inline-form > .status { flex-basis: 100%; margin: 0; }
-.field, .inline-form { --label-line: 16px; }
-.field label { line-height: var(--label-line); }
-/* A button sits at the input's height and top; a visible label (--label-line plus the field's gap) pushes it down to the input. */
-.inline-form .btn, .inline-form input, .inline-form select { box-sizing: border-box; height: 3rem; }
-.inline-form .btn { margin: 0; flex: none; white-space: nowrap; }
-.inline-form > .field:has(> label:not(.visually-hidden)) ~ .btn { margin-top: calc(var(--label-line) + var(--p-space-xs)); }
-/* A form with visible labels keeps its button beside the fields, so that offset always lines up; on a phone they stack (below). */
-.inline-form:has(> .field > label:not(.visually-hidden)) { flex-wrap: nowrap; }
+/* palace's .status upper-cases and tracks its text; a hint in one (a Copy
+   button's fallback) is a sentence. */
+.field-hint { text-transform: none; letter-spacing: 0; }
 .button-row { display: flex; gap: var(--p-space-sm); flex-wrap: wrap; align-items: center; }
 /* A driver's row, in one grid: colour, name, Save and Delete on a line, an
    error under them at the row's width. The form and its fields step aside
@@ -609,8 +595,9 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .driver-form > .btn { grid-column: 3; grid-row: 1; }
 .setup-row > .driver-form ~ .btn { grid-column: 4; grid-row: 1; }
 .driver-form .field-error { grid-column: 1 / -1; grid-row: 2; }
+.driver-form > .btn { white-space: nowrap; }
 .driver-form input[type="color"] {
-  flex: 0 0 auto; width: 3rem; padding: 4px; cursor: pointer;
+  flex: 0 0 auto; width: 3rem; height: var(--p-control-height); padding: 4px; cursor: pointer;
   border: var(--p-border-width) solid var(--p-text); border-radius: var(--p-radius);
   background: var(--p-surface); transition: var(--p-transition);
 }
@@ -620,12 +607,12 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .driver-form input[type="color"]:focus-visible { outline: none; border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); transform: var(--p-lift-sm); }
 .driver-form input[type="color"][aria-invalid="true"] { border-color: var(--p-error); }
 /* An action beside a field (a driver's Save and Delete, a transponder's
-   Assign) stands as tall as the field. An action in a row of text only (a
-   track's, an archived track's, a decoder's) is lighter, one smaller height
-   for all of them, still a comfortable target. */
-.setup-row .btn, .track-row .btn, .setup-table .btn { box-sizing: border-box; height: 2.25rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
-.setup-row:has(> .driver-form) .btn, .setup-table .btn { height: 3rem; }
-.setup-row > .inline-form { flex: 1 1 18rem; }
+   Assign, a track's Rename) stands as tall as the field, its small label
+   centred. An action in a row of text only (a track's, an archived track's,
+   a decoder's) is lighter, one smaller height for all of them, still a
+   comfortable target. */
+.setup-row .btn, .track-row .btn, .setup-table .btn, .track-edit-form .btn { height: 2.25rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
+.setup-row:has(> .driver-form) .btn, .setup-table .btn, .track-edit-form .btn { height: var(--p-control-height); }
 .setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
 .setup-table { width: 100%; border-collapse: collapse; }
 .setup-table th, .setup-table td { padding: var(--p-space-xs) var(--p-space-sm) var(--p-space-xs) 0; text-align: left; vertical-align: middle; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
@@ -636,10 +623,7 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 /* The marker is the first cell's inset shadow; the code keeps its place under the header. */
 .setup-table tr.is-unknown td:first-child { box-shadow: -8px 0 0 var(--p-warning); font-weight: 700; }
 .setup-table tr.is-unknown td { background: transparent; }
-.setup-table .inline-form { gap: var(--p-space-xs); }
-.setup-table .inline-form > .field { flex: 1 1 8rem; }
-.setup-table select { width: 100%; min-width: 0; }
-.setup-row > .inline-form > .field { flex: 1 1 8rem; }
+.setup-table .control-row { --control-row-min: 8rem; }
 .token { display: block; word-break: break-all; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
 /* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
 .token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
@@ -652,10 +636,9 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .status .token { margin: 0; }
 /* A value and its Copy button (tl-copy): the button stays beside what it
    copies, even on a phone, where a long token wraps instead; one-line values
-   and the button share the inline-form height. The hint takes its own line. */
+   and the button share palace's control height. The hint takes its own line. */
 .copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-sm); align-items: start; }
-.copy > .token, .copy > input, .copy > .btn { box-sizing: border-box; min-height: 3rem; margin: 0; }
-.copy > input { height: 3rem; }
+.copy > .token { min-height: var(--p-control-height); }
 .copy > .copy-hint { grid-column: 1 / -1; margin: 0; }
 /* A line that introduces a copyable value sits with it; the next line keeps its distance. */
 .status > p + .copy { margin-top: var(--p-space-xs); }
@@ -670,7 +653,7 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border-left: 6px solid var(--tl-record); }
 .track-head { margin: 0; }
 .track-head .meta { color: var(--p-text-muted); font-size: 12px; margin-left: var(--p-space-xs); }
-.track-now .inline-form > .field { flex: 1 1 9rem; }
+.track-now .control-row { --control-row-min: 9rem; }
 .track-subhead { margin: 0; }
 /* A row: the name and its note on the left, the actions on the right, the fold under both. */
 .track-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--p-space-xs) var(--p-space-sm); padding-block: var(--p-space-sm); }
@@ -680,12 +663,12 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .track-edit > summary, .track-archive > summary { cursor: pointer; font-weight: 600; width: fit-content; }
 .track-edit > summary { font-size: 13px; color: var(--p-text-secondary); }
 .track-edit[open] > summary, .track-archive[open] > summary { margin-bottom: var(--p-space-sm); }
-/* The fold's two forms share one grid (subgrid): the fields end at one edge
-   above buttons of one width, each on one line even on a phone, and an error
-   takes the fold's width under its field. */
-.track-edit-forms { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-xs) var(--p-space-sm); }
-.track-edit-forms > .inline-form { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: var(--p-space-xs); }
-.track-edit-forms > .inline-form + .inline-form { margin-top: var(--p-space-xs); }
+/* The fold's two forms share one grid (subgrid), not a control row each: the
+   fields end at one edge beside buttons of one width, each on one line even
+   on a phone, and an error takes the fold's width under its field, below the
+   row as palace puts it. */
+.track-edit-forms { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-sm); }
+.track-edit-forms > .track-edit-form { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: var(--p-space-sm); }
 .track-edit-forms .field { display: contents; }
 .track-edit-forms input { grid-column: 1; grid-row: 1; min-width: 0; width: 100%; }
 .track-edit-forms .btn { grid-column: 2; grid-row: 1; }
@@ -700,10 +683,6 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
   .driver-form > .btn, .setup-row > .driver-form ~ .btn { grid-row: 3; }
   /* With no error, the actions take the error's row, so no empty row adds its gap. */
   .setup-row:not(:has(.field-error)) .driver-form > .btn, .setup-row:not(:has(.field-error)) > .driver-form ~ .btn { grid-row: 2; }
-  /* A labelled field and its button stack, so the button needs no offset. */
-  .inline-form:has(> .field > label:not(.visually-hidden)) { flex-direction: column; align-items: stretch; }
-  .inline-form:has(> .field > label:not(.visually-hidden)) > .field { flex: 0 0 auto; }
-  .inline-form:has(> .field > label:not(.visually-hidden)) > .btn { margin-top: 0; align-self: flex-start; }
 }
 
 /* The start form: choice groups are fieldsets; the length boxes sit in a row. */
@@ -711,7 +690,6 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 .choices-inline { display: flex; flex-wrap: wrap; gap: var(--p-space-lg); }
 .race-times { display: flex; flex-wrap: wrap; gap: var(--p-space-lg); align-items: flex-start; }
 .race-times input[type="number"] { width: 5.5rem; font-variant-numeric: tabular-nums; }
-.field-hint { margin: 0; color: var(--p-text-muted); font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdown) { opacity: 0.5; }
 /* A form that failed on several fields lists them, each linking to its field. */
 .error-list { margin: 0; padding-left: 1.25em; }
