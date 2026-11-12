@@ -14,6 +14,7 @@ import { retryHeaders } from './responses.js';
 import { safeReturnTo } from './return-to.js';
 import { renderSetup } from './setup-pages.js';
 import { spacePath } from './spaces.js';
+import { collectPage } from './views/collect.js';
 import { notFoundPage } from './views/notice.js';
 import { moveQuestionPage, transponderFormPage } from './views/transponder.js';
 
@@ -29,7 +30,7 @@ function transponderOf(request, raw) {
   const code = transponderCode(raw);
   if (!code) return null;
   const all = request.store.transponders(request.workspaceId);
-  return all.find((t) => t.code === code) ?? all.find((t) => bare(t.code) === bare(code)) ?? { code, driverId: null, lastSeenAt: null };
+  return all.find((t) => t.code === code) ?? all.find((t) => bare(t.code) === bare(code)) ?? { code, driverId: null, lastSeenAt: null, crossedAt: null };
 }
 
 const fallbackOf = (request) => `${request.space.base}/setup#transponders`;
@@ -37,11 +38,12 @@ const fallbackOf = (request) => `${request.space.base}/setup#transponders`;
 /** The form, with any error and what was typed. @param {any} request @param {number} status */
 function renderForm(request, status, transponder, { returnTo, values = {}, errors = null, headers = {} }) {
   const ws = request.workspaceId;
-  const { lastSeenAt } = transponder;
+  // Only a crossing or passing puts it on the track: a number typed in has crossed nothing.
+  const { crossedAt } = transponder;
   return page(request, status, transponderFormPage(request, {
     base: request.space.base,
     code: transponder.code,
-    crossingNow: lastSeenAt !== null && request.now() - lastSeenAt <= CROSSING_NOW_MS,
+    crossingNow: crossedAt !== null && request.now() - crossedAt <= CROSSING_NOW_MS,
     drivers: request.store.drivers(ws),
     transponders: request.store.transponders(ws),
     values,
@@ -72,12 +74,41 @@ function setupFailure(request, form, error, row) {
   return renderSetup(request, failure.status, { errors: { [key]: failure }, values: { [key]: values }, failed: { error: failure, fieldId }, headers: retryHeaders(failure) });
 }
 
+/**
+ * Collect (§3.6) with what the URL says was just assigned, and any refused form of a row.
+ * @param {any} request @param {number} status @param {{ failed?: any, headers?: Record<string, string> }} [extras]
+ */
+function renderCollect(request, status, { failed = null, headers = {} } = {}) {
+  const ws = request.workspaceId;
+  const drivers = request.store.drivers(ws);
+  const transponders = request.store.transponders(ws);
+  const params = request.url.searchParams;
+  const assigned = status === 200 ? transponders.find((t) => t.code === params.get('assigned')) : null;
+  const owner = assigned?.driverId ? drivers.find((d) => d.id === assigned.driverId) : null;
+  const done = owner ? { code: assigned.code, name: owner.name, added: params.get('added') === '1' } : null;
+  return page(request, status, collectPage(request, { workspaceId: ws, drivers, transponders, done, failed }), { headers });
+}
+
+const showCollect = (request) => renderCollect(request, 200);
+
+/**
+ * A refused form of a collect row comes back as collect with that form's error and input, 422.
+ * Which form: the new-driver one sends a name, the driver one a driver.
+ */
+function collectFailure(request, form, code, error) {
+  const which = form.has('name') ? 'name' : 'driver';
+  const failure = error.field ? { ...error, status: 422, field: which } : error;
+  const failed = { code, form: which, error: failure, values: { driver: form.get('driver') ?? '', name: form.get('name') ?? '' } };
+  return renderCollect(request, failure.status, { failed, headers: retryHeaders(failure) });
+}
+
 /** The assignment to `raw`, from the form or Setup's add list; `row` as for setupFailure. */
 function assignTo(request, form, raw, row) {
   const transponder = transponderOf(request, raw);
   if (!transponder) return page(request, 404, notFoundPage(request));
   const ws = request.workspaceId;
   const fromSetup = form.get('from') === 'setup';
+  const fromCollect = form.get('from') === 'collect';
   const driverId = form.get('driver') ?? '';
   const name = form.get('name') ?? '';
   const label = form.get('label') ?? undefined;
@@ -88,6 +119,8 @@ function assignTo(request, form, raw, row) {
   const owner = transponder.driverId ? request.store.driver(ws, transponder.driverId) : null;
   const chosen = driverId ? request.store.driver(ws, driverId) : null;
   const to = driverId ? chosen?.name : name.trim();
+  // Collect's driver form sends no name: nothing chosen is that form's mistake, not a missing new name.
+  if (fromCollect && !form.has('name') && !driverId) return collectFailure(request, form, transponder.code, { problem: 'invalid-request', status: 422, field: 'driver', message: 'Choose a driver.' });
   // Someone else's asks first, once the choice itself is sound; the operation refuses the rest.
   const sound = driverId ? chosen && name.trim() === '' : to !== '';
   if (owner && sound && chosen?.id !== owner.id && form.get('confirm') !== '1') {
@@ -98,6 +131,7 @@ function assignTo(request, form, raw, row) {
   const result = ops.assignTransponderTo(request, { code: transponder.code, driverId: driverId || null, label, newDriverName: name });
   if (!result.error) return seeOther(returnTo);
   if (fromSetup) return setupFailure(request, form, result.error, row);
+  if (fromCollect) return collectFailure(request, form, transponder.code, result.error);
   // A driver deleted meanwhile is a mistake in the form, like any other: 422.
   const failure = result.error.field ? { ...result.error, status: 422 } : result.error;
   return renderForm(request, failure.status, transponder, { returnTo, values: { name }, errors: failure, headers: retryHeaders(failure) });
@@ -140,6 +174,7 @@ async function remove(request, match) {
 }
 
 export const transponderPageRoutes = [
+  { pattern: spacePath('transponders/new'), credentials: true, methods: { GET: pageRoute('timing.setup', showCollect) } },
   { pattern: spacePath('transponders'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', assignNumber, { write: true }) } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})/remove'), credentials: true, methods: { GET: pageRoute('timing.setup', toOwnerPage), POST: pageRoute('timing.setup', remove, { write: true }) } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { GET: pageRoute('timing.setup', showForm), POST: pageRoute('timing.setup', assign, { write: true }) } },

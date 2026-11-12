@@ -954,3 +954,22 @@ ul.tp-rows { list-style: none; margin: 0; padding: 0; }
 .tp-acts { flex: none; display: flex; align-items: center; gap: var(--p-space-sm); margin-left: auto; }
 .tp-forget { display: inline-flex; align-items: center; min-height: var(--p-control-height); padding: 0 var(--p-space-xs); font-size: 0.875rem; color: var(--p-text-secondary); text-decoration: underline; text-underline-offset: 0.2em; border: 0; box-shadow: none; background: none; }
 .tp-forget:hover { color: var(--p-text); }
+
+/* Collect (§3.6): a framed row per new transponder, its number beside two small forms, one or the other.
+ * The row whose transponder is crossing now carries the accent: palace's offset shadow, and both its
+ * buttons in the primary style while every other row's are outlined. tl-crossing-now only toggles .is-crossing. */
+/* The element selector outweighs palace's .container ul; the margin above stays the section's space-md. */
+ul.collect { list-style: none; margin-bottom: 0; padding: 0; display: grid; gap: var(--p-space-md); }
+.container li.collect-row { margin: 0; font-size: 1rem; }
+.collect-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--p-space-sm) var(--p-space-md); align-items: start; padding: var(--p-space-md); border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); transition: box-shadow 0.15s; }
+.collect-row > .tp { font-size: 1.4rem; min-width: 2.6em; padding-block: 0.25em; }
+.collect-body { display: grid; gap: var(--p-space-sm); min-width: 0; container-type: inline-size; }
+.collect-body > form { margin: 0; }
+.collect-seen { margin: 0; min-height: 1.3em; font-size: 0.875rem; color: var(--p-text-secondary); }
+.collect-or { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--p-text-muted); }
+.collect-row.is-crossing { box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
+.collect-row.is-crossing .btn { background: var(--p-accent-1); color: #fff; border-color: var(--p-accent-1); }
+.collect-row.is-crossing .btn:hover { background: var(--p-dark); color: var(--p-accent-1); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-accent-1); }
+/* Narrow, the button goes under its field and takes the row's width. */
+@container (max-width: 24rem) { .collect-body .control-row > .btn { flex: 1 1 100%; } }
+@media (prefers-reduced-motion: reduce) { .collect-row { transition: none; } }

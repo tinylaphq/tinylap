@@ -247,11 +247,13 @@ export function openStore(path) {
     updateDriver: q('UPDATE driver SET name = ?, colour = ? WHERE workspace_id = ? AND id = ?'),
     deleteDriver: q('DELETE FROM driver WHERE workspace_id = ? AND id = ?'),
     unassignDriver: q('UPDATE transponder SET driver_id = NULL, label = NULL WHERE workspace_id = ? AND driver_id = ?'),
-    transponders: q(`SELECT t.code, t.driver_id, t.first_seen_at, t.label,
-      MAX(t.first_seen_at,
-        COALESCE((SELECT MAX(c.at) FROM crossing c WHERE c.workspace_id = t.workspace_id AND c.transponder = t.code), 0),
-        COALESCE((SELECT MAX(p.received_at) FROM passing p WHERE p.workspace_id = t.workspace_id AND p.transponder = t.code), 0)) AS last_seen_at
-      FROM transponder t WHERE t.workspace_id = ? ORDER BY t.code`),
+    // crossed_at: the newest crossing or passing, null for one only typed in; last_seen_at falls back to its row's creation.
+    transponders: q(`SELECT code, driver_id, first_seen_at, label, MAX(first_seen_at, COALESCE(crossed_at, 0)) AS last_seen_at, crossed_at FROM (
+      SELECT t.code, t.driver_id, t.first_seen_at, t.label,
+        NULLIF(MAX(
+          COALESCE((SELECT MAX(c.at) FROM crossing c WHERE c.workspace_id = t.workspace_id AND c.transponder = t.code), 0),
+          COALESCE((SELECT MAX(p.received_at) FROM passing p WHERE p.workspace_id = t.workspace_id AND p.transponder = t.code), 0)), 0) AS crossed_at
+      FROM transponder t WHERE t.workspace_id = ?) ORDER BY code`),
     labelTransponder: q('UPDATE transponder SET label = ? WHERE workspace_id = ? AND code = ?'),
     forgetTransponder: q('DELETE FROM transponder WHERE workspace_id = ? AND code = ?'),
     unknownInSession: q(`SELECT t.code FROM transponder t JOIN crossing c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
@@ -524,7 +526,7 @@ export function openStore(path) {
       });
     },
 
-    transponders: (ws) => s.transponders.all(ws).map((r) => ({ code: String(r.code), driverId: str(r.driver_id), firstSeenAt: Number(r.first_seen_at), label: str(r.label), lastSeenAt: Number(r.last_seen_at) })),
+    transponders: (ws) => s.transponders.all(ws).map((r) => ({ code: String(r.code), driverId: str(r.driver_id), firstSeenAt: Number(r.first_seen_at), label: str(r.label), lastSeenAt: Number(r.last_seen_at), crossedAt: num(r.crossed_at) })),
     /** Gives a transponder a label, or clears it with `null`; false when the club has no such transponder. */
     labelTransponder: (ws, code, label) => s.labelTransponder.run(label, ws, code).changes === 1,
     /** Deletes the transponder row only; its passings and crossings stay. */

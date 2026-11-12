@@ -56,8 +56,16 @@ test('the form: each driver a button with what they have, a new driver, and Not 
 
 test('a transponder that crossed in the last 10 s is on the track now', async () => {
   app.store.seeTransponder(ws(), '52', Date.now() - 2000);
+  app.store.insertPassing({ decoder: 'd1', boot: 'b', transponder: '52', t: 1, receivedAt: Date.now() - 2000, via: 'net', workspaceId: ws() });
   const body = await (await get(owner, `${base}/transponders/52`)).text();
   assert.match(body, /<p class="subtitle pick-live" data-code="52">It's on the track now\.<\/p>/);
+});
+
+test('a number only typed in, just now, is not on the track: only a crossing or passing is', async () => {
+  assign('5E', 'simon');
+  await app.form(owner, `${base}/transponders/5E/remove`, { returnTo: `${base}/setup` });
+  const body = await (await get(owner, `${base}/transponders/5E`)).text();
+  assert.match(body, /<p class="subtitle pick-live" data-code="5E" hidden>It's on the track now\.<\/p>/);
 });
 
 test('a number in another case or with leading zeros is the same transponder', async () => {
