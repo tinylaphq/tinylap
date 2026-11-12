@@ -115,8 +115,8 @@ test('a car with no session running is a live line, by its driver, or by its cod
   const drivers = [{ id: 'h', name: 'Haris', colour: '#1e88e5' }];
   assert.equal(idleNotice(null, drivers), null);
   assert.equal(String(idleNotice({ transponder: '23', driverId: 'h', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span><span class="driver" style="--driver: #1e88e5"><span class="driver-name" title="Haris">Haris</span></span> is on the track</span></p>');
-  assert.equal(String(idleNotice({ transponder: '23', driverId: 'gone', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span>Car 23 is on the track</span></p>', 'a driver since deleted: the code');
-  assert.match(String(idleNotice({ transponder: '<b>', driverId: null, at: 1 }, drivers)), /Car &lt;b&gt; is on the track/);
+  assert.equal(String(idleNotice({ transponder: '23', driverId: 'gone', at: 1 }, drivers)), '<p class="board-on-track" role="status"><span>Transponder 23 is on the track</span></p>', 'a driver since deleted: the code');
+  assert.match(String(idleNotice({ transponder: '<b>', driverId: null, at: 1 }, drivers)), /Transponder &lt;b&gt; is on the track/);
 });
 
 test('the direction icon: an open loop with one arrowhead, named by its own title', () => {

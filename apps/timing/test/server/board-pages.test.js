@@ -23,6 +23,7 @@ let topClub;
 let countedClub;
 let quietClub;
 let statusClub;
+let unassignedClub;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -40,6 +41,8 @@ before(async () => {
   quietClub = app.club(tess, 'Quiet');
   app.join(tess, quietClub.id, user);
   statusClub = app.club(tess, 'Status');
+  unassignedClub = app.club(tess, 'Unassigned');
+  app.join(tess, unassignedClub.id, user);
   app.join(tess, statusClub.id, user);
   member = await app.login(user);
   base = `/clubs/${office.id}`;
@@ -92,14 +95,15 @@ test('laps, a personal best and an unknown car', async () => {
   assert.match(body, /<td class="num">8\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr"/);
   assert.match(body, /<th scope="col" class="num">Best<\/th><th scope="col" class="mark-cell"><span class="visually-hidden">Mark<\/span><\/th>/);
   assert.match(body, /<table class="board-table standings-table">\s*<colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last"><\/colgroup>/);
-  assert.match(body, new RegExp(`<p class="status status-warning flag board-unknown" role="status">Unknown car: 4711\\. <a href="${base}/setup#transponders">Assign in Setup</a>`));
+  // One transponder not assigned yet: the warning links straight to its form, back to the board after.
+  assert.match(body, new RegExp(`<p class="status status-warning flag board-unknown" role="status">Transponder 4711 isn't assigned yet, so its laps aren't counted\\. <a href="${base}/transponders/4711\\?returnTo=${encodeURIComponent(`${base}/board`)}">Assign it</a></p>`));
   assert.match(body, /<time class="board-clock-time" data-clock data-kind="practice" data-state="running" data-opens="\d+" data-closes="" data-now="\d+">0:09<\/time>/);
 });
 
 test('?big is the wall layout, without the members-only notice', async () => {
   const body = await (await get(member, `${base}/board?big`)).text();
   assert.match(body, /<body class="big">/);
-  assert.doesNotMatch(body, /Unknown car/);
+  assert.doesNotMatch(body, /4711|board-unknown|isn't assigned yet/);
   assert.match(body, new RegExp(`href="${base}/board">Leave big screen</a>`));
   assert.match(body, /<div class="navbar-right">\s*<button type="button" class="btn btn-sm btn-outline" data-fullscreen hidden>Full screen<\/button>/);
 });
@@ -112,7 +116,7 @@ test('the watchers board: a page for browsers, JSON for programs, no codes', asy
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const body = await page.text();
   assert.match(body, /&lt;i&gt;Ana&lt;\/i&gt;/);
-  assert.doesNotMatch(body, /4711|Unknown car|board-steps|nav-tabs|nav-account/);
+  assert.doesNotMatch(body, /4711|board-unknown|isn't assigned yet|Assign it|board-steps|nav-tabs|nav-account/);
   assert.match(body, new RegExp(`data-events="/watch/${token}/events"`));
   const data = await app.api(null, 'GET', `/watch/${token}`, undefined, { accept: 'application/json' });
   assert.match(data.headers.get('content-type'), /^application\/json/);
@@ -367,10 +371,12 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   // Never driven: the card to get ready for members; the display and the watchers show the record's place.
   let s = await screens();
   for (const body of Object.values(s)) {
-    assert.match(body, /<header class="board-track">\s*<p class="board-track-name"><strong class="cut-words">Ring<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Clockwise<\/title>/);
+    assert.match(body, /<header class="board-track(?: is-band)?">\s*<p class="board-track-name"><strong class="cut-words">Ring<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Clockwise<\/title>/);
     assert.doesNotMatch(body, /class="eyebrow"|No session yet|Last laps|status-warning/);
   }
   assert.match(s.board, /Ready when your cars are/);
+  assert.match(s.board, /<div id="board-live" class="board is-idle"[^>]*>\s*<header class="board-track">/, 'no card yet: the strip stands alone');
+  for (const body of [s.big, s.watch]) assert.match(body, /<section class="board-hero">\s*<header class="board-track is-band">/, 'the record card’s top band');
   assert.match(s.board, new RegExp(`<a class="btn btn-primary" href="${path}/bridge">Connect the decoder</a>\\s*<a href="${path}/setup#drivers">Add drivers</a>`), 'with drivers, the decoder is next');
   assert.doesNotMatch(s.board, START);
   for (const body of [s.big, s.watch]) {
@@ -386,17 +392,20 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   assert.match(s.board, /<div class="board-hero-go">\s*<p class="board-on-track" role="status"><span><span class="driver" style="--driver: [^"]+"><span class="driver-name" title="Haris">Haris<\/span><\/span> is on the track<\/span><\/p>\s*<form method="post"/);
   assert.match(s.board, new RegExp(`<form method="post" action="${path}/sessions" class="start-practice">\\s*<input type="hidden" name="kind" value="practice">`));
   assert.equal(s.board.match(new RegExp(START, 'g')).length, 1);
-  assert.match(s.board, new RegExp(`<p class="board-quiet" role="status">1 car has no driver yet\\. <a href="${path}/setup#transponders">Assign it</a></p>`));
+  assert.match(s.board, new RegExp(`<p class="board-quiet" role="status">Transponder 63 isn't assigned yet\\. <a href="${path}/transponders/63\\?returnTo=${encodeURIComponent(`${path}/board`)}">Assign it</a></p>`));
   assert.doesNotMatch(s.board, /board-unknown/, 'a quiet line, not the warning');
   assert.match(s.board, /No record yet/);
   assert.doesNotMatch(s.board, /status-warning|Ready when your cars are/);
   for (const body of [s.big, s.watch]) {
-    assert.doesNotMatch(body, /is on the track|no driver yet/);
+    assert.doesNotMatch(body, /is on the track|isn't assigned yet|transponders\//);
     assert.doesNotMatch(body, START);
   }
   // Two cars without a driver: the line counts them. Once they have one, it offers a qualifying or race instead.
   passIn(club.id, 5_001_000, '64');
-  assert.match(await (await get(member, `${path}/board`)).text(), new RegExp(`2 cars have no driver yet\\. <a href="${path}/setup#transponders">Assign them</a>`));
+  const two = await (await get(member, `${path}/board`)).text();
+  assert.match(two, new RegExp(`<p class="board-quiet" role="status">2 transponders aren't assigned yet\\. <a href="${path}/transponders/new">Assign them</a></p>`));
+  assert.match(two, /<span>Transponder 64 is on the track<\/span>/, 'the latest crossing');
+  assert.doesNotMatch(two, /status-warning/, 'no yellow box while idle');
   const mia = app.store.drivers(club.id).find((d) => d.name === 'Mia');
   for (const code of ['63', '64']) app.engine.assign(club.id, code, mia.id);
   assert.match(await (await get(member, `${path}/board`)).text(), new RegExp(`<p class="board-quiet">Or a <a href="${path}/sessions#start-title">qualifying or race</a>\\.</p>`));
@@ -543,4 +552,23 @@ test('every live board says whether each decoder is reporting, idle or not repor
   }
   app.engine.start(club.id, { kind: 'practice', replace: true });
   for (const body of await Promise.all(await pages())) assert.match(body, /Start &lt;b&gt;: not reporting/, 'during a session');
+});
+
+test('several transponders not assigned yet in a session: one warning, by number, linking to collect; none for watchers', async () => {
+  const path = `/clubs/${unassignedClub.id}`;
+  await app.form(member, `${path}/watch-link`, {});
+  const token = app.store.workspace(unassignedClub.id).watchToken;
+  clock.now = 1_000_000_000_000 + 20_000_000;
+  app.engine.start(unassignedClub.id, { kind: 'practice', replace: true });
+  passIn(unassignedClub.id, 20_001_000, '52');
+  passIn(unassignedClub.id, 20_002_000, '41');
+  const collect = `<a href="${path}/transponders/new">Assign them</a></p>`;
+  assert.match(await (await get(member, `${path}/board`)).text(), new RegExp(`<p class="status status-warning flag board-unknown" role="status">Transponders 41 and 52 aren't assigned yet, so their laps aren't counted\\. ${collect}`));
+  passIn(unassignedClub.id, 20_003_000, '66');
+  const three = await (await get(member, `${path}/board`)).text();
+  assert.match(three, new RegExp(`<p class="status status-warning flag board-unknown" role="status">Transponders 41, 52 and 66 aren't assigned yet, so their laps aren't counted\\. ${collect}`));
+  assert.equal(three.match(/board-unknown/g).length, 1);
+  for (const body of [await (await get(null, `/watch/${token}`)).text(), await (await get(member, `${path}/board?big`)).text()]) {
+    assert.doesNotMatch(body, /board-unknown|isn't assigned yet|Assign them|transponders\/new|\b(41|52|66)\b/);
+  }
 });

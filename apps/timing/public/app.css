@@ -54,14 +54,21 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 }
 .board-track, .board-head, .board > .flag { grid-column: 1 / -1; }
 .board > .flag { margin: 0; }
-/* The track and its record (records spec §5.1): a quiet strip, its edge in the
- * record colour. When a record falls it fills with that colour and stands out
- * like the clock (§4.3); that is the board's one moment of colour. */
+/* The track and its record (records spec §5.1): a strip raised in the record
+ * colour's shadow, like the record card, with no left bar (in palace that
+ * marks the selected item of a list). While nobody races it is the record
+ * card's top band instead (drivers and transponders spec §4): one box, one
+ * shadow. When a record falls it fills with that colour and stands out like
+ * the clock (§4.3); that is the board's one moment of colour. */
 .board-track {
   min-width: 0;
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--p-space-xs) var(--p-space-lg);
   padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface);
-  border: var(--p-border-width) solid var(--p-text); border-left: 6px solid var(--tl-record);
+  border: var(--p-border-width) solid var(--p-text); box-shadow: 8px 8px 0 var(--tl-record);
+}
+.board-track.is-band {
+  grid-column: 1 / -1; padding-inline: var(--p-space-xl);
+  border: 0; border-bottom: var(--p-border-width) solid var(--p-text); box-shadow: none; background: var(--p-surface-inset);
 }
 .board-track p { margin: 0; }
 .board-track-name { color: var(--p-text-secondary); display: flex; align-items: center; min-width: 0; }
@@ -75,7 +82,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-track-by { color: var(--p-text-secondary); }
 .board-track-by .driver { color: var(--p-text); }
 .board-track.is-record {
-  background: var(--tl-record); color: var(--tl-record-ink); border-left-width: var(--p-border-width);
+  background: var(--tl-record); color: var(--tl-record-ink);
   box-shadow: var(--p-shadow-lg) var(--p-text); padding-block: var(--p-space-md);
 }
 .board-track.is-record .board-track-name, .board-track.is-record .board-track-name strong,
@@ -505,7 +512,9 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-first .board-first-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm) var(--p-space-lg); margin: 0; }
 .board-first-links a:not(.btn) { font-weight: 600; }
 @media (max-width: 720px) {
-  .board-hero { grid-template-columns: minmax(0, 1fr); box-shadow: var(--p-shadow-lg) var(--tl-record); }
+  .board-hero, .board-track:not(.is-record, .is-band) { box-shadow: var(--p-shadow-lg) var(--tl-record); }
+  .board-hero { grid-template-columns: minmax(0, 1fr); }
+  .board-track.is-band { padding-inline: var(--p-space-lg); }
   .board-hero-record { padding: var(--p-space-lg); }
   /* Stacked on a phone, no row is kept: the line that a car is on the track
      comes under Start practice, so the button still never moves, and
@@ -614,9 +623,9 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 /* On a line of its own, under a long name, Unpair keeps the right edge, as every row's actions do. */
 .decoder-info + .btn { margin-left: auto; }
 /* The track list (named tracks spec §4). The current track is set like the
-   board's track strip, its edge in the record colour, so it reads as the
-   track the board shows. Rename and layout fold away under each track. */
-.track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border-left: 6px solid var(--tl-record); }
+   board's track strip, raised in the record colour's shadow with no left bar,
+   so it reads as the track the board shows. Rename and layout fold away under each track. */
+.track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record); }
 .track-head { margin: 0; }
 .track-head .meta { color: var(--p-text-muted); font-size: 12px; margin-left: var(--p-space-xs); }
 .track-now .control-row { --control-row-min: 9rem; }

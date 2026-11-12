@@ -41,9 +41,10 @@ function decoderStates(snap) {
  * (records spec §5.1, named tracks spec §4). While nobody races the record is
  * the big thing below, so the header leaves it out. While a record has just
  * fallen it is in the record state (§4.3): the new time and holder in the
- * record colour, and the record it beat.
+ * record colour, and the record it beat. While nobody races it is the top
+ * band of the record card (`band`, drivers and transponders spec §4).
  */
-function trackHeader(snap) {
+function trackHeader(snap, { band = false } = {}) {
   const states = decoderStates(snap);
   const where = html`<p class="board-track-name"><strong class="cut-words">${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>`;
   const n = snap.recordNew;
@@ -60,7 +61,7 @@ function trackHeader(snap) {
   const record = !snap.session ? null
     : snap.record ? html`<p class="board-track-record"><span class="board-track-label">Track record</span> ${recordLine(snap, snap.record)}</p>`
       : html`<p class="board-track-record"><span class="board-track-label">No record yet</span></p>`;
-  return html`<header class="board-track">
+  return html`<header class="board-track${band ? ' is-band' : ''}">
   ${where}
   ${record}
   ${states}
@@ -165,11 +166,13 @@ const beaten = (snap, r) => html`, beat ${r.beat.driverId === r.driverId ? 'thei
  * The track record as the big thing (named tracks spec §4): the time, the
  * holder with the crown, when it was set and what it beat. Beside it, for
  * members on their own screen, Start practice: over it the line saying a car
- * is on the track, under it the cars without a driver, quietly.
+ * is on the track, under it the transponders not assigned yet, quietly; and
+ * while nobody races, the track strip as its top band.
  */
-function hero(request, snap, members) {
+function hero(request, snap, members, band) {
   const r = snap.record;
   return html`<section class="board-hero">
+  ${band}
   <div class="board-hero-record">
     <h1 class="board-hero-label">Track record</h1>
     ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
@@ -179,12 +182,29 @@ function hero(request, snap, members) {
 </section>`;
 }
 
-/** Start practice, with the car on the track over it and the cars without a driver under it. */
+/** "41", "41 and 52", "41, 52 and 66". @param {string[]} codes */
+const andList = (codes) => codes.length < 2 ? codes.join('') : `${codes.slice(0, -1).join(', ')} and ${codes.at(-1)}`;
+
+/**
+ * Where "Assign it" or "Assign them" goes (spec §4): one transponder to its
+ * form, back to the board after; several to the page that collects them.
+ */
+const assignHref = (base, unknown) => unknown.length === 1
+  ? `${base}/transponders/${encodeURIComponent(unknown[0])}?returnTo=${encodeURIComponent(`${base}/board`)}`
+  : `${base}/transponders/new`;
+
+/**
+ * The unassigned transponders by number, so the line reads the same, and is
+ * not announced again, while their cars keep crossing.
+ */
+const byNumber = (codes) => [...codes].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+
+/** Start practice, with the car on the track over it and the transponders not assigned yet under it, quietly. */
 function go(request, snap) {
   const base = request.space.base;
   const n = snap.unknown.length;
   const quiet = n
-    ? html`<p class="board-quiet" role="status">${n === 1 ? '1 car has' : `${n} cars have`} no driver yet. <a href="${base}/setup#transponders">${n === 1 ? 'Assign it' : 'Assign them'}</a></p>`
+    ? html`<p class="board-quiet" role="status">${n === 1 ? html`Transponder ${snap.unknown[0]} isn't assigned yet.` : html`${n} transponders aren't assigned yet.`} <a href="${assignHref(base, snap.unknown)}">${n === 1 ? 'Assign it' : 'Assign them'}</a></p>`
     : html`<p class="board-quiet">Or a <a href="${base}/sessions#start-title">qualifying or race</a>.</p>`;
   return html`<div class="board-hero-go">
     ${idleNotice(snap.idle, snap.drivers)}
@@ -237,13 +257,18 @@ function firstRun(request, snap) {
 </section>`;
 }
 
-/** The board while nobody races: the record and what is worth seeing, not warnings. */
-function idleBoard(request, snap, { watcher, big }) {
+/** Whether the idle board is the first-run card: a member's own screen, for a club that has never driven. */
+const isFirstRun = (snap, { watcher, big }) => !watcher && !big && !snap.driven && !snap.idle;
+
+/** The board while nobody races: the record and what is worth seeing, not warnings. `band` is the track strip, when it is the record card's top. */
+function idleBoard(request, snap, { watcher, big, band }) {
   // The display (?big) and the watchers never get a member line or a button (records spec §5.3).
   const members = !watcher && !big;
-  if (members && !snap.driven && !snap.idle) return firstRun(request, snap);
+  if (isFirstRun(snap, { watcher, big })) return firstRun(request, snap);
   const lists = [fastest(snap), lastSession(request, snap, members)].filter(Boolean);
-  return html`${hero(request, snap, members)}
+  // Under the card whose top band names the decoders, a warning that one has gone quiet.
+  return html`${hero(request, snap, members, band)}
+${band ? offlineBanners(snap) : null}
 ${lists.length ? html`<div class="board-idle${timeWidths([...snap.fastest.map((b) => b.bestMs), ...(snap.lastResults?.standings ?? []).slice(0, 3).map((row) => row.bestMs)])}">${lists}</div>` : null}`;
 }
 
@@ -256,15 +281,20 @@ function offlineBanners(snap) {
 export function boardLive(request, snap, { watcher = false, big = false, token = null } = {}) {
   const events = `${watcher ? `/watch/${token}` : `${request.space.base}/board`}/events${big ? '?big' : ''}`;
   if (!snap.session) {
+    // The strip is the record card's top band (spec §4), unless a record has just fallen or there is no card yet.
+    const band = !snap.recordNew && !isFirstRun(snap, { watcher, big }) ? trackHeader(snap, { band: true }) : null;
     return html`<div id="board-live" class="board is-idle" data-events="${events}">
-${trackHeader(snap)}
-${offlineBanners(snap)}
-${idleBoard(request, snap, { watcher, big })}
+${band ? null : trackHeader(snap)}
+${band ? null : offlineBanners(snap)}
+${idleBoard(request, snap, { watcher, big, band })}
 </div>`;
   }
-  // A car without a driver loses its laps while a session runs: that is worth a warning.
-  const unknown = !watcher && !big && snap.unknown?.length
-    ? html`<p class="status status-warning flag board-unknown" role="status">Unknown ${snap.unknown.length === 1 ? 'car' : 'cars'}: ${snap.unknown.join(', ')}. <a href="${request.space.base}/setup#transponders">Assign in Setup</a></p>`
+  // A transponder not assigned yet loses its laps while a session runs: that is worth a warning (spec §4).
+  const codes = !watcher && !big && snap.unknown?.length ? byNumber(snap.unknown) : [];
+  const unknown = codes.length
+    ? html`<p class="status status-warning flag board-unknown" role="status">${codes.length === 1
+      ? html`Transponder ${codes[0]} isn't assigned yet, so its laps aren't counted.`
+      : html`Transponders ${andList(codes)} aren't assigned yet, so their laps aren't counted.`} <a href="${assignHref(request.space.base, codes)}">${codes.length === 1 ? 'Assign it' : 'Assign them'}</a></p>`
     : null;
   return html`<div id="board-live" class="board" data-events="${events}">
 ${trackHeader(snap)}

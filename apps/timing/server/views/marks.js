@@ -70,7 +70,7 @@ export function startPracticeForm(request, { from } = {}) {
 }
 
 /**
- * "Car 23 is on the track": a live line, not a warning, while a car crosses
+ * "Transponder 23 is on the track": a live line, not a warning, while a car crosses
  * with no session running (named tracks spec §4); for members only, from the
  * snapshot's `idle`. A car with a driver says who: "Ana is on the track".
  * @param {{ transponder: string, driverId: string | null } | null} idle
@@ -78,6 +78,6 @@ export function startPracticeForm(request, { from } = {}) {
  */
 export function idleNotice(idle, drivers) {
   if (!idle) return null;
-  const who = idle.driverId && drivers.some((d) => d.id === idle.driverId) ? chip(drivers, idle.driverId) : html`Car ${idle.transponder}`;
+  const who = idle.driverId && drivers.some((d) => d.id === idle.driverId) ? chip(drivers, idle.driverId) : html`Transponder ${idle.transponder}`;
   return html`<p class="board-on-track" role="status"><span>${who} is on the track</span></p>`;
 }
