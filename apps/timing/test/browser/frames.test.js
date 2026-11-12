@@ -101,6 +101,28 @@ test('adding a transponder from a driver\'s list saves in place, and the transpo
   assert.deepEqual(errors, []);
 });
 
+test('a typed number of someone else\'s swaps in the row with its question, and Give it moves it in place', async (t) => {
+  await app.form(owner, '/personal/drivers', { name: 'Bo' });
+  const ws = (await (await app.api(owner, 'GET', '/auth/me')).json()).workspaces[0].id;
+  app.engine.assign(ws, '7C', app.store.drivers(ws).find((d) => d.name === 'Bo').id);
+  const { page, errors, posts, loads } = await openSetup(t);
+  const ana = () => page.locator('#drivers .roster > li', { has: page.locator('.roster-name', { hasText: /^Ana$/ }) });
+  await ana().locator('.roster-add > summary').click();
+  await ana().locator('.pick-row.is-other > summary').click();
+  await ana().locator('input[name="code"]').fill('7C');
+  await ana().getByRole('button', { name: 'Add to Ana' }).click();
+  const row = ana().locator('.pick-row[data-code="7C"][open]');
+  await row.getByText('Transponder 7C is Bo\'s. Giving it to Ana takes it off Bo.').waitFor();
+  assert.equal(loads(), 0, 'swapped in, no page load');
+  await row.getByRole('button', { name: 'Give it to Ana' }).click();
+  await saved(page, 'Drivers saved');
+  await ana().locator('.roster-head .tp, .roster-tps .tp', { hasText: '7C' }).waitFor();
+  assert.equal(app.store.transponders(ws).find((x) => x.code === '7C').driverId, app.store.drivers(ws).find((d) => d.name === 'Ana').id);
+  assert.deepEqual(posts, ['/personal/transponders', '/personal/transponders/7C']);
+  assert.equal(loads(), 0);
+  assert.deepEqual(errors, []);
+});
+
 test('a planner outage (502) swaps in its message, with the link kept', async (t) => {
   const { page, posts, loads } = await openSetup(t);
   const link = `${PLANNER}/layouts/${'A'.repeat(22)}`;

@@ -91,7 +91,9 @@ function assignTo(request, form, raw, row) {
   // Someone else's asks first, once the choice itself is sound; the operation refuses the rest.
   const sound = driverId ? chosen && name.trim() === '' : to !== '';
   if (owner && sound && chosen?.id !== owner.id && form.get('confirm') !== '1') {
-    return page(request, 200, moveQuestionPage(request, { base: request.space.base, code: transponder.code, owner, to, driver: driverId, name, label: label ?? null, from: fromSetup ? 'setup' : null, returnTo }));
+    // In Setup's list the question is the row itself (§3.4): Setup with that row open, so a frame can swap it in.
+    if (fromSetup) return renderSetup(request, 200, { values: { [`add:${driverId}`]: { row: transponder.code, label: label ?? '', number: '' } } });
+    return page(request, 200, moveQuestionPage(request, { base: request.space.base, code: transponder.code, owner, to, driver: driverId, name, returnTo }));
   }
   const result = ops.assignTransponderTo(request, { code: transponder.code, driverId: driverId || null, label, newDriverName: name });
   if (!result.error) return seeOther(returnTo);

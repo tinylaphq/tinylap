@@ -108,9 +108,10 @@ const removeForm = (base, d, t) => html`<form method="post" action="${base}/tran
 /**
  * One row of a driver's add list (§3.1): a <details> of its own, one open at a time, holding a form
  * that adds that transponder, with a label from the driver's second transponder on. `t` is null for
- * the row that takes a number. A refused add comes back with this row open, its input kept.
+ * the row that takes a number. A refused add, or a typed number of someone else's, comes back with this
+ * row open, its input kept.
  */
-function addRow(request, m, d, own, t, numberText = 'Not in the list? Enter its number') {
+function addRow(request, m, d, own, t) {
   const base = request.space.base;
   const key = `add:${d.id}`;
   const kept = m.values[key] ?? null;
@@ -119,11 +120,11 @@ function addRow(request, m, d, own, t, numberText = 'Not in the list? Enter its 
   const error = failed ? m.errors[key] : null;
   const prefix = `add-${d.id}-${t ? t.code : 'number'}`;
   const owner = t?.driverId ? m.drivers.find((x) => x.id === t.driverId) : null;
-  const label = own.length ? textField({ id: `${prefix}-label`, label: 'Label', name: 'label', maxlength: 24, placeholder: 'Optional, e.g. Touring car', hint: `Tells it apart from ${theirs(d, own)}.`, value: failed ? kept.label : '', error }) : null;
+  const label = own.length ? textField({ id: `${prefix}-label`, label: 'Label', name: 'label', maxlength: 24, placeholder: 'Optional', hint: `Tells it apart from ${theirs(d, own)}.`, value: failed ? kept.label : '', error }) : null;
   const whose = owner ? `${owner.name}'s${t.label ? `, ${t.label}` : ''}` : null;
   const ago = t ? html`<span class="meta"${whose ? html` title="${whose}"` : null}>${whose ?? html`<span class="crossing-now" hidden>Crossing now</span><span class="crossed">crossed <time datetime="${new Date(t.lastSeenAt).toISOString()}">${formatAgo(t.lastSeenAt, request.now())}</time></span>`}</span>` : null;
   return html`<details class="pick-row${t ? '' : ' is-other'}" name="add-${d.id}"${t ? html` data-code="${t.code}"` : null}${failed ? html` open` : null}>
-    <summary>${t ? html`<span class="tp">${t.code}</span>${ago}` : numberText}</summary>
+    <summary>${t ? html`<span class="tp">${t.code}</span>${ago}` : 'Not in the list? Enter its number'}</summary>
     <form method="post" action="${base}/transponders${t ? `/${t.code}` : ''}" class="pick-act">
       <input type="hidden" name="driver" value="${d.id}"><input type="hidden" name="name" value="">
       <input type="hidden" name="from" value="setup"><input type="hidden" name="returnTo" value="${base}/setup#drivers">
@@ -151,7 +152,7 @@ function addList(request, m, d, own) {
       ${others.length ? html`<p class="pick-group">Someone else's</p>${others.map((t) => addRow(request, m, d, own, t))}` : null}
       ${addRow(request, m, d, own, null)}
     </div>` : html`<p class="pick-empty">Run its car over the line, and it shows up here.</p>
-    <div class="pick">${addRow(request, m, d, own, null, 'Or enter its number')}</div>`}
+    <div class="pick">${addRow(request, m, d, own, null)}</div>`}
   </details>`;
 }
 

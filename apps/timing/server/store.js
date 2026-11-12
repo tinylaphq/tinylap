@@ -246,7 +246,7 @@ export function openStore(path) {
     addDriver: q('INSERT INTO driver (id, workspace_id, name, colour) VALUES (?, ?, ?, ?)'),
     updateDriver: q('UPDATE driver SET name = ?, colour = ? WHERE workspace_id = ? AND id = ?'),
     deleteDriver: q('DELETE FROM driver WHERE workspace_id = ? AND id = ?'),
-    unassignDriver: q('UPDATE transponder SET driver_id = NULL WHERE workspace_id = ? AND driver_id = ?'),
+    unassignDriver: q('UPDATE transponder SET driver_id = NULL, label = NULL WHERE workspace_id = ? AND driver_id = ?'),
     transponders: q(`SELECT t.code, t.driver_id, t.first_seen_at, t.label,
       MAX(t.first_seen_at,
         COALESCE((SELECT MAX(c.at) FROM crossing c WHERE c.workspace_id = t.workspace_id AND c.transponder = t.code), 0),

@@ -103,6 +103,24 @@ test('assign a transponder that crossed the line', async (t) => {
   assert.equal(app.store.transponders(personal).find((x) => x.code === '4711').driverId, app.store.drivers(personal)[0].id);
 });
 
+test('a typed number of someone else\'s asks in the driver\'s list, and Give it moves it', async (t) => {
+  await app.form(member, '/personal/drivers', { name: 'Bo' });
+  app.engine.assign(personal, '7C', app.store.drivers(personal).find((d) => d.name === 'Bo').id);
+  const page = await plainPage(t);
+  await page.goto('/personal/setup');
+  const ana = page.locator('#drivers .roster > li', { has: page.locator('.roster-name', { hasText: /^Ana$/ }) });
+  await ana.locator('.roster-add > summary').click();
+  await ana.locator('.pick-row.is-other > summary').click();
+  await ana.locator('input[name="code"]').fill('7C');
+  await ana.getByRole('button', { name: 'Add to Ana' }).click();
+  const row = page.locator('#drivers .roster > li', { has: page.locator('.roster-name', { hasText: /^Ana$/ }) }).locator('.pick-row[data-code="7C"][open]');
+  await row.getByText('Transponder 7C is Bo\'s. Giving it to Ana takes it off Bo.').waitFor();
+  assert.equal(app.store.transponders(personal).find((x) => x.code === '7C').driverId, app.store.drivers(personal).find((d) => d.name === 'Bo').id, 'nothing moved yet');
+  await row.getByRole('button', { name: 'Give it to Ana' }).click();
+  await page.waitForURL(/\/personal\/setup#drivers$/);
+  assert.equal(app.store.transponders(personal).find((x) => x.code === '7C').driverId, app.store.drivers(personal).find((d) => d.name === 'Ana').id);
+});
+
 test('race, tap and Back and Forward across a POST and its 303 change nothing twice', async (t) => {
   const page = await plainPage(t);
   await page.goto('/personal/sessions');

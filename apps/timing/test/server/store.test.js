@@ -277,15 +277,15 @@ test('unknownSince filters by session or by time', () => {
   assert.deepEqual(store.unknownSince(W, 100, null), []);
 });
 
-test('deleting a driver unassigns their transponders and keeps their laps', () => {
+test('deleting a driver unassigns their transponders, drops their labels, and keeps their laps', () => {
   const store = openStore(':memory:');
   practice(store);
   store.addDriver(W, { id: 'ana', name: 'Ana', colour: '#ff2d9b' });
-  store.assignTransponder(W, '0A', 'ana', 1);
+  store.assignTransponder(W, '0A', 'ana', 1, 'Buggy');
   crossing(store, { driverId: 'ana', lapMs: 8000, counts: true });
   assert.equal(store.deleteDriver(W, 'ana'), true);
   assert.equal(store.deleteDriver(W, 'ana'), false);
-  assert.deepEqual(store.transponders(W).map((t) => [t.code, t.driverId]), [['0A', null]]);
+  assert.deepEqual(store.transponders(W).map((t) => [t.code, t.driverId, t.label]), [['0A', null, null]]);
   assert.equal(store.crossings('s1')[0].driverId, 'ana');
 });
 

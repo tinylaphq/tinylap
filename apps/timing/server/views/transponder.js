@@ -60,11 +60,11 @@ export function transponderFormPage(request, { base, code, crossingNow, drivers,
 
 /**
  * "Transponder 17 is Simon's." (§3.4): give it to the one chosen, or keep it. The form sends
- * the choice again with confirm=1, and a label and where it came from when given.
+ * the choice again with confirm=1.
  * @param {any} request
- * @param {{ base: string, code: string, owner: { name: string }, to: string, driver: string, name: string, label?: string | null, from?: string | null, returnTo: string }} m
+ * @param {{ base: string, code: string, owner: { name: string }, to: string, driver: string, name: string, returnTo: string }} m
  */
-export function moveQuestionPage(request, { base, code, owner, to, driver, name, label = null, from = null, returnTo }) {
+export function moveQuestionPage(request, { base, code, owner, to, driver, name, returnTo }) {
   const title = `Give transponder ${code} to ${to}?`;
   return layout(request, {
     title,
@@ -78,7 +78,6 @@ export function moveQuestionPage(request, { base, code, owner, to, driver, name,
       <input type="hidden" name="name" value="${name}">
       <input type="hidden" name="returnTo" value="${returnTo}">
       <input type="hidden" name="confirm" value="1">
-      ${label === null ? null : html`<input type="hidden" name="label" value="${label}">`}${from === null ? null : html`<input type="hidden" name="from" value="${from}">`}
       <button type="submit" class="btn btn-primary">Give it to ${to}</button>
       <a class="btn btn-outline" href="${returnTo}">Keep it with ${owner.name}</a>
     </form>
