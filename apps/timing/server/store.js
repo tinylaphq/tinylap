@@ -644,10 +644,10 @@ export function openStore(path) {
     offerPersonalBest(ws, trackId, direction, { driverId, lapMs, at, seq }) {
       s.offerPersonalBest.run(ws, trackId, direction, driverId, lapMs, at, seq);
     },
-    /** The laps that set a record on a track and direction, newest first. */
     /** A driver's best lap with each transponder on a track and direction, best first. */
     bestLapsByTransponder: (ws, driverId, trackId, direction) => s.bestLapsByTransponder.all(ws, trackId, direction, driverId)
       .map((r) => ({ transponder: String(r.transponder), label: str(r.label), lapMs: Number(r.lap_ms), at: Number(r.at) })),
+    /** The laps that set a record on a track and direction, newest first. */
     recordHistory: (ws, trackId, direction, { limit = -1 } = {}) => s.recordHistory.all(ws, trackId, direction, limit).map(recordOf),
     currentRecord(ws, trackId, direction) {
       const r = s.recordHistory.get(ws, trackId, direction, 1);

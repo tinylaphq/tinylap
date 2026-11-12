@@ -22,14 +22,16 @@ export const avatar = (driver, { large = false, small = false } = {}) => html`<s
 /** A transponder's label field, by its number. @param {string} code */
 export const labelFieldOf = (code) => `label:${code}`;
 
-/** The best laps (§3.5): one line per transponder when two or more of theirs are labelled, else their one best, unlabelled. */
+/** The best laps (§3.5): one line per labelled transponder when two or more of theirs are labelled, else their one best, unlabelled. */
 function bestLaps(laps, transponders) {
   if (laps.length === 0) return null;
   const perTransponder = transponders.filter((t) => t.label !== null).length >= 2;
-  const lines = perTransponder ? laps : laps.slice(0, 1);
-  return html`<section class="space-sm" aria-labelledby="best-laps-title">
+  // A lap's label is set only while the transponder is still theirs, so former ones drop out too.
+  const lines = perTransponder ? laps.filter((lap) => lap.label !== null) : laps.slice(0, 1);
+  if (lines.length === 0) return null;
+  return html`<section class="card-static space-sm" aria-labelledby="best-laps-title">
     <h2 id="best-laps-title">Best laps here</h2>
-    <dl class="best-laps">${lines.map((lap) => html`<div><dt class="num">${formatLap(lap.lapMs)}</dt><dd>${perTransponder && lap.label ? html`<span class="best-lap-label">${lap.label}</span> ` : null}${safe(localTime(lap.at, 'date'))}</dd></div>`)}</dl>
+    <dl class="best-laps">${lines.map((lap, i) => html`<div><dt class="num">${i === 0 ? html`<strong>${formatLap(lap.lapMs)}</strong>` : formatLap(lap.lapMs)}</dt><dd>${perTransponder ? html`<span class="best-lap-label">${lap.label}</span> ` : null}${safe(localTime(lap.at, 'date'))}</dd></div>`)}</dl>
   </section>`;
 }
 
@@ -79,9 +81,9 @@ export function driverPage(request, { driver, transponders, laps, values = {}, e
       </li>`;
       })}</ul>` : html`<p class="empty">No transponders yet.</p>`}
     </section>
-    ${bestLaps(laps, transponders)}
     <div class="button-row"><input type="hidden" name="from" value="driver"><button type="submit" class="btn btn-primary">Save</button></div>
   </form>
+  ${bestLaps(laps, transponders)}
   ${transponders.map((t) => html`<form id="remove-${t.code}" method="post" action="${base}/transponders/${t.code}/remove" hidden></form>`)}
 </section>`,
   });

@@ -141,9 +141,36 @@ test('best laps: two labelled transponders give one line each, best first, with 
   assert.deepEqual(app.store.bestLapsByTransponder(ws(), id, app.store.workspace(ws()).trackId, app.store.workspace(ws()).direction),
     [{ transponder: '971', label: 'Red Losi', lapMs: 7701, at: OCT_9 }, { transponder: '972', label: 'Buggy', lapMs: 7842, at: OCT_2 }]);
   const body = await (await get(owner, `${base}/drivers/${id}`)).text();
-  const lines = [...body.matchAll(/<div><dt class="num">([^<]*)<\/dt><dd>(.*?)<\/dd><\/div>/g)].map((m) => [m[1], m[2].replace(/<[^>]*>/g, '')]);
+  const lines = [...body.matchAll(/<div><dt class="num">(?:<strong>)?([^<]*)(?:<\/strong>)?<\/dt><dd>(.*?)<\/dd><\/div>/g)].map((m) => [m[1], m[2].replace(/<[^>]*>/g, '')]);
   assert.deepEqual(lines, [['7.701', 'Red Losi 9 Oct'], ['7.842', 'Buggy 2 Oct']]);
   assert.match(body, /<h2 id="best-laps-title">Best laps here<\/h2>/);
+});
+
+test('best laps: with two labelled, an unlabelled or former transponder gets no line', async () => {
+  const id = driver('Uma');
+  assign('811', id);
+  assign('812', id);
+  assign('813', id);
+  app.store.labelTransponder(ws(), '811', 'Red Losi');
+  app.store.labelTransponder(ws(), '812', 'Buggy');
+  laps([['811', id, 7701, OCT_9], ['812', id, 7842, OCT_2], ['813', id, 7000, OCT_2], ['814', id, 6900, OCT_2]]);
+  const body = await (await get(owner, `${base}/drivers/${id}`)).text();
+  const lines = [...body.matchAll(/<div><dt class="num">(?:<strong>)?([^<]*)(?:<\/strong>)?<\/dt><dd>(.*?)<\/dd><\/div>/g)].map((m) => [m[1], m[2].replace(/<[^>]*>/g, '')]);
+  assert.deepEqual(lines, [['7.701', 'Red Losi 9 Oct'], ['7.842', 'Buggy 2 Oct']]);
+});
+
+test('Save follows the fields, and the best laps are a section after the form', async () => {
+  const id = driver('Ben');
+  assign('821', id);
+  laps([['821', id, 8000, OCT_2]]);
+  const body = await (await get(owner, `${base}/drivers/${id}`)).text();
+  const start = body.indexOf(`<form method="post" action="${base}/drivers/${id}"`);
+  const end = body.indexOf('</form>', start);
+  assert.ok(start > 0);
+  const form = body.slice(start, end);
+  assert.match(form, /id="label-821"[\s\S]*>Save<\/button><\/div>\s*$/);
+  assert.doesNotMatch(form, /Best laps here/);
+  assert.match(body.slice(end), /^<\/form>\s*<section class="card-static space-sm" aria-labelledby="best-laps-title">/);
 });
 
 test('best laps: one transponder gives one line, without a label', async () => {
@@ -152,7 +179,7 @@ test('best laps: one transponder gives one line, without a label', async () => {
   app.store.labelTransponder(ws(), '981', 'Truck');
   laps([['981', id, 8100, OCT_9], ['981', id, 8050, OCT_2]]);
   const body = await (await get(owner, `${base}/drivers/${id}`)).text();
-  const lines = [...body.matchAll(/<div><dt class="num">([^<]*)<\/dt><dd>(.*?)<\/dd><\/div>/g)].map((m) => [m[1], m[2].replace(/<[^>]*>/g, '')]);
+  const lines = [...body.matchAll(/<div><dt class="num">(?:<strong>)?([^<]*)(?:<\/strong>)?<\/dt><dd>(.*?)<\/dd><\/div>/g)].map((m) => [m[1], m[2].replace(/<[^>]*>/g, '')]);
   assert.deepEqual(lines, [['8.050', '2 Oct']]);
 });
 
@@ -182,6 +209,10 @@ test('members only: signed out signs in, another club or a driver not here is no
   assert.equal((await get(owner, `/clubs/${pits.id}/drivers/${id}`)).status, 404);
   assert.equal((await get(owner, `${base}/drivers/nobody`)).status, 404);
   assert.equal((await app.form(owner, `${base}/drivers/nobody`, { from: 'driver', name: 'X' })).status, 404);
+  const theirs = `d${++n}`;
+  app.store.addDriver(pits.id, { id: theirs, name: 'Pia', colour: '#123456' });
+  assert.equal((await app.form(owner, `/clubs/${pits.id}/drivers/${theirs}`, { from: 'driver', name: 'Taken', colour: '#654321' })).status, 404);
+  assert.equal(app.store.driver(pits.id, theirs).name, 'Pia', 'nothing saved');
   const removed = await app.form(null, `${base}/transponders/991/remove`, {});
   assert.equal(removed.status, 303);
   assert.match(removed.headers.get('location'), /^\/auth\/login/);
