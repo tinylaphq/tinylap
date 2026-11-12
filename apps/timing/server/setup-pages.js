@@ -14,6 +14,7 @@ import { page, seeOther } from './respond.js';
 import { retryHeaders } from './responses.js';
 import { spacePath } from './spaces.js';
 import { changeLayoutPage, confirmPage } from './views/confirm.js';
+import { driverPage, labelFieldOf } from './views/driver.js';
 import { notFoundPage } from './views/notice.js';
 import { setupPage } from './views/setup.js';
 import { trackPage } from './views/track.js';
@@ -61,7 +62,49 @@ const addDriver = withForm((request, form) => {
   return afterForm(request, ops.addDriver(request, { name: values.name }), { key: 'add-driver', values, section: 'drivers', fieldId: 'add-driver-name' });
 });
 
+/**
+ * A driver's page (drivers and transponders spec §3.5), with any errors and what was typed; 404 for a driver not here.
+ * @param {any} request @param {string} id @param {number} status
+ * @param {{ values?: Record<string, string>, errors?: any[], headers?: Record<string, any> }} [extras]
+ */
+function renderDriver(request, id, status, { headers = {}, ...extras } = {}) {
+  const { store, workspaceId: ws } = request;
+  const driver = store.driver(ws, id);
+  if (!driver) return page(request, 404, notFoundPage(request));
+  const workspace = store.workspace(ws);
+  const transponders = store.transponders(ws).filter((t) => t.driverId === driver.id);
+  const laps = workspace.trackId ? store.bestLapsByTransponder(ws, driver.id, workspace.trackId, workspace.direction) : [];
+  return page(request, status, driverPage(request, { driver, transponders, laps, ...extras }), { headers });
+}
+
+const showDriver = (request, match) => renderDriver(request, match[2], 200);
+
+/** The driver page's form: name, colour and every label checked first, then saved; 303 back to the page. */
+function saveDriver(request, form, id) {
+  const driver = request.store.driver(request.workspaceId, id);
+  if (!driver) return page(request, 404, notFoundPage(request));
+  const values = { name: form.get('name') ?? '', colour: form.get('colour') ?? '' };
+  const labels = [];
+  const errors = [];
+  for (const t of request.store.transponders(request.workspaceId).filter((x) => x.driverId === driver.id)) {
+    const field = labelFieldOf(t.code);
+    const raw = form.get(field);
+    if (raw === null) continue;
+    values[field] = raw;
+    const { value, error } = ops.labelOf(raw);
+    if (error) errors.push({ ...error, field });
+    else labels.push({ code: t.code, label: value });
+  }
+  const failed = (list, status = 422) => renderDriver(request, id, status, { values, errors: list, headers: retryHeaders(list[0]) });
+  if (errors.length) return failed(errors);
+  const result = ops.renameDriver(request, { id, name: values.name, colour: form.has('colour') ? values.colour : undefined });
+  if (result.error) return result.error.problem === 'not-found' ? page(request, 404, notFoundPage(request)) : failed([result.error], result.error.status);
+  for (const { code, label } of labels) ops.labelTransponder(request, { code, label });
+  return seeOther(`${request.space.base}/drivers/${id}`);
+}
+
 const renameDriver = withForm((request, form, match) => {
+  if (form.get('from') === 'driver') return saveDriver(request, form, match[2]);
   const values = { name: form.get('name') ?? '', colour: form.get('colour') ?? undefined };
   const result = ops.renameDriver(request, { id: match[2], name: values.name, colour: values.colour });
   const fieldId = result.error?.field === 'colour' ? `colour-${match[2]}` : `rename-${match[2]}`;
@@ -242,7 +285,7 @@ const write = { write: true };
 export const setupPageRoutes = [
   { pattern: spacePath('setup'), credentials: true, methods: { GET: pageRoute('timing.run', showSetup) } },
   { pattern: spacePath('drivers'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', addDriver, write) } },
-  { pattern: spacePath('drivers/([^/]+)'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', renameDriver, write) } },
+  { pattern: spacePath('drivers/([^/]+)'), credentials: true, methods: { GET: pageRoute('timing.setup', showDriver), POST: pageRoute('timing.setup', renameDriver, write) } },
   { pattern: spacePath('drivers/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteDriver), POST: pageRoute('timing.delete', deleteDriver, write) } },
   { pattern: spacePath('track'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', setTrack, write) } },
   { pattern: spacePath('tracks'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', addTrack, write) } },

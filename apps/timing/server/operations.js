@@ -102,7 +102,7 @@ export function assignTransponder(request, { code: rawCode, driverId }) {
 
 const MAX_LABEL = 24;
 /** A transponder's label: trimmed, null when empty, at most 24 characters; or an error. @param {unknown} value */
-const labelOf = (value) => {
+export const labelOf = (value) => {
   const label = typeof value === 'string' ? value.trim() : '';
   return label.length > MAX_LABEL ? invalid(`A label has at most ${MAX_LABEL} characters.`, 'label') : { value: label || null };
 };

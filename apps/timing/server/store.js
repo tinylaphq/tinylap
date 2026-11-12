@@ -320,6 +320,11 @@ export function openStore(path) {
     qualifyingLaps: q(`SELECT c.seq, c.driver_id, c.lap_ms, c.at, c.session_id FROM session s JOIN crossing c ON c.session_id = s.id
       WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND c.counts = 1 AND c.via != 'tap' AND c.driver_id IS NOT NULL AND c.lap_ms IS NOT NULL
       ORDER BY c.at, c.seq`),
+    // A driver's best lap per transponder (drivers and transponders spec §3.5); SQLite takes at from the MIN row. A label is theirs only while the transponder is.
+    bestLapsByTransponder: q(`SELECT c.transponder, MIN(c.lap_ms) AS lap_ms, c.at, t.label FROM session s JOIN crossing c ON c.session_id = s.id
+      LEFT JOIN transponder t ON t.workspace_id = c.workspace_id AND t.code = c.transponder AND t.driver_id = c.driver_id
+      WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND c.driver_id = ? AND c.counts = 1 AND c.via != 'tap' AND c.lap_ms IS NOT NULL
+      GROUP BY c.transponder ORDER BY lap_ms, c.at, c.transponder`),
     trackDirections: q('SELECT DISTINCT workspace_id, track_id, direction FROM session WHERE track_id IS NOT NULL'),
     selectCursor: q('SELECT seq FROM feed_cursor WHERE feed = ?'),
     upsertCursor: q('INSERT INTO feed_cursor (feed, seq) VALUES (?, ?) ON CONFLICT (feed) DO UPDATE SET seq = excluded.seq'),
@@ -640,6 +645,9 @@ export function openStore(path) {
       s.offerPersonalBest.run(ws, trackId, direction, driverId, lapMs, at, seq);
     },
     /** The laps that set a record on a track and direction, newest first. */
+    /** A driver's best lap with each transponder on a track and direction, best first. */
+    bestLapsByTransponder: (ws, driverId, trackId, direction) => s.bestLapsByTransponder.all(ws, trackId, direction, driverId)
+      .map((r) => ({ transponder: String(r.transponder), label: str(r.label), lapMs: Number(r.lap_ms), at: Number(r.at) })),
     recordHistory: (ws, trackId, direction, { limit = -1 } = {}) => s.recordHistory.all(ws, trackId, direction, limit).map(recordOf),
     currentRecord(ws, trackId, direction) {
       const r = s.recordHistory.get(ws, trackId, direction, 1);

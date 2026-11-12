@@ -23,7 +23,6 @@ after(() => app.close());
 
 const TARGETS = [
   ['drivers', 'setup#drivers'],
-  ['drivers/d1', 'setup#drivers'],
   ['track', 'setup#track'],
   ['decoders', 'setup#decoders'],
   ['watch-link', 'setup#watchers'],
@@ -41,6 +40,15 @@ test('a GET on a transponder\'s target shows its form', async () => {
   const res = await app.api(owner, 'GET', `/clubs/${office.id}/transponders/00AB`, undefined, { accept: 'text/html' });
   assert.equal(res.status, 200);
   assert.match(await res.text(), /Whose transponder is <span class="assign-big">00AB<\/span>\?/);
+});
+
+test('a GET on a driver\'s target shows their page, or not found', async () => {
+  app.store.ensureWorkspace(office.id);
+  app.store.addDriver(office.id, { id: 'd1', name: 'Dan', colour: '#123456' });
+  const res = await app.api(owner, 'GET', `/clubs/${office.id}/drivers/d1`, undefined, { accept: 'text/html' });
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /<h1[^>]*>Dan<\/h1>/);
+  assert.equal((await app.api(owner, 'GET', `/clubs/${office.id}/drivers/d2`, undefined, { accept: 'text/html' })).status, 404);
 });
 
 test('on the personal space too, and signed out goes to sign-in', async () => {

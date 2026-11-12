@@ -82,6 +82,28 @@ async function assign(request, match) {
   return renderForm(request, failure.status, transponder, { returnTo, values: { name }, errors: failure, headers: retryHeaders(failure) });
 }
 
+/** Where Remove goes back to: the page of the driver who has it, else Setup's transponders. */
+const ownerPageOf = (request, transponder) => (transponder.driverId ? `${request.space.base}/drivers/${transponder.driverId}` : fallbackOf(request));
+
+/** GET on Remove's target (§3.5): on to the page the button is on. */
+function toOwnerPage(request, match) {
+  const transponder = transponderOf(request, match[2]);
+  return transponder ? seeOther(ownerPageOf(request, transponder)) : page(request, 404, notFoundPage(request));
+}
+
+/** Remove (§3.5): back to "Not assigned yet", its label gone; 303 back to the driver's page. */
+async function remove(request, match) {
+  const { error } = await readForm(request);
+  if (error) return error;
+  const transponder = transponderOf(request, match[2]);
+  if (!transponder) return page(request, 404, notFoundPage(request));
+  const back = ownerPageOf(request, transponder);
+  const result = ops.removeTransponder(request, { code: transponder.code });
+  if (result.error) return page(request, result.error.status, notFoundPage(request));
+  return seeOther(back);
+}
+
 export const transponderPageRoutes = [
+  { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})/remove'), credentials: true, methods: { GET: pageRoute('timing.setup', toOwnerPage), POST: pageRoute('timing.setup', remove, { write: true }) } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { GET: pageRoute('timing.setup', showForm), POST: pageRoute('timing.setup', assign, { write: true }) } },
 ];
