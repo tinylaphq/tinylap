@@ -18,5 +18,7 @@ export function safeReturnTo(value, fallback) {
   if (typeof value !== 'string' || value.length > MAX || !PATH.test(value)) return fallback;
   const origin = 'http://same.invalid';
   const url = new URL(value, origin);
-  return url.origin === origin ? url.pathname + url.search + url.hash : fallback;
+  // Parsing removes dot segments, so "/a/..//host" comes out as "//host": check what goes out, too.
+  const out = url.pathname + url.search + url.hash;
+  return url.origin === origin && /^\/(?![/\\])/u.test(out) ? out : fallback;
 }

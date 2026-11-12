@@ -19,6 +19,7 @@ test('anything else goes back to the fallback, never off-site', () => {
     undefined, '', 'board', '//evil.example', '//evil.example/x', 'https://evil.example', 'http:/evil.example',
     '/\\evil.example', '\\\\evil.example', '/\\/evil.example', 'javascript:alert(1)', ' /board', '/\tboard', '/board\n',
     `/${'x'.repeat(2048)}`,
+    '/.//evil.example', '/..//evil.example', '/a/..//evil.example', '/%2e//evil.example', '/.%2e//evil.example',
   ];
   for (const value of hostile) assert.equal(safeReturnTo(value, FALLBACK), FALLBACK, JSON.stringify(value));
 });

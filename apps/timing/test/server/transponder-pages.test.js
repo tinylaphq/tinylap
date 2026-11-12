@@ -87,7 +87,7 @@ test('choosing a driver assigns it and goes back to returnTo', async () => {
 });
 
 test('a hostile returnTo goes back to Setup', async () => {
-  for (const returnTo of ['//evil.example', 'https://evil.example', '/\\evil', 'javascript:alert(1)']) {
+  for (const returnTo of ['//evil.example', 'https://evil.example', '/\\evil', 'javascript:alert(1)', '/a/..//evil.example']) {
     const res = await app.form(owner, `${base}/transponders/65`, { driver: 'mia', name: '', returnTo });
     assert.equal(res.status, 303, returnTo);
     assert.equal(res.headers.get('location'), `${base}/setup#transponders`, returnTo);
