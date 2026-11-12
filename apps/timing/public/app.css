@@ -584,14 +584,12 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
    button's fallback) is a sentence. */
 .field-hint { text-transform: none; letter-spacing: 0; }
 .button-row { display: flex; gap: var(--p-space-sm); flex-wrap: wrap; align-items: center; }
-/* An action beside a field (a transponder's Assign, a track's Rename) stands
+/* An action beside a field (a track's Rename) stands
    as tall as the field, its small label centred. An action in a row of text
    only (a driver's, a track's, an archived track's, a decoder's) is lighter,
    one smaller height for all of them, still a comfortable target. */
 .setup-row .btn, .track-row .btn, .roster-head .btn, .tp-rows .btn, .track-edit-form .btn { height: 2.25rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
 .setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
-/* The last cell ends at the section's edge, as every other section's actions do. */
-/* The marker is the first cell's inset shadow; the code keeps its place under the header. */
 .token { display: block; word-break: break-all; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
 /* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
 .token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
@@ -945,6 +943,14 @@ ul.tp-rows { list-style: none; margin: 0; padding: 0; }
 .tp-rows > li.is-unknown { box-shadow: inset var(--p-border-width) 0 0 var(--p-warning); }
 .tp-rows .meta, .tp-who { flex: 1 1 0; min-width: 0; font-size: 0.875rem; color: var(--p-text-secondary); }
 .tp-who { font-size: 1rem; font-weight: 600; color: var(--p-text); }
+.tp-who .tp-label { margin-left: var(--p-space-xs); font-size: 0.875rem; font-weight: 400; color: var(--p-text-muted); }
+/* On a phone the number keeps both lines; its meta or driver on the first, the actions on the second. */
+@media (max-width: 40rem) {
+  .tp-rows > li { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; padding-block: var(--p-space-sm); }
+  .tp-rows > li > .tp { grid-row: span 2; align-self: start; margin-top: 0.15rem; }
+  .tp-rows > li > .tp-acts { grid-column: 2; margin-left: 0; }
+  .tp-who .tp-label { display: block; margin-left: 0; }
+}
 .tp-acts { flex: none; display: flex; align-items: center; gap: var(--p-space-sm); margin-left: auto; }
 .tp-forget { display: inline-flex; align-items: center; min-height: var(--p-control-height); padding: 0 var(--p-space-xs); font-size: 0.875rem; color: var(--p-text-secondary); text-decoration: underline; text-underline-offset: 0.2em; border: 0; box-shadow: none; background: none; }
 .tp-forget:hover { color: var(--p-text); }

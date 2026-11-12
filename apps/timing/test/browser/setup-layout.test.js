@@ -5,8 +5,8 @@
 // Tap and Setup in the browser, at a phone's and a laptop's width: a long
 // name stays inside its tile, unbroken inside its words, never under 16px,
 // and the result bar keeps its height after a tap; on Setup a section's
-// heading keeps its gap to what follows, actions beside a field stand as tall
-// as the field and actions in a row of text one lighter height, the row's
+// heading keeps its gap to what follows, actions in a row of text share one
+// lighter height, the row's
 // actions end at the section's edge, a driver's add list has 52 px rows, and a
 // fold's error takes the fold's width.
 import test, { after, before } from 'node:test';
@@ -105,7 +105,7 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
     assert.deepEqual(errors, []);
   });
 
-  test(`setup at ${size} width: a heading keeps its gap, row actions take a field's height or a text row's, and end at the section's edge`, async (t) => {
+  test(`setup at ${size} width: a heading keeps its gap, row actions share one lighter height, and end at the section's edge`, async (t) => {
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());
     await page.goto('/personal/setup');
@@ -119,10 +119,7 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
       const actions = [...document.querySelectorAll('.setup-row .btn, .roster-head .btn, .track-row .button-row .btn, .tp-rows .btn')]
         .filter((el) => el.getClientRects().length)
         .map((el) => {
-          // Beside a field: a field in the action's row, not in a fold under it.
-          const row = el.closest('.setup-row, .roster-head, .track-row, .tp-rows > li');
-          const field = [...row.querySelectorAll('input:not([type="hidden"]), select')].find((f) => !f.closest('details'));
-          return { text: el.textContent.trim(), h: Math.round(el.getBoundingClientRect().height), field: field ? Math.round(field.getBoundingClientRect().height) : null };
+          return { text: el.textContent.trim(), h: Math.round(el.getBoundingClientRect().height) };
         });
       const edge = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().right);
       const content = (sel) => { const s = document.querySelector(sel); return Math.round(s.getBoundingClientRect().right - parseFloat(getComputedStyle(s).paddingRight) - parseFloat(getComputedStyle(s).borderRightWidth)); };
@@ -135,10 +132,8 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
       };
     });
     for (const [id, gap] of m.gaps) assert.equal(gap, 16, `${id}: 16px to what follows`);
-    const besideField = m.actions.filter((a) => a.field !== null);
-    const inText = m.actions.filter((a) => a.field === null);
+    const inText = m.actions;
     assert.ok(inText.length, `rows of text: ${JSON.stringify(m.actions)}`);
-    for (const a of besideField) assert.equal(a.h, a.field, `${a.text}: as tall as its field`);
     assert.deepEqual([...new Set(inText.map((a) => a.h))], [36], `actions in a row of text: one lighter height, ${JSON.stringify(inText)}`);
     assert.equal(m.assign, 0, 'Assign ends at the section edge');
     assert.equal(m.unpair, 0, 'Unpair ends at the section edge');

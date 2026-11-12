@@ -641,6 +641,7 @@ test('the transponders overview: not assigned newest first, then assigned; Forge
   assert.match(ask, /Forget transponder 41\?/);
   assert.match(ask, /Its laps stay; if it crosses again it shows up as new\./);
   assert.equal((await get(dOwner, `${dBase}/transponders/99/forget`)).status, 404);
+  assert.equal((await app.form(dOwner, `${dBase}/transponders/99/forget`, {})).status, 404);
   const done = await app.form(dOwner, `${dBase}/transponders/41/forget`, {});
   assert.equal(done.status, 303);
   assert.equal(done.headers.get('location'), `${dBase}/setup#transponders`);
