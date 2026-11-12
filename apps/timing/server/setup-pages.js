@@ -83,11 +83,12 @@ function askDeleteDriver(request, match) {
 
 const deleteDriver = withForm((request, _form, match) => afterForm(request, ops.deleteDriver(request, { id: match[2] }), { key: 'delete', values: {}, section: 'drivers' }));
 
-const assignTransponder = withForm((request, form, match) => {
+/** Setup's own transponder row (a driver select, "— none" unassigns); the form of transponder-pages.js sends a name too. */
+export function assignFromSetup(request, form, match) {
   const driver = form.get('driver') ?? '';
   const code = match[2].toUpperCase();
   return afterForm(request, ops.assignTransponder(request, { code, driverId: driver === '' ? null : driver }), { key: `transponder:${code}`, values: { driver }, section: 'transponders', fieldId: `transponder-${code}` });
-});
+}
 
 export const PAIRED_COOKIE = '__Host-tl-paired';
 const PAIRED_TTL_SECONDS = 300;
@@ -243,7 +244,6 @@ export const setupPageRoutes = [
   { pattern: spacePath('drivers'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', addDriver, write) } },
   { pattern: spacePath('drivers/([^/]+)'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', renameDriver, write) } },
   { pattern: spacePath('drivers/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteDriver), POST: pageRoute('timing.delete', deleteDriver, write) } },
-  { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { GET: toPage('setup#transponders'), POST: pageRoute('timing.setup', assignTransponder, write) } },
   { pattern: spacePath('track'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', setTrack, write) } },
   { pattern: spacePath('tracks'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', addTrack, write) } },
   { pattern: spacePath('tracks/([^/]+)'), credentials: true, methods: { GET: pageRoute('timing.run', showTrack), POST: pageRoute('timing.setup', renameTrack, write) } },

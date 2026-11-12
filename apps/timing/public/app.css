@@ -846,3 +846,36 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .board-decoder.is-idle { color: var(--p-text-secondary); }
 .board-track.is-record .board-decoder { color: inherit; }
 .board-track.is-record .board-decoder::before { background: currentColor; }
+
+/* An avatar (drivers and transponders spec §3): the driver's initials on their colour. Square, as every palace box. */
+.avatar { display: inline-grid; place-items: center; flex: none; width: 2.75rem; height: 2.75rem; background: var(--c); color: var(--p-text); border: var(--p-border-width) solid var(--p-text); font: 700 1rem/1 var(--p-font); overflow: hidden; }
+.avatar.is-lg { width: 4rem; height: 4rem; font-size: 1.35rem; }
+.avatar.is-sm { width: 2rem; height: 2rem; font-size: 0.75rem; border-width: var(--p-border-thin); }
+
+/* "Whose transponder is 41?" (§3.3): the number boxed in the heading, as a transponder's sticker. */
+.assign-big { font-family: var(--p-font-mono); padding-inline: 0.25em; border: var(--p-border-width) solid var(--p-text); }
+
+/* A pick list (§3.1, §3.3): one framed list, grey group bands, 52 px rows with dividers, a small
+ * identity box at the start and quiet details at the right edge. On the form, each row is a submit button. */
+.pick { border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); }
+.pick > .pick-group { margin: 0; padding: var(--p-space-sm) var(--p-space-md); font-size: 0.75rem; font-weight: 700; color: var(--p-text-muted); background: var(--p-surface-inset); border-top: var(--p-border-thin) solid var(--p-border); }
+.pick > .pick-group:first-child { border-top: 0; }
+/* A band can hold a field's label: it reads as the band, not as palace's field label. */
+.pick-group > label { font: inherit; text-transform: none; letter-spacing: normal; color: inherit; margin: 0; }
+/* palace's button look undone: a row reads as a list item, not as a button. */
+.pick > .pick-button {
+  display: flex; align-items: center; gap: var(--p-space-sm); width: 100%; min-height: 3.25rem; margin: 0;
+  padding: var(--p-space-sm) var(--p-space-md); border: 0; border-top: var(--p-border-thin) solid var(--p-border); border-radius: 0;
+  background: none; box-shadow: none; transform: none; font: inherit; font-weight: 400; text-transform: none; letter-spacing: normal;
+  color: inherit; text-align: left; cursor: pointer;
+}
+.pick > .pick-group + .pick-button { border-top: 0; }
+.pick-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.pick-button .meta { flex: none; margin-left: auto; text-align: right; white-space: nowrap; color: var(--p-text-secondary); font-size: 0.875rem; }
+/* Hover and focus look like an open row in Setup's list: the selected-item bar on the inset ground, the name underlined. */
+.pick > .pick-button:hover, .pick > .pick-button:focus-visible { background: var(--p-surface-inset); box-shadow: inset var(--p-border-width) 0 0 var(--p-text); transform: none; outline: none; }
+.pick-button:hover .pick-name, .pick-button:focus-visible .pick-name { text-decoration: underline; text-underline-offset: 0.2em; }
+.pick > .pick-new { margin: 0; padding: var(--p-space-sm) var(--p-space-md) var(--p-space-md); }
+.pick-new-row { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); }
+.pick-new-row > input { flex: 1 1 10rem; min-width: 0; }
+.pick-new-row > .btn { flex: 1 0 auto; }
