@@ -4,7 +4,7 @@
 
 // "Delete Ana?": a destructive action asks on a page of its own with its
 // own form (spec §2), so it works without JavaScript and never uses confirm().
-import { errorSummary, textField } from './form-parts.js';
+import { controlRow, errorSummary } from './form-parts.js';
 import { html } from './html.js';
 import { layout } from './layout.js';
 
@@ -50,11 +50,11 @@ export function changeLayoutPage(request, { track, link, back, error = null, nam
     </form>
     <hr class="divider">
     <p id="new-track-intro">Or add it as a new track:</p>
-    <form method="post" action="${action}" class="inline-form" aria-labelledby="new-track-intro">
+    <form method="post" action="${action}" aria-labelledby="new-track-intro">
       <input type="hidden" name="link" value="${link}">
       <input type="hidden" name="as" value="new">
-      ${textField({ id: 'new-track-name', label: 'New track name', name: 'name', maxlength: 60, required: true, value: name, error })}
-      <button type="submit" class="btn btn-outline">Add as a new track</button>
+      <div class="space-sm">${controlRow([{ id: 'new-track-name', label: 'New track name', name: 'name', maxlength: 60, required: true, value: name, error }],
+        html`<button type="submit" class="btn btn-outline">Add as a new track</button>`)}</div>
     </form>
     <p><a class="btn btn-outline" href="${back}">Cancel</a></p>
   </div>
