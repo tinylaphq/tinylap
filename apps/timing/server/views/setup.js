@@ -120,6 +120,8 @@ function addRow(request, m, d, own, t) {
   const error = failed ? m.errors[key] : null;
   const prefix = `add-${d.id}-${t ? t.code : 'number'}`;
   const owner = t?.driverId ? m.drivers.find((x) => x.id === t.driverId) : null;
+  // Opened by the server to ask (§3.4): its answer has the focus.
+  const asking = failed && owner && !error;
   const label = own.length ? textField({ id: `${prefix}-label`, label: 'Label', name: 'label', maxlength: 24, placeholder: 'Optional', hint: `Tells it apart from ${theirs(d, own)}.`, value: failed ? kept.label : '', error }) : null;
   const whose = owner ? `${owner.name}'s${t.label ? `, ${t.label}` : ''}` : null;
   const ago = t ? html`<span class="meta"${whose ? html` title="${whose}"` : null}>${whose ?? html`<span class="crossing-now" hidden>Crossing now</span><span class="crossed">crossed <time datetime="${new Date(t.lastSeenAt).toISOString()}">${formatAgo(t.lastSeenAt, request.now())}</time></span>`}</span>` : null;
@@ -131,7 +133,7 @@ function addRow(request, m, d, own, t) {
       ${owner ? html`<input type="hidden" name="confirm" value="1"><p class="pick-move cut-words">Transponder ${t.code} is ${owner.name}'s. Giving it to ${d.name} takes it off ${owner.name}.</p>` : null}
       ${t ? null : html`<div class="pick-number">${textField({ id: prefix, label: 'Number', name: 'code', maxlength: 16, required: true, value: failed ? kept.number : '', error })}</div>`}
       ${label}
-      <button type="submit" class="btn btn-primary">${owner ? `Give it to ${d.name}` : t ? `Add ${t.code} to ${d.name}` : `Add to ${d.name}`}</button>
+      <button type="submit" class="btn btn-primary"${asking ? html` autofocus` : null}>${owner ? `Give it to ${d.name}` : t ? `Add ${t.code} to ${d.name}` : `Add to ${d.name}`}</button>
     </form>
   </details>`;
 }

@@ -586,7 +586,8 @@ test('a typed number of someone else\'s asks in the list: Setup, that row open w
   assert.match(open, /Transponder 23 is Mia Kraus's\. Giving it to Simon takes it off Mia Kraus\./);
   assert.match(open, /<input type="hidden" name="confirm" value="1">/);
   assert.match(open, /name="label" value="Losi"/);
-  assert.match(open, />Give it to Simon<\/button>/);
+  assert.match(open, /<button type="submit" class="btn btn-primary" autofocus>Give it to Simon<\/button>/);
+  assert.equal((row.match(/ autofocus/g) ?? []).length, 1, 'only the question\'s answer');
   assert.doesNotMatch(row, /aria-invalid/);
   assert.equal(app.store.transponders(garage.id).find((t) => t.code === '23').driverId, gDriver('Mia Kraus').id, 'nothing moved yet');
 });

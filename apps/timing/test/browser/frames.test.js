@@ -95,6 +95,7 @@ test('adding a transponder from a driver\'s list saves in place, and the transpo
   await row.locator('.pick-row.is-other').getByRole('button', { name: 'Add to Ana' }).click();
   await saved(page, 'Drivers saved');
   await page.locator('#drivers .roster > li').first().locator('.roster-line .tp', { hasText: '5B' }).waitFor();
+  assert.equal(await activeId(page), 'drivers-title', 'the number field is folded away again: focus on the card');
   assert.ok(await page.locator('#transponder-5B').count(), 'the transponders card was refreshed');
   assert.deepEqual(posts, ['/personal/transponders']);
   assert.equal(loads(), 0);
@@ -114,6 +115,10 @@ test('a typed number of someone else\'s swaps in the row with its question, and 
   const row = ana().locator('.pick-row[data-code="7C"][open]');
   await row.getByText('Transponder 7C is Bo\'s. Giving it to Ana takes it off Bo.').waitFor();
   assert.equal(loads(), 0, 'swapped in, no page load');
+  // Asking is no save: the focus on its answer, nothing announced.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Give it to Ana');
+  assert.doesNotMatch(await page.locator('#frame-status').textContent(), /saved/);
   await row.getByRole('button', { name: 'Give it to Ana' }).click();
   await saved(page, 'Drivers saved');
   await ana().locator('.roster-head .tp, .roster-tps .tp', { hasText: '7C' }).waitFor();
