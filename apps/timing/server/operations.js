@@ -120,8 +120,12 @@ export function labelTransponder(request, { code: rawCode, label: rawLabel }) {
 export function removeTransponder(request, { code: rawCode }) {
   const code = transponderCode(rawCode);
   if (!code) return invalid('A transponder code is 1 to 16 hex digits.', 'code');
-  request.engine.assign(request.workspaceId, code, null);
-  request.store.labelTransponder(request.workspaceId, code, null);
+  const ws = request.workspaceId;
+  if (!request.store.transponders(ws).some((t) => t.code === code)) return missing('transponder');
+  request.store.transaction(() => {
+    request.engine.assign(ws, code, null);
+    request.store.labelTransponder(ws, code, null);
+  });
   return { value: { code } };
 }
 
@@ -134,15 +138,20 @@ export function forgetTransponder(request, { code: rawCode }) {
   return { value: { code } };
 }
 
-/** The page's assignment: to a driver, or to one created here from a name, with an optional label. */
+/**
+ * The page's assignment: to a driver, or to one created here from a name, with an optional label. A blank new-driver
+ * name counts as absent: with a driver it is ignored, without one it is "Name the new driver."; a driver and a
+ * non-blank name together are refused.
+ */
 export function assignTransponderTo(request, { code: rawCode, driverId, label: rawLabel, newDriverName }) {
   const code = transponderCode(rawCode);
   if (!code) return invalid('A transponder code is 1 to 16 hex digits.', 'code');
   const { value: label, error } = labelOf(rawLabel);
   if (error) return { error };
   const ws = request.workspaceId;
-  const creating = newDriverName !== undefined && newDriverName !== null;
-  if (creating === Boolean(driverId)) return invalid('Pick a driver, or name a new one.', 'driver');
+  const named = typeof newDriverName === 'string' && newDriverName.trim() !== '';
+  if (driverId && named) return invalid('Pick a driver, or name a new one.', 'driver');
+  const creating = !driverId;
   if (creating && !nameOf(newDriverName)) return invalid('Name the new driver.', 'name');
   if (!creating && (typeof driverId !== 'string' || !request.store.driver(ws, driverId))) return fail('not-found', 'That driver is gone.', 'driver');
   let target = driverId;

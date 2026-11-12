@@ -497,3 +497,11 @@ test('the idle board reads the fastest and whether a club has driven through ind
   assert.match(plan(IDLE_SQL.driven), /^SEARCH crossing USING COVERING INDEX \w+ \(workspace_id=\?\)$/);
   db.close();
 });
+
+test('an idle passing moves lastSeenAt', () => {
+  const store = openStore(':memory:');
+  store.seeTransponder(W, '0C', 5);
+  assert.equal(store.transponders(W)[0].lastSeenAt, 5);
+  store.insertPassing({ decoder: 'd1', boot: 'b', transponder: '0C', t: 1, receivedAt: 50, via: 'net', workspaceId: W });
+  assert.equal(store.transponders(W)[0].lastSeenAt, 50);
+});

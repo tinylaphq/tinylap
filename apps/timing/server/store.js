@@ -248,7 +248,9 @@ export function openStore(path) {
     deleteDriver: q('DELETE FROM driver WHERE workspace_id = ? AND id = ?'),
     unassignDriver: q('UPDATE transponder SET driver_id = NULL WHERE workspace_id = ? AND driver_id = ?'),
     transponders: q(`SELECT t.code, t.driver_id, t.first_seen_at, t.label,
-      COALESCE((SELECT MAX(c.at) FROM crossing c WHERE c.workspace_id = t.workspace_id AND c.transponder = t.code), t.first_seen_at) AS last_seen_at
+      MAX(t.first_seen_at,
+        COALESCE((SELECT MAX(c.at) FROM crossing c WHERE c.workspace_id = t.workspace_id AND c.transponder = t.code), 0),
+        COALESCE((SELECT MAX(p.received_at) FROM passing p WHERE p.workspace_id = t.workspace_id AND p.transponder = t.code), 0)) AS last_seen_at
       FROM transponder t WHERE t.workspace_id = ? ORDER BY t.code`),
     labelTransponder: q('UPDATE transponder SET label = ? WHERE workspace_id = ? AND code = ?'),
     forgetTransponder: q('DELETE FROM transponder WHERE workspace_id = ? AND code = ?'),
@@ -256,9 +258,10 @@ export function openStore(path) {
       WHERE t.workspace_id = ? AND t.driver_id IS NULL AND c.session_id = ? GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`),
     // Idle passings make no crossing, so the passings count as well as the crossings.
     unknownSince: q(`SELECT t.code FROM transponder t JOIN (
-        SELECT workspace_id, transponder, at FROM crossing UNION ALL SELECT workspace_id, transponder, received_at FROM passing
+        SELECT workspace_id, transponder, at FROM crossing WHERE workspace_id = ?1 AND at >= ?2
+        UNION ALL SELECT workspace_id, transponder, received_at FROM passing WHERE workspace_id = ?1 AND received_at >= ?2
       ) c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
-      WHERE t.workspace_id = ? AND t.driver_id IS NULL AND c.at >= ? GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`),
+      WHERE t.workspace_id = ?1 AND t.driver_id IS NULL GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`),
     seeTransponder: q('INSERT INTO transponder (workspace_id, code, first_seen_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
     transponder: q('SELECT code, driver_id FROM transponder WHERE workspace_id = ? AND code = ?'),
     assignTransponder: q(`INSERT INTO transponder (workspace_id, code, driver_id, first_seen_at, label) VALUES (?, ?, ?, ?, ?)

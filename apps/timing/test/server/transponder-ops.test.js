@@ -89,3 +89,41 @@ test('idle, the unknown list holds the last hour only', () => {
   clock.now += 2 * 60_000;
   assert.deepEqual(engine.snapshot(W).unknown, []);
 });
+
+test('removing a forgotten transponder is not found and does not bring it back', () => {
+  const { request, store } = setup();
+  ops.forgetTransponder(request, { code: '0A' });
+  assert.equal(ops.removeTransponder(request, { code: '0A' }).error.status, 404);
+  assert.equal(store.transponders(W).some((t) => t.code === '0A'), false);
+});
+
+test('a blank new-driver name counts as absent when a driver is given', () => {
+  const { request, store } = setup();
+  const before = store.drivers(W).length;
+  for (const blank of ['', '   ', undefined, null]) {
+    assert.equal(ops.assignTransponderTo(request, { code: '0A', driverId: 'ben', newDriverName: blank }).value.driverId, 'ben');
+  }
+  assert.equal(ops.assignTransponderTo(request, { code: '0A', driverId: 'ben', newDriverName: 'Cy' }).error.message, 'Pick a driver, or name a new one.');
+  for (const none of [undefined, '', '  ']) {
+    const { error } = ops.assignTransponderTo(request, { code: '0A', newDriverName: none });
+    assert.equal(error.message, 'Name the new driver.');
+    assert.equal(error.field, 'name');
+  }
+  assert.equal(store.drivers(W).length, before);
+});
+
+test('an unassigned transponder crossing after a session starts is published as unknown', () => {
+  const { engine, events, pass, startPractice, clock } = setup();
+  pass(1000, '0C');
+  const practice = startPractice();
+  events.length = 0;
+  pass(2000, '0C');
+  assert.deepEqual(events.filter((e) => e.type === 'setup').map((e) => e.data), [{ unknown: ['0C'] }]);
+  pass(3000, '0C');
+  assert.equal(events.filter((e) => e.type === 'setup').length, 1, 'only changes are published');
+  events.length = 0;
+  engine.end(W, practice.id);
+  assert.equal(events.filter((e) => e.type === 'setup').length, 0, 'still unknown within the hour');
+  clock.now += 2 * 3_600_000;
+  void clock;
+});
