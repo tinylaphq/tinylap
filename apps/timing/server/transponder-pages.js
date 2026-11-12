@@ -8,11 +8,11 @@
 import { transponderCode } from '@tinylap/timing';
 import { readForm } from './form.js';
 import * as ops from './operations.js';
-import { pageRoute } from './page-access.js';
+import { pageRoute, toPage } from './page-access.js';
 import { page, seeOther } from './respond.js';
 import { retryHeaders } from './responses.js';
 import { safeReturnTo } from './return-to.js';
-import { assignFromSetup } from './setup-pages.js';
+import { assignFromSetup, renderSetup } from './setup-pages.js';
 import { spacePath } from './spaces.js';
 import { notFoundPage } from './views/notice.js';
 import { moveQuestionPage, transponderFormPage } from './views/transponder.js';
@@ -56,30 +56,66 @@ function showForm(request, match) {
   return renderForm(request, 200, transponder, { returnTo: safeReturnTo(request.url.searchParams.get('returnTo') ?? undefined, fallbackOf(request)) });
 }
 
-async function assign(request, match) {
-  const { form, error } = await readForm(request);
-  if (error) return error;
-  // Setup's own row sends no name: it keeps its select until Setup links here.
-  if (!form.has('name')) return assignFromSetup(request, form, match);
-  const transponder = transponderOf(request, match[2]);
+/**
+ * A refused add from Setup's add list (§3.1) comes back as Setup with that row open, the error on
+ * its field and the input kept: 422 for a mistake in the form. `row` is the list row's number, or
+ * '' for the row that takes a number.
+ * @param {any} request @param {URLSearchParams} form @param {any} error @param {string} row
+ */
+function setupFailure(request, form, error, row) {
+  const driverId = form.get('driver') ?? '';
+  const key = `add:${driverId}`;
+  const failure = error.field ? { ...error, status: 422 } : error;
+  const prefix = `add-${driverId}-${row || 'number'}`;
+  const fieldId = { label: `${prefix}-label`, code: `add-${driverId}-number` }[failure.field] ?? null;
+  const values = { row, label: form.get('label') ?? '', number: form.get('code') ?? '' };
+  return renderSetup(request, failure.status, { errors: { [key]: failure }, values: { [key]: values }, failed: { error: failure, fieldId }, headers: retryHeaders(failure) });
+}
+
+/** The assignment to `raw`, from the form or Setup's add list; `row` as for setupFailure. */
+function assignTo(request, form, raw, row) {
+  const transponder = transponderOf(request, raw);
   if (!transponder) return page(request, 404, notFoundPage(request));
   const ws = request.workspaceId;
+  const fromSetup = form.get('from') === 'setup';
   const driverId = form.get('driver') ?? '';
   const name = form.get('name') ?? '';
+  const label = form.get('label') ?? undefined;
   const returnTo = safeReturnTo(form.get('returnTo') ?? undefined, fallbackOf(request));
+  // A bad label is refused before anything is asked.
+  const labelled = ops.labelOf(label);
+  if (labelled.error && fromSetup) return setupFailure(request, form, labelled.error, row);
   const owner = transponder.driverId ? request.store.driver(ws, transponder.driverId) : null;
   const chosen = driverId ? request.store.driver(ws, driverId) : null;
   const to = driverId ? chosen?.name : name.trim();
   // Someone else's asks first, once the choice itself is sound; the operation refuses the rest.
   const sound = driverId ? chosen && name.trim() === '' : to !== '';
   if (owner && sound && chosen?.id !== owner.id && form.get('confirm') !== '1') {
-    return page(request, 200, moveQuestionPage(request, { base: request.space.base, code: transponder.code, owner, to, driver: driverId, name, returnTo }));
+    return page(request, 200, moveQuestionPage(request, { base: request.space.base, code: transponder.code, owner, to, driver: driverId, name, label: label ?? null, from: fromSetup ? 'setup' : null, returnTo }));
   }
-  const result = ops.assignTransponderTo(request, { code: transponder.code, driverId: driverId || null, label: undefined, newDriverName: name });
+  const result = ops.assignTransponderTo(request, { code: transponder.code, driverId: driverId || null, label, newDriverName: name });
   if (!result.error) return seeOther(returnTo);
+  if (fromSetup) return setupFailure(request, form, result.error, row);
   // A driver deleted meanwhile is a mistake in the form, like any other: 422.
   const failure = result.error.field ? { ...result.error, status: 422 } : result.error;
   return renderForm(request, failure.status, transponder, { returnTo, values: { name }, errors: failure, headers: retryHeaders(failure) });
+}
+
+async function assign(request, match) {
+  const { form, error } = await readForm(request);
+  if (error) return error;
+  // Setup's transponder rows send no name: they keep their select until Setup links here.
+  if (!form.has('name')) return assignFromSetup(request, form, match);
+  return assignTo(request, form, match[2], match[2]);
+}
+
+/** Setup's "Not in the list? Enter its number" (§3.1): the number comes in the form, not the URL. */
+async function assignNumber(request) {
+  const { form, error } = await readForm(request);
+  if (error) return error;
+  const raw = form.get('code') ?? '';
+  if (!transponderCode(raw)) return setupFailure(request, form, { problem: 'invalid-request', status: 422, field: 'code', message: 'Type the number on the transponder.' }, '');
+  return assignTo(request, form, raw, '');
 }
 
 /** Where Remove goes back to: the page of the driver who has it, else Setup's transponders. */
@@ -91,19 +127,20 @@ function toOwnerPage(request, match) {
   return transponder ? seeOther(ownerPageOf(request, transponder)) : page(request, 404, notFoundPage(request));
 }
 
-/** Remove (§3.5): back to "Not assigned yet", its label gone; 303 back to the driver's page. */
+/** Remove (§3.1, §3.5): back to "Not assigned yet", its label gone; 303 to returnTo, else the driver's page. */
 async function remove(request, match) {
-  const { error } = await readForm(request);
+  const { form, error } = await readForm(request);
   if (error) return error;
   const transponder = transponderOf(request, match[2]);
   if (!transponder) return page(request, 404, notFoundPage(request));
-  const back = ownerPageOf(request, transponder);
+  const back = safeReturnTo(form.get('returnTo') ?? undefined, ownerPageOf(request, transponder));
   const result = ops.removeTransponder(request, { code: transponder.code });
   if (result.error) return page(request, result.error.status, notFoundPage(request));
   return seeOther(back);
 }
 
 export const transponderPageRoutes = [
+  { pattern: spacePath('transponders'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', assignNumber, { write: true }) } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})/remove'), credentials: true, methods: { GET: pageRoute('timing.setup', toOwnerPage), POST: pageRoute('timing.setup', remove, { write: true }) } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { GET: pageRoute('timing.setup', showForm), POST: pageRoute('timing.setup', assign, { write: true }) } },
 ];

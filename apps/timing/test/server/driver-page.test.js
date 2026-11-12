@@ -121,11 +121,11 @@ test('a bad colour is refused on the colour field, in palace\'s invalid look', a
   assert.match(body, /<a href="#driver-colour">Choose a colour with the swatch\.<\/a>/);
 });
 
-test('Setup\'s own driver row still renames and goes back to Setup', async () => {
+test('a rename without the page\'s marker is the page\'s form too, and goes back to the page', async () => {
   const id = driver('Eve');
   const res = await app.form(owner, `${base}/drivers/${id}`, { name: 'Eva', colour: '#123456' });
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), `${base}/setup#drivers`);
+  assert.equal(res.headers.get('location'), `${base}/drivers/${id}`);
   assert.equal(app.store.driver(ws(), id).name, 'Eva');
 });
 

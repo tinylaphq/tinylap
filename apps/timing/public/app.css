@@ -584,35 +584,12 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
    button's fallback) is a sentence. */
 .field-hint { text-transform: none; letter-spacing: 0; }
 .button-row { display: flex; gap: var(--p-space-sm); flex-wrap: wrap; align-items: center; }
-/* A driver's row, in one grid: colour, name, Save and Delete on a line, an
-   error under them at the row's width. The form and its fields step aside
-   (display: contents), so their parts take the row's cells. */
-.setup-row:has(> .driver-form) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: var(--p-space-xs) var(--p-space-sm); align-items: start; }
-.setup-row:has(> .driver-form):not(:has(> .btn)) { grid-template-columns: auto minmax(0, 1fr) auto; }
-.setup-row > .driver-form, .driver-form > .field { display: contents; }
-.driver-form input[type="color"] { grid-column: 1; grid-row: 1; }
-.driver-form input[name="name"] { grid-column: 2; grid-row: 1; }
-.driver-form > .btn { grid-column: 3; grid-row: 1; }
-.setup-row > .driver-form ~ .btn { grid-column: 4; grid-row: 1; }
-.driver-form .field-error { grid-column: 1 / -1; grid-row: 2; }
-.driver-form > .btn { white-space: nowrap; }
-.driver-form input[type="color"] {
-  flex: 0 0 auto; width: 3rem; height: var(--p-control-height); padding: 4px; cursor: pointer;
-  border: var(--p-border-width) solid var(--p-text); border-radius: var(--p-radius);
-  background: var(--p-surface); transition: var(--p-transition);
-}
-.driver-form input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-.driver-form input[type="color"]::-webkit-color-swatch { border: var(--p-border-thin) solid var(--p-text); border-radius: 0; }
-.driver-form input[type="color"]::-moz-color-swatch { border: var(--p-border-thin) solid var(--p-text); border-radius: 0; }
-.driver-form input[type="color"]:focus-visible { outline: none; border-color: var(--p-accent-2); box-shadow: var(--p-shadow-md) var(--p-accent-2); transform: var(--p-lift-sm); }
-.driver-form input[type="color"][aria-invalid="true"] { border-color: var(--p-error); }
-/* An action beside a field (a driver's Save and Delete, a transponder's
-   Assign, a track's Rename) stands as tall as the field, its small label
-   centred. An action in a row of text only (a track's, an archived track's,
-   a decoder's) is lighter, one smaller height for all of them, still a
-   comfortable target. */
-.setup-row .btn, .track-row .btn, .setup-table .btn, .track-edit-form .btn { height: 2.25rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
-.setup-row:has(> .driver-form) .btn, .setup-table .btn, .track-edit-form .btn { height: var(--p-control-height); }
+/* An action beside a field (a transponder's Assign, a track's Rename) stands
+   as tall as the field, its small label centred. An action in a row of text
+   only (a driver's, a track's, an archived track's, a decoder's) is lighter,
+   one smaller height for all of them, still a comfortable target. */
+.setup-row .btn, .track-row .btn, .roster-head .btn, .setup-table .btn, .track-edit-form .btn { height: 2.25rem; display: inline-flex; align-items: center; justify-content: center; margin: 0; }
+.setup-table .btn, .track-edit-form .btn { height: var(--p-control-height); }
 .setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
 .setup-table { width: 100%; border-collapse: collapse; }
 .setup-table th, .setup-table td { padding: var(--p-space-xs) var(--p-space-sm) var(--p-space-xs) 0; text-align: left; vertical-align: middle; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
@@ -678,11 +655,6 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
   /* A track's actions on a line under its name, at the right, as a driver's are. */
   .track-row { grid-template-columns: minmax(0, 1fr); }
   .track-row > .button-row { justify-self: end; }
-  /* The colour and the whole name on a line, Save and Delete on the next, at the right. */
-  .driver-form input[name="name"] { grid-column: 2 / -1; }
-  .driver-form > .btn, .setup-row > .driver-form ~ .btn { grid-row: 3; }
-  /* With no error, the actions take the error's row, so no empty row adds its gap. */
-  .setup-row:not(:has(.field-error)) .driver-form > .btn, .setup-row:not(:has(.field-error)) > .driver-form ~ .btn { grid-row: 2; }
 }
 
 /* The start form: choice groups are fieldsets; the length boxes sit in a row. */
@@ -875,12 +847,12 @@ ul.driver-transponders { list-style: none; margin: 0; padding: 0; } /* the eleme
   font: 700 1rem/1 var(--p-font-mono); border: var(--p-border-width) solid var(--p-text); background: var(--p-surface-inset);
 }
 /* Remove is quiet: a link's look, palace's button look undone, 44 px to tap. */
-.driver-page .driver-remove {
+.driver-page .driver-remove, .roster .driver-remove {
   flex: none; min-height: var(--p-control-height); padding: 0 var(--p-space-xs); margin: 0; border: 0; border-radius: 0;
   background: none; box-shadow: none; transform: none; font: inherit; font-size: 0.875rem; font-weight: 400; text-transform: none; letter-spacing: normal;
   color: var(--p-text-secondary); text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer;
 }
-.driver-page .driver-remove:hover { color: var(--p-text); background: none; box-shadow: none; transform: none; }
+.driver-page .driver-remove:hover, .roster .driver-remove:hover { color: var(--p-text); background: none; box-shadow: none; transform: none; }
 /* Best laps: the times one right-aligned tabular column (.num), the best in bold as in the mockup, then label and date. */
 .best-laps { margin: 0; }
 .best-laps > div { display: flex; align-items: baseline; gap: var(--p-space-md); padding-block: var(--p-space-xs); }
@@ -916,3 +888,55 @@ ul.driver-transponders { list-style: none; margin: 0; padding: 0; } /* the eleme
 .pick-new-row { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); }
 .pick-new-row > input { flex: 1 1 10rem; min-width: 0; }
 .pick-new-row > .btn { flex: 1 0 auto; }
+
+/* Setup's drivers (§3.1): a row per driver, the avatar beside their name, their transponders and
+ * the add list under it. One transponder sits beside the name, boxed as on its sticker. */
+ul.roster { list-style: none; padding: 0; } /* the element selector outweighs palace's ul padding */
+:where(ul.roster) { margin: 0; }
+.roster { display: grid; gap: var(--p-space-md); }
+.roster > li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--p-space-xs) var(--p-space-md); }
+.roster > li + li { border-top: var(--p-border-thin) solid var(--p-border); padding-top: var(--p-space-md); }
+.roster-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--p-space-xs); min-width: 0; }
+.roster-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--p-space-xs) var(--p-space-sm); min-height: 2.75rem; }
+.roster-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--p-space-sm); margin: 0; min-width: 0; }
+.roster-name { font-size: 1.125rem; font-weight: 700; }
+.roster-line > .meta { color: var(--p-text-muted); font-size: 0.75rem; }
+.roster-head > .button-row { margin-left: auto; }
+ul.roster-tps { list-style: none; margin: 0; padding: 0; }
+.roster-tps { display: flex; flex-wrap: wrap; gap: 0 var(--p-space-md); font-size: 0.875rem; }
+.roster-tps > li { display: flex; align-items: center; gap: var(--p-space-sm); }
+.tp-remove { margin: 0; }
+.tp { display: inline-block; min-width: 2.4em; padding: 0.1em 0.4em; text-align: center; font: 700 0.9em/1.3 var(--p-font-mono); border: var(--p-border-thin) solid var(--p-text); background: var(--p-surface); }
+.tp-label { color: var(--p-text-secondary); }
+/* "Add another transponder" is quiet: a fold under the name, 44 px to tap. */
+.roster-add > summary { display: flex; align-items: center; width: fit-content; min-height: var(--p-control-height); cursor: pointer; font-size: 0.875rem; font-weight: 600; color: var(--p-text-secondary); }
+.roster-add[open] > summary { color: var(--p-text); }
+.pick-empty { margin: 0 0 var(--p-space-sm); padding: var(--p-space-md); border: var(--p-border-width) dashed var(--p-border-dashed); background: var(--p-surface); font-size: 0.875rem; }
+/* Setup's add list: each row opens onto its own form. Open, it has the selected-item bar on the
+ * inset ground, as a hovered row on the form has; the form lines up under the number. */
+.pick-row + .pick-row { border-top: var(--p-border-thin) solid var(--p-border); }
+.pick > .pick-group + .pick-row { border-top: 0; }
+.pick-row > summary { display: flex; align-items: center; gap: var(--p-space-sm); min-height: 3.25rem; padding: var(--p-space-sm) var(--p-space-md); cursor: pointer; list-style: none; font-weight: 400; }
+.pick-row > summary::-webkit-details-marker { display: none; }
+.pick-row > summary::before { content: ""; flex: none; border-block: 0.3em solid transparent; border-left: 0.45em solid var(--p-text-muted); transition: transform 0.15s; }
+.pick-row[open] > summary::before { transform: rotate(90deg); border-left-color: var(--p-text); }
+.pick-row > summary .meta { margin-left: auto; min-width: 0; text-align: right; color: var(--p-text-secondary); font-size: 0.875rem; }
+/* A long name is cut, with "…": its whole name is in the title, and in the row's form. */
+.pick-row > summary .meta, .pick-act > .btn { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pick-act > .btn { display: block; max-width: 100%; }
+.pick-row.is-other > summary { font-size: 0.875rem; color: var(--p-text-secondary); }
+.pick-row > summary:hover, .pick-row[open] { background: var(--p-surface-inset); }
+.pick-row[open] { box-shadow: inset var(--p-border-width) 0 0 var(--p-text); }
+.pick-row[open] > summary { font-weight: 700; }
+.pick-row[open] > summary .meta { color: var(--p-text); }
+.pick-row > summary:focus-visible { outline: var(--p-border-width) solid var(--p-accent-2); outline-offset: calc(-1 * var(--p-border-width)); }
+/* While the live element shows "Crossing now", how long ago steps aside. */
+.crossing-now:not([hidden]) + .crossed { display: none; }
+.crossing-now { font-weight: 700; color: var(--p-text); }
+.pick-act { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--p-space-sm); margin: 0; padding: 0 var(--p-space-md) var(--p-space-md) calc(var(--p-space-md) + 0.45em + var(--p-space-sm)); }
+.pick-act > .btn { justify-self: start; }
+.pick-act .field { margin: 0; }
+.pick-act .field-hint { overflow: hidden; text-overflow: ellipsis; }
+.pick-number { max-width: 9rem; }
+.pick-move { margin: 0; font-size: 0.875rem; }
+@media (prefers-reduced-motion: reduce) { .pick-row > summary::before { transition: none; } }

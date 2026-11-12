@@ -89,21 +89,13 @@ test('renaming a driver', async () => {
   assert.equal(drivers()[0].name, 'Dan');
 });
 
-test('the rename form carries a colour picker with the driver\'s colour', async () => {
-  const [dan] = drivers();
-  const body = await (await get(member, `${base}/setup`)).text();
-  assert.match(body, new RegExp(`<label for="colour-${dan.id}" class="visually-hidden">Colour for Dan</label>`));
-  assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="${dan.colour}"`));
-});
-
-test('changing a driver\'s colour saves it with the name, and the page shows it', async () => {
+test('changing a driver\'s colour saves it with the name, and answers on their page', async () => {
   const [dan] = drivers();
   const res = await app.form(member, `${base}/drivers/${dan.id}`, { name: 'Dan', colour: '#12AB9F' });
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), `${base}/setup#drivers`);
+  assert.equal(res.headers.get('location'), `${base}/drivers/${dan.id}`);
   assert.deepEqual([drivers()[0].name, drivers()[0].colour], ['Dan', '#12ab9f']);
-  const body = await (await get(member, `${base}/setup`)).text();
-  assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="#12ab9f"`));
+  assert.match(await (await get(member, `${base}/setup`)).text(), /<span class="avatar" style="--c: #12ab9f" aria-hidden="true">D<\/span>/);
 });
 
 test('a colour that is not #rrggbb is a 422 in plain words, the name kept, the swatch on the saved colour, and nothing saved', async () => {
@@ -112,10 +104,10 @@ test('a colour that is not #rrggbb is a 422 in plain words, the name kept, the s
     const res = await app.form(member, `${base}/drivers/${dan.id}`, { name: 'Danny', colour });
     assert.equal(res.status, 422, colour);
     const body = await res.text();
-    assert.match(body, new RegExp(`<p class="status status-error cut-words" role="alert"><a href="#colour-${dan.id}">Choose a colour with the swatch\\.</a></p>`));
+    assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#driver-colour">Choose a colour with the swatch\.<\/a><\/p>/);
     // A colour input can't show a refused value (it would turn black), so it shows the saved one.
-    assert.match(body, new RegExp(`<input type="color" id="colour-${dan.id}" name="colour" value="#12ab9f"[^>]*aria-invalid="true"`), colour);
-    assert.match(body, new RegExp(`<input[^>]*id="rename-${dan.id}"[^>]*value="Danny"`));
+    assert.match(body, /<input type="color" id="driver-colour" name="colour" value="#12ab9f"[^>]*aria-invalid="true"/, colour);
+    assert.match(body, /<input[^>]*id="driver-name"[^>]*value="Danny"/);
     assert.doesNotMatch(body, /--driver: red/);
   }
   assert.deepEqual([drivers()[0].name, drivers()[0].colour], ['Dan', '#12ab9f']);
@@ -187,8 +179,8 @@ test('a blank rename is a 422 with the summary linking the field, and the input 
   const res = await app.form(member, `${base}/drivers/${fay.id}`, { name: '   ' });
   assert.equal(res.status, 422);
   const body = await res.text();
-  assert.match(body, new RegExp(`<p class="status status-error cut-words" role="alert"><a href="#rename-${fay.id}">Give the driver a name of 1 to 60 characters\\.</a></p>`));
-  assert.match(body, new RegExp(`<input[^>]*id="rename-${fay.id}"[^>]*value="   "[^>]*aria-invalid="true"`));
+  assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#driver-name">Give the driver a name of 1 to 60 characters\.<\/a><\/p>/);
+  assert.match(body, /<input[^>]*id="driver-name"[^>]*value=" {3}"[^>]*aria-invalid="true"/);
   assert.equal(drivers().find((d) => d.id === fay.id).name, 'Fay');
 });
 
@@ -196,8 +188,7 @@ test('an error without a field shows in the summary, also for a vanished driver\
   const gone = drivers().find((d) => d.name === 'Fay');
   assert.equal((await app.form(owner, `${base}/drivers/${gone.id}/delete`, {})).status, 303);
   const rename = await app.form(member, `${base}/drivers/${gone.id}`, { name: 'Fay again' });
-  assert.equal(rename.status, 404);
-  assert.match(await rename.text(), /<p class="status status-error cut-words" role="alert">There is no such driver here\.<\/p>/);
+  assert.equal(rename.status, 404, 'a rename answers as the driver page: not found');
   const del = await app.form(owner, `${base}/drivers/${gone.id}/delete`, {});
   assert.equal(del.status, 404);
   const body = await del.text();
@@ -473,4 +464,148 @@ test('the watchers link’s field has its label for screen readers only; the hea
   await app.form(owner, `${base}/watch-link`, {});
   const body = await (await get(owner, `${base}/setup`)).text();
   assert.match(body, /<label for="watch-link" class="visually-hidden">Watchers link<\/label>/);
+});
+
+// Drivers with their transponders and the add list (drivers and transponders spec §3.1), in a club of their own.
+const MIN = 60_000;
+let garage;
+let gBase;
+let gOwner;
+const gDriver = (name) => app.store.drivers(garage.id).find((d) => d.name === name);
+const gSetup = async () => (await get(gOwner, `${gBase}/setup`)).text();
+/** A driver's row in Setup's drivers list, its escaped apostrophes read back. */
+const rowOf = (raw, name) => {
+  const body = raw.replaceAll('&#39;', "'");
+  const rows = /<ul class="roster">([\s\S]*?)<\/ul>\s*<form method="post" action="[^"]+\/drivers"/.exec(body)[1].split(/<li>\s*<span class="avatar"/);
+  return rows.find((r) => r.includes(`title="${name}">${name}</span>`));
+};
+
+test('drivers in Setup: an empty club says how a transponder shows up, and still takes a number', async () => {
+  garage = app.club(ana, 'Garage');
+  gOwner = await app.login(ana);
+  gBase = `/clubs/${garage.id}`;
+  assert.equal((await app.form(gOwner, `${gBase}/drivers`, { name: 'Jonas' })).status, 303);
+  const row = rowOf(await gSetup(), 'Jonas');
+  const jonas = gDriver('Jonas');
+  assert.match(row, /<span class="meta">no transponder<\/span>/);
+  assert.match(row, new RegExp(`<a class="btn btn-sm btn-outline" href="${gBase}/drivers/${jonas.id}">Edit<span class="visually-hidden"> Jonas</span></a>`));
+  assert.match(row, /<summary>Add a transponder<span class="visually-hidden"> to Jonas<\/span><\/summary>/);
+  assert.match(row, /<p class="pick-empty">Run its car over the line, and it shows up here\.<\/p>/);
+  assert.match(row, /<summary>Or enter its number<\/summary>/);
+  assert.match(row, new RegExp(`<form method="post" action="${gBase}/transponders" class="pick-act">`));
+  assert.match(row, /<label for="add-[^"]+-number">Number<\/label>/);
+  assert.match(row, />Add to Jonas<\/button>/);
+  assert.doesNotMatch(row, /name="label"/, 'no label for a first transponder');
+  assert.doesNotMatch(row, /Not assigned yet|Someone else's/);
+});
+
+test('drivers in Setup: one transponder sits beside the name, unlabelled, with a quiet Remove that comes back here', async () => {
+  for (const name of ['Simon', 'Haris', 'Mia Kraus']) await app.form(gOwner, `${gBase}/drivers`, { name });
+  const ws = garage.id;
+  const now = Date.now();
+  app.store.assignTransponder(ws, '17', gDriver('Simon').id, now - 60 * MIN, 'Buggy');
+  app.store.assignTransponder(ws, '8', gDriver('Haris').id, now - 50 * MIN);
+  app.store.assignTransponder(ws, '23', gDriver('Mia Kraus').id, now - 40 * MIN, 'Red Losi');
+  app.store.assignTransponder(ws, '31', gDriver('Mia Kraus').id, now - 30 * MIN, 'Buggy');
+  app.store.assignTransponder(ws, '66', null, now - 8 * MIN);
+  app.store.assignTransponder(ws, '41', null, now - 10_000);
+  const row = rowOf(await gSetup(), 'Simon');
+  assert.match(row, /<span class="roster-name cut-words" title="Simon">Simon<\/span> <span class="tp" title="Transponder 17">17<\/span><form method="post" action="[^"]+\/transponders\/17\/remove" class="tp-remove">/);
+  assert.match(row, new RegExp(`<input type="hidden" name="returnTo" value="${gBase}/setup#drivers">\\s*<button type="submit" class="driver-remove">Remove<span class="visually-hidden"> transponder 17 from Simon</span></button>`));
+  assert.doesNotMatch(/<div class="roster-head">[\s\S]*?<details/.exec(row)[0], /Buggy/, 'a label only from two transponders on');
+  assert.doesNotMatch(row, /roster-tps/);
+  assert.match(row, /<summary>Add another transponder<span class="visually-hidden"> to Simon<\/span><\/summary>/);
+
+  const res = await app.form(gOwner, `${gBase}/transponders/8/remove`, { returnTo: `${gBase}/setup#drivers` });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), `${gBase}/setup#drivers`);
+  assert.equal(app.store.transponders(ws).find((t) => t.code === '8').driverId, null);
+  app.store.assignTransponder(ws, '8', gDriver('Haris').id, now - 50 * MIN);
+});
+
+test('drivers in Setup: two transponders are listed with their labels', async () => {
+  const row = rowOf(await gSetup(), 'Mia Kraus');
+  assert.match(row, /<ul class="roster-tps"><li><span class="tp" title="Transponder 23">23<\/span> <span class="tp-label">Red Losi<\/span><form[^>]+\/transponders\/23\/remove"[\s\S]*?<\/li><li><span class="tp" title="Transponder 31">31<\/span> <span class="tp-label">Buggy<\/span><form[^>]+\/transponders\/31\/remove"/);
+  assert.doesNotMatch(/<div class="roster-line">[\s\S]*?<\/div>/.exec(row)[0], /class="tp"/, 'nothing beside the name');
+});
+
+test('the add list: unassigned newest first, then someone else\'s, then a number; each row its own form', async () => {
+  const simon = gDriver('Simon');
+  const row = rowOf(await gSetup(), 'Simon');
+  const order = [...row.matchAll(/<p class="pick-group">([^<]+)<\/p>|<summary><span class="tp">(\w+)<\/span>|<summary>(Not in the list\? Enter its number)<\/summary>/g)].map((x) => x[1] ?? x[2] ?? x[3]);
+  assert.deepEqual(order, ['Not assigned yet', '41', '66', 'Someone else\'s', '8', '23', '31', 'Not in the list? Enter its number']);
+  assert.equal((row.match(new RegExp(`<details class="pick-row[^"]*" name="add-${simon.id}"`, 'g')) ?? []).length, 6, 'one open at a time');
+  assert.doesNotMatch(row, /data-code="17"/, 'not their own');
+  assert.match(row, /data-code="41">\s*<summary><span class="tp">41<\/span><span class="meta"><span class="crossing-now" hidden>Crossing now<\/span><span class="crossed">crossed <time datetime="[^"]+">just now<\/time><\/span><\/span><\/summary>/);
+  assert.match(row, /<span class="crossed">crossed <time datetime="[^"]+">8 min ago<\/time><\/span>/);
+  assert.match(row, /<span class="tp">8<\/span><span class="meta" title="Haris's">Haris's<\/span>/);
+  assert.match(row, /<span class="tp">23<\/span><span class="meta" title="Mia Kraus's, Red Losi">Mia Kraus's, Red Losi<\/span>/);
+
+  const form = (code) => new RegExp(`data-code="${code}">[\\s\\S]*?</form>`).exec(row)[0];
+  const free = form('41');
+  assert.match(free, new RegExp(`<form method="post" action="${gBase}/transponders/41" class="pick-act">`));
+  assert.match(free, new RegExp(`<input type="hidden" name="driver" value="${simon.id}"><input type="hidden" name="name" value="">`));
+  assert.match(free, new RegExp(`<input type="hidden" name="returnTo" value="${gBase}/setup#drivers">`));
+  assert.doesNotMatch(free, /name="confirm"/);
+  assert.match(free, /<label for="add-[^"]+-41-label">Label<\/label>/);
+  assert.match(free, /<p class="field-hint" id="add-[^"]+-41-label-hint">Tells it apart from Simon's 17\.<\/p>/);
+  assert.match(free, />Add 41 to Simon<\/button>/);
+  const theirs = form('8');
+  assert.match(theirs, /<input type="hidden" name="confirm" value="1">/);
+  assert.match(theirs, /Transponder 8 is Haris's\. Giving it to Simon takes it off Haris\./);
+  assert.match(theirs, />Give it to Simon<\/button>/);
+  assert.match(row, /<summary>Not in the list\? Enter its number<\/summary>[\s\S]*?<label for="add-[^"]+-number">Number<\/label>[\s\S]*?<label for="add-[^"]+-number-label">Label<\/label>[\s\S]*?>Add to Simon<\/button>/);
+  assert.match(rowOf(await gSetup(), 'Mia Kraus'), /Tells it apart from Mia Kraus's 23 and 31\./);
+});
+
+test('adding from the list: with a label, giving someone else\'s, and a typed number, each back to the drivers', async () => {
+  const ws = garage.id;
+  const simon = gDriver('Simon');
+  const common = { driver: simon.id, name: '', from: 'setup', returnTo: `${gBase}/setup#drivers` };
+  let res = await app.form(gOwner, `${gBase}/transponders/41`, { ...common, label: ' Touring car ' });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), `${gBase}/setup#drivers`);
+  assert.deepEqual(app.store.transponders(ws).filter((t) => t.code === '41').map((t) => [t.driverId, t.label]), [[simon.id, 'Touring car']]);
+  res = await app.form(gOwner, `${gBase}/transponders/8`, { ...common, label: '', confirm: '1' });
+  assert.equal(res.status, 303);
+  assert.equal(app.store.transponders(ws).find((t) => t.code === '8').driverId, simon.id);
+  res = await app.form(gOwner, `${gBase}/transponders`, { ...common, code: '99', label: '' });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), `${gBase}/setup#drivers`);
+  assert.equal(app.store.transponders(ws).find((t) => t.code === '99').driverId, simon.id);
+});
+
+test('a typed number of someone else\'s asks first, carrying the label and where it came from', async () => {
+  const simon = gDriver('Simon');
+  const res = await app.form(gOwner, `${gBase}/transponders`, { driver: simon.id, name: '', from: 'setup', returnTo: `${gBase}/setup#drivers`, code: '23', label: 'Losi' });
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /Transponder 23 is Mia Kraus's\./);
+  assert.match(body, /<input type="hidden" name="label" value="Losi"><input type="hidden" name="from" value="setup">/);
+  assert.equal(app.store.transponders(garage.id).find((t) => t.code === '23').driverId, gDriver('Mia Kraus').id);
+});
+
+test('a refused add comes back as Setup, 422, the row open with the error and the input kept', async () => {
+  const simon = gDriver('Simon');
+  const common = { driver: simon.id, name: '', from: 'setup', returnTo: `${gBase}/setup#drivers` };
+  const long = 'x'.repeat(25);
+  let res = await app.form(gOwner, `${gBase}/transponders/66`, { ...common, label: long });
+  assert.equal(res.status, 422);
+  let body = await res.text();
+  const label = `add-${simon.id}-66-label`;
+  assert.match(body, new RegExp(`<p class="status status-error cut-words" role="alert"><a href="#${label}">A label has at most 24 characters\\.</a></p>`));
+  assert.match(body, new RegExp(`<details class="roster-add" open>`));
+  assert.match(body, new RegExp(`<details class="pick-row" name="add-${simon.id}" data-code="66" open>`));
+  assert.match(body, new RegExp(`<input type="text" id="${label}" name="label" value="${long}"[^>]*aria-invalid="true"`));
+  assert.equal(app.store.transponders(garage.id).find((t) => t.code === '66').driverId, null);
+
+  res = await app.form(gOwner, `${gBase}/transponders`, { ...common, code: 'not one', label: 'Kept' });
+  assert.equal(res.status, 422);
+  body = await res.text();
+  const number = `add-${simon.id}-number`;
+  assert.match(body, new RegExp(`<a href="#${number}">Type the number on the transponder\\.</a>`));
+  assert.match(body, new RegExp(`<details class="pick-row is-other" name="add-${simon.id}" open>`));
+  assert.match(body, new RegExp(`<input type="text" id="${number}" name="code" value="not one"[^>]*aria-invalid="true"`));
+  assert.match(body, new RegExp(`<input type="text" id="${number}-label" name="label" value="Kept"`));
+  assert.doesNotMatch(body, /hex digits/);
 });

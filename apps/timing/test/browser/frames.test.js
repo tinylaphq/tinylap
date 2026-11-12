@@ -65,22 +65,40 @@ test('adding a driver saves in place: same scroll, focus back in the empty field
   assert.deepEqual(errors, []);
 });
 
-test('a bad rename swaps in the error: summary, marked field, the input kept, focus on it, the URL unchanged', async (t) => {
+test('a refused add in a driver\'s list swaps in the error: the row open, marked, the input kept, focus on it, the URL unchanged', async (t) => {
   const { page, errors, posts, loads } = await openSetup(t);
-  const field = page.locator('input[id^="rename-"]').first();
+  const row = page.locator('#drivers .roster > li').first();
+  await row.locator('.roster-add > summary').click();
+  await row.locator('.pick-row.is-other > summary').click();
+  const field = row.locator('input[name="code"]');
   const id = await field.getAttribute('id');
   const url = page.url();
-  await field.fill('   ');
-  await field.locator('xpath=ancestor::form').getByRole('button', { name: 'Save' }).click();
+  await field.fill('zz');
+  await row.locator('.pick-row.is-other').getByRole('button', { name: 'Add to Ana' }).click();
   await page.locator('#page-status [role="alert"]').waitFor();
   assert.equal(page.url(), url);
   assert.equal(await activeId(page), id);
   assert.equal(await page.locator(`#${id}`).getAttribute('aria-invalid'), 'true');
-  assert.equal(await page.locator(`#${id}`).inputValue(), '   ');
-  assert.equal(posts.length, 1);
+  assert.equal(await page.locator(`#${id}`).inputValue(), 'zz');
+  assert.deepEqual(posts, ['/personal/transponders']);
   assert.equal(loads(), 0);
   // Chrome logs every 4xx response; the 422 is the expected answer here.
   assert.deepEqual(errors.filter((e) => !/status of 422/.test(e)), []);
+});
+
+test('adding a transponder from a driver\'s list saves in place, and the transponders card knows it', async (t) => {
+  const { page, errors, posts, loads } = await openSetup(t);
+  const row = page.locator('#drivers .roster > li').first();
+  await row.locator('.roster-add > summary').click();
+  await row.locator('.pick-row.is-other > summary').click();
+  await row.locator('input[name="code"]').fill('5B');
+  await row.locator('.pick-row.is-other').getByRole('button', { name: 'Add to Ana' }).click();
+  await saved(page, 'Drivers saved');
+  await page.locator('#drivers .roster > li').first().locator('.roster-line .tp', { hasText: '5B' }).waitFor();
+  assert.ok(await page.locator('#transponder-5B').count(), 'the transponders card was refreshed');
+  assert.deepEqual(posts, ['/personal/transponders']);
+  assert.equal(loads(), 0);
+  assert.deepEqual(errors, []);
 });
 
 test('a planner outage (502) swaps in its message, with the link kept', async (t) => {

@@ -103,13 +103,8 @@ function saveDriver(request, form, id) {
   return seeOther(`${request.space.base}/drivers/${id}`);
 }
 
-const renameDriver = withForm((request, form, match) => {
-  if (form.get('from') === 'driver') return saveDriver(request, form, match[2]);
-  const values = { name: form.get('name') ?? '', colour: form.get('colour') ?? undefined };
-  const result = ops.renameDriver(request, { id: match[2], name: values.name, colour: values.colour });
-  const fieldId = result.error?.field === 'colour' ? `colour-${match[2]}` : `rename-${match[2]}`;
-  return afterForm(request, result, { key: `rename:${match[2]}`, values, section: 'drivers', fieldId });
-});
+// Setup no longer renames (§3.1): every rename is the driver page's form, and answers there.
+const renameDriver = withForm((request, form, match) => saveDriver(request, form, match[2]));
 
 function askDeleteDriver(request, match) {
   const driver = request.store.driver(request.workspaceId, match[2]);
