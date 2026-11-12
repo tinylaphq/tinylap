@@ -81,8 +81,8 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
     title: KIND[session.kind],
     screen: 'sessions',
     modules: ['pkg/design/elements/local-time.js'],
-    body: html`<div class="container sessions-screen stack-xl screen">
-  <div class="stack-sm">
+    body: html`<div class="container sessions-screen space-xl screen">
+  <div class="space-sm">
     <p><a href="${request.space.base}/sessions">Sessions</a></p>
     <h1>${KIND[session.kind]}${session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}</h1>
     <dl class="session-facts">
@@ -91,11 +91,11 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
       <div><dt>Track</dt><dd class="cut-words">${trackName(track, session.direction)}</dd></div>
     </dl>
   </div>
-  <section class="stack-md" aria-labelledby="standings-title">
+  <section class="space-md" aria-labelledby="standings-title">
     <h2 id="standings-title">${ended ? 'Final table' : 'Table so far'}</h2>
     ${table}
   </section>
-  ${order.length === 0 ? null : html`<section class="stack-md" aria-labelledby="laps-title">
+  ${order.length === 0 ? null : html`<section class="space-md" aria-labelledby="laps-title">
     <h2 id="laps-title">Laps</h2>
     <div class="session-laps-grid">${lapLists}</div>
   </section>`}

@@ -18,7 +18,7 @@ ${steps.map((s, i) => `  <li data-step="${s.id}"${i === current ? ' aria-current
 
 /** The recovery codes step, shared with the account page later. */
 export const CODES_STEP = `
-<form class="card-static stack-md" id="codes" hidden novalidate>
+<form class="card-static space-md" id="codes" hidden novalidate>
   <h2 class="h3" tabindex="-1">Save your recovery codes</h2>
   <p>If you lose your passkey, one of these codes lets you back in. Each works once. This is the only time they are shown.</p>
   <div class="code-reveal">
@@ -46,7 +46,7 @@ export function signUpPage(url, signedIn) {
       lede: `As ${escapeHtml(signedIn.name)}.`,
       script: 'sign-out.js',
       body: `
-<form class="card-static stack-md" id="sign-out" novalidate>
+<form class="card-static space-md" id="sign-out" novalidate>
   <p>To create another account, sign out first.</p>
   <button type="submit" class="btn btn-outline btn-block">Sign out</button>
   <p class="status" id="status" role="status" hidden></p>
@@ -59,8 +59,8 @@ export function signUpPage(url, signedIn) {
     script: 'sign-up.js',
     body: `
 ${progress([{ id: 'name', label: 'Name' }, { id: 'passkey', label: 'Passkey' }, { id: 'codes', label: 'Recovery codes' }], 0)}
-<form class="card-static stack-md" id="name-form" novalidate>
-  <div>
+<form class="card-static space-md" id="name-form" novalidate>
+  <div class="field">
     <label for="display-name">Display name</label>
     <input type="text" id="display-name" name="displayName" maxlength="40" autocomplete="nickname" required aria-describedby="name-hint">
     <p class="accounts-hint" id="name-hint">Members of your clubs see this name. Up to 40 characters.</p>
@@ -69,13 +69,13 @@ ${progress([{ id: 'name', label: 'Name' }, { id: 'passkey', label: 'Passkey' }, 
   <button type="submit" class="btn btn-primary btn-block">Create a passkey</button>
   <p class="status" id="status" role="status" hidden></p>
 </form>
-<div class="card-static stack-md" id="codes-retry" hidden>
+<div class="card-static space-md" id="codes-retry" hidden>
   <p class="status" id="retry-status" role="status"></p>
   <button type="button" class="btn btn-primary btn-block" id="retry">Try again</button>
   <p class="accounts-hint">Or make them later on <a href="/account">your account page</a>.</p>
 </div>
 ${CODES_STEP}
-<div class="card-static stack-md" id="done" hidden>
+<div class="card-static space-md" id="done" hidden>
   <p class="status status-success" role="status">Your account is ready</p>
   <p>You are signed in. You can close this page, or go to <a href="/account">your account</a>.</p>
 </div>

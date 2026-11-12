@@ -38,15 +38,15 @@ export function clubsPage({ user, workspaces }) {
     data: { page: 'clubs' },
     wide: true,
     body: `<p class="accounts-back"><a href="/account">Your account</a></p>
-<section class="stack-md">
+<section class="space-md">
   <ul class="accounts-list accounts-workspaces" aria-label="Your clubs">${items}
   </ul>
   ${clubs.length ? '' : '<p class="empty">You are not in a club yet. Start one below, or open an invite link a club sent you.</p>'}
 </section>
 <hr class="divider">
-<form class="card-static stack-md" id="create-club" novalidate>
+<form class="card-static space-md" id="create-club" novalidate>
   <h2 class="h3">Start a club</h2>
-  <div>
+  <div class="field">
     <label for="club-name">Club name</label>
     <input type="text" id="club-name" name="name" maxlength="60" required aria-describedby="club-hint">
     <p class="accounts-hint" id="club-hint">You become its owner and can invite members. You own ${owned} of at most ${CLUB_QUOTA} clubs.</p>

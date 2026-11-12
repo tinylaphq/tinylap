@@ -14,6 +14,16 @@
   margin-bottom: var(--p-space-lg);
 }
 
+/* palace's .page-header puts --p-space-sm between all its children; the
+   page's content starts further below the lede and keeps cards apart. */
+.accounts > .subtitle + * {
+  margin-top: var(--p-space-xl);
+}
+
+.accounts > :is(.card, .card-static) + * {
+  margin-top: var(--p-space-md);
+}
+
 .accounts > .brand-lockup .brand {
   color: var(--p-text);
 }
@@ -56,6 +66,11 @@
   margin-top: 6px;
   font-size: 13px;
   color: var(--p-text-muted);
+}
+
+/* In a palace .field the field's gap spaces the hint. */
+.field > .accounts-hint {
+  margin-top: 0;
 }
 
 .accounts-mono,

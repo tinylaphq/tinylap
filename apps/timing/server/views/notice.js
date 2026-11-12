@@ -16,7 +16,7 @@ function notice(request, { title, heading = title, text, action, navSignIn }) {
     body: html`<section class="container-narrow page-header notice">
   ${safe(brandLockup({ name: 'TinyLap Timing', markSrc: asset(request, 'pkg/design/mark.svg') }))}
   <h1>${heading}</h1>
-  <div class="card-static stack-md">
+  <div class="card-static space-md">
     <p>${text}</p>
     ${action ? html`<p><a class="btn btn-primary" href="${action.href}">${action.label}</a></p>` : null}
   </div>

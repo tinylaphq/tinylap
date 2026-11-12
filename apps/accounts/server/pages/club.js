@@ -56,7 +56,7 @@ export function clubPage({ user, claims, workspace, members, invites }) {
 
   const others = members.filter((m) => m.id !== user.id);
   const sections = [`
-<section class="stack-md" aria-labelledby="members-heading">
+<section class="space-md" aria-labelledby="members-heading">
   <h2 class="h3" id="members-heading">Members <span class="accounts-count">${members.length}</span></h2>
   <ul class="accounts-list" id="members">${memberRows}
   </ul>
@@ -66,13 +66,13 @@ export function clubPage({ user, claims, workspace, members, invites }) {
   if (invites) {
     sections.push(`
 <hr class="divider">
-<section class="stack-md" aria-labelledby="invites-heading">
+<section class="space-md" aria-labelledby="invites-heading">
   <h2 class="h3" id="invites-heading">Invite people</h2>
-  <form class="card-static stack-md" id="create-invite" novalidate>
+  <form class="card-static space-md" id="create-invite" novalidate>
     <p>Anyone with the link can join as a member until it expires. Send it the way you would send a key.</p>
     <div class="accounts-fields">
       <label class="accounts-check"><input type="checkbox" id="single-use" checked> Single use</label>
-      <div class="accounts-field">
+      <div class="accounts-field field">
         <label for="ttl">Expires after</label>
         <select id="ttl">
           <option value="1">1 day</option>
@@ -104,18 +104,18 @@ export function clubPage({ user, claims, workspace, members, invites }) {
   if (may('club.manage')) {
     sections.push(`
 <hr class="divider">
-<section class="stack-md" aria-labelledby="settings-heading">
+<section class="space-md" aria-labelledby="settings-heading">
   <h2 class="h3" id="settings-heading">Club settings</h2>
-  <form class="card-static stack-md" id="rename" novalidate>
-    <div>
+  <form class="card-static space-md" id="rename" novalidate>
+    <div class="field">
       <label for="club-name">Club name</label>
       <input type="text" id="club-name" maxlength="60" required value="${escapeHtml(workspace.name)}">
     </div>
     <button type="submit" class="btn btn-secondary">Rename club</button>
     <p class="status" id="rename-status" role="status" hidden></p>
   </form>
-  <form class="card-static stack-md" id="transfer" novalidate>
-    <div>
+  <form class="card-static space-md" id="transfer" novalidate>
+    <div class="field">
       <label for="new-owner">Transfer ownership to</label>
       <select id="new-owner"${others.length ? '' : ' disabled'}>
 ${others.map((m) => `        <option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`).join('\n')}
@@ -130,7 +130,7 @@ ${others.map((m) => `        <option value="${escapeHtml(m.id)}">${escapeHtml(m.
 
   sections.push(`
 <hr class="divider-danger">
-<div class="danger-zone stack-md">
+<div class="danger-zone space-md">
 ${may('club.manage') ? `  <h2 class="h3">Delete this club</h2>
   <p>Members lose access to its tracks at once, and the tracks are deleted. This cannot be undone.</p>
   <button type="button" class="btn btn-danger btn-block" id="delete-club">Delete club</button>` : `  <h2 class="h3">Leave this club</h2>
@@ -148,7 +148,7 @@ ${may('club.manage') ? `  <h2 class="h3">Delete this club</h2>
     body: `<p class="accounts-back"><a href="/clubs">All your clubs</a></p>
 ${sections.join('\n')}
 <dialog class="card-static accounts-dialog" id="confirm" aria-labelledby="confirm-text">
-  <form method="dialog" class="stack-md">
+  <form method="dialog" class="space-md">
     <p id="confirm-text"></p>
     <div class="accounts-actions">
       <button type="submit" value="cancel" class="btn btn-outline" id="confirm-cancel">Cancel</button>

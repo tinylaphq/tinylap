@@ -50,9 +50,9 @@ function trackSection(request, m) {
   const others = m.tracks.filter((t) => t.id !== m.track.id);
   // A refused choice that names no track falls back to the current one, not to the list's first.
   const chosen = m.tracks.some((t) => t.id === values.id) ? values.id : m.track.id;
-  return html`<tl-frame id="track"><section class="card-static stack-md" aria-labelledby="track-title">
+  return html`<tl-frame id="track"><section class="card-static space-md" aria-labelledby="track-title">
   <h2 id="track-title">Track</h2>
-  <div class="track-now stack-sm">
+  <div class="track-now space-sm">
     <p class="track-head cut-words">Now: <a href="${base}/tracks/${m.track.id}"><strong>${m.track.name}</strong></a>, ${DIRECTION_NAME[m.direction]}. ${layoutNote(m.track)}</p>
     <form method="post" action="${base}/track" class="inline-form">
       ${selectField({ id: 'current-track', label: 'Current track', name: 'id', options: m.tracks.map((t) => ({ value: t.id, label: t.name })), value: chosen, error })}
@@ -61,7 +61,7 @@ function trackSection(request, m) {
     </form>
     ${trackEdit(request, m, m.track)}
   </div>
-  ${others.length ? html`<div class="stack-sm">
+  ${others.length ? html`<div class="space-sm">
     <h3 class="track-subhead" id="other-tracks-title">Other tracks</h3>
     <ul class="setup-list" aria-labelledby="other-tracks-title">${others.map((t) => html`<li class="track-row">
       <p class="track-head cut-words"><a href="${base}/tracks/${t.id}">${t.name}</a> ${layoutNote(t)}</p>
@@ -72,7 +72,7 @@ function trackSection(request, m) {
       ${trackEdit(request, m, t)}
     </li>`)}</ul>
   </div>` : null}
-  <form method="post" action="${base}/tracks" class="stack-sm">
+  <form method="post" action="${base}/tracks" class="space-sm">
     <h3 class="track-subhead">Add a track</h3>
     <div class="inline-form">
       ${textField({ id: 'add-track-name', label: 'Name', name: 'name', maxlength: 60, required: true, value: add.name ?? '', error: addError })}
@@ -96,7 +96,7 @@ function trackSection(request, m) {
 function driversSection(request, m) {
   const base = request.space.base;
   const addError = m.errors['add-driver'] ?? null;
-  return html`<tl-frame id="drivers" refreshes="transponders"><section class="card-static stack-md" aria-labelledby="drivers-title">
+  return html`<tl-frame id="drivers" refreshes="transponders"><section class="card-static space-md" aria-labelledby="drivers-title">
   <h2 id="drivers-title">Drivers</h2>
   ${m.drivers.length ? html`<ul class="setup-list">${m.drivers.map((d) => {
     const error = m.errors[`rename:${d.id}`] ?? null;
@@ -123,7 +123,7 @@ function transpondersSection(request, m) {
   const base = request.space.base;
   const options = [{ value: '', label: '— none' }, ...m.drivers.map((d) => ({ value: d.id, label: d.name }))];
   const rows = [...m.transponders].sort((a, b) => Number(a.driverId !== null) - Number(b.driverId !== null) || a.code.localeCompare(b.code));
-  return html`<tl-frame id="transponders"><section class="card-static stack-md" aria-labelledby="transponders-title">
+  return html`<tl-frame id="transponders"><section class="card-static space-md" aria-labelledby="transponders-title">
   <h2 id="transponders-title">Transponders</h2>
   ${rows.length ? html`<table class="setup-table">
     <thead><tr><th scope="col" class="num">Code</th><th scope="col">Driver</th></tr></thead>
@@ -144,7 +144,7 @@ function transpondersSection(request, m) {
 function decodersSection(request, m) {
   const base = request.space.base;
   const error = m.errors.pair ?? null;
-  return html`<section class="card-static stack-md" id="decoders" aria-labelledby="decoders-title">
+  return html`<section class="card-static space-md" id="decoders" aria-labelledby="decoders-title">
   <h2 id="decoders-title">Decoders</h2>
   ${m.paired ? html`<div class="status status-info">
     <p class="cut-words">${m.paired.name} is paired. Its token is shown only this once:</p>
@@ -171,7 +171,7 @@ function decodersSection(request, m) {
 function watchersSection(request, m) {
   const base = request.space.base;
   const link = m.watchToken ? `${request.origin}/watch/${m.watchToken}` : null;
-  return html`<tl-frame id="watchers"><section class="card-static stack-md" aria-labelledby="watchers-title">
+  return html`<tl-frame id="watchers"><section class="card-static space-md" aria-labelledby="watchers-title">
   <h2 id="watchers-title">Watchers link</h2>
   <p>Anyone with this link sees the board, read-only, without signing in.</p>
   ${link ? html`${textField({ id: 'watch-link', label: 'Watchers link', labelHidden: true, name: 'link', value: link, readonly: true, copy: true })}
@@ -187,7 +187,7 @@ export function setupPage(request, model) {
     title: 'Setup',
     screen: 'setup',
     modules: ['pkg/design/elements/frame.js', 'pkg/design/elements/copy.js', 'pkg/design/elements/local-time.js'],
-    body: html`<div class="container stack-xl screen">
+    body: html`<div class="container space-xl screen">
   <h1>Setup</h1>
   <div id="page-status">${m.failed ? errorSummary(m.failed.error, m.failed.fieldId) : null}</div>
   <p class="visually-hidden" role="status" id="frame-status"></p>

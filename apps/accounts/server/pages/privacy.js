@@ -15,7 +15,7 @@ export function privacyPage({ plannerExport }) {
     lede: 'As little as an account needs. No email address, no password, no tracking, nothing third-party unless you connect it.',
     wide: true,
     body: `
-<section class="stack-md" aria-labelledby="stored-heading">
+<section class="space-md" aria-labelledby="stored-heading">
   <h2 class="h3" id="stored-heading">What is stored</h2>
   <ul class="accounts-list">
     <li class="accounts-row"><span class="accounts-row-main">Your display name<span class="accounts-row-sub">Shown to members of your clubs.</span></span></li>
@@ -28,12 +28,12 @@ export function privacyPage({ plannerExport }) {
   </ul>
 </section>
 <hr class="divider">
-<section class="stack-md" aria-labelledby="export-heading">
+<section class="space-md" aria-labelledby="export-heading">
   <h2 class="h3" id="export-heading">Export it</h2>
   <p>On <a href="/account">your account page</a>, download your account data as JSON${plannerExport ? `, and <a href="${escapeHtml(plannerExport)}">your tracks from the planner</a>` : ''}.</p>
 </section>
 <hr class="divider">
-<section class="stack-md" aria-labelledby="delete-heading">
+<section class="space-md" aria-labelledby="delete-heading">
   <h2 class="h3" id="delete-heading">Delete it</h2>
   <p>Delete your account on <a href="/account">your account page</a>. It removes your name, passkeys, recovery codes, sessions and personal space at once and signs you out everywhere; the planner then deletes your private tracks. Clubs keep the tracks you saved to them. If you own a club, hand it on or delete it first.</p>
 </section>

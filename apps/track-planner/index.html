@@ -115,11 +115,15 @@
   <dialog id="room-dialog" aria-labelledby="room-dialog-title">
     <h2 id="room-dialog-title">Room</h2>
     <p class="subtitle">The floor you have to fit the track into.</p>
-    <form method="dialog" id="room-form">
-      <label for="room-w">Width (m)</label>
-      <input type="number" id="room-w" name="w" step="0.3" min="0">
-      <label for="room-h">Depth (m)</label>
-      <input type="number" id="room-h" name="h" step="0.3" min="0">
+    <form method="dialog" id="room-form" class="space-md">
+      <div class="field">
+        <label for="room-w">Width (m)</label>
+        <input type="number" id="room-w" name="w" step="0.3" min="0">
+      </div>
+      <div class="field">
+        <label for="room-h">Depth (m)</label>
+        <input type="number" id="room-h" name="h" step="0.3" min="0">
+      </div>
       <menu>
         <button class="btn btn-outline" value="clear">No limit</button>
         <button class="btn btn-primary" value="set">Set</button>
