@@ -116,11 +116,11 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
         const next = h.nextElementSibling;
         return Math.round(next.getBoundingClientRect().top - h.getBoundingClientRect().bottom);
       };
-      const actions = [...document.querySelectorAll('.setup-row .btn, .roster-head .btn, .track-row .button-row .btn, .setup-table .btn')]
+      const actions = [...document.querySelectorAll('.setup-row .btn, .roster-head .btn, .track-row .button-row .btn, .tp-rows .btn')]
         .filter((el) => el.getClientRects().length)
         .map((el) => {
           // Beside a field: a field in the action's row, not in a fold under it.
-          const row = el.closest('.setup-row, .roster-head, .track-row, tr');
+          const row = el.closest('.setup-row, .roster-head, .track-row, .tp-rows > li');
           const field = [...row.querySelectorAll('input:not([type="hidden"]), select')].find((f) => !f.closest('details'));
           return { text: el.textContent.trim(), h: Math.round(el.getBoundingClientRect().height), field: field ? Math.round(field.getBoundingClientRect().height) : null };
         });
@@ -129,7 +129,7 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
       return {
         gaps: ['track-title', 'drivers-title', 'transponders-title', 'decoders-title'].map((id) => [id, gapAfter(id)]),
         actions,
-        assign: edge('#transponders .setup-table .btn') - content('#transponders section'),
+        assign: edge('#transponders .tp-acts') - content('#transponders .tp-rows > li'),
         unpair: edge('#decoders .setup-row .btn') - content('#decoders'),
         docW: document.documentElement.scrollWidth,
       };
@@ -137,7 +137,7 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
     for (const [id, gap] of m.gaps) assert.equal(gap, 16, `${id}: 16px to what follows`);
     const besideField = m.actions.filter((a) => a.field !== null);
     const inText = m.actions.filter((a) => a.field === null);
-    assert.ok(besideField.length && inText.length, `both kinds of row: ${JSON.stringify(m.actions)}`);
+    assert.ok(inText.length, `rows of text: ${JSON.stringify(m.actions)}`);
     for (const a of besideField) assert.equal(a.h, a.field, `${a.text}: as tall as its field`);
     assert.deepEqual([...new Set(inText.map((a) => a.h))], [36], `actions in a row of text: one lighter height, ${JSON.stringify(inText)}`);
     assert.equal(m.assign, 0, 'Assign ends at the section edge');

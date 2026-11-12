@@ -146,7 +146,7 @@ class TlFrame extends HTMLElement {
     if (res.ok && res.redirected) {
       // A save is the followed 303. Back to the form's field, unless it is folded away now.
       const field = fieldId ? this.querySelector(`#${CSS.escape(fieldId)}`) : null;
-      focusOn(field?.checkVisibility() ? field : heading);
+      focusOn((field?.checkVisibility?.() ?? !!field) ? field : heading);
       announce(`${heading?.textContent?.trim() ?? 'Changes'} saved`);
     } else if (res.ok) {
       // A page without a redirect is the server asking something: nothing was saved. Focus what it marked.

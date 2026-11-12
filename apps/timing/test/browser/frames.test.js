@@ -59,7 +59,7 @@ test('adding a driver saves in place: same scroll, focus back in the empty field
   assert.equal(await page.evaluate(() => scrollY), scrollY);
   assert.equal(await activeId(page), 'add-driver-name');
   assert.equal(await page.locator('#add-driver-name').inputValue(), '');
-  assert.ok(await page.locator('#transponder-0A option', { hasText: 'Cy' }).count(), 'the transponders card was refreshed');
+  assert.ok(await page.locator('#transponders li[data-code="0A"]').count(), 'the transponders card is still there');
   assert.deepEqual(posts, ['/personal/drivers']);
   assert.equal(loads(), 0);
   assert.deepEqual(errors, []);
@@ -96,7 +96,7 @@ test('adding a transponder from a driver\'s list saves in place, and the transpo
   await saved(page, 'Drivers saved');
   await page.locator('#drivers .roster > li').first().locator('.roster-line .tp', { hasText: '5B' }).waitFor();
   assert.equal(await activeId(page), 'drivers-title', 'the number field is folded away again: focus on the card');
-  assert.ok(await page.locator('#transponder-5B').count(), 'the transponders card was refreshed');
+  await page.locator('#transponders li[data-code="5B"]', { hasText: 'Ana' }).waitFor();
   assert.deepEqual(posts, ['/personal/transponders']);
   assert.equal(loads(), 0);
   assert.deepEqual(errors, []);
@@ -157,15 +157,6 @@ test('a layout form loads a page, since a new layout may answer with its confirm
   assert.equal(loads(), 1);
 });
 
-test('an unsaved choice in the transponders card survives a driver swap', async (t) => {
-  const { page } = await openSetup(t);
-  await page.locator('#transponder-0A').selectOption({ label: 'Ana' });
-  await page.locator('#add-driver-name').fill('Dee');
-  await page.getByRole('button', { name: 'Add driver' }).click();
-  await saved(page, 'Drivers saved');
-  assert.equal(await page.locator('#transponder-0A option:checked').innerText(), 'Ana');
-});
-
 test('pairing loads the page; a later swap keeps the one-time token; Copy copies it', async (t) => {
   const { page, context, posts, loads } = await openSetup(t);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -203,9 +194,10 @@ test('a watchers link made in place copies too: tl-copy works after a swap', asy
 test('submits while one is in flight are dropped, in the same frame and in another', async (t) => {
   const { page, posts, loads } = await openSetup(t);
   await page.locator('#add-driver-name').fill('Fay');
+  await page.locator('#add-track-name').fill('Loop');
   await page.evaluate(() => {
     const add = /** @type {HTMLFormElement} */ (document.querySelector('#add-driver-name').closest('form'));
-    const assign = /** @type {HTMLFormElement} */ (document.querySelector('#transponder-0A').closest('form'));
+    const assign = /** @type {HTMLFormElement} */ (document.querySelector('#add-track-name').closest('form'));
     add.requestSubmit();
     add.requestSubmit();
     assign.requestSubmit();
@@ -222,17 +214,18 @@ test('while a save is in flight every card’s buttons are disabled, and a submi
   const held = new Promise((done) => { release = done; });
   await page.route('**/personal/drivers', async (route) => { await held; await route.continue(); });
   await page.locator('#add-driver-name').fill('Ivy');
+  await page.locator('#add-track-name').fill('Loop');
   await page.getByRole('button', { name: 'Add driver' }).click();
   assert.equal(await page.getByRole('button', { name: 'Add driver' }).isDisabled(), true);
   assert.equal(await page.locator('#drivers').getAttribute('aria-busy'), 'true');
-  const assign = page.locator('#transponder-0A').locator('xpath=ancestor::form');
-  assert.equal(await assign.getByRole('button', { name: 'Assign' }).isDisabled(), true, 'another card shows it can’t save yet');
+  const assign = page.locator('#add-track-name').locator('xpath=ancestor::form');
+  assert.equal(await assign.getByRole('button', { name: 'Add track' }).isDisabled(), true, 'another card shows it can’t save yet');
   assert.equal(await page.getByRole('button', { name: 'Add track' }).isDisabled(), true);
   await assign.evaluate((form) => /** @type {HTMLFormElement} */ (form).requestSubmit());
   await saved(page, 'Still saving. Try again in a moment.');
   release();
   await saved(page, 'Drivers saved');
-  assert.equal(await assign.getByRole('button', { name: 'Assign' }).isDisabled(), false, 'and every button comes back');
+  assert.equal(await assign.getByRole('button', { name: 'Add track' }).isDisabled(), false, 'and every button comes back');
   assert.equal(await page.getByRole('button', { name: 'Add track' }).isDisabled(), false);
   assert.deepEqual(posts, ['/personal/drivers']);
 });

@@ -190,25 +190,33 @@ function driversSection(request, m) {
 </section></tl-frame>`;
 }
 
+/** A transponder row's Assign or Move: the form of Task 3, coming back to this list. */
+const assignHref = (base, t) => `${base}/transponders/${t.code}?returnTo=${encodeURIComponent(`${base}/setup#transponders`)}`;
+const forgetLink = (base, t) => html`<a class="tp-forget" href="${base}/transponders/${t.code}/forget">Forget<span class="visually-hidden"> transponder ${t.code}</span></a>`;
+
+// Transponders (spec §3.2): the unassigned first, newest first, then the assigned. Forget is quiet and
+// only for those who may delete.
 function transpondersSection(request, m) {
   const base = request.space.base;
-  const options = [{ value: '', label: '— none' }, ...m.drivers.map((d) => ({ value: d.id, label: d.name }))];
-  const rows = [...m.transponders].sort((a, b) => Number(a.driverId !== null) - Number(b.driverId !== null) || a.code.localeCompare(b.code));
+  const free = m.transponders.filter((t) => t.driverId === null).sort((a, b) => b.firstSeenAt - a.firstSeenAt || byCode(a, b));
+  const taken = m.transponders.filter((t) => t.driverId !== null).sort(byCode);
+  const driver = (t) => m.drivers.find((d) => d.id === t.driverId);
   return html`<tl-frame id="transponders"><section class="card-static space-md" aria-labelledby="transponders-title">
   <h2 id="transponders-title">Transponders</h2>
-  ${rows.length ? html`<table class="setup-table">
-    <thead><tr><th scope="col" class="num">Code</th><th scope="col">Driver</th></tr></thead>
-    <tbody>${rows.map((t) => {
-      const key = `transponder:${t.code}`;
-      return html`<tr${t.driverId === null ? html` class="is-unknown"` : null}>
-      <td class="num">${t.code}</td>
-      <td><form method="post" action="${base}/transponders/${t.code}" class="space-sm">
-        ${controlRow([{ id: `transponder-${t.code}`, label: `Driver for ${t.code}`, labelHidden: true, name: 'driver', options, value: m.values[key]?.driver ?? t.driverId ?? '', error: m.errors[key] ?? null }],
-          html`<button type="submit" class="btn btn-sm btn-outline">Assign</button>`)}
-      </form></td>
-    </tr>`;
-    })}</tbody>
-  </table>` : html`<p class="empty">Transponders show up here when a car first crosses the line.</p>`}
+  ${free.length || taken.length ? html`<div class="tp-list">
+    ${free.length ? html`<div class="tp-group"><p class="pick-group">Not assigned yet</p>${free.length >= 2 ? html`<a class="btn btn-sm btn-outline" href="${base}/transponders/new">Assign all ${free.length}</a>` : null}</div>
+    <ul class="tp-rows">${free.map((t) => html`<li class="is-unknown" data-code="${t.code}">
+      <span class="tp">${t.code}</span>
+      <span class="meta">first crossed <time datetime="${new Date(t.firstSeenAt).toISOString()}">${formatAgo(t.firstSeenAt, request.now())}</time></span>
+      <span class="tp-acts"><a class="btn btn-sm btn-primary" href="${assignHref(base, t)}">Assign<span class="visually-hidden"> transponder ${t.code}</span></a>${m.mayDelete ? forgetLink(base, t) : null}</span>
+    </li>`)}</ul>` : null}
+    ${taken.length ? html`<div class="tp-group"><p class="pick-group">Assigned</p></div>
+    <ul class="tp-rows">${taken.map((t) => html`<li data-code="${t.code}">
+      <span class="tp">${t.code}</span>
+      <span class="tp-who cut-words">${driver(t)?.name ?? 'Former driver'}${t.label ? html` <span class="tp-label">${t.label}</span>` : null}</span>
+      <span class="tp-acts"><a class="btn btn-sm btn-outline" href="${assignHref(base, t)}">Move<span class="visually-hidden"> transponder ${t.code}</span></a>${m.mayDelete ? forgetLink(base, t) : null}</span>
+    </li>`)}</ul>` : null}
+  </div>` : html`<p class="empty">Transponders show up here when a car first crosses the line.</p>`}
 </section></tl-frame>`;
 }
 

@@ -96,10 +96,10 @@ test('assign a transponder that crossed the line', async (t) => {
   assert.ok(sent.ok, `passing: ${sent.status}`);
   const page = await plainPage(t);
   await page.goto('/personal/setup');
-  await page.getByLabel('Driver for 4711').selectOption({ label: 'Ana' });
-  await page.getByRole('button', { name: 'Assign' }).click();
+  await page.getByRole('link', { name: 'Assign transponder 4711' }).click();
+  await page.getByRole('button', { name: 'Assign to Ana' }).click();
   await page.waitForURL(/\/personal\/setup/);
-  assert.equal(await page.getByLabel('Driver for 4711').inputValue(), app.store.drivers(personal)[0].id);
+  await page.locator('#transponders li[data-code="4711"]', { hasText: 'Ana' }).waitFor();
   assert.equal(app.store.transponders(personal).find((x) => x.code === '4711').driverId, app.store.drivers(personal)[0].id);
 });
 

@@ -130,21 +130,6 @@ test('deleting asks first, needs an admin, and unassigns the transponder', async
   assert.equal(app.store.transponders(office.id).find((t) => t.code === '4711').driverId, null);
 });
 
-test('assigning and unassigning a transponder', async () => {
-  const added = await app.form(owner, `${base}/drivers`, { name: 'Eve' });
-  assert.equal(added.status, 303);
-  const [eve] = drivers();
-  let res = await app.form(owner, `${base}/transponders/4711`, { driver: eve.id });
-  assert.equal(res.status, 303);
-  assert.equal(res.headers.get('location'), `${base}/setup#transponders`);
-  assert.equal(app.store.transponders(office.id).find((t) => t.code === '4711').driverId, eve.id);
-  await app.form(owner, `${base}/transponders/4711`, { driver: '' });
-  assert.equal(app.store.transponders(office.id).find((t) => t.code === '4711').driverId, null);
-  res = await app.form(owner, `${base}/transponders/4711`, { driver: 'nobody' });
-  assert.equal(res.status, 422);
-  assert.match(await res.text(), /Pick one of the drivers here, or none\./);
-});
-
 test('a form from another site changes nothing', async () => {
   const before = drivers().length;
   const res = await app.form(owner, `${base}/drivers`, { name: 'Mallory' }, { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' });
@@ -622,4 +607,43 @@ test('a refused add comes back as Setup, 422, the row open with the error and th
   assert.match(body, new RegExp(`<input type="text" id="${number}" name="code" value="not one"[^>]*aria-invalid="true"`));
   assert.match(body, new RegExp(`<input type="text" id="${number}-label" name="label" value="Kept"`));
   assert.doesNotMatch(body, /hex digits/);
+});
+
+// Setup's transponders overview (drivers and transponders spec §3.2), in a club of its own.
+test('the transponders overview: not assigned newest first, then assigned; Forget only for an admin; Forgetting removes the row', async () => {
+  const depot = app.club(ana, 'Depot');
+  const ben = await app.signUp('Bea');
+  app.join(ana, depot.id, ben);
+  const dBase = `/clubs/${depot.id}`;
+  const dMember = await app.login(ben);
+  const dOwner = await app.login(ana);
+  await app.form(dOwner, `${dBase}/drivers`, { name: 'Simon' });
+  const simon = app.store.drivers(depot.id)[0];
+  const now = Date.now();
+  app.store.assignTransponder(depot.id, '17', simon.id, now - 60 * MIN, 'Buggy');
+  app.store.assignTransponder(depot.id, '66', null, now - 8 * MIN);
+  app.store.assignTransponder(depot.id, '41', null, now - 10_000);
+  const section = async (who) => /<tl-frame id="transponders"[\s\S]*?<\/tl-frame>/.exec(await (await get(who, `${dBase}/setup`)).text())[0];
+  const asAdmin = await section(dOwner);
+  assert.deepEqual([...asAdmin.matchAll(/data-code="(\w+)"/g)].map((x) => x[1]), ['41', '66', '17']);
+  assert.match(asAdmin, />Not assigned yet<[\s\S]*>Assigned</);
+  assert.match(asAdmin, /Assign all 2/);
+  assert.match(asAdmin, new RegExp(`href="${dBase}/transponders/new"`));
+  assert.match(asAdmin, new RegExp(`href="${dBase}/transponders/41\\?returnTo=${encodeURIComponent(`${dBase}/setup#transponders`)}">Assign`));
+  assert.match(asAdmin, /Simon <span class="tp-label">Buggy<\/span>/);
+  assert.match(asAdmin, />Move</);
+  assert.equal((asAdmin.match(/class="tp-forget"/g) ?? []).length, 3);
+  assert.doesNotMatch(await section(dMember), /tp-forget/);
+
+  assert.equal((await get(dMember, `${dBase}/transponders/41/forget`)).status, 403);
+  assert.equal((await app.form(dMember, `${dBase}/transponders/41/forget`, {})).status, 403);
+  const ask = await (await get(dOwner, `${dBase}/transponders/41/forget`)).text();
+  assert.match(ask, /Forget transponder 41\?/);
+  assert.match(ask, /Its laps stay; if it crosses again it shows up as new\./);
+  assert.equal((await get(dOwner, `${dBase}/transponders/99/forget`)).status, 404);
+  const done = await app.form(dOwner, `${dBase}/transponders/41/forget`, {});
+  assert.equal(done.status, 303);
+  assert.equal(done.headers.get('location'), `${dBase}/setup#transponders`);
+  assert.deepEqual(app.store.transponders(depot.id).map((t) => t.code).sort(), ['17', '66']);
+  assert.doesNotMatch(await section(dOwner), /Assign all/, 'one left: no Assign all');
 });

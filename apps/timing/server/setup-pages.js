@@ -6,6 +6,7 @@
 // URL and answers 303 to the setup section it changed; a failure renders the
 // page again with the error and what was typed.
 import { can, open, seal } from '@tinylap/auth';
+import { transponderCode } from '@tinylap/timing';
 import { displayName } from './auth.js';
 import * as ops from './operations.js';
 import { readForm } from './form.js';
@@ -121,12 +122,20 @@ function askDeleteDriver(request, match) {
 
 const deleteDriver = withForm((request, _form, match) => afterForm(request, ops.deleteDriver(request, { id: match[2] }), { key: 'delete', values: {}, section: 'drivers' }));
 
-/** Setup's own transponder row (a driver select, "— none" unassigns); the form of transponder-pages.js sends a name too. */
-export function assignFromSetup(request, form, match) {
-  const driver = form.get('driver') ?? '';
-  const code = match[2].toUpperCase();
-  return afterForm(request, ops.assignTransponder(request, { code, driverId: driver === '' ? null : driver }), { key: `transponder:${code}`, values: { driver }, section: 'transponders', fieldId: `transponder-${code}` });
+function askForgetTransponder(request, match) {
+  const code = transponderCode(match[2]);
+  if (!code || !request.store.transponders(request.workspaceId).some((t) => t.code === code)) return renderSetup(request, 404, { failed: { error: { message: 'There is no such transponder here.' } } });
+  const base = request.space.base;
+  return page(request, 200, confirmPage(request, {
+    title: `Forget transponder ${code}?`,
+    text: 'Its laps stay; if it crosses again it shows up as new.',
+    action: `${base}/transponders/${code}/forget`,
+    button: 'Forget',
+    back: `${base}/setup#transponders`,
+  }));
 }
+
+const forgetTransponder = withForm((request, _form, match) => afterForm(request, ops.forgetTransponder(request, { code: match[2] }), { key: 'forget', values: {}, section: 'transponders' }));
 
 export const PAIRED_COOKIE = '__Host-tl-paired';
 const PAIRED_TTL_SECONDS = 300;
@@ -290,6 +299,7 @@ export const setupPageRoutes = [
   { pattern: spacePath('tracks/([^/]+)/restore'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', restoreTrack, write) } },
   { pattern: spacePath('tracks/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteTrack), POST: pageRoute('timing.delete', deleteTrack, write) } },
   { pattern: spacePath('decoders'), credentials: true, methods: { GET: toPage('setup#decoders'), POST: pageRoute('timing.setup', pairDecoder, write) } },
+  { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})/forget'), credentials: true, methods: { GET: pageRoute('timing.delete', askForgetTransponder), POST: pageRoute('timing.delete', forgetTransponder, write) } },
   { pattern: spacePath('decoders/([^/]+)/unpair'), credentials: true, methods: { GET: pageRoute('timing.delete', askUnpair), POST: pageRoute('timing.delete', unpair, write) } },
   { pattern: spacePath('watch-link'), credentials: true, methods: { GET: toPage('setup#watchers'), POST: pageRoute('timing.setup', makeWatchLink, write) } },
   { pattern: spacePath('watch-link/new'), credentials: true, methods: { GET: pageRoute('timing.setup', askNewWatchLink) } },

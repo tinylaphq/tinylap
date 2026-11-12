@@ -12,7 +12,7 @@ import { pageRoute, toPage } from './page-access.js';
 import { page, seeOther } from './respond.js';
 import { retryHeaders } from './responses.js';
 import { safeReturnTo } from './return-to.js';
-import { assignFromSetup, renderSetup } from './setup-pages.js';
+import { renderSetup } from './setup-pages.js';
 import { spacePath } from './spaces.js';
 import { notFoundPage } from './views/notice.js';
 import { moveQuestionPage, transponderFormPage } from './views/transponder.js';
@@ -106,8 +106,6 @@ function assignTo(request, form, raw, row) {
 async function assign(request, match) {
   const { form, error } = await readForm(request);
   if (error) return error;
-  // Setup's transponder rows send no name: they keep their select until Setup links here.
-  if (!form.has('name')) return assignFromSetup(request, form, match);
   return assignTo(request, form, match[2], match[2]);
 }
 
