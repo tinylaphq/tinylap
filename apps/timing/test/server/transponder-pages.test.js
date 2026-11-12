@@ -147,6 +147,24 @@ test('the same driver again asks nothing', async () => {
   assert.equal(res.status, 303);
 });
 
+test('a returnTo outside ASCII is a 303 to it, percent-encoded', async () => {
+  for (const [returnTo, location] of [[`${base}/€`, `${base}/%E2%82%AC`], [`${base}/ü`, `${base}/%C3%BC`]]) {
+    const res = await app.form(owner, `${base}/transponders/70`, { driver: 'mia', name: '', returnTo });
+    assert.equal(res.status, 303, returnTo);
+    assert.equal(res.headers.get('location'), location);
+  }
+});
+
+test('a member of another club gets the not-found page, and nothing is assigned', async () => {
+  const ben = await app.signUp('Ben');
+  app.club(ben, 'Pits');
+  const outsider = await app.login(ben);
+  assert.equal((await get(outsider, `${base}/transponders/71`)).status, 404);
+  const post = await app.form(outsider, `${base}/transponders/71`, { driver: 'mia', name: '' });
+  assert.equal(post.status, 404);
+  assert.equal(row('71'), undefined);
+});
+
 test('signed out goes to sign-in, and a form changes nothing', async () => {
   const page = await get(null, `${base}/transponders/41`);
   assert.equal(page.status, 303);

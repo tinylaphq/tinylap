@@ -22,3 +22,8 @@ test('anything else goes back to the fallback, never off-site', () => {
   ];
   for (const value of hostile) assert.equal(safeReturnTo(value, FALLBACK), FALLBACK, JSON.stringify(value));
 });
+
+test('a path with characters outside ASCII goes back percent-encoded', () => {
+  assert.equal(safeReturnTo('/€', FALLBACK), '/%E2%82%AC');
+  assert.equal(safeReturnTo('/clubs/c1/board?x=ü#ü', FALLBACK), '/clubs/c1/board?x=%C3%BC#%C3%BC');
+});
