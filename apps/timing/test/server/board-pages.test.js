@@ -488,7 +488,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.match(head, /7\.500/);
     assert.match(head, /Haris/);
     assert.match(head, /8\.000/, 'the record it beat');
-    assert.match(head, /<tl-local-time format="date">/);
+    assert.doesNotMatch(head, /<tl-local-time/, 'the record\'s date has left the board');
     assert.doesNotMatch(head, /·/);
     assert.doesNotMatch(head, /board-track-times|board-fastest-line/, 'the record lap is the fastest lap: its line waits while the strip shows the record');
     assert.doesNotMatch(body, NOTICE);

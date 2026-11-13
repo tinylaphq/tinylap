@@ -78,11 +78,15 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-track-times {
   grid-area: times; display: grid; grid-template-columns: auto auto minmax(9em, 12em);
   row-gap: var(--p-space-xs); align-items: baseline;
+  /* How much further a mark rises here than after a time of its own size:
+   * the strip's time is larger than the line's text (1.15em), so its digits
+   * sit higher. In the mark's em, so it scales with the board; fitted so the
+   * mark centres on the digits (marks.test.js pins it within 0.75px). */
+  --tl-mark-nudge: -0.075em;
 }
 .board-track-times > p { position: relative; display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; }
 .board-track-times .board-track-time { grid-column: 1; justify-self: end; }
-/* The time is larger than the line's text, so its digits sit higher: the mark rises a little more to centre on them. */
-.board-track-times .mark { grid-column: 2; justify-self: start; margin-left: var(--p-space-xs); translate: 0 -0.075em; }
+.board-track-times .mark { grid-column: 2; justify-self: start; margin-left: var(--p-space-xs); translate: 0 var(--tl-mark-nudge); }
 .board-track-times .driver { grid-column: 3; display: flex; align-items: baseline; min-width: 0; }
 .board-track-times .driver::before { flex: none; }
 .board-track-times .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

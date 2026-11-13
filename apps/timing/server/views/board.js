@@ -26,8 +26,8 @@ export function clockOf(session, now) {
 
 const chip = (snap, id, options) => driverChip(snap.drivers, id, options);
 
-/** A record's time, holder and date, apart by their line's gap, not by dots: "7.412  Haris  12 Oct". */
-const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by cut-words">${chip(snap, r.driverId)}</span> <span class="board-track-by cut-words">${safe(localTime(r.at, 'date'))}</span>`;
+/** A record's time and holder, apart by their line's gap, not by dots: "7.412  Haris". Its date stays on the session pages (fastest lap spec §3.1). */
+const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by cut-words">${chip(snap, r.driverId)}</span>`;
 
 /** The session's fastest lap's row: the fastest counted best, the earlier lap on a tie (fastest lap spec §2). */
 function fastestRow(standings) {
