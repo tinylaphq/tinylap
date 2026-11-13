@@ -21,6 +21,7 @@ let app;
 let browser;
 let member;
 let ws;
+let aborted;
 
 /** A practice on the current track: each car `laps` laps, Cyrille fastest. */
 function practice(laps) {
@@ -52,6 +53,7 @@ before(async () => {
   for (let i = 0; i < 4; i += 1) practice(5 - i);
   const race = app.engine.start(ws, { kind: 'qualifying', roster: app.store.drivers(ws).map((d) => d.id), durationMs: 120_000, countdownMs: 0 }).session;
   app.engine.abort(ws, race.id);
+  aborted = race.id;
 });
 after(async () => {
   await browser?.close();
@@ -141,3 +143,23 @@ for (const [path, selector] of [['/personal/records', '.records-table'], ['/pers
     }
   });
 }
+
+test("an aborted session's heading shows its Aborted tag, readable, on a phone and a desktop", async (t) => {
+  for (const viewport of [PHONE, DESKTOP]) {
+    const { context, page, errors } = await pageAs(browser, app, member, { viewport });
+    t.after(() => context.close());
+    await page.goto(`/personal/sessions/${aborted}`);
+    await page.evaluate(() => document.fonts.ready);
+    const tag = await page.locator('h1 .tag').evaluate((el) => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return { text: el.textContent, fill: style.webkitTextFillColor, color: style.color, transform: style.textTransform, right: box.right };
+    });
+    assert.equal(tag.text, 'Aborted');
+    for (const c of [tag.fill, tag.color]) assert.notEqual(c, 'rgba(0, 0, 0, 0)', `the tag's text is painted at ${viewport.width}`);
+    assert.equal(tag.transform, 'none', "palace's tag, not the heading's capitals");
+    assert.ok(tag.right <= viewport.width, `inside the page at ${viewport.width}`);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
+    assert.deepEqual(errors, []);
+  }
+});
