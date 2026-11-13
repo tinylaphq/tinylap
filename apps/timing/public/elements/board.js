@@ -42,7 +42,7 @@
 //   whose data-moment this page has not seen lights that row in its mark's
 //   colour (TR, FL or PB), behind its text; never on the first render. A
 //   swap during it carries it to the same driver's row at its elapsed time;
-//   a newer fastest lap slides an older one out; beyond three lit rows, PBs
+//   a newer fastest lap slides an older one out; while three rows are lit, PBs
 //   are dropped. With reduced motion the row takes the colour, holds and
 //   fades. No sound: the record rings as above.
 // Without EventSource there is no stream; without JavaScript the page
@@ -167,7 +167,7 @@ const OUT_EASE = 'cubic-bezier(.6,0,.8,.4)';
 /** A newer fastest lap slides the older row out this fast; with reduced motion a row fades this fast. */
 const CUT_MS = 300;
 const FADE_MS = 200;
-/** Beyond this many lit rows, further PB moments are dropped. */
+/** While this many rows are lit, further PB moments are dropped. */
 const MAX_LIT = 3;
 const LIT = ['is-lit', 'is-lit-fl', 'is-lit-pb', 'is-lit-tr', 'is-lit-light'];
 
@@ -246,7 +246,7 @@ function drawRow(m, t, end) {
   };
   if (m.kind === 'tr') {
     const lightOn = m.reduced ? 0 : k.cross * 0.7;
-    if (elapsed < lightOff) {
+    if (lightOn < lightOff && elapsed < lightOff) {
       at(lightOn, () => m.row.classList.add('is-lit-light'));
       at(lightOff, () => m.row.classList.remove('is-lit-light'));
     }
