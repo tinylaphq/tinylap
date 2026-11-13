@@ -165,7 +165,7 @@ export const TOOLS = [
     annotations: READ,
     input: z.object({ space }),
     output: z.object({ transponders: z.array(z.looseObject({ code: z.string() })) }),
-    run: ({ request }) => ({ value: { transponders: request.store.transponders(request.workspaceId) } }),
+    run: ({ request }) => ({ value: { transponders: ops.listTransponders(request) } }),
   },
   {
     name: 'assign_transponder',

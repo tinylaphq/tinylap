@@ -34,7 +34,7 @@ function deleteDriver(request, match) {
   return r.error ? opProblem(request, r.error) : { status: 204, headers: NO_STORE };
 }
 
-const listTransponders = (request) => json(200, { transponders: request.store.transponders(request.workspaceId) }, NO_STORE);
+const listTransponders = (request) => json(200, { transponders: ops.listTransponders(request) }, NO_STORE);
 
 async function putTransponder(request, match) {
   const { body, error } = await readJson(request);

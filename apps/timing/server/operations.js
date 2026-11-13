@@ -90,6 +90,9 @@ export function deleteDriver(request, { id }) {
   return { value: true };
 }
 
+/** A club's transponders as the API and MCP list them: code, driver and first seen; the pages' label and crossings stay off them. */
+export const listTransponders = (request) => request.store.transponders(request.workspaceId).map(({ code, driverId, firstSeenAt }) => ({ code, driverId, firstSeenAt }));
+
 export function assignTransponder(request, { code: rawCode, driverId }) {
   const code = transponderCode(rawCode);
   if (!code) return invalid('A transponder code is 1 to 16 hex digits.', 'code');
