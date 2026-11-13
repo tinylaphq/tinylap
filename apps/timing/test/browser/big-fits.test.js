@@ -4,7 +4,8 @@
 
 // The wall screen fits its screen (spec 6.1): at 1920×1080, with four drivers,
 // a decoder on the strip, both times to beat and a full Last laps, the board
-// ends inside 1080: Last laps shows the eleven newest, every row whole.
+// ends inside 1080: the server sends Last laps' eleven newest, not twelve,
+// and every row shows whole.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming, useTrack } from '../server/helpers.js';
@@ -65,8 +66,8 @@ test('at 1920×1080 the big board ends inside the screen, and Last laps shows wh
   assert.equal(read.drivers, 4);
   assert.equal(read.decoders, 1, 'the strip shows its decoder');
   assert.equal(read.times, 2, 'and both times to beat');
-  assert.equal(read.rows, 12, 'Last laps is full');
-  assert.equal(read.shown, 11, 'and shows the eleven newest');
+  assert.equal(read.rows, 11, 'Last laps shows the eleven newest');
+  assert.equal(read.shown, 11);
   assert.ok(read.height <= 1080, `the board is ${read.height}px tall`);
   assert.ok(read.feedBottom <= 1080, `Last laps ends at ${read.feedBottom}px`);
   assert.equal(read.cut, 0, 'no Last laps row is cut');
