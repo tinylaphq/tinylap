@@ -12,7 +12,7 @@
 // - transitions: palace's 0.1s (var(--p-transition)), or none.
 //
 // Shadows have their own check (shadows.test.js). Font sizes are not checked:
-// palace has no type scale tokens yet. Pages that must stand alone (the
+// palace has no type scale tokens yet (palace-ui#21). Pages that must stand alone (the
 // exported layout, the API docs) write palace's look out literally in their
 // own <style>, by design; they are not .css files and are not read here.
 import test from 'node:test';
@@ -26,48 +26,39 @@ const SKIP = new Set(['node_modules', 'dist', 'test', '.turbo', 'pkg', 'vendor']
 
 /**
  * Values a rule may still use, each with its reason: `file|selector|property: value`.
- * Most wait on a decision in #107 (a token would change the look) or on a
- * size palace lacks; take an entry out when its value becomes a token.
+ * Each waits on a size palace-ui lacks (the issue named) or is geometry, not
+ * spacing; take an entry out when its value becomes a token.
  */
 const EXCEPTIONS = new Map([
-  // Sub-xs steps: palace has no space below --p-space-xs (4px).
-  ['apps/timing/public/app.css|.board-laps .tag|padding: 1px 6px', 'a lap tag, smaller than palace\'s .tag'],
-  ['apps/timing/public/app.css|.board-last-meta .tag|padding: 1px 6px', 'a lap tag, smaller than palace\'s .tag'],
-  ['apps/timing/public/app.css|.history-table .tag|padding: 1px 6px', 'a lap tag, smaller than palace\'s .tag'],
-  ['apps/timing/public/app.css|.lap-table .tag|padding: 1px 6px', 'a lap tag, smaller than palace\'s .tag'],
-  ['apps/track-planner/css/app.css|.library-ws-head .tag|padding: 1px 6px', 'a lap tag, smaller than palace\'s .tag'],
-  ['apps/timing/public/app.css|.net-note|margin-top: 2px', 'a note under its name'],
-  ['apps/timing/public/app.css|.nav-account-hint|margin-top: 2px', 'a hint under its setting'],
-  ['apps/track-planner/css/app.css|.library-meta|margin: 2px 0 0', 'a meta line under its name'],
-  ['apps/timing/public/app.css|.bridge-stat|gap: 2px', 'a stat\'s label over its count'],
-  ['apps/timing/public/app.css|.decoder-info|gap: 2px', 'a decoder\'s name over its meta'],
-  ['apps/track-planner/css/app.css|.preset-info|gap: 2px', 'a card\'s name over its source'],
-  ['apps/track-planner/css/app.css|.dialog-dismiss .btn|padding: 2px 8px', 'the dialogs\' close button'],
-  ['apps/track-planner/css/app.css|.chip|padding: 2px 8px', 'a filter chip'],
-  ['apps/track-planner/css/app.css|.library-current|padding: 2px var(--p-space-sm)', 'the library name in the navbar'],
-  // Steps between palace's sizes (6, 10, 12, 14px): a token would move them.
-  ['apps/timing/public/app.css|.live-status:not(:empty)::before|margin-right: 6px', 'the live lamp before its word'],
-  ['apps/timing/public/app.css|.navbar-right .btn, .navbar-right .live-status|padding: 6px 14px', 'palace\'s .navbar-menu summary padding, written out'],
-  ['apps/timing/public/app.css|body.big .navbar-right .btn-icon|padding-inline: 12px', 'the big screen\'s icon button'],
-  ['apps/accounts/public/accounts.css|.accounts-progress li|gap: 6px', 'a step\'s number before its name'],
-  ['apps/accounts/public/accounts.css|.accounts-hint|margin-top: 6px', 'a hint under its field'],
-  ['apps/accounts/public/accounts.css|.accounts-workspace, .accounts-row|padding: 12px var(--p-space-md)', 'a club or member row'],
-  ['apps/accounts/public/accounts.css|.accounts-reveal-note|margin-bottom: 10px', 'the reveal\'s note'],
-  ['apps/accounts/public/accounts.css|.accounts-reveal-meta|margin-bottom: 12px', 'the reveal\'s meta'],
-  ['apps/accounts/public/accounts.css|.accounts-reveal .status|margin-top: 12px', 'the reveal\'s status'],
-  ['apps/track-planner/css/app.css|.library-form-row input|padding: 0 10px', 'a small field beside a .btn-sm'],
-  ['apps/track-planner/css/app.css|.library-form-row select|padding: 0 2.5rem 0 10px', 'a small select beside a .btn-sm, room for palace\'s arrow'],
-  ['apps/track-planner/css/app.css|.navbar-right > .btn|padding: 6px 10px', 'the phone navbar\'s buttons'],
+  // A small tag, smaller than palace's .tag: palace-ui#23.
+  ['apps/timing/public/app.css|.board-laps .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
+  ['apps/timing/public/app.css|.board-last-meta .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
+  ['apps/timing/public/app.css|.history-table .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
+  ['apps/timing/public/app.css|.lap-table .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
+  ['apps/track-planner/css/app.css|.library-ws-head .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
+  // 2px, a step below --p-space-xs: palace-ui#22.
+  ['apps/timing/public/app.css|.net-note|margin-top: 2px', 'a note under its name (palace-ui#22)'],
+  ['apps/timing/public/app.css|.nav-account-hint|margin-top: 2px', 'a hint under its setting (palace-ui#22)'],
+  ['apps/track-planner/css/app.css|.library-meta|margin: 2px 0 0', 'a meta line under its name (palace-ui#22)'],
+  ['apps/timing/public/app.css|.bridge-stat|gap: 2px', 'a stat\'s label over its count (palace-ui#22)'],
+  ['apps/timing/public/app.css|.decoder-info|gap: 2px', 'a decoder\'s name over its meta (palace-ui#22)'],
+  ['apps/track-planner/css/app.css|.preset-info|gap: 2px', 'a card\'s name over its source (palace-ui#22)'],
+  ['apps/track-planner/css/app.css|.dialog-dismiss .btn|padding: 2px 8px', 'the dialogs\' close button (palace-ui#22)'],
+  ['apps/track-planner/css/app.css|.chip|padding: 2px 8px', 'a filter chip (palace-ui#22)'],
+  ['apps/track-planner/css/app.css|.library-current|padding: 2px var(--p-space-sm)', 'the library name in the navbar (palace-ui#22)'],
+  // Navbar controls, sized as palace's navbar menu summary: palace-ui#24.
+  ['apps/timing/public/app.css|.live-status:not(:empty)::before|margin-right: 6px', 'the live lamp before its word (palace-ui#24)'],
+  ['apps/timing/public/app.css|.navbar-right .btn, .navbar-right .live-status|padding: 6px 14px', 'palace\'s .navbar-menu summary padding, written out (palace-ui#24)'],
+  ['apps/timing/public/app.css|body.big .navbar-right .btn-icon|padding-inline: 12px', 'the big screen\'s icon button (palace-ui#24)'],
+  ['apps/track-planner/css/app.css|.navbar-right > .btn|padding: 6px 10px', 'the phone navbar\'s buttons (palace-ui#24)'],
+  // A small field beside a .btn-sm: palace-ui#25.
+  ['apps/track-planner/css/app.css|.library-form-row input|padding: 0 10px', 'a small field (palace-ui#25)'],
+  ['apps/track-planner/css/app.css|.library-form-row select|padding: 0 2.5rem 0 10px', 'a small select, room for palace\'s arrow (palace-ui#25)'],
   // Geometry, not spacing.
   ['apps/timing/public/app.css|.tp-rows > li > .tp|margin-top: 0.15rem', 'drops a number onto its row\'s first line'],
   ['apps/track-planner/css/app.css|.library-version::before|margin-top: -5px', 'centres a 10px stop on its line'],
-  // Borders palace has no width for.
+  // A border palace has no width for.
   ['apps/accounts/public/accounts.css|.accounts-workspace|border-left-width: 8px', 'a club\'s lane colour'],
-  ['apps/timing/public/app.css|.tap-tile:focus-visible|outline: 3px solid var(--p-accent-3)', 'the tap tile\'s focus, wider than palace\'s'],
-  ['apps/timing/public/app.css|.track-drawing:target .track-drawing-art|outline: 3px solid var(--tl-record)', 'the linked layout drawing'],
-  // Slower than palace's 0.1s.
-  ['apps/timing/public/app.css|.pick-row > summary::before|transition: transform 0.15s', 'a fold\'s triangle turning'],
-  ['apps/timing/public/app.css|.collect-row|transition: box-shadow 0.15s', 'the crossing row\'s shadow easing in'],
 ]);
 
 function* stylesheets(dir) {
