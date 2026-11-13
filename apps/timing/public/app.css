@@ -663,10 +663,13 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; } /* waits on palace-ui
    button's fallback) is a sentence. */
 .field-hint { text-transform: none; letter-spacing: 0; }
 .button-row { display: flex; gap: var(--p-space-sm); flex-wrap: wrap; align-items: center; }
-/* A row's action (a driver's, a track's, an archived track's, a decoder's, a
-   track's Rename) is lighter: palace's small control height for all of them,
-   its small label centred. */
+/* An action in a row of text (a driver's, a track's, an archived track's, a
+   decoder's) is lighter: palace's small control height for all of them, its
+   small label centred. A button beside a field (a track's Rename and Change
+   layout) is no row action: it is as tall as its field, palace's control
+   height, as in every .control-row. */
 .setup-row .btn, .track-row .btn, .roster-head .btn, .tp-rows .btn, .track-edit-form .btn { height: var(--p-control-height-sm); display: inline-flex; align-items: center; justify-content: center; margin: 0; }
+.track-edit-form .btn { height: var(--p-control-height); }
 .setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
 .token { display: block; word-break: break-all; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
 /* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
