@@ -501,7 +501,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-quiet a { font-weight: 600; }
 .board-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--p-space-lg); align-items: start; margin-top: var(--p-space-sm); }
 .board-idle h2 { margin: 0 0 var(--p-space-sm); }
-.board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); }
+.board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
 /* Pos, driver, time and mark, the time and mark in columns of fixed width:
  * both lists put their times at the same place, side by side or stacked.
  * The fastest list's mark column holds the track record's TR. */
@@ -756,6 +756,8 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .session-facts-fastest .driver::before { flex: none; margin-right: var(--p-space-xs); }
 .session-facts-fastest .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--p-text-secondary); }
 .session-laps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: var(--p-space-md); }
+/* palace's static card has no shadow, and loses it again on hover; the laps carry the lists' ink shadow. */
+.session-laps, .session-laps:hover { box-shadow: var(--p-shadow-lg) var(--p-text); }
 .session-laps .h3 { margin: 0 0 var(--p-space-sm); }
 /* A lap card is headed by the driver's name as it is written, not upper-cased. */
 .session-laps .h3 { text-transform: none; letter-spacing: 0; color: var(--p-text); }
@@ -986,7 +988,7 @@ ul.roster-tps { list-style: none; margin: 0; padding: 0; }
 @media (prefers-reduced-motion: reduce) { .pick-row > summary::before { transition: none; } }
 
 /* Setup's transponders (§3.2): group bands as in the pick list, then rows of number, who or when, actions. */
-.tp-list { border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); }
+.tp-list { border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); background: var(--p-surface); }
 .tp-group { display: flex; align-items: center; justify-content: space-between; gap: var(--p-space-sm); padding-right: var(--p-space-sm); background: var(--p-surface-inset); border-top: var(--p-border-thin) solid var(--p-border); }
 .tp-group:first-child { border-top: 0; }
 .tp-list .pick-group { margin: 0; padding: var(--p-space-sm) var(--p-space-md); font-size: 0.75rem; font-weight: 700; color: var(--p-text-muted); }

@@ -16,6 +16,7 @@ let app;
 let browser;
 let member;
 let ws;
+let session;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -24,7 +25,7 @@ before(async () => {
   ws = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
   await app.form(member, '/personal/drivers', { name: 'Ana' });
   app.engine.assign(ws, '7', app.store.drivers(ws).find((d) => d.name === 'Ana').id);
-  app.engine.start(ws, { kind: 'practice' });
+  session = app.engine.start(ws, { kind: 'practice' }).session;
   clock.offset += 60_000;
   const passings = [16_500, 8500, 500].map((ago) => ({ transponder: '7', t: clock.now - ago }));
   app.engine.ingest({ workspaceId: ws, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings } });
@@ -57,3 +58,19 @@ for (const [label, viewport, path] of [['a laptop', { width: 1280, height: 800 }
     await context.close();
   });
 }
+
+test('the session page\'s Laps cards and the idle board\'s lists carry the same 4px ink shadow as the tables', async () => {
+  app.engine.end(ws, session.id);
+  const { context, page, errors } = await pageAs(browser, app, member);
+  const shadow = (selector) => page.locator(selector).first().evaluate((el) => getComputedStyle(el).boxShadow);
+  await page.goto(`/personal/sessions/${session.id}`);
+  const table = await shadow('.standings-table');
+  assert.match(table, /4px 4px 0px/);
+  assert.equal(await shadow('.session-laps'), table, 'a Laps card matches the Final table');
+  await page.locator('.session-laps').first().hover();
+  assert.equal(await shadow('.session-laps'), table, 'and keeps it under the pointer');
+  await page.goto('/personal/board');
+  assert.equal(await shadow('.board-ranks'), table, 'an idle board list matches too');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
