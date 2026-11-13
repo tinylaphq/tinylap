@@ -10,7 +10,8 @@
 //   transponder, it shows that row's slot and adds `is-crossing` to the row
 //   for hold-ms, then undoes both; another passing starts the hold over.
 // - A slot the server rendered shown (it crossed in the last few seconds),
-//   on connect or in a swap, is held as if it had just crossed, then hidden.
+//   on connect or in a swap, is held for the time its data-left-ms says is
+//   left (hold-ms without one), then hidden.
 // - A row swapped in meanwhile (tl-frame) gets the same while its hold lasts.
 // - An event older than hold-ms lights nothing: a reconnect replays what it
 //   missed. Its age is its `at` against the server's clock, the snapshot's
@@ -48,7 +49,7 @@ class TlCrossingNow extends HTMLElement {
     for (const row of this.querySelectorAll('[data-code]')) {
       const code = row.getAttribute('data-code') ?? '';
       const slot = this.slotOf(row);
-      if (slot && !slot.hidden && !this.lit.has(code)) this.hold(code);
+      if (slot && !slot.hidden && !this.lit.has(code)) this.hold(code, this.leftOf(slot));
     }
   }
 
@@ -57,13 +58,19 @@ class TlCrossingNow extends HTMLElement {
     return /** @type {HTMLElement | null} */ (row.matches('.crossing-now') ? row : row.querySelector('.crossing-now'));
   }
 
-  /** Lights `code` for hold-ms from now. @param {string} code */
-  hold(code) {
+  /** What the server says is left of a shown slot's hold, else hold-ms. @param {HTMLElement} slot */
+  leftOf(slot) {
+    const ms = Number(slot.getAttribute('data-left-ms'));
+    return Number.isFinite(ms) && ms > 0 ? Math.min(ms, this.holdMs) : this.holdMs;
+  }
+
+  /** Lights `code` for `ms` (hold-ms) from now. @param {string} code @param {number} [ms] */
+  hold(code, ms = this.holdMs) {
     clearTimeout(this.lit.get(code));
     this.lit.set(code, setTimeout(() => {
       this.lit.delete(code);
       this.show(code, false);
-    }, this.holdMs));
+    }, ms));
     this.show(code, true);
   }
 

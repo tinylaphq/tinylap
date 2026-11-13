@@ -737,6 +737,8 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .history-table .tag { font-size: 10px; padding: 1px 6px; }
 /* The track under the session, for a phone only; the Track column has it on a wider screen. */
 .history-track { display: none; }
+/* An aborted session's tag in its heading: palace's tag, not the heading's gradient capitals. */
+.sessions-screen h1 .tag { -webkit-text-fill-color: currentColor; color: var(--p-text); text-transform: none; letter-spacing: normal; line-height: normal; vertical-align: middle; }
 .session-facts { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-xl); margin: 0; }
 .session-facts dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
 .session-facts > div { min-width: 0; }

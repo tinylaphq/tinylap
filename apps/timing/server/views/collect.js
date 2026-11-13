@@ -10,7 +10,7 @@ import { formatAgo } from '@tinylap/design/format-ago.js';
 import { controlRow, errorSummary } from './form-parts.js';
 import { html } from './html.js';
 import { layout } from './layout.js';
-import { crossingNow, liveSrc } from './transponder.js';
+import { crossingNow, crossingSlot, liveSrc } from './transponder.js';
 
 const byCode = (a, b) => a.code.length - b.code.length || a.code.localeCompare(b.code);
 const idOf = (code, form) => `collect-${code}-${form}`;
@@ -56,7 +56,7 @@ function row(request, m, t) {
   return html`<li class="collect-row${now ? ' is-crossing' : ''}" data-code="${t.code}">
   <span class="tp">${t.code}</span>
   <div class="collect-body">
-    <p class="collect-seen"><span class="crossing-now"${now ? null : html` hidden`}>Crossing now</span>${t.crossedAt === null ? null : html`<span class="crossed">Crossed <time datetime="${new Date(t.crossedAt).toISOString()}">${formatAgo(t.crossedAt, request.now())}</time></span>`}</p>
+    <p class="collect-seen"><span class="crossing-now"${crossingSlot(request, t.crossedAt)}>Crossing now</span>${t.crossedAt === null ? null : html`<span class="crossed">Crossed <time datetime="${new Date(t.crossedAt).toISOString()}">${formatAgo(t.crossedAt, request.now())}</time></span>`}</p>
     ${asking ? askRow(request, t, asking) : html`${driverForm}
     <form method="post" action="${base}/transponders/${t.code}" class="space-sm">
       <input type="hidden" name="returnTo" value="${back}&amp;added=1">${hidden}

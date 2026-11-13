@@ -20,6 +20,14 @@ export const CROSSING_NOW_MS = 10_000;
 /** Whether a transponder last crossed or passed `crossedAt` is crossing now: never for one that never crossed. @param {any} request @param {number | null} crossedAt */
 export const crossingNow = (request, crossedAt) => crossedAt !== null && request.now() - crossedAt <= CROSSING_NOW_MS;
 
+/**
+ * A "Crossing now" slot's attributes: hidden, or, lit, how long it stays lit (data-left-ms, the rest of
+ * the 10 s from the crossing), which tl-crossing-now holds it for. @param {any} request @param {number | null} crossedAt
+ */
+export const crossingSlot = (request, crossedAt) => (crossingNow(request, crossedAt)
+  ? html` data-left-ms="${Math.min(CROSSING_NOW_MS, Math.max(1, CROSSING_NOW_MS - (request.now() - /** @type {number} */ (crossedAt))))}"`
+  : html` hidden`);
+
 /** The live stream tl-crossing-now lights slots from. @param {any} request */
 export const liveSrc = (request) => `${request.space.base}/live`;
 const LIST_ID = 'assign-to';
@@ -31,7 +39,7 @@ const has = (codes) => (codes.length ? html`<span class="meta">has ${codes.join(
  * The form. `transponders` give each driver's "has 23, 31"; `crossingNow` shows the live line,
  * which is always there (hidden otherwise) for the page's live element to show.
  * @param {any} request
- * @param {{ base: string, code: string, crossingNow: boolean, drivers: { id: string, name: string, colour: string }[],
+ * @param {{ base: string, code: string, crossingNow: import('./html.js').Html, drivers: { id: string, name: string, colour: string }[],
  *   transponders: { code: string, driverId: string | null }[],
  *   values?: { name?: string }, errors?: { field?: string, message: string } | null, returnTo: string }} m
  */
@@ -48,7 +56,7 @@ export function transponderFormPage(request, { base, code, crossingNow, drivers,
     modules: ['public/elements/crossing-now.js'],
     body: html`<tl-crossing-now src="${liveSrc(request)}"><section class="container-narrow page-header space-md">
   <h1 title="${title}">Whose transponder is <span class="assign-big">${code}</span>?</h1>
-  <p class="subtitle pick-live crossing-now" data-code="${code}"${crossingNow ? null : html` hidden`}>It's on the track now.</p>
+  <p class="subtitle pick-live crossing-now" data-code="${code}"${crossingNow}>It's on the track now.</p>
   <div id="page-status">${errorSummary(errors, fieldId)}</div>
   <form method="post" action="${base}/transponders/${code}" class="space-md">
     <input type="hidden" name="returnTo" value="${returnTo}">
