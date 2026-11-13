@@ -17,6 +17,7 @@ let browser;
 let member;
 let decoder;
 let other;
+let workspace;
 // The decoder's clock runs with real time, so a passing's server time is now.
 const T0 = Date.now();
 let last = 0;
@@ -28,6 +29,7 @@ before(async () => {
   member = await app.login(await app.signUp('Ana'));
   for (const name of ['Ana', 'Ben Okafor']) await app.form(member, '/personal/drivers', { name });
   const me = await (await app.api(member, 'GET', '/auth/me')).json();
+  workspace = me.workspaces[0].id;
   decoder = await (await app.api(member, 'POST', `/workspaces/${me.workspaces[0].id}/decoders`, { name: 'Start line' })).json();
   other = await (await app.api(member, 'POST', `/workspaces/${me.workspaces[0].id}/decoders`, { name: 'Pit lane' })).json();
   // Crossed a minute ago, so nothing is lit by the server; a decoder of its own, so the others' clocks stay true.
@@ -84,5 +86,22 @@ test('an event older than the hold lights nothing', async (tc) => {
   await page.locator('.collect-row[data-code="41"].is-crossing').waitFor();
   assert.equal(await page.locator('.collect-row[data-code="66"]').getAttribute('class'), 'collect-row');
   assert.equal(await page.locator('[data-code="66"] .crossing-now').isHidden(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('a slot the server lit with 2 s left goes out after about 2 s, not a full hold', async (tc) => {
+  // Crossed 8 s before the page loads, on a decoder of its own.
+  const chicane = await (await app.api(member, 'POST', `/workspaces/${workspace}/decoders`, { name: 'Chicane' })).json();
+  clock.now = Date.now() - 8000;
+  await postPassings(app, chicane, [{ transponder: '77', t: 1000 }]);
+  const { page, errors } = await openLive(tc, '/personal/transponders/new');
+  const slot = page.locator('[data-code="77"] .crossing-now');
+  const left = Number(await slot.getAttribute('data-left-ms'));
+  assert.ok(left > 1000 && left <= 2500, `${left} ms left`);
+  const started = Date.now();
+  await slot.waitFor({ state: 'hidden', timeout: 8000 });
+  const took = Date.now() - started;
+  assert.ok(took <= left + 1500, `went out after ${took} ms, with ${left} ms left`);
+  assert.equal(await page.locator('.collect-row[data-code="77"]').getAttribute('class'), 'collect-row');
   assert.deepEqual(errors, []);
 });

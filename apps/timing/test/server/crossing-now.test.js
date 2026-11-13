@@ -43,7 +43,7 @@ test('the form: the line is a slot tl-crossing-now finds, lit by the server with
   const lit = await get('/personal/transponders/41');
   assert.match(lit, new RegExp(`<tl-crossing-now src="/personal/live">`));
   assert.match(lit, /<script type="module" src="\/public\/elements\/crossing-now\.js"><\/script>/);
-  assert.match(lit, /<p class="subtitle pick-live crossing-now" data-code="41">It's on the track now\.<\/p>/);
+  assert.match(lit, /<p class="subtitle pick-live crossing-now" data-code="41" data-left-ms="7000">It's on the track now\.<\/p>/);
   assert.match(await get('/personal/transponders/52'), /<p class="subtitle pick-live crossing-now" data-code="52" hidden>/);
   assert.match(await get('/personal/transponders/5E'), /<p class="subtitle pick-live crossing-now" data-code="5E" hidden>/);
 });
@@ -53,7 +53,7 @@ test("Setup's add list: lit within 10 s, crossed from the last crossing, and no 
   assert.match(body, new RegExp(`<tl-crossing-now src="/personal/live">\\s*<tl-frame id="drivers"`));
   assert.match(body, /<script type="module" src="\/public\/elements\/crossing-now\.js"><\/script>/);
   const summary = (code) => body.match(new RegExp(`<details class="pick-row" name="add-simon" data-code="${code}">\\s*<summary>([\\s\\S]*?)</summary>`))?.[1];
-  assert.match(summary('41'), /<span class="crossing-now">Crossing now<\/span><span class="crossed">crossed <time[^>]*>just now<\/time><\/span>/);
+  assert.match(summary('41'), /<span class="crossing-now" data-left-ms="7000">Crossing now<\/span><span class="crossed">crossed <time[^>]*>just now<\/time><\/span>/);
   assert.match(summary('52'), /<span class="crossing-now" hidden>Crossing now<\/span><span class="crossed">crossed <time[^>]*>8 min ago<\/time><\/span>/);
   assert.match(summary('5E'), /<span class="crossing-now" hidden>Crossing now<\/span><\/span>$/);
   assert.doesNotMatch(summary('5E'), /crossed/);
@@ -61,9 +61,18 @@ test("Setup's add list: lit within 10 s, crossed from the last crossing, and no 
 
 test('collect: the row is lit within 10 s, and the subtitle counts only those that crossed', async () => {
   const body = await get('/personal/transponders/new');
-  assert.match(body, /<li class="collect-row is-crossing" data-code="41">[\s\S]*?<span class="crossing-now">Crossing now<\/span>/);
+  assert.match(body, /<li class="collect-row is-crossing" data-code="41">[\s\S]*?<span class="crossing-now" data-left-ms="7000">Crossing now<\/span>/);
   assert.match(body, /<li class="collect-row" data-code="52">[\s\S]*?<span class="crossing-now" hidden>Crossing now<\/span><span class="crossed">Crossed <time[^>]*>8 min ago/);
   const typed = body.match(/<li class="collect-row" data-code="5E">[\s\S]*?<\/li>/)[0];
   assert.match(typed, /<p class="collect-seen"><span class="crossing-now" hidden>Crossing now<\/span><\/p>/);
   assert.match(body, /2 crossed the line and aren't assigned yet\./);
+});
+
+test('a lit slot says how long it stays lit: the rest of the 10 s, from the crossing', async () => {
+  for (const path of ['/personal/transponders/41', '/personal/setup', '/personal/transponders/new']) {
+    const left = [...(await get(path)).matchAll(/data-left-ms="(\d+)"/g)].map((m) => Number(m[1]));
+    assert.ok(left.length > 0, path);
+    for (const ms of left) assert.ok(ms > 0 && ms <= 10_000, `${path}: ${ms}`);
+  }
+  assert.doesNotMatch(await get('/personal/transponders/52'), /data-left-ms/);
 });

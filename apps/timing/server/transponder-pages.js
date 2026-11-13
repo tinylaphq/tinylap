@@ -17,7 +17,7 @@ import { spacePath } from './spaces.js';
 import { eventStream } from './stream.js';
 import { collectPage } from './views/collect.js';
 import { notFoundPage } from './views/notice.js';
-import { crossingNow, moveQuestionPage, transponderFormPage } from './views/transponder.js';
+import { crossingSlot, moveQuestionPage, transponderFormPage } from './views/transponder.js';
 
 const bare = (code) => code.replace(/^0+(?=.)/u, '');
 
@@ -41,7 +41,7 @@ function renderForm(request, status, transponder, { returnTo, values = {}, error
   return page(request, status, transponderFormPage(request, {
     base: request.space.base,
     code: transponder.code,
-    crossingNow: crossingNow(request, transponder.crossedAt),
+    crossingNow: crossingSlot(request, transponder.crossedAt),
     drivers: request.store.drivers(ws),
     transponders: request.store.transponders(ws),
     values,

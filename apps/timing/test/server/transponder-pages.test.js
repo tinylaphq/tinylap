@@ -60,7 +60,7 @@ test('a transponder that crossed in the last 10 s is on the track now', async ()
   app.store.seeTransponder(ws(), '52', Date.now() - 2000);
   app.store.insertPassing({ decoder: 'd1', boot: 'b', transponder: '52', t: 1, receivedAt: Date.now() - 2000, via: 'net', workspaceId: ws() });
   const body = await (await get(owner, `${base}/transponders/52`)).text();
-  assert.match(body, /<p class="subtitle pick-live crossing-now" data-code="52">It's on the track now\.<\/p>/);
+  assert.match(body, /<p class="subtitle pick-live crossing-now" data-code="52" data-left-ms="\d+">It's on the track now\.<\/p>/);
 });
 
 test('a number only typed in, just now, is not on the track: only a crossing or passing is', async () => {
