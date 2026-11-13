@@ -65,6 +65,33 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-track-name strong { color: var(--p-text); font-size: 1.15em; margin-right: var(--p-space-xs); }
 /* The direction as an open loop with one accent arrowhead (named tracks spec §4); its <title> says which. */
 .direction-icon { width: 2.5em; height: auto; vertical-align: -0.35em; color: var(--p-text); overflow: visible; }
+/* While a session runs (fastest lap spec §3.1): the track and its decoders on
+ * the left, the two times to beat on the right, one under the other. Each is
+ * time, mark, driver, in columns the two lines share; the name's column has a
+ * fixed width and cuts a long name, so a new holder never moves a line. */
+.board-track:has(> .board-track-times) {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name times" "decoders times"; align-items: center;
+}
+.board-track:has(> .board-track-times):not(:has(> .board-decoders)) { grid-template-areas: "name times"; }
+.board-track:has(> .board-track-times) > .board-track-name { grid-area: name; }
+.board-track:has(> .board-track-times) > .board-decoders { grid-area: decoders; }
+.board-track-times {
+  grid-area: times; display: grid; grid-template-columns: auto auto minmax(9em, 12em);
+  row-gap: var(--p-space-xs); align-items: baseline;
+  /* How much further a mark rises here than after a time of its own size:
+   * the strip's time is larger than the line's text (1.15em), so its digits
+   * sit higher. In the mark's em, so it scales with the board; fitted so the
+   * mark centres on the digits (marks.test.js pins it within 0.75px). */
+  --tl-mark-nudge: -0.075em;
+}
+.board-track-times > p { position: relative; display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; }
+.board-track-times .board-track-time { grid-column: 1; justify-self: end; }
+.board-track-times .mark { grid-column: 2; justify-self: start; margin-left: var(--p-space-xs); translate: 0 var(--tl-mark-nudge); }
+.board-track-times .driver { grid-column: 3; display: flex; align-items: baseline; min-width: 0; }
+.board-track-times .driver::before { flex: none; }
+.board-track-times .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* No lap yet: a muted dash where the time goes. */
+.board-track-times .is-empty .board-track-time { font-weight: 400; color: var(--p-text-muted); }
 .board-track-record { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); min-width: 0; }
 .board-track-label { font-weight: 700; }
 .board-track-time { font-weight: 700; font-size: 1.15em; }
@@ -176,6 +203,16 @@ tl-bridge { display: block; }
 .cut-words > .driver:only-child { display: flex; align-items: baseline; }
 .cut-words > .driver:only-child::before { flex: none; }
 .cut-words > .driver:only-child > .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* A time and who set it (fastest lap spec §7), wherever a lap time names its
+ * driver: the strip's two lines, the idle board's record card and lists, the
+ * session page's Fastest lap. The time is the value, the driver its credit:
+ * the time bold, the name lighter and quieter, a wide gap after the time (or
+ * its mark) and no word between. The square stays with the name. */
+.lap-credit .num { font-family: var(--p-font-mono); font-weight: 700; color: var(--p-text); }
+.lap-credit > :is(.num, .mark) + .driver { margin-inline-start: var(--p-space-md); }
+.lap-credit .driver { white-space: nowrap; }
+.lap-credit .driver::before { margin-right: var(--p-space-xs); }
+.lap-credit .driver-name { font-weight: 400; color: var(--p-text-secondary); }
 
 .board-feed { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); padding: var(--p-space-md); align-self: start; }
 .board-feed h2 { margin: 0 0 var(--p-space-sm); }
@@ -205,6 +242,15 @@ body.big .board {
 @media (min-width: 721px) { body.big .board:not(.is-idle) { grid-template-columns: minmax(0, 73fr) minmax(0, 27fr); } }
 body.big .board-clock-label { font-size: 0.6em; }
 body.big .board-track { font-size: 0.75em; }
+/* The two times to beat close up to the height of the track and its decoders beside them, so the board does not grow. */
+body.big .board-track-times { row-gap: 0; line-height: 1.35; }
+body.big .board-track:has(> .board-track-times) { padding-block: var(--p-space-xs); }
+/* A phone stacks the strip: the track, its decoders, then the two lines, at the left. */
+@media (max-width: 720px) {
+  .board-track:has(> .board-track-times) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "decoders" "times"; }
+  .board-track:has(> .board-track-times):not(:has(> .board-decoders)) { grid-template-areas: "name" "times"; }
+  .board-track-times { grid-template-columns: auto auto minmax(0, 1fr); margin-top: var(--p-space-xs); }
+}
 @media (max-width: 600px) {
   .board-track.is-record .board-track-record { justify-items: start; }
 }
@@ -512,7 +558,6 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .has-minute-laps .board-ranks li { grid-template-columns: 2em minmax(0, 1fr) 4.9em 1.8em; }
 .board-ranks li:last-child { border-bottom: 0; }
 .board-ranks .pos { font: 700 1em var(--p-font-mono); color: var(--p-text-muted); }
-.board-ranks .num { font-weight: 600; }
 .board-last-meta { margin: var(--p-space-sm) 0 0; font-size: 0.875em; color: var(--p-text-secondary); }
 .board-last-meta .tag { font-size: 10px; padding: 1px 6px; vertical-align: middle; }
 /* A club that has never driven: one card, the first thing to do as the button. */
@@ -746,14 +791,12 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .session-facts dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
 .session-facts > div { min-width: 0; }
 .session-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
-/* The fastest lap and who set it, a value and its credit (fastest lap spec
- * §7): the time in bold, then the driver, quieter, the colour by the name,
- * on one line; a name too long for it ends in "…". */
-.session-facts-fastest { display: flex; align-items: baseline; gap: var(--p-space-md); min-width: 0; }
-.session-facts-fastest .num { flex: none; font-weight: 700; }
-.session-facts-fastest .driver { display: flex; align-items: baseline; min-width: 0; }
-.session-facts-fastest .driver::before { flex: none; margin-right: var(--p-space-xs); }
-.session-facts-fastest .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--p-text-secondary); }
+/* The fastest lap and who set it (.lap-credit) on one line; a name too long for it ends in "…". */
+.session-facts .lap-credit { display: flex; align-items: baseline; min-width: 0; }
+.session-facts .lap-credit .num { flex: none; }
+.session-facts .lap-credit .driver { display: flex; align-items: baseline; min-width: 0; }
+.session-facts .lap-credit .driver::before { flex: none; }
+.session-facts .lap-credit .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .session-laps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: var(--p-space-md); }
 .session-laps .h3 { margin: 0 0 var(--p-space-sm); }
 /* A lap card is headed by the driver's name as it is written, not upper-cased. */

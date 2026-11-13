@@ -7,7 +7,9 @@
 // - On connect it opens an EventSource on #board-live's data-events, read
 //   each time it opens, so ?big carries over; on disconnect it closes it.
 // - Each 'board' message is swapped in for #board-live, keeping focus and an
-//   unchanged notice; tl-board itself is never replaced.
+//   unchanged notice; tl-board itself is never replaced. The strip's fastest
+//   lap line, a live region, stays and takes the new line's content, so a
+//   screen reader reads a new fastest lap.
 // - Shows the stream's state in the element its `status` attribute names:
 //   Live, Reconnecting… (the browser retries) or Disconnected. Once the
 //   stream gives up, it reloads the page after RELOAD_MS.
@@ -158,6 +160,17 @@ function swap(current, next) {
     const now = next.querySelector(selector);
     if (was && now && was.textContent === now.textContent) now.replaceWith(was);
   }
+  // The strip's fastest lap is a live region (fastest lap spec §4): it stays, and takes the new line, so a change is read out.
+  const was = current.querySelector('.board-fastest-line');
+  const now = next.querySelector('.board-fastest-line');
+  if (was && now) {
+    if (was.textContent !== now.textContent) {
+      for (const { name } of [...was.attributes]) if (!now.hasAttribute(name)) was.removeAttribute(name);
+      for (const { name, value } of now.attributes) was.setAttribute(name, value);
+      was.replaceChildren(...now.childNodes);
+    }
+    now.replaceWith(was);
+  }
   current.replaceWith(next);
   const target = focused && (next.contains(focused) ? focused : counterpart(next, focused));
   if (target instanceof HTMLElement && document.activeElement !== target) target.focus({ preventScroll: true });
@@ -262,7 +275,7 @@ class TlBoard extends HTMLElement {
     const text = (/** @type {string} */ selector) => clean(this.querySelector(selector)?.textContent);
     const now = text('.board-track-new .board-track-time');
     const holder = text('.board-track-new .driver-name');
-    // The board sets the beaten record's time, holder and date apart by a gap; plain text takes dots.
+    // The board sets the beaten record's time and holder apart by a gap; plain text takes dots.
     const parts = [...(this.querySelector('.board-track-beat')?.children ?? [])].map((part) => clean(part.textContent)).filter(Boolean);
     const beat = parts.length ? `Beat ${parts.join(' · ')}` : '';
     let note;

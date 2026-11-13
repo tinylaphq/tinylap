@@ -527,7 +527,7 @@ test('a race\'s page: FL on the session\'s fastest lap in its table and its laps
   assert.doesNotMatch(laps, /<td class="num">9\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"/, 'Dee\'s 9.500 was the fastest when it was driven, and keeps no mark');
   // The facts end with the fastest lap: its time, then who set it.
   const facts = /<dl class="session-facts">[\s\S]*?<\/dl>/.exec(body)[0];
-  assert.match(facts, /<div><dt>Track<\/dt>[\s\S]*?<\/div>\s*<div><dt>Fastest lap<\/dt><dd class="session-facts-fastest"><span class="num">9\.200<\/span> <span class="driver" [^>]*><span class="driver-name" title="Dee">Dee<\/span><\/span><\/dd><\/div>\s*<\/dl>/);
+  assert.match(facts, /<div><dt>Track<\/dt>[\s\S]*?<\/div>\s*<div><dt>Fastest lap<\/dt><dd class="lap-credit"><span class="num">9\.200<\/span> <span class="driver" [^>]*><span class="driver-name" title="Dee">Dee<\/span><\/span><\/dd><\/div>\s*<\/dl>/);
   assert.doesNotMatch(body, /class="crown"/, 'nobody here holds the record');
 });
 

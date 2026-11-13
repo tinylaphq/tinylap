@@ -90,7 +90,7 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
       <div><dt>Started</dt><dd>${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</dd></div>
       <div><dt>Ended</dt><dd>${ended ? safe(localTime(session.endedAt, 'time')) : 'Still running'}</dd></div>
       <div><dt>Track</dt><dd class="cut-words">${trackName(track, session.direction)}</dd></div>
-      ${best ? html`<div><dt>Fastest lap</dt><dd class="session-facts-fastest"><span class="num">${formatLap(best.lapMs)}</span> ${chip(drivers, best.driverId)}</dd></div>` : null}
+      ${best ? html`<div><dt>Fastest lap</dt><dd class="lap-credit"><span class="num">${formatLap(best.lapMs)}</span> ${chip(drivers, best.driverId)}</dd></div>` : null}
     </dl>
   </div>
   <section class="space-md" aria-labelledby="standings-title">

@@ -72,12 +72,14 @@ const measure = () => {
     return { top: baseline - m.actualBoundingBoxAscent, bottom: baseline + m.actualBoundingBoxDescent, right: rect.right };
   };
   const marks = [...document.querySelectorAll('.mark')].map((mark) => {
+    // In a column of its own after its time's, or on the strip's line after the time.
     const cell = mark.closest('.mark-cell');
-    const time = ink(cell.previousElementSibling);
+    const before = cell ? cell.previousElementSibling : mark.parentElement.querySelector('.board-track-time');
+    const time = ink(before);
     const letters = ink(mark);
     const box = mark.getBoundingClientRect();
     return {
-      where: `${cell.closest('table, ol').classList[0]} ${cell.previousElementSibling.textContent.trim()} ${mark.textContent}`,
+      where: `${cell ? cell.closest('table, ol').classList[0] : 'board-track'} ${before.textContent.trim()} ${mark.textContent}`,
       off: (box.top + box.bottom) / 2 - (time.top + time.bottom) / 2,
       padTop: letters.top - box.top,
       padBottom: box.bottom - letters.bottom,
@@ -163,7 +165,7 @@ test('on the session page a mark follows its time and centres on its digits, in 
     assert.deepEqual(m.marks.filter((x) => x.where.endsWith('FL')).map((x) => x.where.split(' ')[0]), ['board-table', 'lap-table'], 'FL once in the table, once in the laps');
     // The fact: the time, then the driver, a gap apart, on one baseline.
     const fact = await page.evaluate(() => {
-      const dd = document.querySelector('.session-facts-fastest');
+      const dd = document.querySelector('.session-facts .lap-credit');
       const time = dd.querySelector('.num').getBoundingClientRect();
       const driver = dd.querySelector('.driver').getBoundingClientRect();
       return { gap: driver.left - time.right, text: dd.textContent.replace(/\s+/g, ' ').trim(), weight: getComputedStyle(dd.querySelector('.driver-name')).fontWeight };

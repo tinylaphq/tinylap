@@ -196,7 +196,7 @@ test('on and granted, a new record shows one notification with its text and tag;
     assert.deepEqual(more, []);
     assert.equal(note.title, 'New track record');
     assert.equal(note.tag, `tinylap-record-${seq}`);
-    assert.match(note.body, new RegExp(`^${formatLap(lapMs).replace('.', '\\.')} · Ana\\nBeat ${formatLap(beat).replace('.', '\\.')} · Ana · \\S.*$`));
+    assert.match(note.body, new RegExp(`^${formatLap(lapMs).replace('.', '\\.')} · Ana\\nBeat ${formatLap(beat).replace('.', '\\.')} · Ana$`));
     await page.evaluate(() => {
       for (const { type, listener } of window.notes[0].note.listeners) if (type === 'click') listener(new Event('click'));
     });
