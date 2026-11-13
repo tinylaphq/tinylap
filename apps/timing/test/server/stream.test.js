@@ -104,3 +104,19 @@ test('the request log never holds a watchers token', async () => {
   assert.match(lines[2], /^GET \/watch\/…\/events \d{3} \d+ms$/);
   assert.ok(lines.every((line) => !line.includes(token)));
 });
+
+test('the rows\' moments reach the board pages only, not the API, the stream or the watchers\' JSON', async () => {
+  await tap();
+  await tap();
+  clock.now -= 3000;
+  await tap();
+  const { token } = await (await app.api(member, 'POST', path('/watch-token'))).json();
+  assert.deepEqual(Object.values(app.engine.snapshot(office.id, { moments: true }).moments).map((m) => m.mark), ['fl'], 'a faster lap: FL');
+  assert.equal('moments' in await (await app.api(member, 'GET', path(''))).json(), false, 'GET /workspaces/{workspace}');
+  assert.equal('moments' in await (await fetch(`${app.base}/watch/${token}`)).json(), false, 'the watchers\' JSON');
+  const it = events(await app.api(member, 'GET', path('/live')));
+  assert.equal('moments' in (await next(it)).data, false, 'the live stream\'s snapshot');
+  await it.return();
+  assert.match(await (await app.api(member, 'GET', `/clubs/${office.id}/board`)).text(), / data-moment="\d+ fl"/, 'the board');
+  assert.match(await (await fetch(`${app.base}/watch/${token}`, { headers: { accept: 'text/html' } })).text(), / data-moment="\d+ fl"/, 'the watchers\' board');
+});
