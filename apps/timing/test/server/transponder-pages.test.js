@@ -45,8 +45,10 @@ test('the form: each driver a button with what they have, a new driver, and Not 
   assert.match(body, /<button type="submit" name="driver" value="mia" class="pick-button"><span class="avatar is-sm" style="--c: #00b3c7" aria-hidden="true">MK<\/span><span class="visually-hidden">Assign to <\/span><span class="pick-name">Mia Kraus<\/span><span class="meta">has 23, 31<\/span><\/button>/);
   assert.match(body, /<button type="submit" name="driver" value="simon" class="pick-button">.*>S<\/span>.*<span class="meta">has 17<\/span><\/button>/);
   assert.match(body, /<label for="new-driver-name">Or a new driver<\/label>/);
-  assert.match(body, /<input type="text" id="new-driver-name" name="name" value=""/);
-  assert.match(body, /<button type="submit" name="driver" value="" class="btn btn-primary">Assign to a new driver<\/button>/);
+  assert.match(body, /<input type="text" id="new-driver-name" name="name" value=""[^>]* form="new-driver"/);
+  // The new driver is a form of its own, so Enter in the name submits it, not the first driver.
+  assert.match(body, /<button type="submit" name="driver" value="" form="new-driver" class="btn btn-primary">Assign to a new driver<\/button>/);
+  assert.match(body, new RegExp(`<form method="post" action="${base}/transponders/41" id="new-driver" hidden><input type="hidden" name="returnTo" value="${base}/board"></form>`));
   assert.match(body, new RegExp(`<input type="hidden" name="returnTo" value="${base}/board">`));
   assert.match(body, new RegExp(`<a href="${base}/board">Not now</a>`));
   assert.doesNotMatch(body, /type="radio"|name="label"/);

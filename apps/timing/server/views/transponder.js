@@ -2,15 +2,18 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// "Whose transponder is 41?" (drivers and transponders spec §3.3, §3.4): one form
-// where each driver is a submit button, so one click assigns, and a new driver
-// goes in by name. Assigning someone else's asks first, on a page of its own.
+// "Whose transponder is 41?" (drivers and transponders spec §3.3, §3.4): a form
+// where each driver is a submit button, so one click assigns, and a form of its
+// own where a new driver goes in by name. Assigning someone else's asks first, on a page of its own.
 import { avatar } from './driver.js';
 import { errorSummary, fieldNotes } from './form-parts.js';
 import { html } from './html.js';
 import { layout } from './layout.js';
 
 const NAME_ID = 'new-driver-name';
+// The new driver's name and button belong to a form of their own (their form attribute), so Enter in
+// the name submits its button, not the first driver's.
+const NEW_FORM_ID = 'new-driver';
 /** How long after a crossing or passing a page shows its transponder as crossing now. */
 export const CROSSING_NOW_MS = 10_000;
 
@@ -55,14 +58,15 @@ export function transponderFormPage(request, { base, code, crossingNow, drivers,
       <p class="pick-group"><label for="${NAME_ID}">Or a new driver</label></p>
       <div class="pick-new space-sm">
         <div class="pick-new-row">
-          <input type="text" id="${NAME_ID}" name="name" value="${values.name ?? ''}" maxlength="60" placeholder="Name" autocomplete="off"${described}>
-          <button type="submit" name="driver" value="" class="btn btn-primary">Assign to a new driver</button>
+          <input type="text" id="${NAME_ID}" name="name" value="${values.name ?? ''}" maxlength="60" placeholder="Name" autocomplete="off" form="${NEW_FORM_ID}"${described}>
+          <button type="submit" name="driver" value="" form="${NEW_FORM_ID}" class="btn btn-primary">Assign to a new driver</button>
         </div>
         ${fieldNotes({ id: NAME_ID, name: 'name', error: nameError })}
       </div>
     </div>
     <p><a href="${returnTo}">Not now</a></p>
   </form>
+  <form method="post" action="${base}/transponders/${code}" id="${NEW_FORM_ID}" hidden><input type="hidden" name="returnTo" value="${returnTo}"></form>
 </section></tl-crossing-now>`,
   });
 }

@@ -70,3 +70,18 @@ for (const [size, viewport, code, name] of [['laptop', { width: 1280, height: 80
     assert.deepEqual(errors, []);
   });
 }
+
+test('Enter in the new driver field assigns to a new driver of that name, not to the first driver', async (tc) => {
+  await app.form(member, '/personal/drivers', { name: 'Abe' });
+  const { context, page, errors } = await pageAs(browser, app, member);
+  tc.after(() => context.close());
+  await page.goto('/personal/transponders/74');
+  await page.getByLabel('Or a new driver').fill('Esme');
+  await page.getByLabel('Or a new driver').press('Enter');
+  await Promise.race([page.waitForURL((url) => !url.pathname.endsWith('/transponders/74')), page.getByText('Pick a driver, or name a new one.').first().waitFor()]);
+  assert.doesNotMatch(new URL(page.url()).pathname, /\/transponders\/74$/, await page.locator('#page-status').innerText());
+  const esme = app.store.drivers(ws).find((d) => d.name === 'Esme');
+  assert.ok(esme, 'a new driver Esme');
+  assert.equal(app.store.transponders(ws).find((x) => x.code === '74')?.driverId, esme.id);
+  assert.deepEqual(errors, []);
+});
