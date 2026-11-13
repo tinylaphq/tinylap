@@ -453,15 +453,30 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   // A practice: its clock counts up under "Started 14:32"; Haris sets the first record, then beats it.
   clock.now = 1_000_000_000_000 + 5_100_000;
   const { session } = app.engine.start(club.id, { kind: 'practice' });
+  // The strip's two times to beat (fastest lap spec §3.1): before any lap counts, a muted dash and the mark, no driver, and the line says why.
+  const times = (body) => body.slice(body.indexOf('<div class="board-track-times">'), body.indexOf('</div>', body.indexOf('<div class="board-track-times">')));
+  /** What the strip's lines show on screen: hidden text and marks' titles left out. */
+  const shown = (line) => line.replace(/<span class="visually-hidden">[^<]*<\/span>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const body of Object.values(await screens())) {
+    const empty = times(body);
+    assert.match(empty, /<p class="board-record-line lap-credit is-empty" title="No record yet"><span class="visually-hidden">Track record: no record yet<\/span><span class="num board-track-time" aria-hidden="true">—<\/span><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><\/p>/);
+    assert.match(empty, /<p class="board-fastest-line lap-credit is-empty" title="No laps yet" role="status"><span class="visually-hidden">Fastest lap: no laps yet<\/span><span class="num board-track-time" aria-hidden="true">—<\/span><abbr class="mark mark-fl" title="Fastest lap of the session" aria-hidden="true">FL<\/abbr><\/p>/);
+    assert.deepEqual([...empty.matchAll(/<p [^>]*>([\s\S]*?)<\/p>/g)].map((m) => shown(m[1])), ['— TR', '— FL'], 'no words on screen');
+  }
   passIn(club.id, 5_101_000, '61');
   passIn(club.id, 5_101_500, '62');
   passIn(club.id, 5_109_000, '61');
   passIn(club.id, 5_110_500, '62');
   s = await screens();
-  assert.match(s.board, /Track record/);
   assert.doesNotMatch(s.board, /data-record-new/);
-  // The record's time, holder and date apart by the line's gap, with no literal dots.
-  assert.match(s.board, /<p class="board-track-record"><span class="board-track-label">Track record<\/span> <span class="num board-track-time">8\.000<\/span> <span class="board-track-by cut-words"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span> <span class="board-track-by cut-words"><tl-local-time format="date">/);
+  // Each line is time, mark, driver, and no words on screen; the line's name is for screen readers; the record's date has left the board.
+  for (const body of Object.values(s)) {
+    const lines = times(body);
+    assert.match(lines, /<p class="board-record-line lap-credit"><span class="visually-hidden">Track record <\/span><span class="num board-track-time">8\.000<\/span><span class="visually-hidden">, <\/span><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/p>/);
+    assert.match(lines, /<p class="board-fastest-line lap-credit" role="status"><span class="visually-hidden">Fastest lap <\/span><span class="num board-track-time">8\.000<\/span><span class="visually-hidden">, <\/span><abbr class="mark mark-fl" title="Fastest lap of the session" aria-hidden="true">FL<\/abbr><span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/p>/);
+    assert.deepEqual([...lines.matchAll(/<p [^>]*>([\s\S]*?)<\/p>/g)].map((m) => shown(m[1])), ['8.000 TR Haris', '8.000 FL Haris']);
+    assert.doesNotMatch(lines, /tl-local-time|board-track-label/);
+  }
   passIn(club.id, 5_116_500, '61');
   const recordNew = app.engine.snapshot(club.id).recordNew;
   assert.equal(recordNew?.lapMs, 7500);
@@ -475,6 +490,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.match(head, /8\.000/, 'the record it beat');
     assert.match(head, /<tl-local-time format="date">/);
     assert.doesNotMatch(head, /·/);
+    assert.doesNotMatch(head, /board-track-times|board-fastest-line/, 'the record lap is the fastest lap: its line waits while the strip shows the record');
     assert.doesNotMatch(body, NOTICE);
     // The crown only after the holder's name, TR alone on his best (the fastest lap too), PB on Mia's; no tint.
     assert.equal(body.match(/class="crown"/g).length, 1);
@@ -498,7 +514,11 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.doesNotMatch(body, /data-record-new|is-record|New track record|No session yet|Last laps|board-title|board-unknown/);
     const head = body.slice(body.indexOf('<header class="board-track'), body.indexOf('</header>', body.indexOf('<header class="board-track')));
     assert.doesNotMatch(head, /Track record|7\.500/, 'the record is below, once');
+    assert.doesNotMatch(body, /board-track-times|board-fastest-line/, 'no times to beat on the idle board');
     const hero = part(body, '<section class="board-hero"');
+    // A time and who set it (fastest lap spec §7): the record card and both lists.
+    assert.match(hero, /<div class="board-hero-record lap-credit">/);
+    assert.equal(body.match(/<ol class="board-ranks lap-credit">/g).length, 2);
     assert.match(hero, /<h1 class="board-hero-label">Track record<\/h1>\s*<p class="num board-hero-time">7\.500<\/p>/);
     assert.match(hero, /<p class="board-hero-by cut-words"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span> set <tl-local-time format="datetime-short">[\s\S]*?, beat their own <span class="num">8\.000<\/span><\/p>/, 'his own record: their own, not his name');
     const fastest = part(body, '<section class="board-fastest"');

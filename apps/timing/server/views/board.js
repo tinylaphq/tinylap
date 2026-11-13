@@ -13,7 +13,7 @@ import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
 import { directionIcon } from './direction.js';
-import { chip as driverChip, idleNotice, marks, marksHead, posHead, startPracticeForm, tableClasses, timeWidths } from './marks.js';
+import { chip as driverChip, idleNotice, markLetters, marks, marksHead, posHead, startPracticeForm, tableClasses, timeWidths } from './marks.js';
 
 const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
 
@@ -29,6 +29,39 @@ const chip = (snap, id, options) => driverChip(snap.drivers, id, options);
 /** A record's time, holder and date, apart by their line's gap, not by dots: "7.412  Haris  12 Oct". */
 const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by cut-words">${chip(snap, r.driverId)}</span> <span class="board-track-by cut-words">${safe(localTime(r.at, 'date'))}</span>`;
 
+/** The session's fastest lap's row: the fastest counted best, the earlier lap on a tie (fastest lap spec §2). */
+function fastestRow(standings) {
+  let best = null;
+  for (const row of standings) {
+    if (row.bestMs !== null && (!best || row.bestMs < best.bestMs || (row.bestMs === best.bestMs && row.bestAt < best.bestAt))) best = row;
+  }
+  return best;
+}
+
+/**
+ * One of the strip's two times to beat (fastest lap spec §3.1): the time, its
+ * mark, the driver, and no words on screen; the line's name is for screen
+ * readers. Without a lap, a muted dash and the mark, and the line's title says why.
+ */
+function toBeat(snap, { kind, letters, title, name, none }, lap, attributes = null) {
+  const mark = markLetters(letters.toLowerCase(), letters, title);
+  if (!lap) return html`<p class="board-${kind}-line lap-credit is-empty" title="${none}"${attributes}><span class="visually-hidden">${name}: ${none.toLowerCase()}</span><span class="num board-track-time" aria-hidden="true">—</span>${mark}</p>`;
+  return html`<p class="board-${kind}-line lap-credit"${attributes}><span class="visually-hidden">${name} </span><span class="num board-track-time">${formatLap(lap.lapMs)}</span><span class="visually-hidden">, </span>${mark}${chip(snap, lap.driverId)}</p>`;
+}
+
+/**
+ * The strip's two times to beat while a session runs: the track record, then
+ * the session's fastest lap. The fastest lap's line is a polite live region,
+ * which tl-board keeps across swaps, so a new fastest lap is read out.
+ */
+function timesToBeat(snap) {
+  const best = fastestRow(snap.standings);
+  return html`<div class="board-track-times">
+    ${toBeat(snap, { kind: 'record', letters: 'TR', title: 'Track record', name: 'Track record', none: 'No record yet' }, snap.record)}
+    ${toBeat(snap, { kind: 'fastest', letters: 'FL', title: 'Fastest lap of the session', name: 'Fastest lap', none: 'No laps yet' }, best && { lapMs: best.bestMs, driverId: best.driverId }, html` role="status"`)}
+  </div>`;
+}
+
 /** One item per decoder heard in the last 30 minutes, beside the track (decoder connections spec §6). */
 function decoderStates(snap) {
   const words = { reporting: 'reporting', idle: 'idle', offline: 'not reporting' };
@@ -37,11 +70,13 @@ function decoderStates(snap) {
 }
 
 /**
- * The track, its direction as an icon, and its record, above every board
- * (records spec §5.1, named tracks spec §4). While nobody races the record is
- * the big thing below, so the header leaves it out. While a record has just
+ * The track, its direction as an icon, and while a session runs the two times
+ * to beat, above every board (records spec §5.1, named tracks spec §4,
+ * fastest lap spec §3.1). While nobody races the record is the big thing
+ * below, so the header leaves them out. While a record has just
  * fallen it is in the record state (§4.3): the new time and holder in the
- * record colour, and the record it beat. While nobody races it is the top
+ * record colour, and the record it beat; the record lap is the fastest lap
+ * too, so that line waits until the state is over. While nobody races it is the top
  * band of the record card (`band`, drivers and transponders spec §4).
  */
 function trackHeader(snap, { band = false } = {}) {
@@ -58,12 +93,9 @@ function trackHeader(snap, { band = false } = {}) {
   ${states}
 </header>`;
   }
-  const record = !snap.session ? null
-    : snap.record ? html`<p class="board-track-record"><span class="board-track-label">Track record</span> ${recordLine(snap, snap.record)}</p>`
-      : html`<p class="board-track-record"><span class="board-track-label">No record yet</span></p>`;
   return html`<header class="board-track${band ? ' is-band' : ''}">
   ${where}
-  ${record}
+  ${snap.session ? timesToBeat(snap) : null}
   ${states}
 </header>`;
 }
@@ -99,10 +131,7 @@ function markers(snap, session, standings) {
   const pbs = new Map(here ? snap.bests.map((b) => [b.driverId, b]) : []);
   const same = (lap, row) => lap !== null && lap !== undefined && row.bestMs !== null && lap.lapMs === row.bestMs && lap.at === row.bestAt;
   // The session's fastest lap: one row only, the earlier lap on a tie.
-  let best = null;
-  for (const row of standings) {
-    if (row.bestMs !== null && (!best || row.bestMs < best.bestMs || (row.bestMs === best.bestMs && row.bestAt < best.bestAt))) best = row;
-  }
+  const best = fastestRow(standings);
   const fastest = best && { driverId: best.driverId, lapMs: best.bestMs, at: best.bestAt };
   return {
     /** Whether the row's driver holds the record: their name gets the crown. */
@@ -194,7 +223,7 @@ function hero(request, snap, members, band) {
   // While a record has just fallen the card says so like the strip, so tl-board can play its moment here.
   return html`<section class="board-hero"${snap.recordNew ? html` data-record-new="${snap.recordNew.seq}"` : null}>
   ${band}
-  <div class="board-hero-record">
+  <div class="board-hero-record lap-credit">
     <h1 class="board-hero-label">Track record</h1>
     ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
     <p class="board-hero-by cut-words">${chip(snap, r.driverId)} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? beaten(snap, r) : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
@@ -244,7 +273,7 @@ function fastest(snap) {
   const isRecord = (b) => snap.record?.driverId === b.driverId && snap.record?.lapMs === b.bestMs;
   return html`<section class="board-fastest" aria-labelledby="board-fastest-title">
   <h2 class="h3" id="board-fastest-title">Fastest on this track</h2>
-  <ol class="board-ranks">${snap.fastest.map((b, i) => html`<li><span class="pos">${i + 1}</span><span class="board-driver">${chip(snap, b.driverId)}</span><span class="num">${formatLap(b.bestMs)}</span>${marks({ lapMs: b.bestMs, isRecord: isRecord(b), isPb: false }, { list: true })}</li>`)}</ol>
+  <ol class="board-ranks lap-credit">${snap.fastest.map((b, i) => html`<li><span class="pos">${i + 1}</span><span class="board-driver">${chip(snap, b.driverId)}</span><span class="num">${formatLap(b.bestMs)}</span>${marks({ lapMs: b.bestMs, isRecord: isRecord(b), isPb: false }, { list: true })}</li>`)}</ol>
 </section>`;
 }
 
@@ -256,7 +285,7 @@ function lastSession(request, snap, link) {
   const ended = r.session.endedAt ?? r.session.createdAt;
   return html`<section class="board-last" aria-labelledby="board-last-title">
   <h2 class="h3" id="board-last-title">Last session</h2>
-  ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId, { holder: m.holder(row) })}</span><span class="num">${formatLap(row.bestMs)}</span>${m.mark(row, true)}</li>`)}</ol>`}
+  ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks lap-credit">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId, { holder: m.holder(row) })}</span><span class="num">${formatLap(row.bestMs)}</span>${m.mark(row, true)}</li>`)}</ol>`}
   <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'datetime-short'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${link ? html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>` : null}</p>
 </section>`;
 }

@@ -7,8 +7,11 @@
 // and the line that says a car is on the track with no session running.
 import { html } from './html.js';
 
+/** A mark's letters for the eye, its name in their title; a screen reader skips it. */
+export const markLetters = (kind, letters, title) => html`<abbr class="mark mark-${kind}" title="${title}" aria-hidden="true">${letters}</abbr>`;
+
 /** A mark: its letters for the eye, its full name for a screen reader, which mostly skips an abbr's title. */
-const mark = (kind, letters, title, name = title) => html`<abbr class="mark mark-${kind}" title="${title}" aria-hidden="true">${letters}</abbr><span class="visually-hidden">${name}</span>`;
+const mark = (kind, letters, title, name = title) => html`${markLetters(kind, letters, title)}<span class="visually-hidden">${name}</span>`;
 
 /**
  * The mark of a lap time, in a narrow column of its own after the time's, so
