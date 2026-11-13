@@ -56,7 +56,7 @@ main {
   touch-action: none;
 }
 
-#canvas:focus-visible { outline: var(--p-border-width) solid var(--p-accent-2); outline-offset: -2px; }
+#canvas:focus-visible { outline: var(--p-border-width) solid var(--p-accent-2); outline-offset: calc(-1 * var(--p-border-width)); }
 
 /* Only mats and port handles are interactive. Letting the decorative layers
    take hit-tests made the drop target flicker during a drag. */
@@ -412,7 +412,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  padding: var(--p-space-xs);
   line-height: 0;
 }
 .btn-icon svg { width: 14px; height: 14px; display: block; }
@@ -452,7 +452,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   border-color: var(--p-text);
 }
 .chips-toggle {
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: var(--p-space-xs);
   font-size: 11px; color: var(--p-text-muted); cursor: pointer;
 }
 
@@ -483,7 +483,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--p-surface);
   border-left: var(--p-space-xs) solid var(--p-accent-1);
 }
 @media (max-width: 700px) { .library-current { display: none; } }
@@ -610,10 +610,10 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
     row-gap: var(--p-space-sm);
     padding: var(--p-space-sm) var(--p-space-md);
   }
-  .navbar-brand { min-height: 32px; }
+  .navbar-brand { min-height: var(--p-control-height-sm); }
   /* Pinned beside the brand rather than moved with `order`, which palace's
      `.btn { transition: all }` would animate on every resize. */
-  .account { position: absolute; top: var(--p-space-sm); right: var(--p-space-md); min-height: 32px; padding-left: 0; border-left: 0; }
+  .account { position: absolute; top: var(--p-space-sm); right: var(--p-space-md); min-height: var(--p-control-height-sm); padding-left: 0; border-left: 0; }
   .navbar-right { flex: 1 1 100%; flex-wrap: wrap; gap: var(--p-space-xs); }
   .navbar-right > .btn { padding: 6px 10px; }
 }
