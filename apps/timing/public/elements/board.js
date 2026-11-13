@@ -32,9 +32,10 @@
 //   motion is reduced, jumps a copy of the crown from the old holder's row to
 //   the new holder's (whose own crown waits, hidden, until it lands), and
 //   plays a crown and a burst behind the new time on the card that carries
-//   data-record-new, then bounces the time. All of it aria-hidden, absolute
-//   and clipped to the card; nothing stays. A swap during it carries it over
-//   to the new card; a new record or disconnecting stops it.
+//   data-record-new (on the shallow strip, the burst alone), then bounces
+//   the time. All of it aria-hidden, absolute and clipped to the card;
+//   nothing stays. A swap during it carries it over to the new card; a new
+//   record or disconnecting stops it.
 // Without EventSource there is no stream; without JavaScript the page
 // reloads every ten seconds (<noscript> refresh).
 
@@ -69,10 +70,10 @@ function crownCopy(crown, className) {
 
 /**
  * The record card's part (the mockup's heroFall): behind the time a crown
- * pops up, a little wider than the digits, its base on their baseline, its
- * peaks inside the card, and grows slowly while it fades; a burst of twelve
- * bars shoots out with it, gone within the first second; then the time
- * bounces. Starts `elapsed` ms in, when a swap carries it over.
+ * pops up (on the idle record card; the strip is too shallow), a little
+ * wider than the digits, its base on their baseline, its peaks inside the
+ * card, and grows slowly while it fades; a burst of twelve bars shoots out
+ * with it, gone within the first second; then the time bounces. Starts `elapsed` ms in, when a swap carries it over.
  * @param {HTMLElement} time @param {Element | null} crown @param {number} elapsed
  */
 function lightCard(time, crown, elapsed) {
@@ -97,7 +98,8 @@ function lightCard(time, crown, elapsed) {
     return ray;
   });
   at.append(...rays);
-  const big = crown ? crownCopy(crown, 'fx-crown') : null;
+  // The strip is too shallow for a crown behind its digits: there, only the burst and the bounce.
+  const big = crown && card.matches('.board-hero-record') ? crownCopy(crown, 'fx-crown') : null;
   if (big) {
     Object.assign(big.style, { width: `${w}px`, height: `${ch}px` });
     at.append(big);
@@ -126,20 +128,16 @@ function lightCard(time, crown, elapsed) {
     ], timing));
   });
   // The finale: the time bounces in front, about its digits' middle, wherever the card aligns them.
-  // Light digits (the strip's) take the card's --fx-halo while the crown is behind them, so they still read.
   const tr = time.getBoundingClientRect();
   const transformOrigin = `${digits.left + digits.width / 2 - tr.left}px ${digits.top + digits.height / 2 - tr.top}px`;
-  const halo = getComputedStyle(time).getPropertyValue('--fx-halo').trim();
-  const shade = (/** @type {boolean} */ on) => halo ? { textShadow: on ? halo : '0 0 0 transparent' } : {};
   animations.push(time.animate([
-    { transform: 'scale(1)', transformOrigin, ...shade(false) },
-    { transform: 'scale(1)', transformOrigin, offset: 0.14, ...shade(true) },
-    { transform: 'scale(1)', transformOrigin, offset: 0.34, ...shade(true) },
-    { transform: 'scale(1.2)', transformOrigin, offset: 0.46, easing: 'cubic-bezier(.3,0,.4,1)', ...shade(true) },
-    { transform: 'scale(0.95)', transformOrigin, offset: 0.56, ...shade(true) },
-    { transform: 'scale(1.06)', transformOrigin, offset: 0.64, ...shade(true) },
-    { transform: 'scale(1)', transformOrigin, offset: 0.72, ...shade(true) },
-    { transform: 'scale(1)', transformOrigin, ...shade(false) },
+    { transform: 'scale(1)', transformOrigin },
+    { transform: 'scale(1)', transformOrigin, offset: 0.34 },
+    { transform: 'scale(1.2)', transformOrigin, offset: 0.46, easing: 'cubic-bezier(.3,0,.4,1)' },
+    { transform: 'scale(0.95)', transformOrigin, offset: 0.56 },
+    { transform: 'scale(1.06)', transformOrigin, offset: 0.64 },
+    { transform: 'scale(1)', transformOrigin, offset: 0.72 },
+    { transform: 'scale(1)', transformOrigin },
   ], { duration: MOMENT_MS }));
   for (const a of animations) a.currentTime = elapsed;
   return { fx, animations };

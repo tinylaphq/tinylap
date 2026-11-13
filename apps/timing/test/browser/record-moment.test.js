@@ -95,6 +95,10 @@ test('a falling record lights the record card and the crown jumps to the new hol
   const seq = await newRecord('20');
   await page.locator('.hero-fx').waitFor({ state: 'attached' });
   assert.equal(await page.locator(`[data-record-new="${seq}"] .hero-fx`).count(), 1, 'on the card that says so');
+  // On the strip, the burst and the bounce: no crown behind its digits, it is too shallow.
+  assert.equal(await page.locator('.hero-fx .fx-ray').count(), 12);
+  assert.equal(await page.locator('.hero-fx .fx-crown').count(), 0);
+  assert.equal(await page.locator(`[data-record-new="${seq}"] .board-track-new .board-track-time`).evaluate((e) => e.getAnimations().length), 1, 'the time bounces');
   // The crown flies on its own; the new holder's waits, hidden, until it lands.
   await page.locator('.crown-flyer').waitFor({ state: 'attached' });
   const crown = page.locator('.board-table tr', { hasText: 'Ben' }).locator('.crown');
@@ -167,5 +171,28 @@ test('the big screen plays it too, and a board taken away stops it', async (t) =
   await page.locator('tl-board').evaluate((board) => board.remove());
   assert.equal(await page.evaluate(() => document.querySelectorAll('.hero-fx, .crown-flyer').length
     + document.getAnimations().filter((a) => !(a instanceof CSSAnimation || a instanceof CSSTransition)).length), 0, 'no element and no script animation left');
+  assert.deepEqual(errors, []);
+});
+
+test('the record card, when it carries the record, plays the crown behind its time', async (t) => {
+  // A record falls only during a session; the record card carries it once that session ends within the window.
+  const seq = await newRecord('10');
+  app.engine.end(ws, app.engine.snapshot(ws).session.id);
+  const { context, page, errors, added } = await boardPage();
+  t.after(() => context.close());
+  await page.locator(`.board-hero[data-record-new="${seq}"]`).waitFor();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.deepEqual(await added(), [], 'seen on load: nothing plays');
+  await page.locator('tl-board').evaluate((board) => /** @type {any} */ (board).playMoment(/** @type {any} */ (board).recordSeq(), null));
+  const fx = page.locator(`.board-hero[data-record-new="${seq}"] .board-hero-record > .hero-fx`);
+  assert.equal(await fx.count(), 1);
+  assert.equal(await fx.locator('.fx-ray').count(), 12);
+  const crown = fx.locator('svg.fx-crown');
+  assert.deepEqual(await crown.evaluate((c) => [c.getAttribute('aria-hidden'), c.querySelector('title'), getComputedStyle(c).stroke]), ['true', null, 'none'], 'solid, no outline, for the eye only');
+  // Its peaks inside the card.
+  const [peaks, top] = await Promise.all([crown.evaluate((c) => c.getBoundingClientRect().top), fx.evaluate((e) => e.getBoundingClientRect().top)]);
+  assert.ok(peaks >= top - 1);
+  assert.equal(await page.locator('.board-hero-time').evaluate((e) => e.getAnimations().length), 1, 'the time bounces');
+  await settled(page);
   assert.deepEqual(errors, []);
 });

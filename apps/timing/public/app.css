@@ -547,10 +547,10 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 
 /* The record moment (drivers and transponders spec §4), played by tl-board on
  * the card that says a record has just fallen: behind the new time a big
- * crown pops up with a hard-edged burst, and the time bounces as the finale.
- * It sits behind the card's content, clipped to the card, and moves nothing;
- * nothing stays. The crown's jump from the old holder's row to the new one's
- * flies over the page. */
+ * crown pops up with a hard-edged burst (on the strip, the burst alone), and
+ * the time bounces as the finale. It sits behind the card's content, clipped
+ * to the card, and moves nothing; nothing stays. The crown's jump from the
+ * old holder's row to the new one's flies over the page. */
 .board-hero-record, .board-track.is-record { position: relative; }
 :is(.board-hero-record, .board-track.is-record) > :not(.hero-fx) { position: relative; z-index: 1; }
 .hero-fx { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
@@ -558,8 +558,6 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 /* Behind the time it has no outline: black lines would run into the digits. */
 .hero-fx .fx-crown { position: absolute; left: 0; top: 0; translate: -50% -50%; fill: var(--p-warning); overflow: visible; }
 .hero-fx .fx-ray { position: absolute; left: 0; bottom: 0; translate: -50% 0; transform-origin: 50% 100%; }
-/* The strip's light digits over the yellow crown: a hard shadow in the ink, as palace casts its boxes'. */
-.board-track.is-record .board-track-time { --fx-halo: 0.07em 0.07em 0 var(--p-text); }
 .crown-flyer { position: fixed; z-index: 10; margin: 0; pointer-events: none; }
 
 /* The navbar's right side: the live status, Big screen and Sign in take the
