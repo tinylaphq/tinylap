@@ -53,7 +53,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   min-width: 0;
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--p-space-xs) var(--p-space-lg);
   padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface);
-  border: var(--p-border-width) solid var(--p-text); box-shadow: 8px 8px 0 var(--tl-record);
+  border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record);
 }
 .board-track.is-band {
   grid-column: 1 / -1; padding-inline: var(--p-space-xl);
@@ -110,11 +110,13 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
  * header. */
 .board-table {
   --cell-x: var(--p-space-md); --cell-y: var(--p-space-sm); --mark-gap: var(--p-space-sm);
-  font-size: 1em; width: 100%; table-layout: fixed; border-collapse: collapse;
+  font-size: 1em; width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0;
   background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text);
 }
 .board-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-surface); background: var(--p-dark); }
 .board-table th, .board-table td { padding: var(--cell-y) var(--cell-x); text-align: left; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
+.board-table th { border-bottom-color: var(--p-dark); }
+.board-table tr:last-child > td { border-bottom: 0; }
 /* A row's names, numbers and marks share one baseline. */
 .board-table td, .lap-table td { vertical-align: baseline; }
 .board-table th.num, .board-table td.num { text-align: right; }
@@ -175,7 +177,7 @@ tl-bridge { display: block; }
 .cut-words > .driver:only-child::before { flex: none; }
 .cut-words > .driver:only-child > .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
-.board-feed { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-md); align-self: start; }
+.board-feed { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); padding: var(--p-space-md); align-self: start; }
 .board-feed h2 { margin: 0 0 var(--p-space-sm); }
 .board-laps { list-style: none; margin: 0; padding: 0; }
 .board-laps li { display: flex; gap: var(--p-space-sm); align-items: baseline; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-border-light); }
@@ -470,7 +472,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board.is-idle { grid-template-columns: minmax(0, 1fr); }
 .board-hero {
   display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 1fr);
-  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: 8px 8px 0 var(--tl-record);
+  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record);
 }
 .board-hero-record { display: grid; align-content: center; gap: var(--p-space-xs); padding: var(--p-space-lg) var(--p-space-xl); min-width: 0; }
 /* A label over the time, not palace's gradient headline. */
@@ -499,7 +501,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-quiet a { font-weight: 600; }
 .board-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--p-space-lg); align-items: start; margin-top: var(--p-space-sm); }
 .board-idle h2 { margin: 0 0 var(--p-space-sm); }
-.board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); }
+.board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
 /* Pos, driver, time and mark, the time and mark in columns of fixed width:
  * both lists put their times at the same place, side by side or stacked.
  * The fastest list's mark column holds the track record's TR. */
@@ -514,7 +516,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-last-meta { margin: var(--p-space-sm) 0 0; font-size: 0.875em; color: var(--p-text-secondary); }
 .board-last-meta .tag { font-size: 10px; padding: 1px 6px; vertical-align: middle; }
 /* A club that has never driven: one card, the first thing to do as the button. */
-.board-first { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: 8px 8px 0 var(--tl-record); padding: var(--p-space-xl); }
+.board-first { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record); padding: var(--p-space-xl); }
 .board-first h1 { margin: 0 0 var(--p-space-xs); font-size: clamp(1.75rem, 4vw, 2.5rem); line-height: 1.05; letter-spacing: -0.02em; }
 .board-first p { margin: 0 0 var(--p-space-lg); max-width: 60ch; }
 .board-first .board-first-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm) var(--p-space-lg); margin: 0; }
@@ -646,9 +648,8 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 /* On a line of its own, under a long name, Unpair keeps the right edge, as every row's actions do. */
 .decoder-info + .btn { margin-left: auto; }
 /* The track list (named tracks spec §4). The current track is set like the
-   board's track strip, raised in the record colour's shadow with no left bar,
-   so it reads as the track the board shows. Rename and layout fold away under each track. */
-.track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record); }
+   board's track strip, with no left bar; inside its card it has the 2px border and no shadow. Rename and layout fold away under each track. */
+.track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); }
 .track-head { margin: 0; }
 .track-head .meta { color: var(--p-text-muted); font-size: 12px; margin-left: var(--p-space-xs); }
 .track-now .control-row { --control-row-min: 9rem; }
@@ -837,8 +838,8 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
     white-space: normal; font-size: 0.85em; line-height: 1.3; color: var(--p-text-muted);
   }
   /* Tighter cells, the start's date over its time, and the session as wide as "Qualifying":
-   * what is left goes to the fastest driver, whose long name breaks between its words. */
-  .history-table { --cell-x: 6px; }
+   * what is left goes to the fastest driver, whose long name breaks between its words. Cells take 5px at the sides: the table's own border sits inside its width. */
+  .history-table { --cell-x: 5px; }
   .history-table .col-started { width: calc(4.6em + 2 * var(--cell-x)); }
   .history-table .col-kind { width: calc(5.6em + 2 * var(--cell-x)); }
   .history-started a { white-space: normal; }
@@ -975,6 +976,8 @@ ul.roster-tps { list-style: none; margin: 0; padding: 0; }
 /* While the live element shows "Crossing now", how long ago steps aside. */
 .crossing-now:not([hidden]) + .crossed { display: none; }
 .crossing-now { font-weight: 700; color: var(--p-text); }
+/* A block, so Setup's spacing between cards reaches the card inside it. */
+tl-crossing-now { display: block; }
 .pick-act { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--p-space-sm); margin: 0; padding: 0 var(--p-space-md) var(--p-space-md) calc(var(--p-space-md) + 0.45em + var(--p-space-sm)); }
 .pick-act > .btn { justify-self: start; }
 .pick-act .field { margin: 0; }
