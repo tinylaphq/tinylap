@@ -20,7 +20,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .nav-tab, .nav-tab:hover { border-bottom: 0; }
 .nav-tab:hover { opacity: 1; }
 .nav-tab[aria-current="page"] { opacity: 1; box-shadow: inset 0 -3px 0 var(--p-accent-1); }
-.nav-tab:focus-visible { outline: 2px solid var(--p-accent-3); outline-offset: -2px; }
+.nav-tab:focus-visible { outline: var(--p-border-width) solid var(--p-accent-3); outline-offset: calc(-1 * var(--p-border-width)); }
 .live-status { color: var(--p-surface); white-space: nowrap; }
 /* The stream's state as a square lamp, like a timing desk's: green live,
  * amber blinking while it reconnects, red once it has given up. */
@@ -129,7 +129,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 
 /* Wide tables scroll inside the board, not the page; the padding keeps the hard
  * shadow in view. Positioned, so palace's .visually-hidden text inside stays in it. */
-.board-scroll { position: relative; overflow-x: auto; padding: 0 4px 4px 0; }
+.board-scroll { position: relative; overflow-x: auto; padding: 0 var(--p-space-xs) var(--p-space-xs) 0; }
 .board-main { display: grid; gap: var(--p-space-lg); align-content: start; min-width: 0; }
 /* A fixed layout: the <colgroup> sets every column's width but one, so a live
  * update never moves a column and tables of one kind line up. --cell-x is the
@@ -235,8 +235,8 @@ body.big .board {
   --board-font: clamp(1rem, min(2.4vw, 3.6vh), 2.6rem);
   font-size: var(--board-font);
   min-height: 100dvh; box-sizing: border-box; max-width: none; align-content: start;
-  /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
-  padding-top: calc(0.5rem + 44px + var(--p-space-md));
+  /* The pill (space-sm down, a control tall) plus a clear gap before the clock. */
+  padding-top: calc(var(--p-space-sm) + var(--p-control-height) + var(--p-space-md));
 }
 /* The table takes 73% and the feed may shrink, so the table keeps every column and room for names, and at 1920×1080 the feed keeps a name whole beside a "Not counted" tag and the mark column. */
 @media (min-width: 721px) { body.big .board:not(.is-idle) { grid-template-columns: minmax(0, 73fr) minmax(0, 27fr); } }
@@ -263,17 +263,17 @@ body.big .board-hero-time { font-size: 4.5em; }
 body.big .board-hero-by, body.big .board-last-meta { font-size: 0.7em; }
 body.big .board .board-last-meta .tag { font-size: 0.8em; }
 /* The way out: a dark pill at the top right, always there, big enough to hit by touch. */
-body.big .navbar { position: fixed; top: 0.5rem; right: 0.5rem; left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
+body.big .navbar { position: fixed; top: var(--p-space-sm); right: var(--p-space-sm); left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
 body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; }
 body.big .navbar-brand, body.big .nav-tabs, body.big .nav-account, body.big .live-status, body.big .board-unknown { display: none; }
 body.big .navbar-right { margin: 0; gap: 0; }
 /* The pill's buttons share one border instead of showing the pill between them. */
 body.big .navbar-right > * + * { margin-left: calc(-1 * var(--p-border-thin)); }
 /* A wall screen nobody watches closely still shows when it has gone stale. */
-body.big .navbar-right .live-status:not([data-state="live"]):not([hidden]) { display: inline-flex; min-height: 44px; font-size: 16px; padding-inline: var(--p-space-md); }
+body.big .navbar-right .live-status:not([data-state="live"]):not([hidden]) { display: inline-flex; min-height: var(--p-control-height); font-size: 16px; padding-inline: var(--p-space-md); }
 body.big .navbar-right .live-status::before { width: 0.75em; height: 0.75em; }
 body.big .navbar:has(.live-status:not([data-state="live"]):not([hidden])) { opacity: 1; }
-body.big .navbar-right .btn { font-size: 16px; min-height: 44px; padding-inline: var(--p-space-md); color: var(--p-surface); }
+body.big .navbar-right .btn { font-size: 16px; min-height: var(--p-control-height); padding-inline: var(--p-space-md); color: var(--p-surface); }
 @media (max-width: 640px) {
   body.big .board { --board-font: 0.9rem; }
   body.big .board-table { --cell-x: calc(var(--board-font) * 0.3); }
@@ -617,7 +617,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .navbar-right .btn[aria-pressed="true"], .navbar-right .btn[aria-pressed="true"]:hover { background: var(--p-surface); border-color: var(--p-surface); color: var(--p-dark); }
 /* An icon button: as tall as the text buttons beside it (its icon is their
  * line height), square-ish, its name in aria-label and title. */
-.navbar-right .btn-icon { position: relative; padding-inline: 8px; }
+.navbar-right .btn-icon { position: relative; padding-inline: var(--p-space-sm); }
 .btn-icon svg { display: block; width: 1.4em; height: 1.4em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* Sound: off, the speaker struck through in outline; on (pressed), the
  * speaker filled, with its waves. */
@@ -808,7 +808,7 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .confirm-actions .btn-danger { background: var(--p-error); color: var(--p-text); border-color: var(--p-text); }
 .confirm-actions .btn-danger:hover { background: var(--p-dark); color: var(--p-error); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-error); }
 /* A driver's laps: fixed columns, so a tag never moves the time, and every card's columns line up. */
-.lap-table { --cell-x: 8px; --mark-gap: var(--p-space-sm); table-layout: fixed; font-size: 13px; }
+.lap-table { --cell-x: var(--p-space-sm); --mark-gap: var(--p-space-sm); table-layout: fixed; font-size: 13px; }
 .lap-table td, .lap-table th { padding: var(--p-space-xs) var(--cell-x); }
 .lap-table .tag { font-size: 10px; padding: 1px 6px; white-space: nowrap; }
 /* A time that did not count is muted, in a lap list and in Last laps alike. */
@@ -959,7 +959,7 @@ ul.driver-transponders { list-style: none; margin: 0; padding: 0; } /* the eleme
 .pick-group > label { font: inherit; text-transform: none; letter-spacing: normal; color: inherit; margin: 0; }
 /* palace's button look undone: a row reads as a list item, not as a button. */
 .pick > .pick-button {
-  display: flex; align-items: center; gap: var(--p-space-sm); width: 100%; min-height: 3.25rem; margin: 0;
+  display: flex; align-items: center; gap: var(--p-space-sm); width: 100%; min-height: var(--p-control-height-lg); margin: 0;
   padding: var(--p-space-sm) var(--p-space-md); border: 0; border-top: var(--p-border-thin) solid var(--p-border); border-radius: 0;
   background: none; box-shadow: none; transform: none; font: inherit; font-weight: 400; text-transform: none; letter-spacing: normal;
   color: inherit; text-align: left; cursor: pointer;
@@ -983,7 +983,7 @@ ul.roster { list-style: none; padding: 0; } /* the element selector outweighs pa
 .roster > li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--p-space-xs) var(--p-space-md); }
 .roster > li + li { border-top: var(--p-border-thin) solid var(--p-border); padding-top: var(--p-space-md); }
 .roster-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--p-space-xs); min-width: 0; }
-.roster-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--p-space-xs) var(--p-space-sm); min-height: 2.75rem; }
+.roster-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--p-space-xs) var(--p-space-sm); min-height: var(--p-control-height); }
 .roster-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--p-space-sm); margin: 0; min-width: 0; }
 .roster-name { font-size: 1.125rem; font-weight: 700; }
 .roster-line > .meta { color: var(--p-text-muted); font-size: 0.75rem; }
@@ -1002,7 +1002,7 @@ ul.roster-tps { list-style: none; margin: 0; padding: 0; }
  * inset ground, as a hovered row on the form has; the form lines up under the number. */
 .pick-row + .pick-row { border-top: var(--p-border-thin) solid var(--p-border); }
 .pick > .pick-group + .pick-row { border-top: 0; }
-.pick-row > summary { display: flex; align-items: center; gap: var(--p-space-sm); min-height: 3.25rem; padding: var(--p-space-sm) var(--p-space-md); cursor: pointer; list-style: none; font-weight: 400; }
+.pick-row > summary { display: flex; align-items: center; gap: var(--p-space-sm); min-height: var(--p-control-height-lg); padding: var(--p-space-sm) var(--p-space-md); cursor: pointer; list-style: none; font-weight: 400; }
 .pick-row > summary::-webkit-details-marker { display: none; }
 .pick-row > summary::before { content: ""; flex: none; border-block: 0.3em solid transparent; border-left: 0.45em solid var(--p-text-muted); transition: transform 0.15s; }
 .pick-row[open] > summary::before { transform: rotate(90deg); border-left-color: var(--p-text); }
@@ -1037,7 +1037,7 @@ tl-crossing-now { display: block; }
 .tp-group > .pick-group { background: none; }
 .tp-list > .pick-group { background: var(--p-surface-inset); }
 ul.tp-rows { list-style: none; margin: 0; padding: 0; }
-.tp-rows > li { display: flex; align-items: center; gap: var(--p-space-xs) var(--p-space-md); min-height: 3.25rem; padding: var(--p-space-xs) var(--p-space-md); }
+.tp-rows > li { display: flex; align-items: center; gap: var(--p-space-xs) var(--p-space-md); min-height: var(--p-control-height-lg); padding: var(--p-space-xs) var(--p-space-md); }
 .tp-rows > li + li { border-top: var(--p-border-thin) solid var(--p-border); }
 .tp-rows .meta, .tp-who { flex: 1 1 0; min-width: 0; font-size: 0.875rem; color: var(--p-text-secondary); }
 .tp-who { font-size: 1rem; font-weight: 600; color: var(--p-text); }
@@ -1067,7 +1067,7 @@ ul.collect { list-style: none; margin-bottom: 0; padding: 0; display: grid; gap:
 .collect-seen { margin: 0; min-height: 1.3em; font-size: 0.875rem; color: var(--p-text-secondary); }
 .collect-or { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--p-text-muted); }
 .collect-row.is-crossing { box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
-.collect-row.is-crossing button.btn { background: var(--p-accent-1); color: #fff; border-color: var(--p-accent-1); }
+.collect-row.is-crossing button.btn { background: var(--p-accent-1); color: var(--p-surface); border-color: var(--p-accent-1); }
 .collect-row.is-crossing button.btn:hover { background: var(--p-dark); color: var(--p-accent-1); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-accent-1); }
 /* Narrow, the button goes under its field and takes the row's width. */
 @container (max-width: 24rem) { .collect-body .control-row > .btn { flex: 1 1 100%; } }
