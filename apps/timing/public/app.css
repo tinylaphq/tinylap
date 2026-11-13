@@ -624,8 +624,12 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .is-lit-pb .mark-pb { background: var(--p-text); color: var(--tl-pb); }
 .is-lit-tr .mark-tr { background: var(--p-text); color: var(--tl-record-ink); }
 .is-lit .driver::before { outline: var(--p-border-width) solid var(--p-text); outline-offset: -1px; }
-/* On purple, ink text falls to about 3.7:1: a record row's text turns white while the purple is under it. */
-.is-lit-light :is(td, .board-ago) { color: var(--tl-record-ink); transition: color 0.12s; }
+/* On purple, ink text falls to about 3.7:1: a record row's text, its driver
+ * name and its crown's outline turn white from the start until the fill
+ * begins to leave. White is the text-on-fill colour; until palace-ui ships
+ * --p-text-on-fill (palace-ui#26, palace 0.16.0) it is --p-surface. */
+.is-lit-light :is(td, .board-ago, .driver-name) { color: var(--p-surface); transition: color 0.12s; }
+.is-lit-light .crown { stroke: var(--p-surface); }
 
 /* The navbar's right side: the live status, Big screen and Sign in take the
  * btn-sm box (same padding, 1px border, line height) that the shared account

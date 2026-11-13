@@ -176,15 +176,15 @@ const LIT = ['is-lit', 'is-lit-fl', 'is-lit-pb', 'is-lit-tr', 'is-lit-light'];
  * it began, whether motion was reduced then, when a newer fastest lap cut it
  * short, and what of it is on the row now.
  * @typedef {{ driver: string, seq: string, kind: keyof typeof ROW_KINDS, start: number, reduced: boolean, cut: number | null,
- *   row: HTMLElement, fx: HTMLElement | null, animations: Animation[], timers: ReturnType<typeof setTimeout>[] }} RowMoment
+ *   row: HTMLElement, fx: HTMLElement | null, animations: Animation[], cues: Animation[] }} RowMoment
  */
 
 /**
  * Draws `m` on its row as it stands at time `t`, whether it starts now or a
  * swap carries it over: one aria-hidden .row-fx in the row's first cell, the
  * head and fill animated to their elapsed time, the row's classes (lit; a
- * record row's text white while the purple is under it), and a timer for
- * each change still to come. `end` runs when it is over.
+ * record row's text white until its fill begins to leave), and a cue for
+ * each change still to come. `end` runs when its fill is gone.
  * @param {RowMoment} m @param {number} t @param {() => void} end
  */
 function drawRow(m, t, end) {
@@ -224,7 +224,8 @@ function drawRow(m, t, end) {
   for (const a of main) a.currentTime = elapsed;
   // Cut short by a newer fastest lap: the whole moment slides out with a plain edge (or fades), wherever it was.
   let over = k.ms;
-  let lightOff = m.reduced ? k.ms - FADE_MS : k.out + 120;
+  // A record row's text is white from the start until the fill begins to leave.
+  let lightOff = m.reduced ? k.ms - FADE_MS : k.out;
   if (m.cut !== null) {
     const cutAt = m.cut - m.start;
     const leave = m.reduced
@@ -233,31 +234,36 @@ function drawRow(m, t, end) {
     leave.currentTime = t - m.cut;
     main.push(leave);
     over = Math.min(over, cutAt + (m.reduced ? FADE_MS : CUT_MS));
-    lightOff = Math.min(lightOff, cutAt + (m.reduced ? 0 : 120));
+    lightOff = Math.min(lightOff, cutAt);
   }
   m.row.classList.add('is-lit', `is-lit-${m.kind}`);
   m.row.firstElementChild?.append(fx);
   m.fx = fx;
   m.animations = main;
-  /** @type {(at: number, run: () => void) => void} */
+  // Later changes run on the animations' clock, not on timers, so the row's classes go exactly when its fill does.
+  /** @type {(when: number, run: () => void) => void} */
   const at = (when, run) => {
-    if (when <= elapsed) run();
-    else m.timers.push(setTimeout(run, when - elapsed));
-  };
-  if (m.kind === 'tr') {
-    const lightOn = m.reduced ? 0 : k.cross * 0.7;
-    if (lightOn < lightOff && elapsed < lightOff) {
-      at(lightOn, () => m.row.classList.add('is-lit-light'));
-      at(lightOff, () => m.row.classList.remove('is-lit-light'));
+    if (when <= elapsed) {
+      run();
+      return;
     }
+    const cue = new Animation(new KeyframeEffect(null, null, when));
+    cue.currentTime = elapsed;
+    cue.play();
+    cue.finished.then(run, () => {}); // cancelled: the moment was taken off its row
+    m.cues.push(cue);
+  };
+  if (m.kind === 'tr' && elapsed < lightOff) {
+    m.row.classList.add('is-lit-light');
+    at(lightOff, () => m.row.classList.remove('is-lit-light'));
   }
   at(over, end);
 }
 
 /** Takes `m` off its row: nothing of it stays. @param {RowMoment} m */
 function undrawRow(m) {
-  for (const timer of m.timers) clearTimeout(timer);
-  m.timers = [];
+  for (const cue of m.cues) cue.cancel();
+  m.cues = [];
   for (const a of m.animations) a.cancel();
   m.animations = [];
   m.fx?.remove();
@@ -534,7 +540,7 @@ class TlBoard extends HTMLElement {
     for (const r of [...fresh.filter((f) => f.kind !== 'pb'), ...fresh.filter((f) => f.kind === 'pb')]) {
       if (r.kind === 'pb' && [...this.rows.values()].filter((m) => m.cut === null).length >= MAX_LIT) continue;
       /** @type {RowMoment} */
-      const m = { driver: r.driver, seq: r.seq, kind: r.kind, start: t, reduced, cut: null, row: r.row, fx: null, animations: [], timers: [] };
+      const m = { driver: r.driver, seq: r.seq, kind: r.kind, start: t, reduced, cut: null, row: r.row, fx: null, animations: [], cues: [] };
       this.rows.set(r.driver, m);
       this.drawRow(m, t);
     }

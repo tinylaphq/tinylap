@@ -217,24 +217,84 @@ test('with reduced motion the row takes the colour, holds and fades: nothing mov
   assert.deepEqual(errors, []);
 });
 
-test('a track record lights its row purple, its text white while the purple is under it, on the big screen too', async (t) => {
+/**
+ * Samples a row's moment live, every frame from when its .row-fx appears
+ * until `ms` later: elapsed ms, then the lit row's classes, its cells', driver
+ * name's and crown outline's colours, its mark's colours, and how much of the
+ * row the fill covers (0 to 1).
+ */
+const sampling = (page, ms) => page.evaluate((ms) => {
+  window.samples = [];
+  let t0 = null;
+  let row = null;
+  const step = () => {
+    const fx = document.querySelector('.row-fx');
+    if (fx && t0 === null) {
+      t0 = performance.now();
+      row = fx.closest('tr')?.getAttribute('data-driver');
+    }
+    if (t0 !== null) {
+      const tr = document.querySelector(`.standings-table tbody tr[data-driver="${row}"]`);
+      const fill = tr?.querySelector('.row-fx-fill');
+      let covers = 0;
+      if (fill) {
+        const [, top, right, , left] = getComputedStyle(fill).clipPath.match(/inset\(([-\d.]+)\S*\s+([-\d.]+)\S*\s+([-\d.]+)\S*\s+([-\d.]+)/) ?? [];
+        covers = top === undefined ? 1 : Math.max(0, Math.min(1, 1 - Math.max(0, Number(right)) / 100 - Math.max(0, Number(left)) / 100));
+      }
+      const mark = tr?.querySelector('.mark');
+      const css = (el, p) => (el ? getComputedStyle(el).getPropertyValue(p) : null);
+      window.samples.push([performance.now() - t0, tr?.className ?? '', css(tr?.querySelector('td.num'), 'color'), css(tr?.querySelector('.driver-name'), 'color'),
+        css(tr?.querySelector('.crown'), 'stroke'), css(mark, 'background-color'), css(mark, 'color'), covers]);
+    }
+    if (t0 === null || performance.now() - t0 < ms) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}, ms);
+/** The first sample at or after `ms`, once sampling is done, as a record. */
+async function sampleAt(page, ms) {
+  await page.waitForFunction((ms) => window.samples.length && window.samples.at(-1)[0] >= ms, ms, { timeout: 5000 });
+  const [at, classes, cell, name, crown, markBg, markColour, covers] = await page.evaluate((ms) => window.samples.find((x) => x[0] >= ms), ms);
+  return { at, classes, cell, name, crown, markBg, markColour, covers };
+}
+
+test('a track record lights its row purple, its text white from the start until the fill leaves, on the big screen too', async (t) => {
   await practice();
   await lap('20', 9950);
   const { context, page, errors } = await boardPage('/personal/board?big', { viewport: { width: 1920, height: 1080 } });
   t.after(() => context.close());
+  await sampling(page, 2600);
   await lap('10', 8900); // beats Ana's 9.000
-  const ana = row(page, 'Ana');
-  await ana.locator('.row-fx').waitFor({ state: 'attached' });
-  assert.match(await ana.getAttribute('class') ?? '', /\bis-lit-tr\b/);
+  const ink = await page.evaluate(() => getComputedStyle(document.body).color);
   const white = 'rgb(255, 255, 255)';
-  const colour = () => ana.locator('td.num').first().evaluate((td) => getComputedStyle(td).color);
-  await page.waitForFunction(() => document.querySelector('.is-lit-light'), null, { timeout: 2000 });
-  await page.waitForTimeout(200);
-  assert.equal(await colour(), white);
-  assert.deepEqual(await ana.locator('.mark-tr').evaluate((m) => [getComputedStyle(m).backgroundColor, getComputedStyle(m).color]), [await page.evaluate(() => getComputedStyle(document.body).color), white]);
-  await page.waitForFunction(() => document.querySelector('.is-lit-tr') && !document.querySelector('.is-lit-light'), null, { timeout: 3000 });
+  for (const ms of [200, 400, 600, 1000, 1800]) {
+    const s = await sampleAt(page, ms);
+    assert.match(s.classes, /\bis-lit-tr\b/);
+    assert.deepEqual([s.cell, s.name, s.crown], [white, white, white], `white text and crown outline at ${Math.round(s.at)} ms`);
+    assert.deepEqual([s.markBg, s.markColour], [ink, white], 'the mark inverted');
+  }
+  const leaving = await sampleAt(page, 2050);
+  assert.doesNotMatch(leaving.classes, /is-lit-light/, 'ink again once the fill begins to leave');
+  assert.equal(leaving.cell, ink);
+  const after = await sampleAt(page, 2500);
+  assert.equal(after.classes, '', 'nothing lit once the fill is gone');
   await settled(page);
-  assert.notEqual(await colour(), white, 'and back');
+  assert.deepEqual(errors, []);
+});
+
+test('an FL fill holds through its slide-out, and the row is itself again as it ends', async (t) => {
+  await practice();
+  await lap('10', 9950);
+  const { context, page, errors } = await boardPage();
+  t.after(() => context.close());
+  await sampling(page, 1900);
+  await fastestLap('20');
+  const held = await sampleAt(page, 1300);
+  assert.ok(held.covers > 0.5, `the fill still covers ${Math.round(held.covers * 100)}% of the row at ${Math.round(held.at)} ms`);
+  assert.match(held.classes, /\bis-lit-fl\b/);
+  const done = await sampleAt(page, 1700);
+  assert.equal(done.classes, '', 'no longer lit');
+  assert.equal(done.markBg, 'rgb(0, 229, 255)', 'the mark is cyan again');
+  assert.equal(done.markColour, await page.evaluate(() => getComputedStyle(document.body).color));
   assert.deepEqual(errors, []);
 });
 
