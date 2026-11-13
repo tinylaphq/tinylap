@@ -23,6 +23,7 @@ Non-goals:
 
 - The mark is **FL**, in SB's cyan box. Its class is `mark-fl`, its colour is a new token `--tl-fastest` (`var(--p-accent-3)`) with ink `--tl-fastest-ink` (`var(--p-text)`), in `packages/design/design.css` beside `--tl-record` and `--tl-pb`. Its title is "Fastest lap of the session"; its visually hidden text is "Fastest lap".
 - One mark per lap time stays, the widest that is true: **TR**, then **FL**, then **PB**.
+- **A mark always follows its time**, the way a unit follows a number: in the standings, the lap lists, Last laps and the strip. The mark carries its name for the eye as a `title` and for a screen reader as visually hidden text.
 - "Session best", `mark-sb`, `isSessionBest`, `--tl-session-best` and SB leave the code, the docs (`docs/timing.md`) and the tests. The API and MCP never exposed it and do not change.
 - A tie keeps the lap set first. FL is the fastest of the laps the standings count (a tapped lap included, a lap marked "Not counted" not), so it is always somebody's Best (call).
 
@@ -32,17 +33,17 @@ Every mark's box is trimmed to its capitals (`text-box: trim-both cap alphabetic
 
 ### 3.1 The strip
 
-The strip (`.board-track`) holds the track and its decoders on the left and the two times to beat on the right, one under the other:
+The strip (`.board-track`) holds the track and its decoders on the left and the two times to beat on the right, one under the other, each as time, mark, driver, with no words:
 
 ```
-Kitchen Ring ⊂⊃                    TR Track record  6.950 ■ Ana
-■ Start line: reporting            FL Fastest lap   7.106 ■ Ben Okafor
+Kitchen Ring ⊂⊃                       6.950 TR   ■ Ana
+■ Start line: reporting               7.106 FL   ■ Ben Okafor
 ```
 
-- Each line starts with its mark, so the strip also explains the table's marks. Labels, times and names share columns. The name column has a fixed width (between 9em and 12em) and cuts a long name with an ellipsis, so a new holder never moves either line.
-- The labels stay on the times' baseline; only the mark is nudged to centre on the label's capitals.
+- Each line is read through its mark: TR for the track record (also told by the strip's purple shadow and the crown on its holder in the standings), FL for the fastest lap. The words "Track record" and "Fastest lap" are visually hidden, for screen readers.
+- The mark sits `--p-space-xs` after the time; the driver follows `--p-space-md` after the mark (§7). Times, marks and names share columns. The name column has a fixed width (between 9em and 12em) and cuts a long name with an ellipsis, so a new holder never moves either line.
 - The record's date leaves the board (it stays on the session pages).
-- Before any lap counts, the second line says "No laps yet" in muted text. The line is there while a session runs; the idle board does not have it.
+- Before any lap counts, the second line is a muted dash in the time's place, then FL, and no driver; the line's `title` and its hidden text say "No laps yet". The line is there while a session runs; the idle board does not have it.
 - While the strip shows a fallen record (`.board-track.is-record`), the Fastest lap line is hidden: the record lap is the fastest lap, and the card already names it. It comes back when the strip does (call).
 - On a phone (at most 720px) the strip stacks: name, decoders, then the two lines, left-aligned.
 - On the big screen the two lines close up (smaller gap), so the board does not grow taller.
@@ -55,7 +56,7 @@ Kitchen Ring ⊂⊃                    TR Track record  6.950 ■ Ana
 
 ### 3.3 Last laps
 
-- The feed marks **TR and FL only** (PB on every early lap would be noise), in `.board-laps-tags`, the slot before the time where "Not counted" goes, so no row gives up room.
+- The feed marks **TR and FL only** (PB on every early lap would be noise), after the time, in a mark column every row keeps (about 28px: a mark's width plus `--p-space-xs`), so the times stay aligned. Tags such as "Not counted" stay before the time.
 - FL marks only the current fastest lap; when it is beaten, the old lap loses its mark.
 - The feed plays no moment: the standings row carries it.
 
@@ -141,7 +142,8 @@ The same rules hold wherever live standings show: the board at a laptop's width,
 ## 9. Tests
 
 - Marks: FL replaces SB in every view; the widest mark wins; FL on P1 in practice and qualifying; a tie keeps the earlier lap; a not-counted lap never holds FL, a tapped one can.
-- Strip: the Fastest lap line with time and holder; "No laps yet" before a counted lap; absent on the idle board; hidden while the strip shows a fallen record; names cut, lines not moving when the holder changes (layout measured before and after a swap).
+- Marks follow their times everywhere, the feed included, and the feed's times stay aligned with or without a mark.
+- Strip: each line is time, mark, driver, with no visible words; the fastest lap's dash and "No laps yet" title before a counted lap; absent on the idle board; hidden while the strip shows a fallen record; names cut, lines not moving when the holder changes (layout measured before and after a swap).
 - Feed: TR and FL only; only the current fastest lap keeps FL.
 - Server: `data-moment` for FL on an improvement but not on the first counted lap; PB only once an earlier session's best exists, then on every improvement; TR exactly when `recordNew` is set; late laps none; one moment per lap, the widest that plays.
 - Browser: a moment carries over a swap that comes during it, to the same driver's row, at its elapsed time.
@@ -152,4 +154,4 @@ The same rules hold wherever live standings show: the board at a laptop's width,
 
 ## 10. Words
 
-Fastest lap, FL (Fastest lap of the session), No laps yet, Track record, TR, Personal best, PB. Screen reader: "Fastest lap 7.041, Ben Okafor".
+FL (title "Fastest lap of the session"), TR ("Track record"), PB ("Personal best"); on the strip, for screen readers only, "Track record", "Fastest lap" and "Fastest lap: no laps yet"; the session page's fact "Fastest lap". Screen reader: "Fastest lap 7.041, Ben Okafor".
