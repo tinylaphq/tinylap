@@ -5,8 +5,8 @@
 // Tap and Setup in the browser, at a phone's and a laptop's width: a long
 // name stays inside its tile, unbroken inside its words, never under 16px,
 // and the result bar keeps its height after a tap; on Setup a section's
-// heading keeps its gap to what follows, actions in a row of text share one
-// lighter height, the row's
+// heading keeps its gap to what follows, actions in a row of text share
+// palace's small control height, the row's
 // actions end at the section's edge, a driver's add list has 52 px rows, and a
 // fold's error takes the fold's width.
 import test, { after, before } from 'node:test';
@@ -134,10 +134,36 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
     for (const [id, gap] of m.gaps) assert.equal(gap, 16, `${id}: 16px to what follows`);
     const inText = m.actions;
     assert.ok(inText.length, `rows of text: ${JSON.stringify(m.actions)}`);
-    assert.deepEqual([...new Set(inText.map((a) => a.h))], [36], `actions in a row of text: one lighter height, ${JSON.stringify(inText)}`);
+    assert.deepEqual([...new Set(inText.map((a) => a.h))], [32], `actions in a row of text: palace's small control height, ${JSON.stringify(inText)}`);
     assert.equal(m.assign, 0, 'Assign ends at the section edge');
     assert.equal(m.unpair, 0, 'Unpair ends at the section edge');
     assert.ok(m.docW <= viewport.width, 'no sideways scroll');
+    assert.deepEqual(errors, []);
+  });
+
+  test(`setup and collect at ${size} width: a button beside a field in its row is as tall as the field`, async (t) => {
+    const { context, page, errors } = await pageAs(browser, app, member, { viewport });
+    t.after(() => context.close());
+    const pairs = [];
+    for (const path of ['/personal/setup', '/personal/transponders/new']) {
+      await page.goto(path);
+      for (const d of await page.locator('details.track-edit, details.track-archive, details.roster-add').all()) await d.locator('summary').first().click();
+      pairs.push(...await page.evaluate(() => {
+        const shown = (el) => el.getClientRects().length > 0;
+        const out = [];
+        for (const button of [...document.querySelectorAll('main button, main .btn')].filter(shown)) {
+          const b = button.getBoundingClientRect();
+          // The nearest form or row around the button that holds a field on the button's line.
+          const box = button.closest('.control-row, .track-edit-form, .pick-new-row, form');
+          const field = box && [...box.querySelectorAll('input:not([type=hidden], [type=checkbox], [type=radio], [type=color]), select')].filter(shown)
+            .find((f) => { const r = f.getBoundingClientRect(); return r.top < b.bottom && r.bottom > b.top; });
+          if (field) out.push({ button: button.textContent.trim(), h: Math.round(b.height), field: Math.round(field.getBoundingClientRect().height) });
+        }
+        return out;
+      }));
+    }
+    assert.ok(pairs.some((p) => /Rename/.test(p.button)), `a track's Rename is among them: ${JSON.stringify(pairs)}`);
+    for (const p of pairs) assert.equal(p.h, p.field, `${p.button}: ${p.h}px beside a ${p.field}px field`);
     assert.deepEqual(errors, []);
   });
 }

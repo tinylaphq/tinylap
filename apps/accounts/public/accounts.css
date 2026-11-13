@@ -40,7 +40,7 @@
 .accounts-progress li {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--p-space-xs);
   margin: 0;
   font-size: 11px;
   font-weight: 700;
@@ -63,7 +63,7 @@
 }
 
 .accounts-hint {
-  margin-top: 6px;
+  margin-top: var(--p-space-xs);
   font-size: 13px;
   color: var(--p-text-muted);
 }
@@ -104,8 +104,8 @@ input[type="text"].accounts-mono {
 }
 
 .btn-outline.accounts-on-dark {
-  color: #fff;
-  border-color: #fff;
+  color: var(--p-surface);
+  border-color: var(--p-surface);
 }
 
 .btn-outline.accounts-on-dark:hover {
@@ -181,13 +181,13 @@ input[type="text"].accounts-mono {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--p-space-sm) var(--p-space-md);
-  padding: 12px var(--p-space-md);
+  padding: var(--p-space-sm) var(--p-space-md);
   background: var(--p-surface);
   border: var(--p-border-width) solid var(--p-text);
 }
 
 .accounts-workspace {
-  border-left-width: 8px;
+  border-left-width: 8px; /* a lane colour: palace has no border this wide */
 }
 
 .accounts-workspace:nth-child(3n+1) { border-left-color: var(--p-accent-1); }
@@ -227,7 +227,7 @@ input[type="text"].accounts-mono {
 
 /* Roles: the owner's tag is solid, an admin's carries the purple. */
 .accounts-role-owner {
-  color: #fff;
+  color: var(--p-surface);
   background: var(--p-dark);
   border-color: var(--p-dark);
 }
@@ -274,23 +274,23 @@ input[type="text"].accounts-mono {
 .accounts-reveal-note {
   font-weight: 700;
   color: var(--p-accent-3);
-  margin-bottom: 10px;
+  margin-bottom: var(--p-space-sm);
 }
 
 .accounts-reveal-meta {
   font-size: 13px;
   color: var(--p-code-text);
-  margin-bottom: 12px;
+  margin-bottom: var(--p-space-sm);
 }
 
 .accounts-reveal .status {
-  margin-top: 12px;
+  margin-top: var(--p-space-sm);
   margin-bottom: 0;
 }
 
 /* The confirm dialog for remove, transfer, delete and leave. */
 .accounts-dialog {
-  width: min(420px, calc(100vw - 32px));
+  width: min(var(--p-container-narrow), calc(100vw - 2 * var(--p-space-md)));
   margin: auto;
   color: var(--p-text);
   box-shadow: var(--p-shadow-lg) var(--p-error);
@@ -329,7 +329,7 @@ a.accounts-workspace-name {
 
 .accounts-gauge {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--p-space-xs);
 }
 
 .accounts-gauge-mark {
