@@ -20,8 +20,6 @@ import { KIND } from './sessions.js';
 export function sessionPage(request, { session, standings, crossings, drivers, track, record, bests }) {
   const race = session.kind === 'race';
   const pbSeq = new Set(bests.map((b) => b.seq));
-  /** A lap's mark; SB, the session's fastest lap, where `sb` allows it. */
-  const markOf = (c, { sb = true } = {}) => marks({ lapMs: c?.lapMs, isRecord: c?.seq === record?.seq, isSessionBest: sb && best !== null && c?.seq === best.seq, isPb: pbSeq.has(c?.seq) });
   const laps = new Map();
   for (const c of crossings) {
     if (c.lapMs === null || c.driverId === null) continue;
@@ -37,6 +35,8 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
     const c = bestOf(row);
     if (c && (!best || c.lapMs < best.lapMs || (c.lapMs === best.lapMs && c.seq < best.seq))) best = c;
   }
+  /** A lap's mark; SB, the session's fastest lap, where `sb` allows it. */
+  const markOf = (c, { sb = true } = {}) => marks({ lapMs: c?.lapMs, isRecord: c?.seq === record?.seq, isSessionBest: sb && best !== null && c?.seq === best.seq, isPb: pbSeq.has(c?.seq) });
   const order = [...standings.map((r) => r.driverId), ...[...laps.keys()].filter((id) => !standings.some((r) => r.driverId === id))];
   const ended = session.state === 'done' || session.state === 'aborted';
 

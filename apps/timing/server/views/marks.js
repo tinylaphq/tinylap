@@ -14,18 +14,17 @@ const mark = (kind, letters, name) => html`<abbr class="mark mark-${kind}" title
  * The mark of a lap time, in a narrow column of its own after the time's, so
  * the time keeps its column's edge whether a mark follows it or not. One mark
  * at most, the widest that is true: TR (the track's), then SB (the session's
- * fastest lap), then PB (the driver's own). `note` is read after it. In a
- * list, the cell is a span.
+ * fastest lap), then PB (the driver's own). In a list, the cell is a span.
  * @param {{ lapMs: number | null | undefined, isRecord: boolean, isSessionBest?: boolean, isPb: boolean }} lap
- * @param {{ note?: any, list?: boolean }} [options]
+ * @param {{ list?: boolean }} [options]
  */
-export function marks({ lapMs, isRecord, isSessionBest = false, isPb }, { note = null, list = false } = {}) {
+export function marks({ lapMs, isRecord, isSessionBest = false, isPb }, { list = false } = {}) {
   const has = lapMs !== null && lapMs !== undefined;
   const shown = !has ? null
     : isRecord ? mark('tr', 'TR', 'Track record')
       : isSessionBest ? mark('sb', 'SB', 'Session best')
         : isPb ? mark('pb', 'PB', 'Personal best') : null;
-  return list ? html`<span class="mark-cell">${shown}${note}</span>` : html`<td class="mark-cell">${shown}${note}</td>`;
+  return list ? html`<span class="mark-cell">${shown}</span>` : html`<td class="mark-cell">${shown}</td>`;
 }
 
 /**
@@ -60,7 +59,7 @@ export function tableClasses({ positions, flags = false }) {
  * The crown: the record holder's, after their name in standings. Flat, in the
  * warning colour with a mark's outline, as tall as a mark (app.css).
  */
-const crownMark = html`<svg class="crown" viewBox="0 0 26 18" role="img" aria-label="Track record holder"><title>Track record holder</title><path d="M1.125 16.875V4.5l6.5 5.5L13 1.6l5.375 8.4 6.5-5.5v12.475Z"/></svg>`;
+const crownMark = html`<svg class="crown" viewBox="0 0 26 18" role="img"><title>Track record holder</title><path d="M1.125 16.875V4.5l6.5 5.5L13 1.6l5.375 8.4 6.5-5.5v12.475Z"/></svg>`;
 
 /**
  * A driver's name with their colour, or what is left of one. In standings

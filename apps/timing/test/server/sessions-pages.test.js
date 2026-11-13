@@ -372,7 +372,7 @@ test('history: newest first, with kind, length, drivers and the best lap with it
   assert.match(newest, /<td class="history-wide cut-words">Office loop, clockwise<\/td>/);
   assert.match(newest, /<td class="num history-wide">18 s<\/td>/, 'from its start to its last passing');
   assert.match(newest, /<td class="num history-wide">2<\/td>/);
-  assert.match(newest, /<span class="driver-name" title="Ana">Ana<\/span><svg class="crown" viewBox="0 0 26 18" role="img" aria-label="Track record holder"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg>/);
+  assert.match(newest, /<td class="board-driver"><span [^>]+><span class="driver-name" title="Ana">Ana<\/span><\/span><\/td>/, 'no crown in the history: it would repeat on every session the holder won');
   assert.match(newest, /<td class="num">7\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><span class="visually-hidden">Track record<\/span><\/td>/);
   assert.match(body, /<th scope="col" class="num">Best<\/th><th scope="col" class="mark-cell"><span class="visually-hidden">Mark<\/span><\/th>/);
   assert.match(rows[1], /<td class="num history-wide">0 s<\/td>/);
@@ -424,7 +424,7 @@ test('a session page: the final table with marks and crown, then every lap', asy
   const rows = [...table.matchAll(/<tr>[\s\S]*?<\/tr>/g)].slice(1);
   assert.equal(rows.length, 2);
   assert.match(table, /<thead><tr><th scope="col"><span class="visually-hidden">Position<\/span><\/th>/);
-  assert.match(rows[0][0], /<span class="driver-name" title="Ana">Ana<\/span><svg class="crown" viewBox="0 0 26 18" role="img" aria-label="Track record holder"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span>/, 'the crown after the holder');
+  assert.match(rows[0][0], /<span class="driver-name" title="Ana">Ana<\/span><svg class="crown" viewBox="0 0 26 18" role="img"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span>/, 'the crown after the holder');
   assert.match(rows[0][0], /<td class="num">7\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><span class="visually-hidden">Track record<\/span><\/td>/, 'TR only');
   assert.doesNotMatch(table, /mark-sb|is-best/, 'a practice table, sorted by best lap, shows no SB and no tint');
   assert.match(rows[1][0], /<td class="num">7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB<\/abbr><span class="visually-hidden">Personal best<\/span><\/td>/);

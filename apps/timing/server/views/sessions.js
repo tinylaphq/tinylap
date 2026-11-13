@@ -107,7 +107,7 @@ function historySection(request, { rows, older, newer }, drivers) {
     <td class="history-wide cut-words">${trackName(track, session.direction)}</td>
     <td class="num history-wide">${shortLength(drivenMs(session))}</td>
     <td class="num history-wide">${count}</td>
-    <td class="board-driver">${best ? chip(drivers, best.driverId, { holder: best.isHolder }) : null}</td>
+    <td class="board-driver">${best ? chip(drivers, best.driverId) : null}</td>
     <td class="num">${formatLap(best?.lapMs)}</td>
     ${marks({ lapMs: best?.lapMs, isRecord: Boolean(best?.isRecord), isPb: Boolean(best?.isPb) })}
   </tr>`)}</tbody>

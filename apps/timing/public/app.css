@@ -163,15 +163,16 @@ tl-bridge { display: block; }
  * outline a mark's border, exactly as tall as a mark (0.8em type, 0.15em of
  * it padding above and below, and the border); the path fills its box,
  * stroke included. It drops to the line a mark sits on, as far below the
- * baseline as a mark's box hangs (a share of its type, plus its border; the
- * names test measures both); in a flex row vertical-align does nothing, so a
- * relative nudge does it there. */
+ * baseline as a mark's box hangs: a share of its type, plus its border. The
+ * nudge's two parts were fitted to a mark at 14px and on the big board, and
+ * names.test.js pins it there within 0.5px. In a flex row vertical-align
+ * does nothing, so a relative nudge does it there. */
 .crown {
   display: inline-block; flex: none; height: calc(1.04em + 2 * var(--p-border-thin)); width: auto; aspect-ratio: 26 / 18;
   margin-left: var(--mark-gap, var(--p-space-sm)); vertical-align: -0.22em;
   fill: var(--p-warning); stroke: var(--p-text); stroke-width: 2.25; stroke-linejoin: miter; overflow: visible;
 }
-.driver:is(.board-driver *, .board-laps *, .cut-words > *) > .crown { position: relative; top: calc(0.11em + 1.5px); vertical-align: baseline; }
+.board-driver .driver > .crown { position: relative; top: calc(0.11em + 1.5 * var(--p-border-thin)); vertical-align: baseline; }
 /* In a table or list a name keeps one line: the colour, the name, cut with an
  * ellipsis where the column ends, then the crown. The whole name stays in
  * the text, for screen readers, and in its title, for hover. */
@@ -809,7 +810,7 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
   }
   /* Tighter cells, the start's date over its time, and the session as wide as "Qualifying":
    * what is left goes to the fastest driver, whose long name breaks between its words. */
-  .history-table { --cell-x: 6px; --mark-gap: var(--p-space-xs); }
+  .history-table { --cell-x: 6px; }
   .history-table .col-started { width: calc(4.6em + 2 * var(--cell-x)); }
   .history-table .col-kind { width: calc(5.6em + 2 * var(--cell-x)); }
   .history-started a { white-space: normal; }
