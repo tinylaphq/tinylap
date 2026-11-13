@@ -169,14 +169,14 @@ const CUT_MS = 300;
 const FADE_MS = 200;
 /** While this many rows are lit, further PB moments are dropped. */
 const MAX_LIT = 3;
-const LIT = ['is-lit', 'is-lit-fl', 'is-lit-pb', 'is-lit-tr', 'is-lit-light'];
+const LIT = ['is-lit', 'is-lit-fl', 'is-lit-pb', 'is-lit-tr'];
 
 /**
  * A row's moment while it plays: whose row, which lap (`seq`) and mark, when
  * it began, whether motion was reduced then, when a newer fastest lap cut it
  * short, and what of it is on the row now.
  * @typedef {{ driver: string, seq: string, kind: keyof typeof ROW_KINDS, start: number, reduced: boolean, cut: number | null,
- *   row: HTMLElement, fx: HTMLElement | null, animations: Animation[], cues: Animation[] }} RowMoment
+ *   row: HTMLElement, fx: HTMLElement | null, animations: Animation[], cues: Animation[], frame: number, edge?: number }} RowMoment
  */
 
 /**
@@ -224,8 +224,8 @@ function drawRow(m, t, end) {
   for (const a of main) a.currentTime = elapsed;
   // Cut short by a newer fastest lap: the whole moment slides out with a plain edge (or fades), wherever it was.
   let over = k.ms;
-  // A record row's text is white from the start until the fill begins to leave.
-  let lightOff = m.reduced ? k.ms - FADE_MS : k.out;
+  // With reduced motion a record row's text is white while the colour shows, until it begins to fade.
+  let lightOff = k.ms - FADE_MS;
   if (m.cut !== null) {
     const cutAt = m.cut - m.start;
     const leave = m.reduced
@@ -253,17 +253,63 @@ function drawRow(m, t, end) {
     cue.finished.then(run, () => {}); // cancelled: the moment was taken off its row
     m.cues.push(cue);
   };
-  if (m.kind === 'tr' && elapsed < lightOff) {
-    m.row.classList.add('is-lit-light');
-    at(lightOff, () => m.row.classList.remove('is-lit-light'));
+  if (m.kind === 'tr') {
+    // Each frame, every piece of a record row's text is white while the purple covers it, and ink otherwise.
+    const frame = () => {
+      m.frame = requestAnimationFrame(frame);
+      lightText(m, fill, fx, lightOff);
+    };
+    frame();
   }
   at(over, end);
+}
+
+/** The px span of `el`'s box its clip-path (an inset, or none) leaves showing. @param {Element} el @param {number} width */
+function shown(el, width) {
+  const inset = getComputedStyle(el).clipPath.match(/^inset\(([^)]*)\)$/);
+  if (!inset) return [0, width];
+  const v = inset[1].trim().split(/\s+/).map((x) => (x.endsWith('%') ? (parseFloat(x) / 100) * width : parseFloat(x)));
+  const right = v[1] ?? v[0], left = v[3] ?? right;
+  return [left, width - right];
+}
+
+/**
+ * A record row's text on its fill: each cell (the driver's name, crown and
+ * second line apart) is white while the purple is under all of it, and ink
+ * otherwise, read from the fill's own animation as it is this frame. With
+ * reduced motion it is white until the colour begins to fade.
+ * @param {RowMoment} m @param {HTMLElement} fill @param {HTMLElement} fx @param {number} lightOff
+ */
+function lightText(m, fill, fx, lightOff) {
+  const box = fx.getBoundingClientRect();
+  const [fillFrom, fillTo] = shown(fill, box.width);
+  const [fxFrom, fxTo] = shown(fx, box.width);
+  const edge = Math.max(fillFrom, fxFrom);
+  // The slide-out's edge may be painted a frame ahead of what script reads (a composited clip): ink one frame early.
+  const from = box.left + edge + Math.max(0, edge - (m.edge ?? edge)), to = box.left + Math.min(fillTo, fxTo);
+  m.edge = edge;
+  const now = Number(m.animations[0]?.currentTime ?? 0);
+  const range = document.createRange();
+  for (const cell of m.row.children) {
+    if (cell.matches('.mark-cell')) continue; // the mark keeps its own ink box
+    const parts = cell.matches('.board-driver') ? cell.querySelectorAll('.driver-name, .crown, .board-ago') : [cell];
+    for (const part of parts) {
+      range.selectNodeContents(part);
+      if (part.contains(fx)) range.setEndBefore(fx); // the moment itself is no text
+      const text = part instanceof SVGElement ? part.getBoundingClientRect() : range.getBoundingClientRect();
+      const lit = m.reduced ? now < lightOff : text.width > 0 && text.left >= from && text.right <= to;
+      part.classList.toggle('is-lit-light', lit);
+    }
+  }
 }
 
 /** Takes `m` off its row: nothing of it stays. @param {RowMoment} m */
 function undrawRow(m) {
   for (const cue of m.cues) cue.cancel();
   m.cues = [];
+  cancelAnimationFrame(m.frame);
+  delete m.edge;
+  for (const part of m.row.querySelectorAll('.is-lit-light')) part.classList.remove('is-lit-light');
   for (const a of m.animations) a.cancel();
   m.animations = [];
   m.fx?.remove();
@@ -540,7 +586,7 @@ class TlBoard extends HTMLElement {
     for (const r of [...fresh.filter((f) => f.kind !== 'pb'), ...fresh.filter((f) => f.kind === 'pb')]) {
       if (r.kind === 'pb' && [...this.rows.values()].filter((m) => m.cut === null).length >= MAX_LIT) continue;
       /** @type {RowMoment} */
-      const m = { driver: r.driver, seq: r.seq, kind: r.kind, start: t, reduced, cut: null, row: r.row, fx: null, animations: [], cues: [] };
+      const m = { driver: r.driver, seq: r.seq, kind: r.kind, start: t, reduced, cut: null, row: r.row, fx: null, animations: [], cues: [], frame: 0 };
       this.rows.set(r.driver, m);
       this.drawRow(m, t);
     }

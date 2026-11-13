@@ -167,7 +167,7 @@ While a session runs, a number that crossed in it and is not assigned gets a war
 
 **The record moment:** when a new track record comes in while a board is open, the record card plays a burst and its time bounces, and the crown flies from the old holder's name to the new one's. It plays once, on boards open at that moment, never on load and never with reduced motion; nothing it adds stays on the page.
 
-**A row's moment:** when a lap sets a mark that plays (a new fastest lap of the session, a track record, or a personal best for a driver who already had one here from an earlier session), that driver's row in the standings lights up in the mark's colour: a rainbow head sweeps across it, the colour holds, then slides out. A record row's text turns white until the colour slides out. A newer fastest lap slides the older row out; while three rows are lit, a further PB doesn't light. It plays once, on boards open at that moment (the watchers' board too), never on load; with reduced motion the row takes the colour, holds and fades. Only a record rings the bell.
+**A row's moment:** when a lap sets a mark that plays (a new fastest lap of the session, a track record, or a personal best for a driver who already had one here from an earlier session), that driver's row in the standings lights up in the mark's colour: a rainbow head sweeps across it, the colour holds, then slides out. A record row's text turns white wherever the purple is under it. A newer fastest lap slides the older row out; while three rows are lit, a further PB doesn't light. It plays once, on boards open at that moment (the watchers' board too), never on load; with reduced motion the row takes the colour, holds and fades. Only a record rings the bell.
 
 ## Without hardware
 

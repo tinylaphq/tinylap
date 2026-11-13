@@ -24,6 +24,8 @@ let t = 1000;
 const last = new Map();
 /** The fastest lap so far in the running session; each FL beats it by 10 ms, staying slower than the record. */
 let fastest = 9900;
+/** The track record; each new one beats it by 10 ms. */
+let record = 9000;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -257,26 +259,108 @@ async function sampleAt(page, ms) {
   return { at, classes, cell, name, crown, markBg, markColour, covers };
 }
 
-test('a track record lights its row purple, its text white from the start until the fill leaves, on the big screen too', async (t) => {
+/**
+ * Samples a record row live, every frame from when its .row-fx appears until
+ * `ms` later: for each piece of its text (each cell but the mark's; the
+ * driver's name, crown and second line), whether the fill covers all of it,
+ * none of it or a part, and whether it is white.
+ */
+const textSampling = (page, ms) => page.evaluate((ms) => {
+  window.text = [];
+  let t0 = null;
+  let row = null;
+  const span = (el, width) => {
+    const inset = getComputedStyle(el).clipPath.match(/^inset\(([^)]*)\)$/);
+    if (!inset) return [0, width];
+    const v = inset[1].trim().split(/\s+/).map((x) => (x.endsWith('%') ? (parseFloat(x) / 100) * width : parseFloat(x)));
+    return [v[3] ?? v[1] ?? v[0], width - (v[1] ?? v[0])];
+  };
+  const step = () => {
+    const fx = document.querySelector('.row-fx');
+    if (fx && t0 === null) {
+      t0 = performance.now();
+      row = fx.closest('tr')?.getAttribute('data-driver');
+    }
+    if (t0 !== null) {
+      const tr = document.querySelector(`.standings-table tbody tr[data-driver="${row}"]`);
+      const fx = tr?.querySelector('.row-fx');
+      const fill = fx?.querySelector('.row-fx-fill');
+      const parts = [];
+      if (tr && fx && fill) {
+        const box = fx.getBoundingClientRect();
+        const [a, b] = span(fill, box.width), [c, d] = span(fx, box.width);
+        const from = box.left + Math.max(a, c), to = box.left + Math.min(b, d);
+        const range = document.createRange();
+        for (const cell of tr.children) {
+          if (cell.matches('.mark-cell')) continue;
+          for (const part of cell.matches('.board-driver') ? cell.querySelectorAll('.driver-name, .crown, .board-ago') : [cell]) {
+            range.selectNodeContents(part);
+            if (part.contains(fx)) range.setEndBefore(fx);
+            const r = part instanceof SVGElement ? part.getBoundingClientRect() : range.getBoundingClientRect();
+            if (!r.width) continue;
+            const cover = r.left >= from && r.right <= to ? 'full' : r.right <= from || r.left >= to ? 'none' : 'part';
+            const style = getComputedStyle(part);
+            parts.push([part.className.baseVal ?? part.className, cover, (part instanceof SVGElement ? style.stroke : style.color) === 'rgb(255, 255, 255)']);
+          }
+        }
+      }
+      window.text.push([performance.now() - t0, parts]);
+    }
+    if (t0 === null || performance.now() - t0 < ms) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}, ms);
+const textSamples = async (page, ms) => {
+  await page.waitForFunction((ms) => window.text.length && window.text.at(-1)[0] >= ms, ms, { timeout: 6000 });
+  return page.evaluate(() => window.text);
+};
+/** Frames where a piece of text shows white on white or ink on purple, two frames running (one frame may lag the fill). */
+function mismatches(samples) {
+  const wrong = samples.map(([, parts]) => parts.map(([, cover, white]) => (cover === 'full' && !white) || (cover === 'none' && white)));
+  return samples.filter((s, i) => i > 0 && s[1].some((_, j) => wrong[i][j] && wrong[i - 1][j]))
+    .map(([at, parts]) => `${Math.round(at)} ms: ${parts.map(([name, cover, white]) => `${name || 'cell'} ${cover} ${white ? 'white' : 'ink'}`).join(', ')}`);
+}
+
+test('a track record lights its row purple, each piece of its text white while the purple is under it, on the big screen too', async (t) => {
   await practice();
   await lap('20', 9950);
   const { context, page, errors } = await boardPage('/personal/board?big', { viewport: { width: 1920, height: 1080 } });
   t.after(() => context.close());
   await sampling(page, 2600);
-  await lap('10', 8900); // beats Ana's 9.000
+  await textSampling(page, 2500);
+  await lap('10', (record -= 10)); // beats the record
+  const samples = await textSamples(page, 2500);
+  assert.deepEqual(mismatches(samples), [], 'no white on white, no ink on purple');
+  const full = samples.filter(([at]) => at > 800 && at < 1800);
+  assert.ok(full.length > 10 && full.every(([, parts]) => parts.length >= 5 && parts.every(([, cover, white]) => cover === 'full' && white)), 'all white while the fill holds');
+  assert.ok(samples.some(([at, parts]) => at < 500 && parts.some(([, cover, white]) => cover === 'none' && !white)), 'ink ahead of the fill');
   const ink = await page.evaluate(() => getComputedStyle(document.body).color);
-  const white = 'rgb(255, 255, 255)';
-  for (const ms of [200, 400, 600, 1000, 1800]) {
-    const s = await sampleAt(page, ms);
-    assert.match(s.classes, /\bis-lit-tr\b/);
-    assert.deepEqual([s.cell, s.name, s.crown], [white, white, white], `white text and crown outline at ${Math.round(s.at)} ms`);
-    assert.deepEqual([s.markBg, s.markColour], [ink, white], 'the mark inverted');
-  }
-  const leaving = await sampleAt(page, 2050);
-  assert.doesNotMatch(leaving.classes, /is-lit-light/, 'ink again once the fill begins to leave');
-  assert.equal(leaving.cell, ink);
+  const s = await sampleAt(page, 1000);
+  assert.deepEqual([s.cell, s.name, s.crown], ['rgb(255, 255, 255)', 'rgb(255, 255, 255)', 'rgb(255, 255, 255)'], 'cells, name and crown outline');
+  assert.deepEqual([s.markBg, s.markColour], [ink, 'rgb(255, 255, 255)'], 'the mark inverted');
   const after = await sampleAt(page, 2500);
   assert.equal(after.classes, '', 'nothing lit once the fill is gone');
+  assert.equal(after.cell, ink);
+  await settled(page);
+  assert.equal(await page.locator('.is-lit-light').count(), 0);
+  assert.deepEqual(errors, []);
+});
+
+test('with reduced motion a record row\'s text is white while the colour shows', async (t) => {
+  await practice();
+  await lap('20', 9950);
+  const { context, page, errors } = await boardPage();
+  t.after(() => context.close());
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await sampling(page, 2500);
+  await lap('10', (record -= 10));
+  const white = 'rgb(255, 255, 255)';
+  for (const ms of [50, 1000, 2100]) {
+    const s = await sampleAt(page, ms);
+    assert.deepEqual([s.cell, s.name, s.crown], [white, white, white], `white at ${Math.round(s.at)} ms`);
+  }
+  const fading = await sampleAt(page, 2250);
+  assert.equal(fading.cell, await page.evaluate(() => getComputedStyle(document.body).color), 'ink once the colour fades');
   await settled(page);
   assert.deepEqual(errors, []);
 });
