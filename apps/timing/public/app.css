@@ -623,7 +623,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .is-lit-fl .mark-fl { background: var(--p-text); color: var(--tl-fastest); }
 .is-lit-pb .mark-pb { background: var(--p-text); color: var(--tl-pb); }
 .is-lit-tr .mark-tr { background: var(--p-text); color: var(--tl-record-ink); }
-.is-lit .driver::before { outline: var(--p-border-width) solid var(--p-text); outline-offset: -1px; }
+.is-lit .driver::before { outline: var(--p-border-width) solid var(--p-text); outline-offset: calc(-1 * var(--p-border-thin)); }
 /* On purple, ink text falls to about 3.7:1: in a record row, each cell's
  * text (and the driver's name, crown outline and second line) turns white
  * while the purple is under it, as tl-board marks it, with no transition so
