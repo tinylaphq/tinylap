@@ -222,7 +222,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 .preset-card:hover { transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--accent); }
 .preset-thumb { flex: 0 0 4rem; display: flex; border: var(--p-border-thin) solid var(--p-text); }
 .preset-thumb svg { width: 4rem; height: auto; display: block; }
-.preset-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.preset-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; } /* 2px: waits on palace-ui#22 */
 .preset-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
 .preset-source { font-size: 11px; color: var(--p-text-faint); }
 .preset-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -345,7 +345,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
    of the presets dialog sits past the suggestions and the out-of-reach
    block, i.e. off-screen at this dialog's height. */
 .dialog-dismiss { float: right; margin: 0 0 var(--p-space-xs) var(--p-space-sm); }
-.dialog-dismiss .btn { padding: 2px 8px; line-height: 1; }
+.dialog-dismiss .btn { padding: 2px 8px; line-height: 1; } /* 2px: waits on palace-ui#22 */
 
 /* A rail heading with its own action beside it — MATERIALS + Edit kits.
    The button sits with the numbers it governs: the OWNED column IS the
@@ -438,7 +438,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 2px 8px;
+  padding: 2px 8px; /* 2px: waits on palace-ui#22 */
   background: transparent;
   color: var(--p-text-muted);
   border: var(--p-border-thin) solid var(--p-border);
@@ -476,7 +476,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
    library dialog, so the two read as the same thing. */
 .library-current {
   margin: 0 auto 0 var(--p-space-md);
-  padding: 2px var(--p-space-sm);
+  padding: 2px var(--p-space-sm); /* 2px: waits on palace-ui#22 */
   max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -499,7 +499,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   margin-bottom: var(--p-space-sm);
 }
 .library-ws-head h3 { color: var(--p-accent-2); }
-.library-ws-head .tag { font-size: 11px; padding: 1px 6px; }
+.library-ws-head .tag { font-size: 11px; padding: 1px 6px; } /* a small tag: waits on palace-ui#23 */
 .library-hint { color: var(--p-text-muted); }
 
 .library-tracks { list-style: none; padding: 0; margin: 0; }
@@ -526,7 +526,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   font-weight: 700;
   color: var(--p-accent-1);
 }
-.library-meta { margin: 2px 0 0; font-size: 12px; color: var(--p-text-muted); }
+.library-meta { margin: 2px 0 0; font-size: var(--tl-text-meta); color: var(--p-text-muted); } /* 2px: waits on palace-ui#22 */
 .library-actions {
   display: flex;
   flex-wrap: wrap;
@@ -580,7 +580,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 
 .library-form label { margin-bottom: var(--p-space-xs); }
 .library-form-row { display: flex; gap: var(--p-space-xs); align-items: stretch; flex-wrap: wrap; }
-/* As tall as the .btn-sm beside it. */
+/* As tall as the .btn-sm beside it; a small field waits on palace-ui#25. */
 .library-form-row input { flex: 1 1 12rem; width: auto; height: var(--p-control-height-sm); padding: 0 10px; font-size: 14px; }
 /* Leaves room on the right for palace's select arrow. */
 .library-form-row select { flex: 1 1 12rem; width: auto; height: var(--p-control-height-sm); padding: 0 2.5rem 0 10px; font-size: 14px; }
@@ -615,5 +615,5 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
      `.btn { transition: all }` would animate on every resize. */
   .account { position: absolute; top: var(--p-space-sm); right: var(--p-space-md); min-height: var(--p-control-height-sm); padding-left: 0; border-left: 0; }
   .navbar-right { flex: 1 1 100%; flex-wrap: wrap; gap: var(--p-space-xs); }
-  .navbar-right > .btn { padding: 6px 10px; }
+  .navbar-right > .btn { padding: 6px 10px; } /* waits on palace-ui#24 */
 }
