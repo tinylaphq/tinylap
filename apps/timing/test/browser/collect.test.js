@@ -125,6 +125,28 @@ test("with script, a row whose number became someone else's asks in the row, the
   await row.getByText("Transponder 66 is Ana's. Giving it to Ben Okafor takes it off Ana.").waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Give it to Ben Okafor', 'the answer has the focus');
   assert.equal(await page.locator('#frame-status').textContent(), '', 'nothing saved yet');
+  // Crossing now, the row is lit, but the safe answer stays outlined: only Give it looks primary.
+  await postPassings(app, decoder, [{ transponder: '66', t: tick() }]);
+  await page.locator('.collect-row.is-crossing[data-code="66"]').waitFor();
+  await page.mouse.move(0, 0); // off the button the click left the pointer on
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  const keep = row.getByRole('link', { name: 'Keep it with Ana' });
+  const looks = await keep.evaluate((a) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--p-accent-1)';
+    document.body.append(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const outline = document.createElement('a');
+    outline.className = 'btn btn-outline';
+    document.querySelector('main').append(outline);
+    const plain = getComputedStyle(outline).backgroundColor;
+    outline.remove();
+    return { accent, plain, keep: getComputedStyle(a).backgroundColor, give: getComputedStyle(a.parentElement.querySelector('button')).backgroundColor };
+  });
+  assert.notEqual(looks.keep, looks.accent, 'Keep it is not primary');
+  assert.equal(looks.keep, looks.plain, 'Keep it is outlined, as off the lit row');
+  assert.equal(looks.give, looks.accent, 'Give it is primary');
   await page.getByRole('button', { name: 'Give it to Ben Okafor' }).click();
   await page.locator('[role="status"]', { hasText: "Transponder 66 is Ben Okafor's now." }).waitFor();
   assert.equal(await page.locator('.collect-row[data-code="66"]').count(), 0);

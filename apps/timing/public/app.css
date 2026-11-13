@@ -996,7 +996,8 @@ ul.tp-rows { list-style: none; margin: 0; padding: 0; }
 
 /* Collect (§3.6): a framed row per new transponder, its number beside two small forms, one or the other.
  * The row whose transponder is crossing now carries the accent: palace's offset shadow, and both its
- * buttons in the primary style while every other row's are outlined. tl-crossing-now only toggles .is-crossing. */
+ * buttons in the primary style while every other row's are outlined; a row asking keeps its "Keep it with"
+ * link outlined, the safe answer. tl-crossing-now only toggles .is-crossing. */
 /* The element selector outweighs palace's .container ul; the margin above stays the section's space-md. */
 ul.collect { list-style: none; margin-bottom: 0; padding: 0; display: grid; gap: var(--p-space-md); }
 .container li.collect-row { margin: 0; font-size: 1rem; }
@@ -1007,8 +1008,8 @@ ul.collect { list-style: none; margin-bottom: 0; padding: 0; display: grid; gap:
 .collect-seen { margin: 0; min-height: 1.3em; font-size: 0.875rem; color: var(--p-text-secondary); }
 .collect-or { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--p-text-muted); }
 .collect-row.is-crossing { box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
-.collect-row.is-crossing .btn { background: var(--p-accent-1); color: #fff; border-color: var(--p-accent-1); }
-.collect-row.is-crossing .btn:hover { background: var(--p-dark); color: var(--p-accent-1); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-accent-1); }
+.collect-row.is-crossing button.btn { background: var(--p-accent-1); color: #fff; border-color: var(--p-accent-1); }
+.collect-row.is-crossing button.btn:hover { background: var(--p-dark); color: var(--p-accent-1); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-accent-1); }
 /* Narrow, the button goes under its field and takes the row's width. */
 @container (max-width: 24rem) { .collect-body .control-row > .btn { flex: 1 1 100%; } }
 @media (prefers-reduced-motion: reduce) { .collect-row { transition: none; } }
