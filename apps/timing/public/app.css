@@ -199,8 +199,8 @@ body.big .board {
   /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
   padding-top: calc(0.5rem + 44px + var(--p-space-md));
 }
-/* The table takes three quarters and the feed may shrink, so the table keeps every column and room for names. */
-@media (min-width: 721px) { body.big .board:not(.is-idle) { grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); } }
+/* The table takes 73% and the feed may shrink, so the table keeps every column and room for names, and at 1920×1080 the feed keeps a name whole beside a "Not counted" tag and the mark column. */
+@media (min-width: 721px) { body.big .board:not(.is-idle) { grid-template-columns: minmax(0, 73fr) minmax(0, 27fr); } }
 body.big .board-clock-label { font-size: 0.6em; }
 body.big .board-track { font-size: 0.75em; }
 @media (max-width: 600px) {
@@ -767,7 +767,8 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .lap-table { --cell-x: 8px; --mark-gap: var(--p-space-sm); table-layout: fixed; font-size: 13px; }
 .lap-table td, .lap-table th { padding: var(--p-space-xs) var(--cell-x); }
 .lap-table .tag { font-size: 10px; padding: 1px 6px; white-space: nowrap; }
-.lap-table tr.is-not-counted .num { color: var(--p-text-muted); }
+/* A time that did not count is muted, in a lap list and in Last laps alike. */
+.lap-table tr.is-not-counted .num, .board-laps li.is-not-counted .num { color: var(--p-text-muted); }
 /* A track's page: each layout drawn on the track's dark floor, the current one large. */
 .track-drawing { margin: 0; display: grid; gap: var(--p-space-xs); }
 .track-drawing-art { background: var(--tl-track-bg); padding: var(--p-space-md); display: grid; place-items: center; }

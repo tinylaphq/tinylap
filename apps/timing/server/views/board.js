@@ -175,7 +175,7 @@ function feed(snap) {
   const laps = snap.crossings.filter((c) => c.lapMs !== null).slice(0, 12);
   return html`<aside class="board-feed" aria-label="Last laps">
   <h2 class="h3">Last laps</h2>
-  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps${timeWidths(laps.map((c) => c.lapMs))}">${laps.map((c) => html`<li>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">Not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span>${m.lap(c)}</li>`)}</ol>`}
+  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps${timeWidths(laps.map((c) => c.lapMs))}">${laps.map((c) => html`<li${c.counts ? null : html` class="is-not-counted"`}>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">Not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span>${m.lap(c)}</li>`)}</ol>`}
 </aside>`;
 }
 

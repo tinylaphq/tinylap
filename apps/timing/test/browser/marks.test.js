@@ -122,6 +122,35 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
   });
 }
 
+test('on the big screen at 1920×1080, Last laps keeps whole names beside a "Not counted" tag and the mark column; a time that did not count is muted', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member, { viewport: { width: 1920, height: 1080 } });
+  t.after(() => context.close());
+  await page.goto('/personal/board?big');
+  await page.evaluate(() => document.fonts.ready);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('.board-feed .board-laps li')].map((li) => {
+    const name = li.querySelector('.driver-name');
+    return {
+      name: name.textContent,
+      cut: name.scrollWidth > name.clientWidth + 0.5,
+      tagged: /Not counted/.test(li.querySelector('.board-laps-tags').textContent),
+      marked: Boolean(li.querySelector('.mark')),
+      notCounted: li.classList.contains('is-not-counted'),
+      colour: getComputedStyle(li.querySelector('.num')).color,
+      muted: (() => { const probe = document.createElement('span'); probe.style.color = 'var(--p-text-muted)'; document.body.append(probe); const c = getComputedStyle(probe).color; probe.remove(); return c; })(),
+    };
+  }));
+  assert.ok(rows.some((r) => r.marked), 'a mark in the feed');
+  const tagged = rows.filter((r) => r.tagged);
+  assert.ok(tagged.some((r) => r.name === 'Ben Okafor') && tagged.some((r) => r.name === 'Mia Schulz'), 'long names beside the tag');
+  for (const r of rows) {
+    assert.ok(!r.cut, `${r.name}${r.tagged ? ' (Not counted)' : ''}: the name is whole`);
+    assert.equal(r.notCounted, r.tagged, `${r.name}: muted exactly when it did not count`);
+    if (r.notCounted) assert.equal(r.colour, r.muted, `${r.name}: a time that did not count is muted`);
+    else assert.notEqual(r.colour, r.muted);
+  }
+  assert.deepEqual(errors, []);
+});
+
 test('on the session page a mark follows its time and centres on its digits, in the table and the lap lists', async (t) => {
   app.engine.end(ws, practice.id);
   for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
