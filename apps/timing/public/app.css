@@ -258,6 +258,8 @@ body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
 body.big .board-table { --cell-x: calc(var(--board-font) * 0.5); --cell-y: calc(var(--board-font) * 0.6); --mark-gap: calc(var(--board-font) * 0.4); }
 body.big .board-feed { font-size: max(0.7em, 0.875rem); }
+/* Last laps shows the eleven newest on the wall screen, whole rows only: at 1920×1080 with four drivers and the strip's two lines, a twelfth would run past the screen's bottom. */
+body.big .board-feed .board-laps li:nth-child(n + 12) { display: none; }
 body.big .board-ago { font-size: 0.6em; }
 body.big .board-hero-time { font-size: 4.5em; }
 body.big .board-hero-by, body.big .board-last-meta { font-size: 0.7em; }
