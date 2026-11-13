@@ -206,7 +206,7 @@ function transpondersSection(request, m) {
   <h2 id="transponders-title">Transponders</h2>
   ${free.length || taken.length ? html`<div class="tp-list">
     ${free.length ? html`<div class="tp-group"><p class="pick-group">Not assigned yet</p>${free.length >= 2 ? html`<a class="btn btn-sm btn-outline" href="${base}/transponders/new">Assign all ${free.length}</a>` : null}</div>
-    <ul class="tp-rows">${free.map((t) => html`<li class="is-unknown" data-code="${t.code}">
+    <ul class="tp-rows">${free.map((t) => html`<li data-code="${t.code}">
       <span class="tp">${t.code}</span>
       <span class="meta">first crossed <time datetime="${new Date(t.firstSeenAt).toISOString()}">${formatAgo(t.firstSeenAt, request.now())}</time></span>
       <span class="tp-acts"><a class="btn btn-sm btn-primary" href="${assignHref(base, t)}">Assign<span class="visually-hidden"> transponder ${t.code}</span></a>${m.mayDelete ? forgetLink(base, t) : null}</span>

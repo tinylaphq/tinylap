@@ -10,14 +10,13 @@
  * like the display at a track's start line. The table around it stays plain. */
 
 /* Record marks (records spec §4.2), in the colours a timing screen uses:
- * purple for the fastest lap anyone has driven here, green for a driver's own
- * best. The session's best lap tints its whole row. */
+ * purple for the fastest lap anyone has driven here, cyan for the session's
+ * fastest (.mark-sb), green for a driver's own best. */
 :root {
   --tl-record: var(--p-accent-2);
   --tl-record-ink: var(--p-surface);
   --tl-pb: var(--p-success);
   --tl-pb-ink: var(--p-text);
-  --tl-session-best: color-mix(in srgb, var(--p-accent-3) 22%, var(--p-surface));
 }
 
 body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-text); font-family: var(--p-font); }
@@ -120,7 +119,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
  * cells' side padding; th and td share it, so a number sits flush under its
  * header. */
 .board-table {
-  --cell-x: var(--p-space-md); --cell-y: var(--p-space-sm); --mark-gap: var(--p-space-xs);
+  --cell-x: var(--p-space-md); --cell-y: var(--p-space-sm); --mark-gap: var(--p-space-sm);
   font-size: 1em; width: 100%; table-layout: fixed; border-collapse: collapse;
   background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text);
 }
@@ -131,8 +130,11 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-table th.num, .board-table td.num { text-align: right; }
 .board-table td, .board-table th { font-size: inherit; }
 .board-table th { font-size: 0.7em; }
-.board-table tbody tr:first-child .pos { box-shadow: inset 4px 0 0 var(--p-accent-1); }
 .board-table .pos { font: 700 1.25em var(--p-font-mono); white-space: nowrap; }
+/* A position belongs to its name: right-aligned, so 1 and 12 end on the same
+ * edge, and one cell's padding to the name instead of two (the table's left
+ * and right edges keep the same padding). Its header is for screen readers. */
+.standings-table .pos { text-align: right; padding-right: 0; }
 /* The board element; the stream swaps the #board-live inside it. */
 tl-board { display: block; }
 /* The tap element; the tap screen inside it is unchanged. */
@@ -156,18 +158,30 @@ tl-bridge { display: block; }
   content: ''; display: inline-block; width: 0.75em; height: 0.75em; margin-right: 0.25em;
   background: var(--driver, var(--p-text-faint)); border: var(--p-border-thin) solid var(--p-text);
 }
-/* The record holder's crown, between the colour and the name. */
-.crown { margin-right: 0.25em; }
-/* In a table or list a name keeps one line: the colour, the crown, then the
- * name, cut with an ellipsis where the column ends. The whole name stays in
+/* The record holder's crown, after the name in standings, as far after it as
+ * a mark sits after its time (--mark-gap). Flat: the warning colour, its
+ * outline a mark's border, exactly as tall as a mark (0.8em type, 0.15em of
+ * it padding above and below, and the border); the path fills its box,
+ * stroke included. It drops to the line a mark sits on, as far below the
+ * baseline as a mark's box hangs (a share of its type, plus its border; the
+ * names test measures both); in a flex row vertical-align does nothing, so a
+ * relative nudge does it there. */
+.crown {
+  display: inline-block; flex: none; height: calc(1.04em + 2 * var(--p-border-thin)); width: auto; aspect-ratio: 26 / 18;
+  margin-left: var(--mark-gap, var(--p-space-sm)); vertical-align: -0.22em;
+  fill: var(--p-warning); stroke: var(--p-text); stroke-width: 2.25; stroke-linejoin: miter; overflow: visible;
+}
+.driver:is(.board-driver *, .board-laps *, .cut-words > *) > .crown { position: relative; top: calc(0.11em + 1.5px); vertical-align: baseline; }
+/* In a table or list a name keeps one line: the colour, the name, cut with an
+ * ellipsis where the column ends, then the crown. The whole name stays in
  * the text, for screen readers, and in its title, for hover. */
 .board-driver .driver, .board-laps .driver { display: flex; align-items: baseline; min-width: 0; }
-.board-driver .driver::before, .board-driver .crown, .board-laps .driver::before { flex: none; }
+.board-driver .driver::before, .board-laps .driver::before { flex: none; }
 .board-driver .driver-name, .board-laps .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A name alone in a heading that cuts long words keeps its colour beside it:
  * it wraps between words, and a word too long for the line ends in "…". */
 .cut-words > .driver:only-child { display: flex; align-items: baseline; }
-.cut-words > .driver:only-child::before, .cut-words > .driver:only-child > .crown { flex: none; }
+.cut-words > .driver:only-child::before { flex: none; }
 .cut-words > .driver:only-child > .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .board-feed { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-md); align-self: start; }
@@ -200,7 +214,7 @@ body.big .board-track { font-size: 0.75em; }
 }
 body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
-body.big .board-table { --cell-x: calc(var(--board-font) * 0.5); --cell-y: calc(var(--board-font) * 0.6); --mark-gap: calc(var(--board-font) * 0.2); }
+body.big .board-table { --cell-x: calc(var(--board-font) * 0.5); --cell-y: calc(var(--board-font) * 0.6); --mark-gap: calc(var(--board-font) * 0.4); }
 body.big .board-feed { font-size: max(0.7em, 0.875rem); }
 body.big .board-ago { font-size: 0.6em; }
 body.big .board-hero-time { font-size: 4.5em; }
@@ -680,8 +694,8 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
   font: 700 0.8em/1 var(--p-font); letter-spacing: 0.04em; border: var(--p-border-thin) solid var(--p-text);
 }
 .mark-tr { background: var(--tl-record); color: var(--tl-record-ink); }
+.mark-sb { background: var(--p-accent-3); color: var(--p-text); }
 .mark-pb { background: var(--tl-pb); color: var(--tl-pb-ink); }
-.board-table tr.is-best td { background: var(--tl-session-best); }
 
 /* A notice on the board ("Unknown cars…" while a session runs):
  * palace's warning status in full, with the hard offset shadow its cards and the board's
@@ -716,16 +730,13 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 /* A lap card is headed by the driver's name as it is written, not upper-cased. */
 .session-laps .h3 { text-transform: none; letter-spacing: 0; color: var(--p-text); }
 .session-laps-note { margin: 0 0 var(--p-space-sm); font-size: 13px; color: var(--p-text-muted); }
-/* The key to the tinted row of the session's best lap. */
-.table-key { display: flex; align-items: center; gap: var(--p-space-xs); margin: 0; font-size: 13px; color: var(--p-text-secondary); }
-.table-key-swatch { width: 1.5em; height: 1em; background: var(--tl-session-best); border: var(--p-border-thin) solid var(--p-text); }
 /* A confirmation's action is the destructive one, so it is the filled, main
  * button beside Cancel: palace's danger colours, filled as its error status is.
  * A filled danger button belongs upstream in palace-ui. */
 .confirm-actions .btn-danger { background: var(--p-error); color: var(--p-text); border-color: var(--p-text); }
 .confirm-actions .btn-danger:hover { background: var(--p-dark); color: var(--p-error); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-error); }
 /* A driver's laps: fixed columns, so a tag never moves the time, and every card's columns line up. */
-.lap-table { --cell-x: 8px; --mark-gap: var(--p-space-xs); table-layout: fixed; font-size: 13px; }
+.lap-table { --cell-x: 8px; --mark-gap: var(--p-space-sm); table-layout: fixed; font-size: 13px; }
 .lap-table td, .lap-table th { padding: var(--p-space-xs) var(--cell-x); }
 .lap-table .tag { font-size: 10px; padding: 1px 6px; white-space: nowrap; }
 .lap-table tr.is-not-counted .num { color: var(--p-text-muted); }
@@ -751,10 +762,14 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
  * .has-long-totals "60:59.999": a race lasts at most an hour (startErrors),
  * and its last lap at most a minute, so a total never reaches an hour's
  * format. The server sets
- * both classes (timeWidths in views/marks.js). The position holds "12" and
- * the finish flag; the mark's column is one mark wide. The rest are what
- * their header or content needs. */
-.col-pos { width: calc(2.6em + 2 * var(--cell-x)); }
+ * both classes (timeWidths in views/marks.js). The position holds one digit
+ * (1.25em mono, 0.6em a character) and one cell padding, its right edge the
+ * name's: two digits with .has-two-digit-pos (ten rows or more), and room for
+ * the finish flag with .has-flags (races), both from tableClasses. The mark's
+ * column is one mark wide. The rest are what their header or content needs. */
+.col-pos { width: calc(0.85em + var(--cell-x)); }
+.has-two-digit-pos .col-pos { width: calc(1.6em + var(--cell-x)); }
+.has-flags .col-pos { width: calc(2.6em + var(--cell-x)); }
 .col-laps { width: calc(2.2em + 2 * var(--cell-x)); }
 .col-lap { width: calc(2em + 2 * var(--cell-x)); }
 .col-time { width: calc(3.7em + var(--cell-x) + var(--mark-gap)); }
@@ -794,7 +809,7 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
   }
   /* Tighter cells, the start's date over its time, and the session as wide as "Qualifying":
    * what is left goes to the fastest driver, whose long name breaks between its words. */
-  .history-table { --cell-x: 6px; }
+  .history-table { --cell-x: 6px; --mark-gap: var(--p-space-xs); }
   .history-table .col-started { width: calc(4.6em + 2 * var(--cell-x)); }
   .history-table .col-kind { width: calc(5.6em + 2 * var(--cell-x)); }
   .history-started a { white-space: normal; }
@@ -949,7 +964,6 @@ ul.roster-tps { list-style: none; margin: 0; padding: 0; }
 ul.tp-rows { list-style: none; margin: 0; padding: 0; }
 .tp-rows > li { display: flex; align-items: center; gap: var(--p-space-xs) var(--p-space-md); min-height: 3.25rem; padding: var(--p-space-xs) var(--p-space-md); }
 .tp-rows > li + li { border-top: var(--p-border-thin) solid var(--p-border); }
-.tp-rows > li.is-unknown { box-shadow: inset var(--p-border-width) 0 0 var(--p-warning); }
 .tp-rows .meta, .tp-who { flex: 1 1 0; min-width: 0; font-size: 0.875rem; color: var(--p-text-secondary); }
 .tp-who { font-size: 1rem; font-weight: 600; color: var(--p-text); }
 .tp-who .tp-label { margin-left: var(--p-space-xs); font-size: 0.875rem; font-weight: 400; color: var(--p-text-muted); }

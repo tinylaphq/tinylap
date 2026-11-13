@@ -24,6 +24,7 @@ let countedClub;
 let quietClub;
 let statusClub;
 let unassignedClub;
+let marksClub;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -42,6 +43,9 @@ before(async () => {
   app.join(tess, quietClub.id, user);
   statusClub = app.club(tess, 'Status');
   unassignedClub = app.club(tess, 'Unassigned');
+  const uma = await app.signUp('Uma');
+  marksClub = app.club(uma, 'Marks');
+  app.join(uma, marksClub.id, user);
   app.join(tess, unassignedClub.id, user);
   app.join(tess, statusClub.id, user);
   member = await app.login(user);
@@ -94,6 +98,7 @@ test('laps, a personal best and an unknown car', async () => {
   // The time in its column, its mark in the narrow column after it.
   assert.match(body, /<td class="num">8\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr"/);
   assert.match(body, /<th scope="col" class="num">Best<\/th><th scope="col" class="mark-cell"><span class="visually-hidden">Mark<\/span><\/th>/);
+  assert.match(body, /<thead><tr><th scope="col"><span class="visually-hidden">Position<\/span><\/th><th scope="col">Driver<\/th>/, 'Pos for screen readers only');
   assert.match(body, /<table class="board-table standings-table">\s*<colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last"><\/colgroup>/);
   // One transponder not assigned yet: the warning links straight to its form, back to the board after.
   assert.match(body, new RegExp(`<p class="status status-warning flag board-unknown" role="status">Transponder 4711 isn't assigned yet, so its laps aren't counted\\. <a href="${base}/transponders/4711\\?returnTo=${encodeURIComponent(`${base}/board`)}">Assign it</a></p>`));
@@ -260,7 +265,7 @@ test('a stopped practice driver shows when they last crossed the line, but not w
   const lastAt = clock.now;
   clock.now = lastAt + 180_000;
   let body = await (await get(member, `/clubs/${practiceClub.id}/board`)).text();
-  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+"><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑</span><span class="driver-name" title="Cleo">Cleo</span></span><tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
+  assert.match(body, new RegExp(`<td class="board-driver"><span class="driver" style="--driver: [^"]+"><span class="driver-name" title="Cleo">Cleo</span><svg class="crown" viewBox="0 0 26 18" role="img" aria-label="Track record holder"><title>Track record holder</title><path d="[^"]+"/></svg></span><tl-relative-time class="board-ago" now="${clock.now}" min="60000">last lap <time datetime="${escape(new Date(lastAt).toISOString())}">3 min ago</time></tl-relative-time></td>`));
 
   passIn(practiceClub.id, 396_000, '21');
   passIn(practiceClub.id, 404_000, '21');
@@ -298,7 +303,7 @@ test('a race table: Last shows counted laps only, the mark has its own column, a
   clock.now = session.opensAt + 1000;
   app.engine.tick();
   const body = await (await get(member, `/clubs/${countedClub.id}/board`)).text();
-  assert.match(body, /<table class="board-table standings-table is-race">\s*<colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last"><col class="col-total"><\/colgroup>/);
+  assert.match(body, /<table class="board-table standings-table is-race has-flags">\s*<colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last"><col class="col-total"><\/colgroup>/);
   assert.match(body, /<th scope="col" class="num col-last">Last<\/th><th scope="col" class="num">Time<\/th>/);
   assert.match(body, /<td class="num col-last">—<\/td>/, 'the lap before the start is not the last lap');
   assert.match(body, /<li><span [^>]+><span class="driver-name" title="Cleo">Cleo<\/span><\/span><span class="board-laps-tags"><span class="tag">Not counted<\/span><\/span><span class="num">8\.000<\/span><\/li>/);
@@ -320,13 +325,13 @@ test('no note on a finished row, nor in the results', async () => {
   clock.now += 180_000;
   let body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
   assert.match(body, /data-state="finishing"/);
-  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<span class="finish" role="img" aria-label="Finished" title="Finished"><\/span><\/td>\s*<td class="board-driver"><span [^>]+><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><span class="driver-name" title="Abe">Abe<\/span><\/span><\/td>/);
+  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<span class="finish" role="img" aria-label="Finished" title="Finished"><\/span><\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Abe">Abe<\/span><svg class="crown" viewBox="0 0 26 18" role="img" aria-label="Track record holder"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span><\/td>/);
   assert.match(body, />Bea<\/span><\/span><tl-relative-time class="board-ago"[^>]*>last lap <time [^>]+>3 min ago<\/time>/);
 
   app.engine.abort(finishClub.id, session.id);
   body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
   const results = body.slice(body.indexOf('<section class="board-last"'), body.indexOf('</section>', body.indexOf('<section class="board-last"')));
-  assert.match(results, /<span class="board-driver"><span [^>]+><span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><span class="driver-name" title="Abe">Abe<\/span><\/span><\/span>/);
+  assert.match(results, /<span class="board-driver"><span [^>]+><span class="driver-name" title="Abe">Abe<\/span><svg class="crown" viewBox="0 0 26 18" role="img" aria-label="Track record holder"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span><\/span>/);
   assert.doesNotMatch(results, /tl-relative-time/);
 });
 
@@ -347,7 +352,7 @@ test('no note while the session still says countdown, even for a crossing after 
 test('the watchers board and the big board show the note too', async () => {
   const token = await watchToken();
   for (const body of [await (await get(null, `/watch/${token}`)).text(), await (await get(member, `${base}/board?big`)).text()]) {
-    assert.match(body, /&lt;i&gt;Ana&lt;\/i&gt;<\/span><\/span><tl-relative-time class="board-ago" now="\d+" min="60000">last lap <time datetime="[^"]+">\d+ min ago<\/time><\/tl-relative-time>/);
+    assert.match(body, /&lt;i&gt;Ana&lt;\/i&gt;<\/span>(?:<svg class="crown"[^]*?<\/svg>)?<\/span><tl-relative-time class="board-ago" now="\d+" min="60000">last lap <time datetime="[^"]+">\d+ min ago<\/time><\/tl-relative-time>/);
   }
 });
 
@@ -436,13 +441,12 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.match(head, /<tl-local-time format="date">/);
     assert.doesNotMatch(head, /·/);
     assert.doesNotMatch(body, NOTICE);
-    // The crown only beside the holder, TR on his best, PB on Mia's, and one session-best row.
+    // The crown only after the holder's name, TR alone on his best, PB on Mia's; a practice table shows no SB, no tint.
     assert.equal(body.match(/class="crown"/g).length, 1);
-    assert.match(body, /<span class="crown" role="img" aria-label="Track record holder" title="Track record holder">👑<\/span><span class="driver-name" title="Haris">Haris</);
-    assert.match(body, /7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr"[^>]*>TR<\/abbr><span class="visually-hidden">Track record<\/span><span class="visually-hidden">Session best<\/span><\/td>/);
+    assert.match(body, /<td class="pos">1<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><svg class="crown" viewBox="0 0 26 18" role="img" aria-label="Track record holder"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span>/);
+    assert.match(body, /7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr"[^>]*>TR<\/abbr><span class="visually-hidden">Track record<\/span><\/td>/);
     assert.match(body, /9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb"/);
-    assert.equal(body.match(/class="is-best"/g).length, 1);
-    assert.match(body, /<tr class="is-best">\s*<td class="pos">1<\/td>\s*<td class="board-driver"><span [^>]+>(?:<span class="crown"[^>]*>👑<\/span>)?<span class="driver-name" title="Haris">Haris</);
+    assert.doesNotMatch(body, /mark-sb|Session best|is-best/);
     assert.match(body, new RegExp(`<span class="stat-label board-clock-label">Started <tl-local-time format="time"><time datetime="${escape(new Date(session.opensAt).toISOString())}">`));
     assert.match(body, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
   }
@@ -459,7 +463,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.doesNotMatch(head, /Track record|7\.500/, 'the record is below, once');
     const hero = part(body, '<section class="board-hero"');
     assert.match(hero, /<h1 class="board-hero-label">Track record<\/h1>\s*<p class="num board-hero-time">7\.500<\/p>/);
-    assert.match(hero, /<p class="board-hero-by cut-words"><span [^>]+><span class="crown"[^>]*>👑<\/span><span class="driver-name" title="Haris">Haris<\/span><\/span> set <tl-local-time format="datetime-short">[\s\S]*?, beat their own <span class="num">8\.000<\/span><\/p>/, 'his own record: their own, not his name');
+    assert.match(hero, /<p class="board-hero-by cut-words"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span> set <tl-local-time format="datetime-short">[\s\S]*?, beat their own <span class="num">8\.000<\/span><\/p>/, 'his own record: their own, not his name');
     const fastest = part(body, '<section class="board-fastest"');
     assert.match(fastest, /<h2 class="h3" id="board-fastest-title">Fastest on this track<\/h2>/);
     assert.deepEqual([...fastest.matchAll(/>(Haris|Mia)<\/span>[\s\S]*?(\d+\.\d{3})/g)].map((m) => [m[1], m[2]]), [['Haris', '7.500'], ['Mia', '9.000']]);
@@ -468,7 +472,8 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.match(last, /7\.500<\/span><span class="mark-cell"><abbr class="mark mark-tr"/);
     assert.match(last, /9\.000<\/span><span class="mark-cell"><abbr class="mark mark-pb"/);
     assert.match(last, /Practice, ended <tl-local-time format="datetime-short">/);
-    assert.equal(body.match(/class="crown"/g).length, 2, 'beside the holder in the record and in the last session');
+    assert.equal(body.match(/class="crown"/g).length, 1, 'after the holder in the last session; the record card says whose it is');
+    assert.doesNotMatch(hero, /class="crown"/, 'no crown on the record card');
   }
   assert.match(s.board, new RegExp(`<a href="${path}/sessions/${session.id}">All laps</a>`));
   for (const body of [s.big, s.watch]) assert.doesNotMatch(body, /All laps/);
@@ -571,4 +576,31 @@ test('several transponders not assigned yet in a session: one warning, by number
   for (const body of [await (await get(null, `/watch/${token}`)).text(), await (await get(member, `${path}/board?big`)).text()]) {
     assert.doesNotMatch(body, /board-unknown|isn't assigned yet|Assign them|transponders\/new|\b(41|52|66)\b/);
   }
+});
+
+test('a race table: SB on the session\'s fastest lap, also a PB; the crown after the holder; ten rows or more, two digits', async () => {
+  const names = ['Abe', 'Bea', ...Array.from({ length: 10 }, (_, i) => `Car ${i + 3}`)];
+  const drivers = [];
+  for (const [i, name] of names.entries()) drivers.push(await driverIn(marksClub, name, String(61 + i)));
+  // Abe sets the record in a practice.
+  clock.now = 1_000_000_000_000 + 20_000_000;
+  const practice = app.engine.start(marksClub.id, { kind: 'practice' }).session;
+  passIn(marksClub.id, 20_001_000, '61');
+  passIn(marksClub.id, 20_008_000, '61');
+  app.engine.end(marksClub.id, practice.id);
+  // A race of twelve: Bea's 8.500 is the session's fastest, and her first lap here, so a PB too.
+  clock.now = 1_000_000_000_000 + 20_100_000;
+  const { session } = app.engine.start(marksClub.id, { kind: 'race', roster: drivers.map((d) => d.id), durationMs: 600_000, countdownMs: 0 });
+  for (const [i] of names.entries()) passIn(marksClub.id, 20_101_000 + i * 10, String(61 + i));
+  for (const [i] of names.entries()) passIn(marksClub.id, 20_101_000 + i * 10 + (i === 1 ? 8500 : 9000 + i * 10), String(61 + i));
+  const body = await (await get(member, `/clubs/${marksClub.id}/board`)).text();
+  assert.match(body, /<table class="board-table standings-table is-race has-two-digit-pos has-flags">/);
+  const rows = [...body.matchAll(/<tr(?: class="[^"]*")?>\s*<td class="pos">[\s\S]*?<\/tr>/g)].map((m) => m[0]);
+  assert.equal(rows.length, 12);
+  const bea = rows.find((r) => r.includes('title="Bea"'));
+  assert.match(bea, /8\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-sb" title="Session best" aria-hidden="true">SB<\/abbr><span class="visually-hidden">Session best<\/span><\/td>/);
+  assert.equal(body.match(/class="mark mark-sb"/g).length, 1, 'one SB');
+  assert.match(rows.find((r) => r.includes('title="Abe"')), /<span class="driver-name" title="Abe">Abe<\/span><svg class="crown"/);
+  assert.doesNotMatch(body, /is-best|table-key|Session best lap/, 'no tint, no key');
+  app.engine.abort(marksClub.id, session.id);
 });

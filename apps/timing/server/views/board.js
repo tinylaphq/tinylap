@@ -13,7 +13,7 @@ import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
 import { directionIcon } from './direction.js';
-import { chip as driverChip, idleNotice, marks, marksHead, startPracticeForm, timeWidths } from './marks.js';
+import { chip as driverChip, idleNotice, marks, marksHead, posHead, startPracticeForm, tableClasses, timeWidths } from './marks.js';
 
 const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
 
@@ -89,7 +89,8 @@ function header(snap) {
  * The marks of a leaderboard (records spec §4.2), from what the snapshot
  * already holds: a row's best lap is the record or the driver's best when it
  * is the same lap (time, driver, when it was driven). Only on the track and
- * direction the record belongs to.
+ * direction the record belongs to. SB only in a race's standings, in
+ * finishing order: in a table sorted by best lap it would always be row 1.
  */
 function markers(snap, session, standings) {
   const here = session.trackId === snap.track.id && session.direction === snap.direction;
@@ -101,15 +102,14 @@ function markers(snap, session, standings) {
   for (const row of standings) {
     if (row.bestMs !== null && (!best || row.bestMs < best.bestMs || (row.bestMs === best.bestMs && row.bestAt < best.bestAt))) best = row;
   }
+  const sb = session.kind === 'race';
   return {
-    isBest: (row) => row === best,
     /** Whether the row's driver holds the record: their name gets the crown. */
     holder: (row) => record?.driverId === row.driverId,
     /** The mark cell after a row's best lap; in a list, a span. */
     mark: (row, list = false) => {
       const pb = pbs.get(row.driverId);
-      const note = row === best ? html`<span class="visually-hidden">Session best</span>` : null;
-      return marks({ lapMs: row.bestMs, isRecord: record?.driverId === row.driverId && same(record, row), isPb: same(pb && { lapMs: pb.bestMs, at: pb.at }, row) }, { note, list });
+      return marks({ lapMs: row.bestMs, isRecord: record?.driverId === row.driverId && same(record, row), isSessionBest: sb && row === best, isPb: same(pb && { lapMs: pb.bestMs, at: pb.at }, row) }, { list });
     },
   };
 }
@@ -136,10 +136,10 @@ function standingsTable(snap) {
   for (const c of snap.crossings) if (c.lapMs !== null && c.driverId && c.counts && !last.has(c.driverId)) last.set(c.driverId, c.lapMs);
   const m = markers(snap, snap.session, snap.standings);
   if (snap.standings.length === 0) return html`<p class="empty board-empty">No laps yet.</p>`;
-  return html`<div class="board-scroll"><table class="board-table standings-table${race ? ' is-race' : ''}${timeWidths([...snap.standings.map((row) => row.bestMs), ...last.values()], snap.standings.map((row) => row.elapsedMs))}">
+  return html`<div class="board-scroll"><table class="board-table standings-table${race ? ' is-race' : ''}${tableClasses({ positions: snap.standings.length, flags: race })}${timeWidths([...snap.standings.map((row) => row.bestMs), ...last.values()], snap.standings.map((row) => row.elapsedMs))}">
   <colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last">${race ? html`<col class="col-total">` : null}</colgroup>
-  <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${marksHead}<th scope="col" class="num col-last">Last</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
-  <tbody>${snap.standings.map((row) => { const cls = [row.finished && 'is-finished', m.isBest(row) && 'is-best'].filter(Boolean).join(' '); return html`<tr${cls ? html` class="${cls}"` : null}>
+  <thead><tr>${posHead}<th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${marksHead}<th scope="col" class="num col-last">Last</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
+  <tbody>${snap.standings.map((row) => html`<tr${row.finished ? html` class="is-finished"` : null}>
     <td class="pos">${row.position}${row.finished ? html`<span class="finish" role="img" aria-label="Finished" title="Finished"></span>` : null}</td>
     <td class="board-driver">${chip(snap, row.driverId, { holder: m.holder(row) })}${ago(snap, row)}</td>
     <td class="num">${row.laps}</td>
@@ -147,7 +147,7 @@ function standingsTable(snap) {
     ${m.mark(row)}
     <td class="num col-last">${formatLap(last.get(row.driverId))}</td>
     ${race ? html`<td class="num">${formatLap(row.elapsedMs)}</td>` : null}
-  </tr>`; })}</tbody>
+  </tr>`)}</tbody>
 </table></div>`;
 }
 
@@ -164,7 +164,7 @@ const beaten = (snap, r) => html`, beat ${r.beat.driverId === r.driverId ? 'thei
 
 /**
  * The track record as the big thing (named tracks spec §4): the time, the
- * holder with the crown, when it was set and what it beat. Beside it, for
+ * holder (no crown: the card says whose record it is), when it was set and what it beat. Beside it, for
  * members on their own screen, Start practice: over it the line saying a car
  * is on the track, under it the transponders not assigned yet, quietly; and
  * while nobody races, the track strip as its top band.
@@ -176,7 +176,7 @@ function hero(request, snap, members, band) {
   <div class="board-hero-record">
     <h1 class="board-hero-label">Track record</h1>
     ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
-    <p class="board-hero-by cut-words">${chip(snap, r.driverId, { holder: true })} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? beaten(snap, r) : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
+    <p class="board-hero-by cut-words">${chip(snap, r.driverId)} set ${safe(localTime(r.at, 'datetime-short'))}${r.beat ? beaten(snap, r) : null}</p>` : html`<p class="board-hero-none">No record yet</p>`}
   </div>
   ${members ? go(request, snap) : null}
 </section>`;
