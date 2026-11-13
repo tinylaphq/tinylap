@@ -57,7 +57,7 @@ The approved mockup is `drivers-transponders.html` from the brainstorming sessio
 
 ### 3.4 Moving a transponder
 
-Assigning a transponder that belongs to another driver asks first. On the form (§3.3) and on collect: "Transponder 17 is Simon's." with **Give it to Mia** (primary) and **Keep it with Simon**. In Setup's add list (§3.1) the question is the row itself. On the form the move question follows a click on a driver. Giving it moves it; Simon then has one fewer.
+Assigning a transponder that belongs to another driver asks first. On the form (§3.3) and on collect: "Transponder 17 is Simon's. Giving it to Mia takes it off Simon." with **Give it to Mia** (primary) and **Keep it with Simon**. In Setup's add list (§3.1) the question is the row itself. On the form the move question follows a click on a driver. Giving it moves it; Simon then has one fewer.
 
 ### 3.5 The driver's page
 

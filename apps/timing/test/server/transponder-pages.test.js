@@ -139,7 +139,8 @@ test('someone else’s asks first, then moves it', async () => {
   const ask = await app.form(owner, `${base}/transponders/17`, { driver: 'mia', name: '', returnTo: `${base}/board` });
   assert.equal(ask.status, 200);
   const body = await ask.text();
-  assert.match(body, /Transponder 17 is Simon's\./);
+  // The same sentence as Setup's and collect's move question.
+  assert.match(body, /<p class="cut-words">Transponder 17 is Simon's\. Giving it to Mia Kraus takes it off Simon\.<\/p>/);
   assert.match(body, /<button type="submit" class="btn btn-primary">Give it to Mia Kraus<\/button>/);
   assert.match(body, new RegExp(`<a class="btn btn-outline" href="${base}/board">Keep it with Simon</a>`));
   assert.match(body, /<input type="hidden" name="confirm" value="1">/);

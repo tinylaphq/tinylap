@@ -72,7 +72,7 @@ export function transponderFormPage(request, { base, code, crossingNow, drivers,
 }
 
 /**
- * "Transponder 17 is Simon's." (§3.4): give it to the one chosen, or keep it. The form sends
+ * "Transponder 17 is Simon's. Giving it to Mia takes it off Simon." (§3.4): give it to the one chosen, or keep it. The form sends
  * the choice again with confirm=1.
  * @param {any} request
  * @param {{ base: string, code: string, owner: { name: string }, to: string, driver: string, name: string, returnTo: string }} m
@@ -85,7 +85,7 @@ export function moveQuestionPage(request, { base, code, owner, to, driver, name,
     body: html`<section class="container-narrow page-header space-md">
   <h1 class="cut-words" title="${title}">${title}</h1>
   <div class="card-static space-md">
-    <p class="cut-words">Transponder ${code} is ${owner.name}'s.</p>
+    <p class="cut-words">Transponder ${code} is ${owner.name}'s. Giving it to ${to} takes it off ${owner.name}.</p>
     <form method="post" action="${base}/transponders/${code}" class="button-row confirm-actions">
       <input type="hidden" name="driver" value="${driver}">
       <input type="hidden" name="name" value="${name}">
