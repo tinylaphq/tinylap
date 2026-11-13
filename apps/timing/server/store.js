@@ -548,7 +548,7 @@ export function openStore(path) {
       const r = s.transponder.get(ws, code);
       return { code: String(r.code), driverId: str(r.driver_id), created };
     },
-    /** A moved transponder loses its label; for the same driver `label` replaces it only when not `undefined`. */
+    /** A moved transponder loses its label; for the same driver a string `label` replaces it, and `null` and `undefined` both keep it. */
     assignTransponder(ws, code, driverId, at, label = null) {
       s.assignTransponder.run(ws, code, driverId, at, label, label);
     },
