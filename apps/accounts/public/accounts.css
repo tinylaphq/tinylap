@@ -104,8 +104,8 @@ input[type="text"].accounts-mono {
 }
 
 .btn-outline.accounts-on-dark {
-  color: #fff;
-  border-color: #fff;
+  color: var(--p-surface);
+  border-color: var(--p-surface);
 }
 
 .btn-outline.accounts-on-dark:hover {
@@ -227,7 +227,7 @@ input[type="text"].accounts-mono {
 
 /* Roles: the owner's tag is solid, an admin's carries the purple. */
 .accounts-role-owner {
-  color: #fff;
+  color: var(--p-surface);
   background: var(--p-dark);
   border-color: var(--p-dark);
 }
@@ -290,7 +290,7 @@ input[type="text"].accounts-mono {
 
 /* The confirm dialog for remove, transfer, delete and leave. */
 .accounts-dialog {
-  width: min(420px, calc(100vw - 32px));
+  width: min(var(--p-container-narrow), calc(100vw - 2 * var(--p-space-md)));
   margin: auto;
   color: var(--p-text);
   box-shadow: var(--p-shadow-lg) var(--p-error);
@@ -329,7 +329,7 @@ a.accounts-workspace-name {
 
 .accounts-gauge {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--p-space-xs);
 }
 
 .accounts-gauge-mark {
