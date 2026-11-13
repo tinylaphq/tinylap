@@ -4,6 +4,8 @@ The session's fastest lap gets a plain name and a moment of its own. "Session be
 
 Mark: **(call)** a choice made here that a builder may revisit if it fights the code.
 
+The approved mockups were built on the real board's markup and styles (`.superpowers/brainstorm/fastest-lap/` from the design session, not committed); the rules here bind, the mockups illustrate.
+
 ## 1. Why, and what it is not
 
 A session's fastest lap is simply the fastest lap in that session. In practice and qualifying it belongs to P1, because those tables are sorted by best lap. In a race the order is by laps, so the last driver can hold it. It falls far more often than a track record, and it is what drivers chase lap after lap, so it deserves to be seen as well as the record.
@@ -121,7 +123,7 @@ The server decides which moment a lap earns, as it already decides the record (`
 ## 6. Shadows
 
 palace-ui names its shadow offsets like its spacing, in t-shirt sizes, and TinyLap uses only those:
-- palace already has `--p-shadow-sm` (2px), `--p-shadow-md` (3px), `--p-shadow-lg` (4px). It gains `--p-shadow-xs` (1px), which its own `kbd` uses instead of a raw `1px 1px 0`. palace's SPEC says which size is for what: `xs` keys, `sm` small chips, `md` controls (hover and focus), `lg` boxes and cards. palace's own CSS uses no raw offsets (a test checks it). This is palace-ui work and a release before TinyLap's part.
+- palace already has `--p-shadow-sm` (2px), `--p-shadow-md` (3px), `--p-shadow-lg` (4px). It gains `--p-shadow-xs` (1px), which its own `kbd` uses instead of a raw `1px 1px 0`. palace's SPEC says which size is for what: `xs` keys, `sm` small chips, `md` controls (hover and focus), `lg` boxes and cards. palace's own CSS uses no raw offsets (a test checks it). This is palace-ui work with a release of its own; TinyLap's part below needs only the sizes palace has today, so it does not wait for it, and TinyLap takes the release when it comes.
 - TinyLap's board uses `--p-shadow-lg` for every box: the strip (`apps/timing/public/app.css:66`), the idle board's hero (`:480`) and the first-run card (`:524`) come down from a raw 8px; the Last laps card (`.board-feed`) gets `var(--p-shadow-lg) var(--p-text)`, like the standings table. Colours keep their meaning: purple for the record's strip and hero, pink for the clock, ink for the lists.
 - No raw shadow offsets anywhere in TinyLap's CSS (apps and `packages/design`): a check in CI fails on a `box-shadow` whose offset is not a `--p-shadow-*` token (inset indicator lines, such as the nav tab's underline, are not shadows and are allowed).
 
