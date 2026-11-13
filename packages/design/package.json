@@ -24,7 +24,7 @@
     "mark.svg"
   ],
   "dependencies": {
-    "palace-ui": "^0.14.0"
+    "palace-ui": "^0.15.0"
   },
   "scripts": {
     "test": "node --test 'test/*.test.js'",
