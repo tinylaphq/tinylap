@@ -124,6 +124,15 @@ function ago(snap, row) {
 }
 
 /**
+ * The moment its row plays, when its driver's latest counted lap set a mark that plays (fastest lap spec §4.1):
+ * `data-moment="<seq> fl|pb|tr"`. The server decides it; tl-board plays each seq once.
+ */
+function moment(snap, row) {
+  const m = snap.moments?.[row.driverId];
+  return m ? html` data-moment="${m.seq} ${m.mark}"` : null;
+}
+
+/**
  * The leaderboard. Its columns have fixed widths (app.css), so a live update
  * never moves one; the driver takes what is left. A race's Last column goes on
  * a phone, where the feed below repeats it. A driver who has finished keeps
@@ -139,7 +148,7 @@ function standingsTable(snap) {
   return html`<div class="board-scroll"><table class="board-table standings-table${race ? ' is-race' : ''}${tableClasses({ positions: snap.standings.length, flags: race })}${timeWidths([...snap.standings.map((row) => row.bestMs), ...last.values()], snap.standings.map((row) => row.elapsedMs))}">
   <colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last">${race ? html`<col class="col-total">` : null}</colgroup>
   <thead><tr>${posHead}<th scope="col">Driver</th><th scope="col" class="num">Laps</th><th scope="col" class="num">Best</th>${marksHead}<th scope="col" class="num col-last">Last</th>${race ? html`<th scope="col" class="num">Time</th>` : null}</tr></thead>
-  <tbody>${snap.standings.map((row) => html`<tr${row.finished ? html` class="is-finished"` : null}>
+  <tbody>${snap.standings.map((row) => html`<tr${row.finished ? html` class="is-finished"` : null} data-driver="${row.driverId}"${moment(snap, row)}>
     <td class="pos">${row.position}${row.finished ? html`<span class="finish" role="img" aria-label="Finished" title="Finished"></span>` : null}</td>
     <td class="board-driver">${chip(snap, row.driverId, { holder: m.holder(row) })}${ago(snap, row)}</td>
     <td class="num">${row.laps}</td>

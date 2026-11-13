@@ -332,6 +332,10 @@ export function openStore(path) {
     qualifyingLaps: q(`SELECT c.seq, c.driver_id, c.lap_ms, c.at, c.session_id FROM session s JOIN crossing c ON c.session_id = s.id
       WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND c.counts = 1 AND c.via != 'tap' AND c.driver_id IS NOT NULL AND c.lap_ms IS NOT NULL
       ORDER BY c.at, c.seq`),
+    // Each driver's best on a track and direction in its other sessions, as personal_best counts them (fastest lap spec §4).
+    otherBests: q(`SELECT c.driver_id, MIN(c.lap_ms) AS lap_ms FROM session s JOIN crossing c ON c.session_id = s.id
+      WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND s.id != ? AND c.counts = 1 AND c.via != 'tap' AND c.driver_id IS NOT NULL AND c.lap_ms IS NOT NULL
+      GROUP BY c.driver_id`),
     // A driver's best lap per transponder (drivers and transponders spec §3.5); SQLite takes at from the MIN row. A label is theirs only while the transponder is.
     bestLapsByTransponder: q(`SELECT c.transponder, MIN(c.lap_ms) AS lap_ms, c.at, t.label FROM session s JOIN crossing c ON c.session_id = s.id
       LEFT JOIN transponder t ON t.workspace_id = c.workspace_id AND t.code = c.transponder AND t.driver_id = c.driver_id
@@ -656,6 +660,9 @@ export function openStore(path) {
     offerPersonalBest(ws, trackId, direction, { driverId, lapMs, at, seq }) {
       s.offerPersonalBest.run(ws, trackId, direction, driverId, lapMs, at, seq);
     },
+    /** Each driver's best lap on a track and direction in sessions other than `sessionId`, by driver. @returns {Map<string, number>} */
+    otherBests: (ws, trackId, direction, sessionId) => new Map(s.otherBests.all(ws, trackId, direction, sessionId)
+      .map((r) => [String(r.driver_id), Number(r.lap_ms)])),
     /** A driver's best lap with each transponder on a track and direction, best first. */
     bestLapsByTransponder: (ws, driverId, trackId, direction) => s.bestLapsByTransponder.all(ws, trackId, direction, driverId)
       .map((r) => ({ transponder: String(r.transponder), label: str(r.label), lapMs: Number(r.lap_ms), at: Number(r.at) })),
