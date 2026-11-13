@@ -233,6 +233,7 @@ test('the track strip has no left bar: the record card’s top band while idle, 
   await page.goto('/personal/setup');
   const now = await look('.track-now');
   assert.deepEqual([now.left, now.top], ['2px', '2px'], "Setup's current track: no left bar either");
+  assert.equal(now.shadow, 'none', "a box inside the Track card: its 2px border, no shadow of its own");
   const running2 = app.store.runningSession(personal);
   if (running2) app.engine.end(personal, running2.id);
   assert.deepEqual(errors, []);

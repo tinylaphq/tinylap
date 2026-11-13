@@ -648,9 +648,8 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; }
 /* On a line of its own, under a long name, Unpair keeps the right edge, as every row's actions do. */
 .decoder-info + .btn { margin-left: auto; }
 /* The track list (named tracks spec §4). The current track is set like the
-   board's track strip, raised in the record colour's shadow with no left bar,
-   so it reads as the track the board shows. Rename and layout fold away under each track. */
-.track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record); }
+   board's track strip, with no left bar; inside its card it has the 2px border and no shadow. Rename and layout fold away under each track. */
+.track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); }
 .track-head { margin: 0; }
 .track-head .meta { color: var(--p-text-muted); font-size: 12px; margin-left: var(--p-space-xs); }
 .track-now .control-row { --control-row-min: 9rem; }
