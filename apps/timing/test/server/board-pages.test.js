@@ -26,6 +26,7 @@ let statusClub;
 let unassignedClub;
 let marksClub;
 let feedClub;
+let wordsClub;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -48,6 +49,8 @@ before(async () => {
   marksClub = app.club(uma, 'Marks');
   feedClub = app.club(uma, 'Feed');
   app.join(uma, feedClub.id, user);
+  wordsClub = app.club(uma, 'Words');
+  app.join(uma, wordsClub.id, user);
   app.join(uma, marksClub.id, user);
   app.join(tess, unassignedClub.id, user);
   app.join(tess, statusClub.id, user);
@@ -652,4 +655,37 @@ test('a race table: FL on the session\'s fastest lap, also a PB; the crown after
   const qrows = [...qbody.matchAll(/<tr(?: class="[^"]*")? data-driver="[^"]+"(?: data-moment="[^"]+")?>\s*<td class="pos">[\s\S]*?<\/tr>/g)].map((m) => m[0]);
   assert.match(qrows[0], /title="Bea"[\s\S]*8\.400<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"/, 'FL on P1');
   app.engine.abort(marksClub.id, q.id);
+});
+
+test('no board and no session page says "Session best" or shows SB: the fastest lap is FL', async () => {
+  const ws = wordsClub.id;
+  const abe = await driverIn(wordsClub, 'Abe', '95');
+  const bea = await driverIn(wordsClub, 'Bea', '96');
+  const SB = /mark-sb|Session best|session best|>SB</;
+  const pages = [];
+  const page = async (path) => {
+    const res = await get(member, path);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    pages.push(path);
+    return body;
+  };
+  for (const [i, kind] of ['practice', 'race'].entries()) {
+    clock.now = 1_000_000_000_000 + 60_000_000 + i * 100_000;
+    const { session } = app.engine.start(ws, kind === 'race' ? { kind, roster: [abe.id, bea.id], durationMs: 600_000, countdownMs: 0 } : { kind });
+    const t = 60_001_000 + i * 100_000;
+    for (const [dt, code] of [[0, '95'], [100, '96'], [8_600, '95'], [9_100, '96'], [16_900, '95'], [18_000, '96']]) passIn(ws, t + dt, code);
+    for (const path of [`/clubs/${ws}/board`, `/clubs/${ws}/board?big`]) {
+      const body = await page(path);
+      assert.match(body, /class="mark mark-fl"|class="mark mark-tr"/, `${kind} ${path}: the fastest lap is marked`);
+      assert.doesNotMatch(body, SB, `${kind} ${path}`);
+    }
+    app.engine.end(ws, session.id);
+    assert.doesNotMatch(await page(`/clubs/${ws}/board`), SB, `the idle board after the ${kind}`);
+    const detail = await page(`/clubs/${ws}/sessions/${session.id}`);
+    assert.match(detail, /<dt>Fastest lap<\/dt>/);
+    assert.doesNotMatch(detail, SB, `the ${kind}'s page`);
+  }
+  assert.doesNotMatch(await page(`/clubs/${ws}/sessions`), SB, 'the sessions list');
+  assert.equal(pages.length, 9);
 });
