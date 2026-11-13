@@ -171,7 +171,8 @@ const beaten = (snap, r) => html`, beat ${r.beat.driverId === r.driverId ? 'thei
  */
 function hero(request, snap, members, band) {
   const r = snap.record;
-  return html`<section class="board-hero">
+  // While a record has just fallen the card says so like the strip, so tl-board can play its moment here.
+  return html`<section class="board-hero"${snap.recordNew ? html` data-record-new="${snap.recordNew.seq}"` : null}>
   ${band}
   <div class="board-hero-record">
     <h1 class="board-hero-label">Track record</h1>

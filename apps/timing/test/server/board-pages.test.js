@@ -453,6 +453,8 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
 
   // Ended, and the record state over: the record is the big thing, then the fastest here and the last session.
   app.engine.end(club.id, session.id);
+  // Ended while the record state lasts: the record card carries it like the strip, so a board knows it has seen it.
+  for (const body of Object.values(await screens())) assert.match(body, new RegExp(`<section class="board-hero" data-record-new="${recordNew.seq}">`));
   clock.now += 60_000;
   app.engine.tick();
   s = await screens();
