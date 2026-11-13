@@ -218,7 +218,7 @@ test('the track strip has no left bar: the record card’s top band while idle, 
   assert.equal(band.bottom, '2px');
   const hero = await look('.board-hero');
   assert.equal(hero.left, '2px');
-  assert.match(hero.shadow, /8px 8px 0px/);
+  assert.match(hero.shadow, /4px 4px 0px/);
   // The link under the live line goes to the transponder's form, back to the board after.
   await page.getByRole('link', { name: 'Assign it' }).click();
   await page.waitForURL(/\/personal\/transponders\/88\?returnTo=/);
