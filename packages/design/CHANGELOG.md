@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/tinylaphq/tinylap/compare/design-v0.4.0...design-v0.5.0) (2026-11-13)
+
+
+### Features
+
+* decoder connections on the Bridge page, Wi-Fi changes over the cable, and board status ([#80](https://github.com/tinylaphq/tinylap/issues/80)) ([bd914dd](https://github.com/tinylaphq/tinylap/commit/bd914ddce336a8f8dca792658b91a773979279e0))
+* **timing:** assign transponders from the board, Setup and a collect page ([#91](https://github.com/tinylaphq/tinylap/issues/91)) ([a588745](https://github.com/tinylaphq/tinylap/commit/a588745e7b63151abb191e1db933bfedafe58e2e))
+* **timing:** the fastest lap is marked FL, and marks follow their times ([#108](https://github.com/tinylaphq/tinylap/issues/108)) ([d970dce](https://github.com/tinylaphq/tinylap/commit/d970dcec8e3df3b92898c58bd1bae63818b058d4)), closes [#100](https://github.com/tinylaphq/tinylap/issues/100)
+
+
+### Bug Fixes
+
+* palace tokens instead of raw values across every app, and a check for them ([#110](https://github.com/tinylaphq/tinylap/issues/110)) ([95d19c0](https://github.com/tinylaphq/tinylap/commit/95d19c076c9e13c17a6bd275e871a7df03eb3dff)), closes [#107](https://github.com/tinylaphq/tinylap/issues/107)
+* **timing:** one shadow size on the board, and no raw shadow offsets ([#106](https://github.com/tinylaphq/tinylap/issues/106)) ([d012465](https://github.com/tinylaphq/tinylap/commit/d012465a00c9d635c0fbd0d54d286356173d5adf)), closes [#99](https://github.com/tinylaphq/tinylap/issues/99)
+
 ## [0.4.0](https://github.com/tinylaphq/tinylap/compare/design-v0.3.0...design-v0.4.0) (2026-11-09)
 
 
