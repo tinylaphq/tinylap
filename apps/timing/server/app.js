@@ -23,10 +23,39 @@ const API_HEADERS = {
 const WATCH_PATH = /^\/watch\/[^/]+/;
 const CREDENTIAL_HEADERS = { Link: API_HEADERS.Link };
 
-function send(req, res, { status, headers = {}, body, stream }) {
+/** @typedef {{ status: number, headers?: Record<string, any>, body?: any, stream?: (req: any, res: any) => any }} Outgoing */
+
+/** @param {any} req @param {any} res @param {Outgoing} response */
+function write(req, res, { status, headers = {}, body, stream }) {
   res.writeHead(status, { ...BASE_HEADERS, ...headers });
   if (stream && req.method !== 'HEAD') return stream(req, res);
   res.end(req.method === 'HEAD' ? undefined : body);
+}
+
+/**
+ * A response that cannot be written (an invalid header value) is a 500, or a closed socket once its head is out.
+ * @param {any} req @param {any} res @param {Outgoing} response
+ * @returns {number} the status sent
+ */
+function send(req, res, response) {
+  try {
+    const streaming = write(req, res, response);
+    if (streaming?.catch) streaming.catch((error) => { console.error(error); res.destroy(); });
+    return response.status;
+  } catch (error) {
+    console.error(error);
+    if (res.headersSent) {
+      res.destroy();
+      return response.status;
+    }
+    for (const name of res.getHeaderNames()) res.removeHeader(name);
+    write(req, res, {
+      status: 500,
+      headers: { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' },
+      body: JSON.stringify({ type: 'about:blank', title: 'Internal Server Error', status: 500 }),
+    });
+    return 500;
+  }
 }
 
 /**
@@ -150,8 +179,8 @@ export function createHandler(options) {
       console.error(error);
       response = { ...problem(request, 'unavailable', 'The server could not complete the request.'), headers: { ...API_HEADERS, 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' } };
     }
-    send(req, res, response);
+    const status = send(req, res, response);
     // No client addresses in the log, ever, and no watchers tokens (spec §7): the token is the whole secret.
-    log?.(`${req.method} ${url.pathname.replace(WATCH_PATH, '/watch/…')} ${response.status} ${Math.round(performance.now() - started)}ms`);
+    log?.(`${req.method} ${url.pathname.replace(WATCH_PATH, '/watch/…')} ${status} ${Math.round(performance.now() - started)}ms`);
   };
 }
