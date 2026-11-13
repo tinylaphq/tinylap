@@ -21,9 +21,37 @@ const API_HEADERS = {
   Link: '</openapi.json>; rel="service-desc"',
 };
 
-function send(req, res, { status, headers = {}, body }) {
+/** @typedef {{ status: number, headers?: Record<string, any>, body?: any }} Outgoing */
+
+/** @param {any} req @param {any} res @param {Outgoing} response */
+function write(req, res, { status, headers = {}, body }) {
   res.writeHead(status, { ...BASE_HEADERS, ...headers });
   res.end(req.method === 'HEAD' ? undefined : body);
+}
+
+/**
+ * A response that cannot be written (an invalid header value) is a 500, or a closed socket once its head is out.
+ * @param {any} req @param {any} res @param {Outgoing} response
+ * @returns {number} the status sent
+ */
+function send(req, res, response) {
+  try {
+    write(req, res, response);
+    return response.status;
+  } catch (error) {
+    console.error(error);
+    if (res.headersSent) {
+      res.destroy();
+      return response.status;
+    }
+    for (const name of res.getHeaderNames()) res.removeHeader(name);
+    write(req, res, {
+      status: 500,
+      headers: { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' },
+      body: JSON.stringify({ type: 'about:blank', title: 'Internal Server Error', status: 500 }),
+    });
+    return 500;
+  }
 }
 
 // Routes marked `credentials: true` read the session cookie, so they never
@@ -112,8 +140,8 @@ export function createHandler(options) {
       console.error(error);
       response = { ...problem(request, 'unavailable', 'The server could not complete the request.'), headers: { ...API_HEADERS, 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' } };
     }
-    send(req, res, response);
+    const status = send(req, res, response);
     // No client addresses in the log, ever.
-    if (options.log !== false) console.log(`${req.method} ${url.pathname} ${response.status} ${Math.round(performance.now() - started)}ms`);
+    if (options.log !== false) console.log(`${req.method} ${url.pathname} ${status} ${Math.round(performance.now() - started)}ms`);
   };
 }
