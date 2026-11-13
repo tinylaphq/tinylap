@@ -90,6 +90,8 @@ const measure = () => {
     right: ink(li.querySelector('.num')).right,
     markCellAfterTime: li.querySelector('.num')?.nextElementSibling?.classList.contains('mark-cell') ?? false,
     marked: Boolean(li.querySelector('.mark')),
+    tagged: Boolean(li.querySelector('.tag')),
+    height: li.getBoundingClientRect().height,
   }));
   return { marks, feed, trims: CSS.supports('text-box', 'trim-both cap alphabetic') };
 };
@@ -120,6 +122,10 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     assert.ok(m.feed.some((li) => li.marked) && m.feed.some((li) => !li.marked), 'laps with a mark and without');
     const rights = m.feed.map((li) => li.right);
     assert.ok(Math.max(...rights) - Math.min(...rights) <= 1, `the feed's times end together: ${Math.min(...rights).toFixed(1)}–${Math.max(...rights).toFixed(1)}`);
+    // A "Not counted" tag fits its row: a tagged lap is as tall as one without.
+    assert.ok(m.feed.some((li) => li.tagged), 'a lap with a tag');
+    const heights = m.feed.map((li) => li.height);
+    assert.ok(Math.max(...heights) - Math.min(...heights) <= 0.5, `every lap in the feed is as tall, tag or not: ${heights.map((h) => h.toFixed(1)).join(', ')}`);
     assert.deepEqual(errors, []);
   });
 }
@@ -163,6 +169,11 @@ test('on the session page a mark follows its time and centres on its digits, in 
     await page.evaluate(() => document.fonts.ready);
     const m = await page.evaluate(measure);
     check(m, `session page at ${viewport.width}`);
+    // A tag fits its row: a lap with "Not counted" or "Tap" is as tall as one without.
+    const rows = await page.evaluate(() => [...document.querySelectorAll('.lap-table tbody tr')].map((tr) => ({ tagged: Boolean(tr.querySelector('.tag')), height: tr.getBoundingClientRect().height })));
+    assert.ok(rows.some((r) => r.tagged) && rows.some((r) => !r.tagged), `session page at ${viewport.width}: laps with a tag and without`);
+    const heights = rows.map((r) => r.height);
+    assert.ok(Math.max(...heights) - Math.min(...heights) <= 0.5, `session page at ${viewport.width}: every lap row is as tall, tag or not: ${heights.map((h) => h.toFixed(1)).join(', ')}`);
     assert.deepEqual(m.marks.filter((x) => x.where.endsWith('FL')).map((x) => x.where.split(' ')[0]), ['board-table', 'lap-table'], 'FL once in the table, once in the laps');
     // The fact: the time, then the driver, a gap apart, on one baseline.
     const fact = await page.evaluate(() => {

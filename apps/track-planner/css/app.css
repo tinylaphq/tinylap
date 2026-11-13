@@ -143,7 +143,7 @@ main {
 .piece-thumb svg { width: 3rem; height: 3rem; display: block; }
 
 .piece-name {
-  font-size: 12px;
+  font-size: var(--p-text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -171,7 +171,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   grid-template-columns: auto 1fr;
   gap: var(--p-space-sm) var(--p-space-md);
   margin: 0;
-  font-size: 12px;
+  font-size: var(--p-text-xs);
   line-height: 1.35;
   align-items: baseline;
 }
@@ -189,7 +189,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 
 #metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--p-space-md);
            margin-bottom: var(--p-space-lg); }
-#metrics .stat { font-size: 15px; white-space: nowrap; }
+#metrics .stat { font-size: var(--p-text-lg); white-space: nowrap; }
 
 /* Sat flush against the ROOM line above it. Everything else in this rail
    is separated by --p-space-md; this was the one exception. */
@@ -222,13 +222,13 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 .preset-card:hover { transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--accent); }
 .preset-thumb { flex: 0 0 4rem; display: flex; border: var(--p-border-thin) solid var(--p-text); }
 .preset-thumb svg { width: 4rem; height: auto; display: block; }
-.preset-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; } /* 2px: waits on palace-ui#22 */
-.preset-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-.preset-source { font-size: 11px; color: var(--p-text-faint); }
-.preset-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.preset-info { display: flex; flex-direction: column; gap: var(--p-space-2xs); min-width: 0; }
+.preset-name { font-size: var(--p-text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+.preset-source { font-size: var(--p-text-2xs); color: var(--p-text-faint); }
+.preset-badge { font-size: var(--p-text-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 .preset-badge--ok { color: var(--p-success); }
 .preset-badge--bad { color: var(--p-error-text); }
-.preset-broken { color: var(--p-error-text); font-size: 12px; }
+.preset-broken { color: var(--p-error-text); font-size: var(--p-text-xs); }
 
 /* Skeleton rows for #suggestions-list while generateLayouts computes (see
  * js/app.js's renderSuggestionsSkeleton). Not a spinner or "Loading…" text
@@ -294,9 +294,9 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   margin-bottom: var(--p-space-sm);
   min-height: 24px;
 }
-#suggestions-page { color: var(--p-text-faint); font-size: 12px; }
+#suggestions-page { color: var(--p-text-faint); font-size: var(--p-text-xs); }
 #out-of-reach-list { display: grid; grid-template-columns: auto 1fr; gap: var(--p-space-xs) var(--p-space-md);
-                     margin: 0; font-size: 12px; }
+                     margin: 0; font-size: var(--p-text-xs); }
 #out-of-reach-list dt { font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 #out-of-reach-list dd { margin: 0; color: var(--p-text-muted); }
 
@@ -345,7 +345,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
    of the presets dialog sits past the suggestions and the out-of-reach
    block, i.e. off-screen at this dialog's height. */
 .dialog-dismiss { float: right; margin: 0 0 var(--p-space-xs) var(--p-space-sm); }
-.dialog-dismiss .btn { padding: 2px 8px; line-height: 1; } /* 2px: waits on palace-ui#22 */
+.dialog-dismiss .btn { padding: var(--p-space-2xs) var(--p-space-sm); line-height: 1; }
 
 /* A rail heading with its own action beside it — MATERIALS + Edit kits.
    The button sits with the numbers it governs: the OWNED column IS the
@@ -369,7 +369,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   margin-top: var(--p-space-md);
 }
 .rail-line-label {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  font-size: var(--p-text-2xs); font-weight: 700; text-transform: uppercase;
   letter-spacing: 1px; color: var(--p-text-faint);
 }
 .rail-line-value {
@@ -428,17 +428,17 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   margin-bottom: var(--p-space-sm);
 }
 .chips-label {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  font-size: var(--p-text-2xs); font-weight: 700; text-transform: uppercase;
   letter-spacing: 1px; color: var(--p-text-faint);
   flex: 0 0 3rem;
 }
 .chips-row { display: flex; flex-wrap: wrap; gap: var(--p-space-xs); }
 .chip {
   font: inherit;
-  font-size: 11px;
+  font-size: var(--p-text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 2px 8px; /* 2px: waits on palace-ui#22 */
+  padding: var(--p-space-2xs) var(--p-space-sm);
   background: transparent;
   color: var(--p-text-muted);
   border: var(--p-border-thin) solid var(--p-border);
@@ -453,7 +453,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 }
 .chips-toggle {
   display: flex; align-items: center; gap: var(--p-space-xs);
-  font-size: 11px; color: var(--p-text-muted); cursor: pointer;
+  font-size: var(--p-text-2xs); color: var(--p-text-muted); cursor: pointer;
 }
 
 /* ── Account ─────────────────────────────────────────────────────── */
@@ -467,7 +467,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   border-left: var(--p-border-thin) solid var(--p-border-dark);
 }
 
-.account-down { font-size: 12px; color: var(--p-text-faint); }
+.account-down { font-size: var(--p-text-xs); color: var(--p-text-faint); }
 
 /* ── Library ─────────────────────────────────────────────────────── */
 
@@ -476,14 +476,14 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
    library dialog, so the two read as the same thing. */
 .library-current {
   margin: 0 auto 0 var(--p-space-md);
-  padding: 2px var(--p-space-sm); /* 2px: waits on palace-ui#22 */
+  padding: var(--p-space-2xs) var(--p-space-sm);
   max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--p-text-xs);
   font-weight: 600;
-  color: var(--p-surface);
+  color: var(--p-text-on-fill);
   border-left: var(--p-space-xs) solid var(--p-accent-1);
 }
 @media (max-width: 700px) { .library-current { display: none; } }
@@ -499,7 +499,6 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   margin-bottom: var(--p-space-sm);
 }
 .library-ws-head h3 { color: var(--p-accent-2); }
-.library-ws-head .tag { font-size: 11px; padding: 1px 6px; } /* a small tag: waits on palace-ui#23 */
 .library-hint { color: var(--p-text-muted); }
 
 .library-tracks { list-style: none; padding: 0; margin: 0; }
@@ -517,16 +516,16 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
 
 .library-track-head { display: flex; align-items: baseline; gap: var(--p-space-sm); flex-wrap: wrap; }
 .library-track-name {
-  font-size: 15px;
+  font-size: var(--p-text-lg);
   font-weight: 700;
   overflow-wrap: anywhere;
 }
 .library-badge {
-  font-size: 11px;
+  font-size: var(--p-text-2xs);
   font-weight: 700;
   color: var(--p-accent-1);
 }
-.library-meta { margin: 2px 0 0; font-size: var(--tl-text-meta); color: var(--p-text-muted); } /* 2px: waits on palace-ui#22 */
+.library-meta { margin: var(--p-space-2xs) 0 0; font-size: var(--p-text-xs); color: var(--p-text-muted); }
 .library-actions {
   display: flex;
   flex-wrap: wrap;
@@ -540,7 +539,7 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   padding-top: var(--p-space-sm);
   border-top: var(--p-border-thin) solid var(--p-border);
 }
-.library-note { margin: var(--p-space-sm) 0 0; font-size: 12px; color: var(--p-text-faint); }
+.library-note { margin: var(--p-space-sm) 0 0; font-size: var(--p-text-xs); color: var(--p-text-faint); }
 
 /* The history: newest first, down a rule, a square stop per save. The
    rule is painted inside the list's padding so the scroll box clips
@@ -573,17 +572,15 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
   border: var(--p-border-width) solid var(--p-text-faint);
 }
 .library-version[aria-current="true"]::before { background: var(--p-accent-1); border-color: var(--p-accent-1); }
-.library-version-when { font-size: 13px; font-weight: 600; }
-.library-version-current { margin-left: var(--p-space-sm); font-size: 11px; font-weight: 700; color: var(--p-accent-1); }
+.library-version-when { font-size: var(--p-text-sm); font-weight: 600; }
+.library-version-current { margin-left: var(--p-space-sm); font-size: var(--p-text-2xs); font-weight: 700; color: var(--p-accent-1); }
 .library-version .library-meta { grid-column: 1; margin: 0; }
 .library-version-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: var(--p-space-xs); }
 
 .library-form label { margin-bottom: var(--p-space-xs); }
 .library-form-row { display: flex; gap: var(--p-space-xs); align-items: stretch; flex-wrap: wrap; }
-/* As tall as the .btn-sm beside it; a small field waits on palace-ui#25. */
-.library-form-row input { flex: 1 1 12rem; width: auto; height: var(--p-control-height-sm); padding: 0 10px; font-size: 14px; }
-/* Leaves room on the right for palace's select arrow. */
-.library-form-row select { flex: 1 1 12rem; width: auto; height: var(--p-control-height-sm); padding: 0 2.5rem 0 10px; font-size: 14px; }
+/* palace's .input-sm, as tall as the .btn-sm beside it. */
+.library-form-row :is(input, select) { flex: 1 1 12rem; width: auto; }
 
 .library-foot { margin: var(--p-space-lg) 0 0; }
 
@@ -615,5 +612,5 @@ aside h2.h3 { color: var(--p-accent-3); }   /* .h3 is a class, so match it */
      `.btn { transition: all }` would animate on every resize. */
   .account { position: absolute; top: var(--p-space-sm); right: var(--p-space-md); min-height: var(--p-control-height-sm); padding-left: 0; border-left: 0; }
   .navbar-right { flex: 1 1 100%; flex-wrap: wrap; gap: var(--p-space-xs); }
-  .navbar-right > .btn { padding: 6px 10px; } /* waits on palace-ui#24 */
+  .navbar-right > .btn { padding: 6px 10px; } /* narrower than .btn-sm, so the row holds them all */
 }

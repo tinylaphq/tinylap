@@ -103,7 +103,7 @@ function historySection(request, { rows, older, newer }, drivers) {
   <thead><tr><th scope="col">Started</th><th scope="col">Session</th><th scope="col" class="history-wide">Track</th><th scope="col" class="num history-wide">Length</th><th scope="col" class="num history-wide">Drivers</th><th scope="col">Fastest</th><th scope="col" class="num">Best</th>${marksHead}</tr></thead>
   <tbody>${rows.map(({ session, track, drivers: count, best }) => html`<tr class="history-row">
     <td class="history-started"><a href="${base}/sessions/${session.id}">${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</a></td>
-    <td class="history-session"><span class="history-kind">${KIND[session.kind]}</span>${session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}<span class="history-track">${trackName(track, session.direction)}</span></td>
+    <td class="history-session"><span class="history-kind">${KIND[session.kind]}</span>${session.state === 'aborted' ? html` <span class="tag tag-sm">Aborted</span>` : null}<span class="history-track">${trackName(track, session.direction)}</span></td>
     <td class="history-wide cut-words">${trackName(track, session.direction)}</td>
     <td class="num history-wide">${shortLength(drivenMs(session))}</td>
     <td class="num history-wide">${count}</td>

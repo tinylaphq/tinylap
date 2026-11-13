@@ -42,7 +42,7 @@
   align-items: baseline;
   gap: var(--p-space-xs);
   margin: 0;
-  font-size: 11px;
+  font-size: var(--p-text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -51,7 +51,7 @@
 
 .accounts-progress .step-num {
   width: auto;
-  font-size: 18px;
+  font-size: var(--p-text-xl);
 }
 
 .accounts-progress [aria-current="step"] {
@@ -64,7 +64,7 @@
 
 .accounts-hint {
   margin-top: var(--p-space-xs);
-  font-size: 13px;
+  font-size: var(--p-text-sm);
   color: var(--p-text-muted);
 }
 
@@ -90,7 +90,7 @@ input[type="text"].accounts-mono {
 .container-narrow .accounts-codes li {
   margin: 0;
   font-family: var(--p-font-mono);
-  font-size: 12px;
+  font-size: var(--p-text-xs);
   line-height: 1.4;
   color: var(--p-code-highlight);
   white-space: nowrap;
@@ -104,7 +104,7 @@ input[type="text"].accounts-mono {
 }
 
 .btn-outline.accounts-on-dark {
-  color: var(--p-surface);
+  color: var(--p-text-on-fill);
   border-color: var(--p-surface);
 }
 
@@ -118,7 +118,6 @@ input[type="text"].accounts-mono {
   align-items: center;
   gap: var(--p-space-sm);
   margin-bottom: 0;
-  font-size: 13px;
   color: var(--p-text);
   cursor: pointer;
 }
@@ -137,7 +136,7 @@ input[type="text"].accounts-mono {
 }
 
 .container-narrow .accounts-links li {
-  font-size: 13px;
+  font-size: var(--p-text-sm);
   color: var(--p-text-muted);
   margin-bottom: var(--p-space-sm);
 }
@@ -154,13 +153,13 @@ input[type="text"].accounts-mono {
 }
 
 .accounts-wide .accounts-links li {
-  font-size: 13px;
+  font-size: var(--p-text-sm);
   color: var(--p-text-muted);
 }
 
 .accounts-back {
   margin-bottom: var(--p-space-lg);
-  font-size: 13px;
+  font-size: var(--p-text-sm);
 }
 
 .accounts .accounts-list {
@@ -200,13 +199,13 @@ input[type="text"].accounts-mono {
   min-width: 0;
   overflow-wrap: anywhere;
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--p-text-lg);
 }
 
 .accounts-workspace-meta,
 .accounts-row-sub,
 .accounts-you {
-  font-size: 13px;
+  font-size: var(--p-text-sm);
   font-weight: 400;
   color: var(--p-text-muted);
 }
@@ -227,7 +226,7 @@ input[type="text"].accounts-mono {
 
 /* Roles: the owner's tag is solid, an admin's carries the purple. */
 .accounts-role-owner {
-  color: var(--p-surface);
+  color: var(--p-text-on-fill);
   background: var(--p-dark);
   border-color: var(--p-dark);
 }
@@ -244,7 +243,7 @@ input[type="text"].accounts-mono {
 }
 
 .accounts-subhead {
-  font-size: 15px;
+  font-size: var(--p-text-lg);
   margin-bottom: 0;
 }
 
@@ -278,7 +277,7 @@ input[type="text"].accounts-mono {
 }
 
 .accounts-reveal-meta {
-  font-size: 13px;
+  font-size: var(--p-text-sm);
   color: var(--p-code-text);
   margin-bottom: var(--p-space-sm);
 }
@@ -301,8 +300,8 @@ input[type="text"].accounts-mono {
 }
 
 .accounts-dialog p {
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: var(--p-text-lg);
+  line-height: var(--p-leading);
 }
 
 .accounts-dialog .accounts-actions {
@@ -324,7 +323,7 @@ a.accounts-workspace-name {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--p-space-sm) var(--p-space-md);
-  font-size: 15px;
+  font-size: var(--p-text-lg);
 }
 
 .accounts-gauge {
@@ -364,7 +363,7 @@ a.accounts-workspace-name {
 .accounts-reveal .accounts-codes li {
   margin: 0;
   font-family: var(--p-font-mono);
-  font-size: 12px;
+  font-size: var(--p-text-xs);
   line-height: 1.4;
   color: var(--p-code-highlight);
   overflow-wrap: anywhere;
@@ -383,7 +382,7 @@ a.accounts-workspace-name {
 .accounts-consent-host {
   margin: 0;
   font-family: var(--p-font-mono);
-  font-size: 22px;
+  font-size: var(--p-text-2xl);
   overflow-wrap: anywhere;
 }
 

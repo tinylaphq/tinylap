@@ -71,7 +71,7 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
       <td class="num">${i + 1}</td>
       <td class="num">${formatLap(c.lapMs)}</td>
       ${markOf(c)}
-      <td>${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${c.counts || noneCounted ? null : html`<span class="tag">Not counted</span>`}</td>
+      <td>${c.via === 'tap' ? html`<span class="tag tag-sm">Tap</span>` : null}${c.counts || noneCounted ? null : html`<span class="tag tag-sm">Not counted</span>`}</td>
     </tr>`)}</tbody>
   </table>
   ${own.length ? null : html`<p class="empty">No laps.</p>`}
