@@ -6,9 +6,11 @@
 // and the watchers link, each its own card-static section and forms.
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { localTime } from '@tinylap/design/html/local-time.js';
+import { avatar } from './driver.js';
 import { html, safe } from './html.js';
 import { controlRow, copyable, errorSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
+import { crossingNow, liveSrc } from './transponder.js';
 
 const DIRECTIONS = [{ value: 'ccw', label: 'Anticlockwise' }, { value: 'cw', label: 'Clockwise' }];
 const DIRECTION_NAME = { cw: 'clockwise', ccw: 'anticlockwise' };
@@ -93,23 +95,93 @@ function trackSection(request, m) {
 </section></tl-frame>`;
 }
 
+/** Transponder numbers in reading order: shorter first, then by digit. */
+const byCode = (a, b) => a.code.length - b.code.length || a.code.localeCompare(b.code);
+/** "Simon's 17", "Mia Kraus's 23 and 31": a driver's numbers, for the label's hint. */
+const theirs = (d, own) => `${d.name}'s ${own.map((t) => t.code).join(', ').replace(/, (?=[^,]*$)/u, ' and ')}`;
+
+/** Remove (§3.1): quiet, back to "Not assigned yet", and back here. */
+const removeForm = (base, d, t) => html`<form method="post" action="${base}/transponders/${t.code}/remove" class="tp-remove">
+  <input type="hidden" name="returnTo" value="${base}/setup#drivers">
+  <button type="submit" class="driver-remove">Remove<span class="visually-hidden"> transponder ${t.code} from ${d.name}</span></button>
+</form>`;
+
+/**
+ * One row of a driver's add list (§3.1): a <details> of its own, one open at a time, holding a form
+ * that adds that transponder, with a label from the driver's second transponder on. `t` is null for
+ * the row that takes a number. A refused add, or a typed number of someone else's, comes back with this
+ * row open, its input kept.
+ */
+function addRow(request, m, d, own, t) {
+  const base = request.space.base;
+  const key = `add:${d.id}`;
+  const kept = m.values[key] ?? null;
+  const row = t?.code ?? '';
+  const failed = kept !== null && kept.row === row;
+  const error = failed ? m.errors[key] : null;
+  const prefix = `add-${d.id}-${t ? t.code : 'number'}`;
+  const owner = t?.driverId ? m.drivers.find((x) => x.id === t.driverId) : null;
+  // Opened by the server to ask (§3.4): its answer has the focus.
+  const asking = failed && owner && !error;
+  const label = own.length ? textField({ id: `${prefix}-label`, label: 'Label', name: 'label', maxlength: 24, placeholder: 'Optional', hint: `Tells it apart from ${theirs(d, own)}.`, value: failed ? kept.label : '', error }) : null;
+  const whose = owner ? `${owner.name}'s${t.label ? `, ${t.label}` : ''}` : null;
+  const ago = t ? html`<span class="meta"${whose ? html` title="${whose}"` : null}>${whose ?? html`<span class="crossing-now"${crossingNow(request, t.crossedAt) ? null : html` hidden`}>Crossing now</span>${t.crossedAt === null ? null : html`<span class="crossed">crossed <time datetime="${new Date(t.crossedAt).toISOString()}">${formatAgo(t.crossedAt, request.now())}</time></span>`}`}</span>` : null;
+  return html`<details class="pick-row${t ? '' : ' is-other'}" name="add-${d.id}"${t ? html` data-code="${t.code}"` : null}${failed ? html` open` : null}>
+    <summary>${t ? html`<span class="tp">${t.code}</span>${ago}` : 'Not in the list? Enter its number'}</summary>
+    <form method="post" action="${base}/transponders${t ? `/${t.code}` : ''}" class="pick-act">
+      <input type="hidden" name="driver" value="${d.id}"><input type="hidden" name="name" value="">
+      <input type="hidden" name="from" value="setup"><input type="hidden" name="returnTo" value="${base}/setup#drivers">
+      ${owner ? html`<input type="hidden" name="confirm" value="1"><p class="pick-move cut-words">Transponder ${t.code} is ${owner.name}'s. Giving it to ${d.name} takes it off ${owner.name}.</p>` : null}
+      ${t ? null : html`<div class="pick-number">${textField({ id: prefix, label: 'Number', name: 'code', maxlength: 16, required: true, value: failed ? kept.number : '', error })}</div>`}
+      ${label}
+      <button type="submit" class="btn btn-primary"${asking ? html` autofocus` : null}>${owner ? `Give it to ${d.name}` : t ? `Add ${t.code} to ${d.name}` : `Add to ${d.name}`}</button>
+    </form>
+  </details>`;
+}
+
+/**
+ * A driver's add list (§3.1): the free transponders, newest first; then someone else's; then a number.
+ * Without any: how one shows up, and the number.
+ */
+function addList(request, m, d, own) {
+  const free = m.transponders.filter((t) => t.driverId === null).sort((a, b) => b.lastSeenAt - a.lastSeenAt || byCode(a, b));
+  const name = (t) => m.drivers.find((x) => x.id === t.driverId)?.name ?? '';
+  const others = m.transponders.filter((t) => t.driverId !== null && t.driverId !== d.id).sort((a, b) => name(a).localeCompare(name(b)) || byCode(a, b));
+  const open = m.values[`add:${d.id}`] !== undefined;
+  return html`<details class="roster-add"${open ? html` open` : null}>
+    <summary>${own.length ? 'Add another transponder' : 'Add a transponder'}<span class="visually-hidden"> to ${d.name}</span></summary>
+    ${free.length || others.length ? html`<div class="pick">
+      ${free.length ? html`<p class="pick-group">Not assigned yet</p>${free.map((t) => addRow(request, m, d, own, t))}` : null}
+      ${others.length ? html`<p class="pick-group">Someone else's</p>${others.map((t) => addRow(request, m, d, own, t))}` : null}
+      ${addRow(request, m, d, own, null)}
+    </div>` : html`<p class="pick-empty">Run its car over the line, and it shows up here.</p>
+    <div class="pick">${addRow(request, m, d, own, null)}</div>`}
+  </details>`;
+}
+
+// Drivers (drivers and transponders spec §3.1): a row per driver with their transponders, each with a
+// quiet Remove, Edit to their page, and the add list. One transponder sits beside the name; from
+// two on, each is listed with its label.
 function driversSection(request, m) {
   const base = request.space.base;
   const addError = m.errors['add-driver'] ?? null;
   return html`<tl-frame id="drivers" refreshes="transponders"><section class="card-static space-md" aria-labelledby="drivers-title">
   <h2 id="drivers-title">Drivers</h2>
-  ${m.drivers.length ? html`<ul class="setup-list">${m.drivers.map((d) => {
-    const error = m.errors[`rename:${d.id}`] ?? null;
-    const kept = m.values[`rename:${d.id}`] ?? {};
-    // The swatch shows a colour it can show: a refused one would turn it black.
-    const colour = /^#[0-9a-f]{6}$/i.test(kept.colour ?? '') ? kept.colour : d.colour;
-    return html`<li class="setup-row">
-    <form method="post" action="${base}/drivers/${d.id}" class="driver-form">
-      ${textField({ id: `colour-${d.id}`, label: `Colour for ${d.name}`, labelHidden: true, name: 'colour', type: 'color', value: colour, error })}
-      ${textField({ id: `rename-${d.id}`, label: `New name for ${d.name}`, labelHidden: true, name: 'name', maxlength: 60, required: true, value: kept.name ?? d.name, error })}
-      <button type="submit" class="btn btn-sm btn-outline">Save</button>
-    </form>
-    ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/drivers/${d.id}/delete">Delete</a>` : null}
+  ${m.drivers.length ? html`<ul class="roster">${m.drivers.map((d) => {
+    const own = m.transponders.filter((t) => t.driverId === d.id).sort(byCode);
+    return html`<li>
+    ${avatar(d)}
+    <div class="roster-body">
+      <div class="roster-head">
+        <div class="roster-line"><span class="roster-name cut-words" title="${d.name}">${d.name}</span>${own.length === 1 ? html` <span class="tp" title="Transponder ${own[0].code}">${own[0].code}</span>${removeForm(base, d, own[0])}` : own.length ? null : html` <span class="meta">no transponder</span>`}</div>
+        <div class="button-row">
+          <a class="btn btn-sm btn-outline" href="${base}/drivers/${d.id}">Edit<span class="visually-hidden"> ${d.name}</span></a>
+          ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/drivers/${d.id}/delete">Delete<span class="visually-hidden"> ${d.name}</span></a>` : null}
+        </div>
+      </div>
+      ${own.length > 1 ? html`<ul class="roster-tps">${own.map((t) => html`<li><span class="tp" title="Transponder ${t.code}">${t.code}</span>${t.label ? html` <span class="tp-label">${t.label}</span>` : null}${removeForm(base, d, t)}</li>`)}</ul>` : null}
+      ${addList(request, m, d, own)}
+    </div>
   </li>`;
   })}</ul>` : html`<p class="empty">No drivers yet.</p>`}
   <form method="post" action="${base}/drivers" class="space-sm">
@@ -119,25 +191,33 @@ function driversSection(request, m) {
 </section></tl-frame>`;
 }
 
+/** A transponder row's Assign or Move: the form of Task 3, coming back to this list. */
+const assignHref = (base, t) => `${base}/transponders/${t.code}?returnTo=${encodeURIComponent(`${base}/setup#transponders`)}`;
+const forgetLink = (base, t) => html`<a class="tp-forget" href="${base}/transponders/${t.code}/forget">Forget<span class="visually-hidden"> transponder ${t.code}</span></a>`;
+
+// Transponders (spec §3.2): the unassigned first, newest first, then the assigned. Forget is quiet and
+// only for those who may delete.
 function transpondersSection(request, m) {
   const base = request.space.base;
-  const options = [{ value: '', label: '— none' }, ...m.drivers.map((d) => ({ value: d.id, label: d.name }))];
-  const rows = [...m.transponders].sort((a, b) => Number(a.driverId !== null) - Number(b.driverId !== null) || a.code.localeCompare(b.code));
+  const free = m.transponders.filter((t) => t.driverId === null).sort((a, b) => b.firstSeenAt - a.firstSeenAt || byCode(a, b));
+  const taken = m.transponders.filter((t) => t.driverId !== null).sort(byCode);
+  const driver = (t) => m.drivers.find((d) => d.id === t.driverId);
   return html`<tl-frame id="transponders"><section class="card-static space-md" aria-labelledby="transponders-title">
   <h2 id="transponders-title">Transponders</h2>
-  ${rows.length ? html`<table class="setup-table">
-    <thead><tr><th scope="col" class="num">Code</th><th scope="col">Driver</th></tr></thead>
-    <tbody>${rows.map((t) => {
-      const key = `transponder:${t.code}`;
-      return html`<tr${t.driverId === null ? html` class="is-unknown"` : null}>
-      <td class="num">${t.code}</td>
-      <td><form method="post" action="${base}/transponders/${t.code}" class="space-sm">
-        ${controlRow([{ id: `transponder-${t.code}`, label: `Driver for ${t.code}`, labelHidden: true, name: 'driver', options, value: m.values[key]?.driver ?? t.driverId ?? '', error: m.errors[key] ?? null }],
-          html`<button type="submit" class="btn btn-sm btn-outline">Assign</button>`)}
-      </form></td>
-    </tr>`;
-    })}</tbody>
-  </table>` : html`<p class="empty">Transponders show up here when a car first crosses the line.</p>`}
+  ${free.length || taken.length ? html`<div class="tp-list">
+    ${free.length ? html`<div class="tp-group"><p class="pick-group">Not assigned yet</p>${free.length >= 2 ? html`<a class="btn btn-sm btn-outline" href="${base}/transponders/new">Assign all ${free.length}</a>` : null}</div>
+    <ul class="tp-rows">${free.map((t) => html`<li data-code="${t.code}">
+      <span class="tp">${t.code}</span>
+      <span class="meta">first crossed <time datetime="${new Date(t.firstSeenAt).toISOString()}">${formatAgo(t.firstSeenAt, request.now())}</time></span>
+      <span class="tp-acts"><a class="btn btn-sm btn-primary" href="${assignHref(base, t)}">Assign<span class="visually-hidden"> transponder ${t.code}</span></a>${m.mayDelete ? forgetLink(base, t) : null}</span>
+    </li>`)}</ul>` : null}
+    ${taken.length ? html`<div class="tp-group"><p class="pick-group">Assigned</p></div>
+    <ul class="tp-rows">${taken.map((t) => html`<li data-code="${t.code}">
+      <span class="tp">${t.code}</span>
+      <span class="tp-who cut-words">${driver(t)?.name ?? 'Former driver'}${t.label ? html` <span class="tp-label">${t.label}</span>` : null}</span>
+      <span class="tp-acts"><a class="btn btn-sm btn-outline" href="${assignHref(base, t)}">Move<span class="visually-hidden"> transponder ${t.code}</span></a>${m.mayDelete ? forgetLink(base, t) : null}</span>
+    </li>`)}</ul>` : null}
+  </div>` : html`<p class="empty">Transponders show up here when a car first crosses the line.</p>`}
 </section></tl-frame>`;
 }
 
@@ -186,13 +266,15 @@ export function setupPage(request, model) {
   return layout(request, {
     title: 'Setup',
     screen: 'setup',
-    modules: ['pkg/design/elements/frame.js', 'pkg/design/elements/copy.js', 'pkg/design/elements/local-time.js'],
+    modules: ['pkg/design/elements/frame.js', 'pkg/design/elements/copy.js', 'pkg/design/elements/local-time.js', 'public/elements/crossing-now.js'],
     body: html`<div class="container space-xl screen">
   <h1>Setup</h1>
   <div id="page-status">${m.failed ? errorSummary(m.failed.error, m.failed.fieldId) : null}</div>
   <p class="visually-hidden" role="status" id="frame-status"></p>
   ${trackSection(request, m)}
+  <tl-crossing-now src="${liveSrc(request)}">
   ${driversSection(request, m)}
+  </tl-crossing-now>
   ${transpondersSection(request, m)}
   ${decodersSection(request, m)}
   ${watchersSection(request, m)}

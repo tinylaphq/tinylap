@@ -57,7 +57,7 @@ function historyOf(request, before) {
     const bests = store.personalBests(ws, trackId, direction, [...new Set(group.map((r) => r.best.driverId))]);
     for (const row of group) {
       const best = row.best;
-      row.best = { ...best, isRecord: best.seq === record?.seq, isPb: bests.some((b) => b.seq === best.seq), isHolder: best.driverId === record?.driverId };
+      row.best = { ...best, isRecord: best.seq === record?.seq, isPb: bests.some((b) => b.seq === best.seq) };
     }
   }
   const last = sessions[PAGE - 1];

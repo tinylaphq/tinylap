@@ -15,6 +15,7 @@ import { sessionsPageRoutes } from './sessions-pages.js';
 import { setupPageRoutes } from './setup-pages.js';
 import { spacesOf } from './spaces.js';
 import { tapPageRoutes } from './tap-pages.js';
+import { transponderPageRoutes } from './transponder-pages.js';
 import { notFoundPage, startPage } from './views/notice.js';
 
 const COOKIE = new RegExp(`(?:^|;\\s*)${SPACE_COOKIE}=([^;]+)`);
@@ -39,7 +40,7 @@ const home = withSession(async (request) => {
 }, { pages: true });
 
 /** @type {any[]} Feature tasks add their page and form routes here. */
-export const SCREEN_ROUTES = [...boardPageRoutes, ...boardStreamRoutes, ...setupPageRoutes, ...sessionsPageRoutes, ...tapPageRoutes, ...bridgePageRoutes, ...bridgeStreamRoutes];
+export const SCREEN_ROUTES = [...boardPageRoutes, ...boardStreamRoutes, ...setupPageRoutes, ...transponderPageRoutes, ...sessionsPageRoutes, ...tapPageRoutes, ...bridgePageRoutes, ...bridgeStreamRoutes];
 
 export const pageRoutes = [
   { pattern: /^\/$/, credentials: true, methods: { GET: home } },

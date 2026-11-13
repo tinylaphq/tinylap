@@ -59,28 +59,73 @@ test('adding a driver saves in place: same scroll, focus back in the empty field
   assert.equal(await page.evaluate(() => scrollY), scrollY);
   assert.equal(await activeId(page), 'add-driver-name');
   assert.equal(await page.locator('#add-driver-name').inputValue(), '');
-  assert.ok(await page.locator('#transponder-0A option', { hasText: 'Cy' }).count(), 'the transponders card was refreshed');
+  assert.ok(await page.locator('#transponders li[data-code="0A"]').count(), 'the transponders card is still there');
   assert.deepEqual(posts, ['/personal/drivers']);
   assert.equal(loads(), 0);
   assert.deepEqual(errors, []);
 });
 
-test('a bad rename swaps in the error: summary, marked field, the input kept, focus on it, the URL unchanged', async (t) => {
+test('a refused add in a driver\'s list swaps in the error: the row open, marked, the input kept, focus on it, the URL unchanged', async (t) => {
   const { page, errors, posts, loads } = await openSetup(t);
-  const field = page.locator('input[id^="rename-"]').first();
+  const row = page.locator('#drivers .roster > li').first();
+  await row.locator('.roster-add > summary').click();
+  await row.locator('.pick-row.is-other > summary').click();
+  const field = row.locator('input[name="code"]');
   const id = await field.getAttribute('id');
   const url = page.url();
-  await field.fill('   ');
-  await field.locator('xpath=ancestor::form').getByRole('button', { name: 'Save' }).click();
+  await field.fill('zz');
+  await row.locator('.pick-row.is-other').getByRole('button', { name: 'Add to Ana' }).click();
   await page.locator('#page-status [role="alert"]').waitFor();
   assert.equal(page.url(), url);
   assert.equal(await activeId(page), id);
   assert.equal(await page.locator(`#${id}`).getAttribute('aria-invalid'), 'true');
-  assert.equal(await page.locator(`#${id}`).inputValue(), '   ');
-  assert.equal(posts.length, 1);
+  assert.equal(await page.locator(`#${id}`).inputValue(), 'zz');
+  assert.deepEqual(posts, ['/personal/transponders']);
   assert.equal(loads(), 0);
   // Chrome logs every 4xx response; the 422 is the expected answer here.
   assert.deepEqual(errors.filter((e) => !/status of 422/.test(e)), []);
+});
+
+test('adding a transponder from a driver\'s list saves in place, and the transponders card knows it', async (t) => {
+  const { page, errors, posts, loads } = await openSetup(t);
+  const row = page.locator('#drivers .roster > li').first();
+  await row.locator('.roster-add > summary').click();
+  await row.locator('.pick-row.is-other > summary').click();
+  await row.locator('input[name="code"]').fill('5B');
+  await row.locator('.pick-row.is-other').getByRole('button', { name: 'Add to Ana' }).click();
+  await saved(page, 'Drivers saved');
+  await page.locator('#drivers .roster > li').first().locator('.roster-line .tp', { hasText: '5B' }).waitFor();
+  assert.equal(await activeId(page), 'drivers-title', 'the number field is folded away again: focus on the card');
+  await page.locator('#transponders li[data-code="5B"]', { hasText: 'Ana' }).waitFor();
+  assert.deepEqual(posts, ['/personal/transponders']);
+  assert.equal(loads(), 0);
+  assert.deepEqual(errors, []);
+});
+
+test('a typed number of someone else\'s swaps in the row with its question, and Give it moves it in place', async (t) => {
+  await app.form(owner, '/personal/drivers', { name: 'Bo' });
+  const ws = (await (await app.api(owner, 'GET', '/auth/me')).json()).workspaces[0].id;
+  app.engine.assign(ws, '7C', app.store.drivers(ws).find((d) => d.name === 'Bo').id);
+  const { page, errors, posts, loads } = await openSetup(t);
+  const ana = () => page.locator('#drivers .roster > li', { has: page.locator('.roster-name', { hasText: /^Ana$/ }) });
+  await ana().locator('.roster-add > summary').click();
+  await ana().locator('.pick-row.is-other > summary').click();
+  await ana().locator('input[name="code"]').fill('7C');
+  await ana().getByRole('button', { name: 'Add to Ana' }).click();
+  const row = ana().locator('.pick-row[data-code="7C"][open]');
+  await row.getByText('Transponder 7C is Bo\'s. Giving it to Ana takes it off Bo.').waitFor();
+  assert.equal(loads(), 0, 'swapped in, no page load');
+  // Asking is no save: the focus on its answer, nothing announced.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Give it to Ana');
+  assert.doesNotMatch(await page.locator('#frame-status').textContent(), /saved/);
+  await row.getByRole('button', { name: 'Give it to Ana' }).click();
+  await saved(page, 'Drivers saved');
+  await ana().locator('.roster-head .tp, .roster-tps .tp', { hasText: '7C' }).waitFor();
+  assert.equal(app.store.transponders(ws).find((x) => x.code === '7C').driverId, app.store.drivers(ws).find((d) => d.name === 'Ana').id);
+  assert.deepEqual(posts, ['/personal/transponders', '/personal/transponders/7C']);
+  assert.equal(loads(), 0);
+  assert.deepEqual(errors, []);
 });
 
 test('a planner outage (502) swaps in its message, with the link kept', async (t) => {
@@ -110,15 +155,6 @@ test('a layout form loads a page, since a new layout may answer with its confirm
   assert.equal(await page.locator('[id^="track-link-"]').first().inputValue(), link);
   assert.equal(posts.length, 1);
   assert.equal(loads(), 1);
-});
-
-test('an unsaved choice in the transponders card survives a driver swap', async (t) => {
-  const { page } = await openSetup(t);
-  await page.locator('#transponder-0A').selectOption({ label: 'Ana' });
-  await page.locator('#add-driver-name').fill('Dee');
-  await page.getByRole('button', { name: 'Add driver' }).click();
-  await saved(page, 'Drivers saved');
-  assert.equal(await page.locator('#transponder-0A option:checked').innerText(), 'Ana');
 });
 
 test('pairing loads the page; a later swap keeps the one-time token; Copy copies it', async (t) => {
@@ -158,9 +194,10 @@ test('a watchers link made in place copies too: tl-copy works after a swap', asy
 test('submits while one is in flight are dropped, in the same frame and in another', async (t) => {
   const { page, posts, loads } = await openSetup(t);
   await page.locator('#add-driver-name').fill('Fay');
+  await page.locator('#add-track-name').fill('Loop');
   await page.evaluate(() => {
     const add = /** @type {HTMLFormElement} */ (document.querySelector('#add-driver-name').closest('form'));
-    const assign = /** @type {HTMLFormElement} */ (document.querySelector('#transponder-0A').closest('form'));
+    const assign = /** @type {HTMLFormElement} */ (document.querySelector('#add-track-name').closest('form'));
     add.requestSubmit();
     add.requestSubmit();
     assign.requestSubmit();
@@ -177,17 +214,18 @@ test('while a save is in flight every card’s buttons are disabled, and a submi
   const held = new Promise((done) => { release = done; });
   await page.route('**/personal/drivers', async (route) => { await held; await route.continue(); });
   await page.locator('#add-driver-name').fill('Ivy');
+  await page.locator('#add-track-name').fill('Loop');
   await page.getByRole('button', { name: 'Add driver' }).click();
   assert.equal(await page.getByRole('button', { name: 'Add driver' }).isDisabled(), true);
   assert.equal(await page.locator('#drivers').getAttribute('aria-busy'), 'true');
-  const assign = page.locator('#transponder-0A').locator('xpath=ancestor::form');
-  assert.equal(await assign.getByRole('button', { name: 'Assign' }).isDisabled(), true, 'another card shows it can’t save yet');
+  const assign = page.locator('#add-track-name').locator('xpath=ancestor::form');
+  assert.equal(await assign.getByRole('button', { name: 'Add track' }).isDisabled(), true, 'another card shows it can’t save yet');
   assert.equal(await page.getByRole('button', { name: 'Add track' }).isDisabled(), true);
   await assign.evaluate((form) => /** @type {HTMLFormElement} */ (form).requestSubmit());
   await saved(page, 'Still saving. Try again in a moment.');
   release();
   await saved(page, 'Drivers saved');
-  assert.equal(await assign.getByRole('button', { name: 'Assign' }).isDisabled(), false, 'and every button comes back');
+  assert.equal(await assign.getByRole('button', { name: 'Add track' }).isDisabled(), false, 'and every button comes back');
   assert.equal(await page.getByRole('button', { name: 'Add track' }).isDisabled(), false);
   assert.deepEqual(posts, ['/personal/drivers']);
 });

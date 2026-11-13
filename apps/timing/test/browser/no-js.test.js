@@ -65,16 +65,22 @@ test('set the track and manage drivers', async (t) => {
     await page.getByLabel('New driver').fill(name);
     await page.getByRole('button', { name: 'Add driver' }).click();
   }
-  await page.getByLabel('New name for Ben').fill('Benji');
-  await page.locator('form', { has: page.getByLabel('New name for Ben') }).getByRole('button', { name: 'Save' }).click();
-  await page.getByLabel('New name for Benji').waitFor();
-  await page.getByLabel('Colour for Ana').fill('#1e90a0');
-  await page.locator('form', { has: page.getByLabel('Colour for Ana') }).getByRole('button', { name: 'Save' }).click();
-  await page.locator('#drivers').waitFor();
-  assert.equal(await page.getByLabel('Colour for Ana').inputValue(), '#1e90a0');
+  // Renaming and colours are on the driver's page, reached by Edit.
+  await page.getByRole('link', { name: 'Edit Ben' }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Benji');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('heading', { name: 'Benji' }).waitFor();
+  await page.goto('/personal/setup');
+  await page.getByRole('link', { name: 'Edit Ana' }).click();
+  await page.getByLabel('Colour').fill('#1e90a0');
+  const loaded = page.waitForEvent('load');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await loaded;
+  assert.equal(await page.getByLabel('Colour').inputValue(), '#1e90a0');
   assert.equal(app.store.drivers(personal).find((d) => d.name === 'Ana').colour, '#1e90a0');
+  await page.goto('/personal/setup');
 
-  await page.locator('#drivers li', { has: page.getByLabel('New name for Benji') }).getByRole('link', { name: 'Delete' }).click();
+  await page.getByRole('link', { name: 'Delete Benji' }).click();
   await page.getByRole('heading', { name: 'Delete Benji?' }).waitFor();
   await page.goBack();
   assert.equal(pathOf(page), '/personal/setup');
@@ -90,11 +96,29 @@ test('assign a transponder that crossed the line', async (t) => {
   assert.ok(sent.ok, `passing: ${sent.status}`);
   const page = await plainPage(t);
   await page.goto('/personal/setup');
-  await page.getByLabel('Driver for 4711').selectOption({ label: 'Ana' });
-  await page.getByRole('button', { name: 'Assign' }).click();
+  await page.getByRole('link', { name: 'Assign transponder 4711' }).click();
+  await page.getByRole('button', { name: 'Assign to Ana' }).click();
   await page.waitForURL(/\/personal\/setup/);
-  assert.equal(await page.getByLabel('Driver for 4711').inputValue(), app.store.drivers(personal)[0].id);
+  await page.locator('#transponders li[data-code="4711"]', { hasText: 'Ana' }).waitFor();
   assert.equal(app.store.transponders(personal).find((x) => x.code === '4711').driverId, app.store.drivers(personal)[0].id);
+});
+
+test('a typed number of someone else\'s asks in the driver\'s list, and Give it moves it', async (t) => {
+  await app.form(member, '/personal/drivers', { name: 'Bo' });
+  app.engine.assign(personal, '7C', app.store.drivers(personal).find((d) => d.name === 'Bo').id);
+  const page = await plainPage(t);
+  await page.goto('/personal/setup');
+  const ana = page.locator('#drivers .roster > li', { has: page.locator('.roster-name', { hasText: /^Ana$/ }) });
+  await ana.locator('.roster-add > summary').click();
+  await ana.locator('.pick-row.is-other > summary').click();
+  await ana.locator('input[name="code"]').fill('7C');
+  await ana.getByRole('button', { name: 'Add to Ana' }).click();
+  const row = page.locator('#drivers .roster > li', { has: page.locator('.roster-name', { hasText: /^Ana$/ }) }).locator('.pick-row[data-code="7C"][open]');
+  await row.getByText('Transponder 7C is Bo\'s. Giving it to Ana takes it off Bo.').waitFor();
+  assert.equal(app.store.transponders(personal).find((x) => x.code === '7C').driverId, app.store.drivers(personal).find((d) => d.name === 'Bo').id, 'nothing moved yet');
+  await row.getByRole('button', { name: 'Give it to Ana' }).click();
+  await page.waitForURL(/\/personal\/setup#drivers$/);
+  assert.equal(app.store.transponders(personal).find((x) => x.code === '7C').driverId, app.store.drivers(personal).find((d) => d.name === 'Ana').id);
 });
 
 test('race, tap and Back and Forward across a POST and its 303 change nothing twice', async (t) => {

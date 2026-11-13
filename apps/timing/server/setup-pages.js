@@ -6,6 +6,7 @@
 // URL and answers 303 to the setup section it changed; a failure renders the
 // page again with the error and what was typed.
 import { can, open, seal } from '@tinylap/auth';
+import { transponderCode } from '@tinylap/timing';
 import { displayName } from './auth.js';
 import * as ops from './operations.js';
 import { readForm } from './form.js';
@@ -14,6 +15,7 @@ import { page, seeOther } from './respond.js';
 import { retryHeaders } from './responses.js';
 import { spacePath } from './spaces.js';
 import { changeLayoutPage, confirmPage } from './views/confirm.js';
+import { driverPage, labelFieldOf } from './views/driver.js';
 import { notFoundPage } from './views/notice.js';
 import { setupPage } from './views/setup.js';
 import { trackPage } from './views/track.js';
@@ -61,12 +63,49 @@ const addDriver = withForm((request, form) => {
   return afterForm(request, ops.addDriver(request, { name: values.name }), { key: 'add-driver', values, section: 'drivers', fieldId: 'add-driver-name' });
 });
 
-const renameDriver = withForm((request, form, match) => {
-  const values = { name: form.get('name') ?? '', colour: form.get('colour') ?? undefined };
-  const result = ops.renameDriver(request, { id: match[2], name: values.name, colour: values.colour });
-  const fieldId = result.error?.field === 'colour' ? `colour-${match[2]}` : `rename-${match[2]}`;
-  return afterForm(request, result, { key: `rename:${match[2]}`, values, section: 'drivers', fieldId });
-});
+/**
+ * A driver's page (drivers and transponders spec §3.5), with any errors and what was typed; 404 for a driver not here.
+ * @param {any} request @param {string} id @param {number} status
+ * @param {{ values?: Record<string, string>, errors?: any[], headers?: Record<string, any> }} [extras]
+ */
+function renderDriver(request, id, status, { headers = {}, ...extras } = {}) {
+  const { store, workspaceId: ws } = request;
+  const driver = store.driver(ws, id);
+  if (!driver) return page(request, 404, notFoundPage(request));
+  const workspace = store.workspace(ws);
+  const transponders = store.transponders(ws).filter((t) => t.driverId === driver.id);
+  const laps = workspace.trackId ? store.bestLapsByTransponder(ws, driver.id, workspace.trackId, workspace.direction) : [];
+  return page(request, status, driverPage(request, { driver, transponders, laps, ...extras }), { headers });
+}
+
+const showDriver = (request, match) => renderDriver(request, match[2], 200);
+
+/** The driver page's form: name, colour and every label checked first, then saved; 303 back to the page. */
+function saveDriver(request, form, id) {
+  const driver = request.store.driver(request.workspaceId, id);
+  if (!driver) return page(request, 404, notFoundPage(request));
+  const values = { name: form.get('name') ?? '', colour: form.get('colour') ?? '' };
+  const labels = [];
+  const errors = [];
+  for (const t of request.store.transponders(request.workspaceId).filter((x) => x.driverId === driver.id)) {
+    const field = labelFieldOf(t.code);
+    const raw = form.get(field);
+    if (raw === null) continue;
+    values[field] = raw;
+    const { value, error } = ops.labelOf(raw);
+    if (error) errors.push({ ...error, field });
+    else labels.push({ code: t.code, label: value });
+  }
+  const failed = (list, status = 422) => renderDriver(request, id, status, { values, errors: list, headers: retryHeaders(list[0]) });
+  if (errors.length) return failed(errors);
+  const result = ops.renameDriver(request, { id, name: values.name, colour: form.has('colour') ? values.colour : undefined });
+  if (result.error) return result.error.problem === 'not-found' ? page(request, 404, notFoundPage(request)) : failed([result.error], result.error.status);
+  for (const { code, label } of labels) ops.labelTransponder(request, { code, label });
+  return seeOther(`${request.space.base}/drivers/${id}`);
+}
+
+// Setup no longer renames (§3.1): every rename is the driver page's form, and answers there.
+const renameDriver = withForm((request, form, match) => saveDriver(request, form, match[2]));
 
 function askDeleteDriver(request, match) {
   const driver = request.store.driver(request.workspaceId, match[2]);
@@ -83,11 +122,20 @@ function askDeleteDriver(request, match) {
 
 const deleteDriver = withForm((request, _form, match) => afterForm(request, ops.deleteDriver(request, { id: match[2] }), { key: 'delete', values: {}, section: 'drivers' }));
 
-const assignTransponder = withForm((request, form, match) => {
-  const driver = form.get('driver') ?? '';
-  const code = match[2].toUpperCase();
-  return afterForm(request, ops.assignTransponder(request, { code, driverId: driver === '' ? null : driver }), { key: `transponder:${code}`, values: { driver }, section: 'transponders', fieldId: `transponder-${code}` });
-});
+function askForgetTransponder(request, match) {
+  const code = transponderCode(match[2]);
+  if (!code || !request.store.transponders(request.workspaceId).some((t) => t.code === code)) return renderSetup(request, 404, { failed: { error: { message: 'There is no such transponder here.' } } });
+  const base = request.space.base;
+  return page(request, 200, confirmPage(request, {
+    title: `Forget transponder ${code}?`,
+    text: 'Its laps stay; if it crosses again it shows up as new.',
+    action: `${base}/transponders/${code}/forget`,
+    button: 'Forget',
+    back: `${base}/setup#transponders`,
+  }));
+}
+
+const forgetTransponder = withForm((request, _form, match) => afterForm(request, ops.forgetTransponder(request, { code: match[2] }), { key: 'forget', values: {}, section: 'transponders' }));
 
 export const PAIRED_COOKIE = '__Host-tl-paired';
 const PAIRED_TTL_SECONDS = 300;
@@ -241,9 +289,8 @@ const write = { write: true };
 export const setupPageRoutes = [
   { pattern: spacePath('setup'), credentials: true, methods: { GET: pageRoute('timing.run', showSetup) } },
   { pattern: spacePath('drivers'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', addDriver, write) } },
-  { pattern: spacePath('drivers/([^/]+)'), credentials: true, methods: { GET: toPage('setup#drivers'), POST: pageRoute('timing.setup', renameDriver, write) } },
+  { pattern: spacePath('drivers/([^/]+)'), credentials: true, methods: { GET: pageRoute('timing.setup', showDriver), POST: pageRoute('timing.setup', renameDriver, write) } },
   { pattern: spacePath('drivers/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteDriver), POST: pageRoute('timing.delete', deleteDriver, write) } },
-  { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})'), credentials: true, methods: { GET: toPage('setup#transponders'), POST: pageRoute('timing.setup', assignTransponder, write) } },
   { pattern: spacePath('track'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', setTrack, write) } },
   { pattern: spacePath('tracks'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', addTrack, write) } },
   { pattern: spacePath('tracks/([^/]+)'), credentials: true, methods: { GET: pageRoute('timing.run', showTrack), POST: pageRoute('timing.setup', renameTrack, write) } },
@@ -252,6 +299,7 @@ export const setupPageRoutes = [
   { pattern: spacePath('tracks/([^/]+)/restore'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', restoreTrack, write) } },
   { pattern: spacePath('tracks/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteTrack), POST: pageRoute('timing.delete', deleteTrack, write) } },
   { pattern: spacePath('decoders'), credentials: true, methods: { GET: toPage('setup#decoders'), POST: pageRoute('timing.setup', pairDecoder, write) } },
+  { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})/forget'), credentials: true, methods: { GET: pageRoute('timing.delete', askForgetTransponder), POST: pageRoute('timing.delete', forgetTransponder, write) } },
   { pattern: spacePath('decoders/([^/]+)/unpair'), credentials: true, methods: { GET: pageRoute('timing.delete', askUnpair), POST: pageRoute('timing.delete', unpair, write) } },
   { pattern: spacePath('watch-link'), credentials: true, methods: { GET: toPage('setup#watchers'), POST: pageRoute('timing.setup', makeWatchLink, write) } },
   { pattern: spacePath('watch-link/new'), credentials: true, methods: { GET: pageRoute('timing.setup', askNewWatchLink) } },

@@ -5,9 +5,10 @@
 // Tap and Setup in the browser, at a phone's and a laptop's width: a long
 // name stays inside its tile, unbroken inside its words, never under 16px,
 // and the result bar keeps its height after a tap; on Setup a section's
-// heading keeps its gap to what follows, actions beside a field stand as tall
-// as the field and actions in a row of text one lighter height, the row's
-// actions end at the section's edge, and a fold's error takes the fold's width.
+// heading keeps its gap to what follows, actions in a row of text share one
+// lighter height, the row's
+// actions end at the section's edge, a driver's add list has 52 px rows, and a
+// fold's error takes the fold's width.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
@@ -104,7 +105,7 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
     assert.deepEqual(errors, []);
   });
 
-  test(`setup at ${size} width: a heading keeps its gap, row actions take a field's height or a text row's, and end at the section's edge`, async (t) => {
+  test(`setup at ${size} width: a heading keeps its gap, row actions share one lighter height, and end at the section's edge`, async (t) => {
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());
     await page.goto('/personal/setup');
@@ -115,29 +116,24 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
         const next = h.nextElementSibling;
         return Math.round(next.getBoundingClientRect().top - h.getBoundingClientRect().bottom);
       };
-      const actions = [...document.querySelectorAll('.setup-row .btn, .track-row .button-row .btn, .setup-table .btn')]
+      const actions = [...document.querySelectorAll('.setup-row .btn, .roster-head .btn, .track-row .button-row .btn, .tp-rows .btn')]
         .filter((el) => el.getClientRects().length)
         .map((el) => {
-          // Beside a field: a field in the action's row, not in a fold under it.
-          const row = el.closest('.setup-row, .track-row, tr');
-          const field = [...row.querySelectorAll('input:not([type="hidden"]), select')].find((f) => !f.closest('details'));
-          return { text: el.textContent.trim(), h: Math.round(el.getBoundingClientRect().height), field: field ? Math.round(field.getBoundingClientRect().height) : null };
+          return { text: el.textContent.trim(), h: Math.round(el.getBoundingClientRect().height) };
         });
       const edge = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().right);
       const content = (sel) => { const s = document.querySelector(sel); return Math.round(s.getBoundingClientRect().right - parseFloat(getComputedStyle(s).paddingRight) - parseFloat(getComputedStyle(s).borderRightWidth)); };
       return {
         gaps: ['track-title', 'drivers-title', 'transponders-title', 'decoders-title'].map((id) => [id, gapAfter(id)]),
         actions,
-        assign: edge('#transponders .setup-table .btn') - content('#transponders section'),
+        assign: edge('#transponders .tp-acts') - content('#transponders .tp-rows > li'),
         unpair: edge('#decoders .setup-row .btn') - content('#decoders'),
         docW: document.documentElement.scrollWidth,
       };
     });
     for (const [id, gap] of m.gaps) assert.equal(gap, 16, `${id}: 16px to what follows`);
-    const besideField = m.actions.filter((a) => a.field !== null);
-    const inText = m.actions.filter((a) => a.field === null);
-    assert.ok(besideField.length && inText.length, `both kinds of row: ${JSON.stringify(m.actions)}`);
-    for (const a of besideField) assert.equal(a.h, a.field, `${a.text}: as tall as its field`);
+    const inText = m.actions;
+    assert.ok(inText.length, `rows of text: ${JSON.stringify(m.actions)}`);
     assert.deepEqual([...new Set(inText.map((a) => a.h))], [36], `actions in a row of text: one lighter height, ${JSON.stringify(inText)}`);
     assert.equal(m.assign, 0, 'Assign ends at the section edge');
     assert.equal(m.unpair, 0, 'Unpair ends at the section edge');
@@ -146,38 +142,28 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
   });
 }
 
-test('setup on a phone: a driver row keeps the whole name in view, its actions on a line of their own, one row gap under the name', async (t) => {
+test('setup on a phone: a driver row keeps the whole name in view; the add list has 52 px rows, one open at a time, its form under the number', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member, { viewport: PHONE });
   t.after(() => context.close());
   await page.goto('/personal/setup');
-  const measure = (el) => {
-    const input = el.querySelector('input[name="name"]');
-    const save = el.querySelector('button[type="submit"]');
-    const error = el.querySelector('.field-error')?.getBoundingClientRect();
-    return {
-      fits: input.scrollWidth <= input.clientWidth,
-      gap: parseFloat(getComputedStyle(el).rowGap),
-      inputBottom: input.getBoundingClientRect().bottom,
-      saveTop: save.getBoundingClientRect().top,
-      error: error ? { top: error.top, bottom: error.bottom } : null,
-    };
-  };
-  const row = page.locator('#drivers .setup-row', { has: page.locator(`input[value="${LONG}"]`) });
-  const m = await row.evaluate(measure);
-  assert.ok(m.fits, 'the whole name shows');
-  assert.equal(m.error, null);
-  // Within a pixel: rows can land on half pixels. An empty error row would add a whole row gap.
-  const near = (px, gap, what) => assert.ok(Math.abs(px - gap) <= 1, `${what}: ${px}px, not ${gap}px`);
-  near(m.saveTop - m.inputBottom, m.gap, 'Save is below the name, one row gap away: no empty error row between');
-  // A refused rename: the error takes the row between, a row gap on each side.
-  await row.locator('input[name="name"]').evaluate((input) => { input.form.noValidate = true; input.value = ''; });
-  await row.locator('button[type="submit"]').click();
-  const refused = page.locator('#drivers .setup-row', { has: page.locator('.field-error') });
-  await refused.waitFor();
-  const e = await refused.evaluate(measure);
-  // The error's box is as tall as its font makes it, so only the order is measured here.
-  assert.ok(e.error.top >= e.inputBottom - 1 && e.saveTop > e.error.top, `the error between the name and Save: ${JSON.stringify(e)}`);
-  assert.deepEqual(errors.filter((x) => !/status of 422/.test(x)), [], 'nothing but the refused form');
+  const row = page.locator('#drivers .roster > li', { has: page.locator('.roster-name', { hasText: LONG }) });
+  assert.ok(await row.locator('.roster-name').evaluate((el) => el.scrollWidth <= el.clientWidth), 'the whole name shows');
+  await row.locator('.roster-add > summary').click();
+  const heights = await row.locator('.pick-row:not(.is-other) > summary').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+  assert.ok(heights.length >= 2, `a free and someone else's: ${heights}`);
+  for (const h of heights) assert.equal(Math.round(h), 52, `a row is 52 px: ${heights}`);
+  const [first, second] = await row.locator('.pick-row:not(.is-other) > summary').all();
+  await first.click();
+  await second.click();
+  assert.equal(await row.locator('.pick-row[open]').count(), 1, 'opening one closes the other');
+  const m = await row.locator('.pick-row[open]').evaluate((el) => ({
+    tp: el.querySelector('summary .tp').getBoundingClientRect().left,
+    button: el.querySelector('form .btn').getBoundingClientRect().left,
+    docW: document.documentElement.scrollWidth,
+  }));
+  assert.ok(Math.abs(m.tp - m.button) <= 1, `the form lines up under the number: ${JSON.stringify(m)}`);
+  assert.ok(m.docW <= PHONE.width, 'no sideways scroll');
+  assert.deepEqual(errors, []);
 });
 
 test('setup on a phone: a fold’s error spans the fold, and Rename and Change layout end at one edge', async (t) => {

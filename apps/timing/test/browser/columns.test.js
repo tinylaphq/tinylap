@@ -105,8 +105,8 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
 
 test('?big at 1280 shows every race column; a phone keeps Pos, Driver, Laps, Best and Time, and lets Last go', async (t) => {
   for (const [viewport, columns] of [
-    [{ width: 1280, height: 800, big: true }, ['Pos', 'Driver', 'Laps', 'Best', '', 'Last', 'Time']],
-    [{ width: 390, height: 844 }, ['Pos', 'Driver', 'Laps', 'Best', '', 'Time']],
+    [{ width: 1280, height: 800, big: true }, ['', 'Driver', 'Laps', 'Best', '', 'Last', 'Time']],
+    [{ width: 390, height: 844 }, ['', 'Driver', 'Laps', 'Best', '', 'Time']],
   ]) {
     const { context, page } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());

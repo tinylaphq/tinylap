@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS driver (
 );
 CREATE INDEX IF NOT EXISTS driver_workspace ON driver (workspace_id);
 CREATE TABLE IF NOT EXISTS transponder (
-  workspace_id TEXT NOT NULL, code TEXT NOT NULL, driver_id TEXT, first_seen_at INTEGER NOT NULL,
+  workspace_id TEXT NOT NULL, code TEXT NOT NULL, driver_id TEXT, first_seen_at INTEGER NOT NULL, label TEXT,
   PRIMARY KEY (workspace_id, code)
 );
 CREATE TABLE IF NOT EXISTS decoder (
@@ -67,6 +67,10 @@ CREATE INDEX IF NOT EXISTS crossing_reference ON crossing (decoder_id, transpond
 CREATE INDEX IF NOT EXISTS passing_received ON passing (received_at);
 CREATE INDEX IF NOT EXISTS crossing_passing ON crossing (decoder_id, boot, transponder, t);
 CREATE INDEX IF NOT EXISTS crossing_transponder ON crossing (workspace_id, transponder, driver_id);
+CREATE INDEX IF NOT EXISTS crossing_transponder_at ON crossing (workspace_id, transponder, at);
+CREATE INDEX IF NOT EXISTS crossing_workspace_at ON crossing (workspace_id, at);
+CREATE INDEX IF NOT EXISTS passing_transponder_received ON passing (workspace_id, transponder, received_at);
+CREATE INDEX IF NOT EXISTS passing_workspace_received ON passing (workspace_id, received_at);
 CREATE INDEX IF NOT EXISTS session_track ON session (workspace_id, track_id, direction);
 CREATE INDEX IF NOT EXISTS session_created ON session (workspace_id, created_at, id);
 CREATE TABLE IF NOT EXISTS track_record (
@@ -202,6 +206,23 @@ export const IDLE_SQL = {
   fastest: 'SELECT driver_id, lap_ms, at, crossing_seq FROM personal_best WHERE workspace_id = ? AND track_id = ? AND direction = ? ORDER BY lap_ms, at, crossing_seq LIMIT ?',
   driven: 'SELECT 1 FROM crossing WHERE workspace_id = ? LIMIT 1',
 };
+// What Setup, collect and the driver page read of a club's transponders (planned in the store tests): each newest
+// crossing or passing through an index that starts with the club and the transponder, never a scan of a club's laps.
+export const TRANSPONDER_SQL = {
+  // crossed_at: the newest crossing or passing, null for one only typed in; last_seen_at falls back to its row's creation.
+  transponders: `SELECT code, driver_id, first_seen_at, label, MAX(first_seen_at, COALESCE(crossed_at, 0)) AS last_seen_at, crossed_at FROM (
+    SELECT t.code, t.driver_id, t.first_seen_at, t.label,
+      NULLIF(MAX(
+        COALESCE((SELECT MAX(c.at) FROM crossing c WHERE c.workspace_id = t.workspace_id AND c.transponder = t.code), 0),
+        COALESCE((SELECT MAX(p.received_at) FROM passing p WHERE p.workspace_id = t.workspace_id AND p.transponder = t.code), 0)), 0) AS crossed_at
+    FROM transponder t WHERE t.workspace_id = ?) ORDER BY code`,
+  // Idle passings make no crossing, so the passings count as well as the crossings.
+  unknownSince: `SELECT t.code FROM transponder t JOIN (
+      SELECT workspace_id, transponder, at FROM crossing WHERE workspace_id = ?1 AND at >= ?2
+      UNION ALL SELECT workspace_id, transponder, received_at FROM passing WHERE workspace_id = ?1 AND received_at >= ?2
+    ) c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
+    WHERE t.workspace_id = ?1 AND t.driver_id IS NULL GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`,
+};
 /** SQLite's code for a broken UNIQUE constraint: a track name already in use. */
 const UNIQUE = 2067;
 const nameInUse = (error) => error?.errcode === UNIQUE;
@@ -246,12 +267,19 @@ export function openStore(path) {
     addDriver: q('INSERT INTO driver (id, workspace_id, name, colour) VALUES (?, ?, ?, ?)'),
     updateDriver: q('UPDATE driver SET name = ?, colour = ? WHERE workspace_id = ? AND id = ?'),
     deleteDriver: q('DELETE FROM driver WHERE workspace_id = ? AND id = ?'),
-    unassignDriver: q('UPDATE transponder SET driver_id = NULL WHERE workspace_id = ? AND driver_id = ?'),
-    transponders: q('SELECT code, driver_id, first_seen_at FROM transponder WHERE workspace_id = ? ORDER BY code'),
+    unassignDriver: q('UPDATE transponder SET driver_id = NULL, label = NULL WHERE workspace_id = ? AND driver_id = ?'),
+    transponders: q(TRANSPONDER_SQL.transponders),
+    labelTransponder: q('UPDATE transponder SET label = ? WHERE workspace_id = ? AND code = ?'),
+    forgetTransponder: q('DELETE FROM transponder WHERE workspace_id = ? AND code = ?'),
+    unknownInSession: q(`SELECT t.code FROM transponder t JOIN crossing c ON c.workspace_id = t.workspace_id AND c.transponder = t.code
+      WHERE t.workspace_id = ? AND t.driver_id IS NULL AND c.session_id = ? GROUP BY t.code ORDER BY MAX(c.at) DESC, t.code`),
+    unknownSince: q(TRANSPONDER_SQL.unknownSince),
     seeTransponder: q('INSERT INTO transponder (workspace_id, code, first_seen_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
     transponder: q('SELECT code, driver_id FROM transponder WHERE workspace_id = ? AND code = ?'),
-    assignTransponder: q(`INSERT INTO transponder (workspace_id, code, driver_id, first_seen_at) VALUES (?, ?, ?, ?)
-      ON CONFLICT (workspace_id, code) DO UPDATE SET driver_id = excluded.driver_id`),
+    assignTransponder: q(`INSERT INTO transponder (workspace_id, code, driver_id, first_seen_at, label) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (workspace_id, code) DO UPDATE SET
+        label = CASE WHEN transponder.driver_id IS excluded.driver_id THEN COALESCE(?, transponder.label) ELSE excluded.label END,
+        driver_id = excluded.driver_id`),
     decoders: q('SELECT id, name, created_at, last_seen_at FROM decoder WHERE workspace_id = ? ORDER BY created_at, id'),
     netDecoders: q("SELECT DISTINCT decoder_id FROM passing WHERE workspace_id = ? AND via = 'net'"),
     decoder: q('SELECT id, workspace_id, name FROM decoder WHERE id = ?'),
@@ -304,6 +332,11 @@ export function openStore(path) {
     qualifyingLaps: q(`SELECT c.seq, c.driver_id, c.lap_ms, c.at, c.session_id FROM session s JOIN crossing c ON c.session_id = s.id
       WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND c.counts = 1 AND c.via != 'tap' AND c.driver_id IS NOT NULL AND c.lap_ms IS NOT NULL
       ORDER BY c.at, c.seq`),
+    // A driver's best lap per transponder (drivers and transponders spec §3.5); SQLite takes at from the MIN row. A label is theirs only while the transponder is.
+    bestLapsByTransponder: q(`SELECT c.transponder, MIN(c.lap_ms) AS lap_ms, c.at, t.label FROM session s JOIN crossing c ON c.session_id = s.id
+      LEFT JOIN transponder t ON t.workspace_id = c.workspace_id AND t.code = c.transponder AND t.driver_id = c.driver_id
+      WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND c.driver_id = ? AND c.counts = 1 AND c.via != 'tap' AND c.lap_ms IS NOT NULL
+      GROUP BY c.transponder ORDER BY lap_ms, c.at, c.transponder`),
     trackDirections: q('SELECT DISTINCT workspace_id, track_id, direction FROM session WHERE track_id IS NOT NULL'),
     selectCursor: q('SELECT seq FROM feed_cursor WHERE feed = ?'),
     upsertCursor: q('INSERT INTO feed_cursor (feed, seq) VALUES (?, ?) ON CONFLICT (feed) DO UPDATE SET seq = excluded.seq'),
@@ -503,14 +536,21 @@ export function openStore(path) {
       });
     },
 
-    transponders: (ws) => s.transponders.all(ws).map((r) => ({ code: String(r.code), driverId: str(r.driver_id), firstSeenAt: Number(r.first_seen_at) })),
+    transponders: (ws) => s.transponders.all(ws).map((r) => ({ code: String(r.code), driverId: str(r.driver_id), firstSeenAt: Number(r.first_seen_at), label: str(r.label), lastSeenAt: Number(r.last_seen_at), crossedAt: num(r.crossed_at) })),
+    /** Gives a transponder a label, or clears it with `null`; false when the club has no such transponder. */
+    labelTransponder: (ws, code, label) => s.labelTransponder.run(label, ws, code).changes === 1,
+    /** Deletes the transponder row only; its passings and crossings stay. */
+    forgetTransponder: (ws, code) => s.forgetTransponder.run(ws, code).changes === 1,
+    /** Unassigned codes that crossed in the session when given, else at or after `since`; newest crossing first. */
+    unknownSince: (ws, since, sessionId) => (sessionId === null ? s.unknownSince.all(ws, since) : s.unknownInSession.all(ws, sessionId)).map((r) => String(r.code)),
     seeTransponder(ws, code, at) {
       const created = s.seeTransponder.run(ws, code, at).changes === 1;
       const r = s.transponder.get(ws, code);
       return { code: String(r.code), driverId: str(r.driver_id), created };
     },
-    assignTransponder(ws, code, driverId, at) {
-      s.assignTransponder.run(ws, code, driverId, at);
+    /** A moved transponder loses its label; for the same driver a string `label` replaces it, and `null` and `undefined` both keep it. */
+    assignTransponder(ws, code, driverId, at, label = null) {
+      s.assignTransponder.run(ws, code, driverId, at, label, label);
     },
 
     decoders: (ws) => s.decoders.all(ws).map((r) => ({ id: String(r.id), name: String(r.name), createdAt: Number(r.created_at), lastSeenAt: num(r.last_seen_at) })),
@@ -616,6 +656,9 @@ export function openStore(path) {
     offerPersonalBest(ws, trackId, direction, { driverId, lapMs, at, seq }) {
       s.offerPersonalBest.run(ws, trackId, direction, driverId, lapMs, at, seq);
     },
+    /** A driver's best lap with each transponder on a track and direction, best first. */
+    bestLapsByTransponder: (ws, driverId, trackId, direction) => s.bestLapsByTransponder.all(ws, trackId, direction, driverId)
+      .map((r) => ({ transponder: String(r.transponder), label: str(r.label), lapMs: Number(r.lap_ms), at: Number(r.at) })),
     /** The laps that set a record on a track and direction, newest first. */
     recordHistory: (ws, trackId, direction, { limit = -1 } = {}) => s.recordHistory.all(ws, trackId, direction, limit).map(recordOf),
     currentRecord(ws, trackId, direction) {

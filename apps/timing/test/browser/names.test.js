@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Names in tables and lists: the record holder's crown before the name, never
-// alone on a line; a name too long for its column cut with "…" on one line,
-// whole in its title and for a screen reader.
+// Names in tables and lists: the record holder's crown after the name, never
+// alone on a line and as tall as a mark; a name too long for its column cut
+// with "…" on one line before the crown, whole in its title and for a screen
+// reader. A position sits one cell's padding from its name's colour.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
@@ -68,12 +69,12 @@ const names = () => [...document.querySelectorAll('.board-driver .driver-name, .
     cut: name.scrollWidth > name.clientWidth + 0.5,
     oneLine: name.getClientRects().length === 1 && style.whiteSpace === 'nowrap',
     ellipsis: style.textOverflow === 'ellipsis' && style.overflow === 'hidden',
-    crown: c ? { sameLine: Math.abs(c.bottom - box.bottom) < box.height / 2, before: c.right <= box.left + 0.5 } : null,
+    crown: c ? { sameLine: Math.abs(c.bottom - box.bottom) < box.height / 2, after: c.left >= box.right - 0.5 } : null,
   };
 });
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1920, height: 1080, big: true }]) {
-  test(`the crown sits before its name, and a long name is cut with "…" but whole in its title and for screen readers, at ${viewport.width}${viewport.big ? ' ?big' : ''}`, async (t) => {
+  test(`the crown sits after its name, and a long name is cut with "…" but whole in its title and for screen readers, at ${viewport.width}${viewport.big ? ' ?big' : ''}`, async (t) => {
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());
     await page.goto(`/personal/board${viewport.big ? '?big' : ''}`);
@@ -81,14 +82,40 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1920, height: 1080
     const all = await page.evaluate(names);
     const crowned = all.filter((n) => n.crown);
     assert.ok(crowned.length >= 1, 'the holder has a crown in the table');
-    for (const n of crowned) assert.deepEqual(n.crown, { sameLine: true, before: true }, `${n.text}: the crown on the name's line, before it`);
+    for (const n of crowned) assert.deepEqual(n.crown, { sameLine: true, after: true }, `${n.text}: the crown on the name's line, after it`);
     for (const n of all) {
       assert.equal(n.title, n.text, `${n.text}: its title is the whole name`);
       assert.ok(n.oneLine && n.ellipsis, `${n.text}: one line, cut with an ellipsis if it must be`);
     }
     assert.ok(all.some((n) => n.text === LONG && n.cut), 'the long name is cut here');
     // A screen reader gets the whole name: the table's accessible tree has it in full.
-    assert.match(await page.locator('.standings-table').ariaSnapshot(), new RegExp(`Track record holder.*${LONG}`));
+    assert.match(await page.locator('.standings-table').ariaSnapshot(), new RegExp(`${LONG}.*Track record holder`));
+    assert.deepEqual(errors, []);
+  });
+}
+
+/** The crown and the mark in its row (the race's SB), and from the position's digit to the name's colour. */
+const crownAndPos = () => {
+  const crown = document.querySelector('.standings-table .crown');
+  const mark = crown.closest('tr').querySelector('.mark');
+  const pos = crown.closest('tr').querySelector('td.pos');
+  const range = document.createRange();
+  range.selectNodeContents(pos);
+  const c = crown.getBoundingClientRect();
+  const m = mark.getBoundingClientRect();
+  return { crown: { top: c.top, bottom: c.bottom }, mark: { top: m.top, bottom: m.bottom }, gap: crown.closest('.driver').getBoundingClientRect().left - range.getBoundingClientRect().right };
+};
+
+for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }, { width: 1280, height: 800, big: true }, { width: 1920, height: 1080, big: true }]) {
+  test(`the crown is as tall as a mark and on its line, and a position sits by its name, at ${viewport.width}${viewport.big ? ' ?big' : ''}`, async (t) => {
+    const { context, page, errors } = await pageAs(browser, app, member, { viewport });
+    t.after(() => context.close());
+    await page.goto(`/personal/board${viewport.big ? '?big' : ''}`);
+    await page.evaluate(() => document.fonts.ready);
+    const m = await page.evaluate(crownAndPos);
+    assert.ok(Math.abs(m.crown.top - m.mark.top) <= 0.5, `crown top ${m.crown.top}, mark top ${m.mark.top}`);
+    assert.ok(Math.abs(m.crown.bottom - m.mark.bottom) <= 0.5, `crown bottom ${m.crown.bottom}, mark bottom ${m.mark.bottom}`);
+    if (viewport.width === 1280 && !viewport.big) assert.ok(Math.abs(m.gap - 16) <= 0.5, `digit to colour: ${m.gap}`);
     assert.deepEqual(errors, []);
   });
 }

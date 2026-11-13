@@ -4,7 +4,7 @@
 
 // The history and the records in the browser: on a phone the history keeps
 // who was fastest and how fast in view, with the track under the session,
-// and a record's date stays on one line; the crown stays beside its name.
+// and a record's date stays on one line; the history has no crown.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { canonicalJson } from '@tinylap/track-format';
@@ -76,14 +76,6 @@ const measure = (selector) => {
     cols: [...table.querySelectorAll('thead th')].map((th) => Math.round(th.getBoundingClientRect().width)),
     shown: [...table.querySelectorAll('thead th')].filter((th) => th.getClientRects().length && th.getBoundingClientRect().right <= box.right + 0.5).map((th) => th.textContent.trim()),
     rows: [...table.querySelectorAll('tbody tr')].map((tr) => {
-      const crown = tr.querySelector('.crown');
-      const name = crown?.parentElement.querySelector('.driver-name');
-      // The crown's line: the name's, before it, not one of its own.
-      let crownAlone = false;
-      if (crown && name) {
-        const first = name.getClientRects()[0];
-        crownAlone = Math.abs(crown.getBoundingClientRect().bottom - first.bottom) >= first.height / 2;
-      }
       const track = tr.querySelector('.history-track');
       const tag = tr.querySelector('.history-session .tag');
       const cell = tag?.closest('td').getBoundingClientRect();
@@ -91,7 +83,7 @@ const measure = (selector) => {
         dates: [...tr.querySelectorAll('td:not(.board-driver):not(.num) a')].filter((a) => a.getClientRects().length).map(lines),
         track: track && track.getClientRects().length ? track.textContent : null,
         trackLines: track && track.getClientRects().length ? Math.round(track.getBoundingClientRect().height / parseFloat(getComputedStyle(track).lineHeight)) : 0,
-        crownAlone,
+        crowned: Boolean(tr.querySelector('.crown')),
         tagInside: tag ? tag.getBoundingClientRect().right <= cell.right + 0.5 : null,
         best: tr.querySelector('td.num:not(.history-wide)')?.textContent ?? null,
       };
@@ -112,14 +104,14 @@ test('a phone\'s history shows Started, Session, Fastest and Best, with the trac
   for (const row of m.rows) {
     assert.match(row.track, /^Garage oval behind the workshop, long version, anticlockwise$/);
     assert.ok(row.trackLines <= 2, `the track takes at most two lines: ${row.trackLines}`);
-    assert.equal(row.crownAlone, false, 'the crown stays on its name\'s line');
+    assert.equal(row.crowned, false, 'no crown in the history');
   }
   assert.ok(m.rows.slice(1).every((row) => /^\d+\.\d{3}$/.test(row.best)), 'each practice\'s best lap is in view');
   assert.equal(m.rows[0].tagInside, true, 'the Aborted tag stays in its cell');
   assert.deepEqual(errors, []);
 });
 
-test('on a desktop the history keeps every column, and the crown stays beside a long name', async (t) => {
+test('on a desktop the history keeps every column, and no crown', async (t) => {
   const { context, page } = await pageAs(browser, app, member, { viewport: DESKTOP });
   t.after(() => context.close());
   await page.goto('/personal/sessions');
@@ -129,7 +121,7 @@ test('on a desktop the history keeps every column, and the crown stays beside a 
   assert.ok(m.fits, `the history fits its box: ${m.widths}`);
   for (const row of m.rows) {
     assert.equal(row.track, null, 'the second line is for a phone');
-    assert.equal(row.crownAlone, false, `the crown stays on its name's line: columns ${m.cols}`);
+    assert.equal(row.crowned, false, 'no crown in the history');
   }
 });
 

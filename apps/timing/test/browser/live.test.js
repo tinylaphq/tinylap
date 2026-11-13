@@ -139,7 +139,8 @@ test('focus stays on the same link, and the notice is not announced again, when 
   await postPassings(app, decoder, [{ transponder: '55', t: 40000 }]);
   await page.goto('/personal/board');
   await page.locator('#live-status[data-state="live"]').waitFor();
-  const link = page.getByRole('link', { name: 'Assign in Setup' });
+  // 77 (the big screen's) and 55 crossed in this session: one warning for both, linking to collect.
+  const link = page.getByRole('link', { name: 'Assign them' });
   await link.focus();
   await page.evaluate(() => {
     /** @type {any} */ (document.querySelector('#board-live')).stale = true;
@@ -147,7 +148,7 @@ test('focus stays on the same link, and the notice is not announced again, when 
   });
   await postPassings(app, decoder, [{ transponder: '10', t: 41000 }]);
   await page.waitForFunction(() => !(/** @type {any} */ (document.querySelector('#board-live'))).stale);
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('href')), '/personal/setup#transponders');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('href')), '/personal/transponders/new');
   assert.equal(await page.evaluate(() => /** @type {any} */ (document.querySelector('.board-unknown')).kept), true);
   assert.deepEqual(errors, []);
 });
@@ -183,7 +184,7 @@ test('with nobody racing, the quiet line and the live line are not announced aga
   await postPassings(app, decoder, [{ transponder: '77', t: 90000 }]);
   await page.goto('/personal/board');
   await page.locator('#live-status[data-state="live"]').waitFor();
-  await page.locator('.board-quiet', { hasText: 'no driver yet' }).waitFor();
+  await page.locator('.board-quiet', { hasText: "2 transponders aren't assigned yet" }).waitFor(); // 77 and 55
   await page.evaluate(() => {
     /** @type {any} */ (document.querySelector('#board-live')).stale = true;
     /** @type {any} */ (document.querySelector('.board-quiet')).kept = true;
@@ -193,5 +194,46 @@ test('with nobody racing, the quiet line and the live line are not announced aga
   await page.waitForFunction(() => !(/** @type {any} */ (document.querySelector('#board-live'))).stale);
   assert.equal(await page.evaluate(() => /** @type {any} */ (document.querySelector('.board-quiet')).kept), true);
   assert.equal(await page.evaluate(() => /** @type {any} */ (document.querySelector('.board-on-track')).kept), true);
+  assert.deepEqual(errors, []);
+});
+
+test('the track strip has no left bar: the record card’s top band while idle, raised alone in a session', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  const personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
+  const running = app.store.runningSession(personal);
+  if (running) app.engine.end(personal, running.id);
+  // Earlier tests' transponders get a driver, so 88 is the one not assigned yet.
+  for (const code of app.engine.snapshot(personal).unknown) app.engine.assign(personal, code, app.store.drivers(personal)[0].id);
+  clock.offset += 5_000;
+  await postPassings(app, decoder, [{ transponder: '88', t: 120000 }]);
+  const look = (selector) => page.locator(selector).evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { left: s.borderLeftWidth, top: s.borderTopWidth, bottom: s.borderBottomWidth, shadow: s.boxShadow };
+  });
+  await page.goto('/personal/board');
+  await page.locator('.board-hero > .board-track.is-band').waitFor();
+  const band = await look('.board-track');
+  assert.deepEqual([band.left, band.top, band.shadow], ['0px', '0px', 'none'], 'a band of the card: the card has the border and the shadow');
+  assert.equal(band.bottom, '2px');
+  const hero = await look('.board-hero');
+  assert.equal(hero.left, '2px');
+  assert.match(hero.shadow, /8px 8px 0px/);
+  // The link under the live line goes to the transponder's form, back to the board after.
+  await page.getByRole('link', { name: 'Assign it' }).click();
+  await page.waitForURL(/\/personal\/transponders\/88\?returnTo=/);
+  app.engine.start(personal, { kind: 'practice', replace: true });
+  clock.offset += 5_000;
+  await postPassings(app, decoder, [{ transponder: '88', t: 130000 }]);
+  await page.goto('/personal/board');
+  await page.locator('.board-unknown', { hasText: "Transponder 88 isn't assigned yet, so its laps aren't counted." }).waitFor();
+  const strip = await look('.board-track');
+  assert.deepEqual([strip.left, strip.top], ['2px', '2px'], 'one border all round, no 6px bar');
+  assert.equal(strip.shadow, hero.shadow, 'raised like the record card');
+  await page.goto('/personal/setup');
+  const now = await look('.track-now');
+  assert.deepEqual([now.left, now.top], ['2px', '2px'], "Setup's current track: no left bar either");
+  const running2 = app.store.runningSession(personal);
+  if (running2) app.engine.end(personal, running2.id);
   assert.deepEqual(errors, []);
 });

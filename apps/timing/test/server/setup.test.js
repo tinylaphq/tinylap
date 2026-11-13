@@ -82,6 +82,8 @@ test('assigning a transponder; deleting its driver unassigns it', async () => {
   assert.equal((await app.api(admin, 'DELETE', path(`drivers/${cy.id}`))).status, 204);
   const { transponders } = await (await app.api(member, 'GET', path('transponders'))).json();
   assert.deepEqual(transponders.map((t) => [t.code, t.driverId]), [['4A1F', null]]);
+  // The API keeps its shape: the page's label, last seen and crossed are not in it.
+  assert.deepEqual(Object.keys(transponders[0]).sort(), ['code', 'driverId', 'firstSeenAt']);
   await problemOf(await app.api(admin, 'DELETE', path(`drivers/${cy.id}`)), 404, 'not-found');
 });
 

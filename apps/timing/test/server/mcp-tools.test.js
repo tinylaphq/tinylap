@@ -181,6 +181,8 @@ test('transponders: assign and unassign', async () => {
   assert.equal(assigned.value.driverId, driver.id);
   const list = await call(member, 'list_transponders');
   assert.ok(list.value.transponders.some((x) => x.code === assigned.value.code));
+  // The tool keeps its shape: the page's label, last seen and crossed are not in it.
+  for (const x of list.value.transponders) assert.deepEqual(Object.keys(x).sort(), ['code', 'driverId', 'firstSeenAt']);
   const freed = await call(owner, 'assign_transponder', { code: 'A1B2', driver: null });
   assert.equal(freed.value.driverId, null);
 });
