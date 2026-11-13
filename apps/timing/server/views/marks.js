@@ -8,21 +8,21 @@
 import { html } from './html.js';
 
 /** A mark: its letters for the eye, its full name for a screen reader, which mostly skips an abbr's title. */
-const mark = (kind, letters, name) => html`<abbr class="mark mark-${kind}" title="${name}" aria-hidden="true">${letters}</abbr><span class="visually-hidden">${name}</span>`;
+const mark = (kind, letters, title, name = title) => html`<abbr class="mark mark-${kind}" title="${title}" aria-hidden="true">${letters}</abbr><span class="visually-hidden">${name}</span>`;
 
 /**
  * The mark of a lap time, in a narrow column of its own after the time's, so
  * the time keeps its column's edge whether a mark follows it or not. One mark
- * at most, the widest that is true: TR (the track's), then SB (the session's
+ * at most, the widest that is true: TR (the track's), then FL (the session's
  * fastest lap), then PB (the driver's own). In a list, the cell is a span.
- * @param {{ lapMs: number | null | undefined, isRecord: boolean, isSessionBest?: boolean, isPb: boolean }} lap
+ * @param {{ lapMs: number | null | undefined, isRecord: boolean, isFastest?: boolean, isPb: boolean }} lap
  * @param {{ list?: boolean }} [options]
  */
-export function marks({ lapMs, isRecord, isSessionBest = false, isPb }, { list = false } = {}) {
+export function marks({ lapMs, isRecord, isFastest = false, isPb }, { list = false } = {}) {
   const has = lapMs !== null && lapMs !== undefined;
   const shown = !has ? null
     : isRecord ? mark('tr', 'TR', 'Track record')
-      : isSessionBest ? mark('sb', 'SB', 'Session best')
+      : isFastest ? mark('fl', 'FL', 'Fastest lap of the session', 'Fastest lap')
         : isPb ? mark('pb', 'PB', 'Personal best') : null;
   return list ? html`<span class="mark-cell">${shown}</span>` : html`<td class="mark-cell">${shown}</td>`;
 }

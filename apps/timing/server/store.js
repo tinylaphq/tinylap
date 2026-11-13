@@ -315,7 +315,7 @@ export function openStore(path) {
     listSessionsAfter: q('SELECT * FROM session WHERE workspace_id = ? AND (created_at, id) > (?, ?) ORDER BY created_at, id LIMIT ?'),
     // A session's counted laps only, through crossing_session: never a club's whole history.
     sessionDrivers: q('SELECT COUNT(DISTINCT driver_id) AS n FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL'),
-    sessionBest: q('SELECT seq, driver_id, lap_ms FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL AND lap_ms IS NOT NULL ORDER BY lap_ms, seq LIMIT 1'),
+    fastestLap: q('SELECT seq, driver_id, lap_ms FROM crossing WHERE session_id = ? AND counts = 1 AND driver_id IS NOT NULL AND lap_ms IS NOT NULL ORDER BY lap_ms, seq LIMIT 1'),
     // Records and personal bests (records spec §4, §6): projections of the qualifying laps, written with each lap.
     personalBests: q(`SELECT driver_id, lap_ms, at, crossing_seq FROM personal_best
       WHERE workspace_id = ? AND track_id = ? AND direction = ? AND driver_id IN (SELECT value FROM json_each(?)) ORDER BY lap_ms, at, crossing_seq`),
@@ -639,9 +639,9 @@ export function openStore(path) {
     listSessions: (ws, limit, before = null) => (before === null ? s.listSessions.all(ws, limit) : s.listSessionsBefore.all(ws, before.createdAt, before.id, limit)).map(sessionOf),
     /** The sessions just after `after`, oldest first: what a page of the history steps back to. */
     listSessionsAfter: (ws, limit, after) => s.listSessionsAfter.all(ws, after.createdAt, after.id, limit).map(sessionOf),
-    /** How many drivers a session counted, and its best lap. */
+    /** How many drivers a session counted, and its fastest lap. */
     sessionSummary(sessionId) {
-      const best = s.sessionBest.get(sessionId);
+      const best = s.fastestLap.get(sessionId);
       return {
         drivers: Number(s.sessionDrivers.get(sessionId)?.n ?? 0),
         best: best ? { seq: Number(best.seq), driverId: String(best.driver_id), lapMs: Number(best.lap_ms) } : null,

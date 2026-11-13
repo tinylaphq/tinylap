@@ -25,6 +25,8 @@ let quietClub;
 let statusClub;
 let unassignedClub;
 let marksClub;
+let feedClub;
+let wordsClub;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -45,6 +47,10 @@ before(async () => {
   unassignedClub = app.club(tess, 'Unassigned');
   const uma = await app.signUp('Uma');
   marksClub = app.club(uma, 'Marks');
+  feedClub = app.club(uma, 'Feed');
+  app.join(uma, feedClub.id, user);
+  wordsClub = app.club(uma, 'Words');
+  app.join(uma, wordsClub.id, user);
   app.join(uma, marksClub.id, user);
   app.join(tess, unassignedClub.id, user);
   app.join(tess, statusClub.id, user);
@@ -306,8 +312,37 @@ test('a race table: Last shows counted laps only, the mark has its own column, a
   assert.match(body, /<table class="board-table standings-table is-race has-flags">\s*<colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last"><col class="col-total"><\/colgroup>/);
   assert.match(body, /<th scope="col" class="num col-last">Last<\/th><th scope="col" class="num">Time<\/th>/);
   assert.match(body, /<td class="num col-last">—<\/td>/, 'the lap before the start is not the last lap');
-  assert.match(body, /<li><span [^>]+><span class="driver-name" title="Cleo">Cleo<\/span><\/span><span class="board-laps-tags"><span class="tag">Not counted<\/span><\/span><span class="num">8\.000<\/span><\/li>/);
+  assert.match(body, /<li class="is-not-counted"><span [^>]+><span class="driver-name" title="Cleo">Cleo<\/span><\/span><span class="board-laps-tags"><span class="tag">Not counted<\/span><\/span><span class="num">8\.000<\/span><span class="mark-cell"><\/span><\/li>/, 'the tag before the time, and a lap that did not count is never FL');
   app.engine.abort(countedClub.id, session.id);
+});
+
+test('Last laps: the mark follows the time, TR and FL only, FL only on the current fastest lap', async () => {
+  await driverIn(feedClub, 'Abe', '91');
+  await driverIn(feedClub, 'Bea', '92');
+  // Abe sets the record in a practice: 8.000.
+  clock.now = 1_000_000_000_000 + 50_000_000;
+  const first = app.engine.start(feedClub.id, { kind: 'practice' }).session;
+  passIn(feedClub.id, 50_001_000, '91');
+  passIn(feedClub.id, 50_009_000, '91');
+  app.engine.end(feedClub.id, first.id);
+  // The next practice: Bea's first laps here (PBs), Abe's 8.800, then Bea's 8.600, then the record falls: Abe's 7.900.
+  clock.now = 1_000_000_000_000 + 50_100_000;
+  const { session } = app.engine.start(feedClub.id, { kind: 'practice' });
+  passIn(feedClub.id, 50_101_000, '91');
+  passIn(feedClub.id, 50_101_100, '92');
+  passIn(feedClub.id, 50_109_800, '91');
+  passIn(feedClub.id, 50_110_100, '92');
+  const feedOf = async () => {
+    const body = await (await get(member, `/clubs/${feedClub.id}/board`)).text();
+    const feed = body.slice(body.indexOf('<aside class="board-feed"'), body.indexOf('</aside>'));
+    return [...feed.matchAll(/<li>[\s\S]*?title="(\w+)"[\s\S]*?<span class="num">([\d.]+)<\/span><span class="mark-cell">(?:<abbr class="mark mark-(\w+)"[^>]*>\w+<\/abbr><span class="visually-hidden">[^<]+<\/span>)?<\/span><\/li>/g)].map((m) => `${m[1]} ${m[2]}${m[3] ? ` ${m[3]}` : ''}`);
+  };
+  assert.deepEqual(await feedOf(), ['Bea 9.000', 'Abe 8.800 fl'], 'FL on the fastest lap; Bea\'s first lap, a PB, has no mark here');
+  passIn(feedClub.id, 50_118_700, '92');
+  assert.deepEqual(await feedOf(), ['Bea 8.600 fl', 'Bea 9.000', 'Abe 8.800'], 'the beaten lap loses its FL');
+  passIn(feedClub.id, 50_117_700, '91');
+  assert.deepEqual(await feedOf(), ['Abe 7.900 tr', 'Bea 8.600', 'Bea 9.000', 'Abe 8.800'], 'a record lap is TR, the widest mark');
+  app.engine.abort(feedClub.id, session.id);
 });
 
 test('no note on a finished row, nor in the results', async () => {
@@ -441,12 +476,12 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.match(head, /<tl-local-time format="date">/);
     assert.doesNotMatch(head, /·/);
     assert.doesNotMatch(body, NOTICE);
-    // The crown only after the holder's name, TR alone on his best, PB on Mia's; a practice table shows no SB, no tint.
+    // The crown only after the holder's name, TR alone on his best (the fastest lap too), PB on Mia's; no tint.
     assert.equal(body.match(/class="crown"/g).length, 1);
     assert.match(body, /<td class="pos">1<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><svg class="crown" viewBox="0 0 26 18" role="img"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span>/);
     assert.match(body, /7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr"[^>]*>TR<\/abbr><span class="visually-hidden">Track record<\/span><\/td>/);
     assert.match(body, /9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb"/);
-    assert.doesNotMatch(body, /mark-sb|Session best|is-best/);
+    assert.doesNotMatch(body, /mark-fl|is-best/, 'the record lap is the fastest lap: TR, not FL');
     assert.match(body, new RegExp(`<span class="stat-label board-clock-label">Started <tl-local-time format="time"><time datetime="${escape(new Date(session.opensAt).toISOString())}">`));
     assert.match(body, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
   }
@@ -580,7 +615,7 @@ test('several transponders not assigned yet in a session: one warning, by number
   }
 });
 
-test('a race table: SB on the session\'s fastest lap, also a PB; the crown after the holder; ten rows or more, two digits', async () => {
+test('a race table: FL on the session\'s fastest lap, also a PB; the crown after the holder; ten rows or more, two digits', async () => {
   const names = ['Abe', 'Bea', ...Array.from({ length: 10 }, (_, i) => `Car ${i + 3}`)];
   const drivers = [];
   for (const [i, name] of names.entries()) drivers.push(await driverIn(marksClub, name, String(61 + i)));
@@ -600,23 +635,57 @@ test('a race table: SB on the session\'s fastest lap, also a PB; the crown after
   const rows = [...body.matchAll(/<tr(?: class="[^"]*")? data-driver="[^"]+"(?: data-moment="[^"]+")?>\s*<td class="pos">[\s\S]*?<\/tr>/g)].map((m) => m[0]);
   assert.equal(rows.length, 12);
   const bea = rows.find((r) => r.includes('title="Bea"'));
-  assert.match(bea, /8\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-sb" title="Session best" aria-hidden="true">SB<\/abbr><span class="visually-hidden">Session best<\/span><\/td>/);
-  assert.equal(body.match(/class="mark mark-sb"/g).length, 1, 'one SB');
+  assert.match(bea, /8\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl" title="Fastest lap of the session" aria-hidden="true">FL<\/abbr><span class="visually-hidden">Fastest lap<\/span><\/td>/);
+  const table = body.slice(body.indexOf('<table'), body.indexOf('</table>'));
+  assert.equal(table.match(/class="mark mark-fl"/g).length, 1, 'one FL in the table');
   assert.match(rows.find((r) => r.includes('title="Abe"')), /<span class="driver-name" title="Abe">Abe<\/span><svg class="crown"/);
-  assert.doesNotMatch(body, /is-best|table-key|Session best lap/, 'no tint, no key');
+  assert.doesNotMatch(body, /is-best|table-key/, 'no tint, no key');
   app.engine.abort(marksClub.id, session.id);
-  // The race is the last session: its ranks show SB too.
+  // The race is the last session: its ranks show FL too.
   const idle = await (await get(member, `/clubs/${marksClub.id}/board`)).text();
   const last = idle.slice(idle.indexOf('<section class="board-last"'), idle.indexOf('</section>', idle.indexOf('<section class="board-last"')));
-  assert.match(last, /8\.500<\/span><span class="mark-cell"><abbr class="mark mark-sb"/);
-  // A qualifying table is sorted by best lap: no SB, though Bea's lap is the session's fastest.
+  assert.match(last, /8\.500<\/span><span class="mark-cell"><abbr class="mark mark-fl"/);
+  // A qualifying table is sorted by best lap: FL on P1, Bea's, though it is her PB too.
   clock.now = 1_000_000_000_000 + 20_800_000;
   const q = app.engine.start(marksClub.id, { kind: 'qualifying', roster: drivers.map((d) => d.id), durationMs: 600_000, countdownMs: 0 }).session;
   for (const [i] of names.entries()) passIn(marksClub.id, 20_801_000 + i * 10, String(61 + i));
   for (const [i] of names.entries()) passIn(marksClub.id, 20_801_000 + i * 10 + (i === 1 ? 8400 : 9000 + i * 10), String(61 + i));
   const qbody = await (await get(member, `/clubs/${marksClub.id}/board`)).text();
   assert.match(qbody, /<h1 class="board-title">Qualifying<\/h1>/);
-  assert.match(qbody, /8\.400<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb"/, 'her PB, not SB');
-  assert.doesNotMatch(qbody, /mark-sb/);
+  const qrows = [...qbody.matchAll(/<tr(?: class="[^"]*")? data-driver="[^"]+"(?: data-moment="[^"]+")?>\s*<td class="pos">[\s\S]*?<\/tr>/g)].map((m) => m[0]);
+  assert.match(qrows[0], /title="Bea"[\s\S]*8\.400<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"/, 'FL on P1');
   app.engine.abort(marksClub.id, q.id);
+});
+
+test('no board and no session page says "Session best" or shows SB: the fastest lap is FL', async () => {
+  const ws = wordsClub.id;
+  const abe = await driverIn(wordsClub, 'Abe', '95');
+  const bea = await driverIn(wordsClub, 'Bea', '96');
+  const SB = /mark-sb|Session best|session best|>SB</;
+  const pages = [];
+  const page = async (path) => {
+    const res = await get(member, path);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    pages.push(path);
+    return body;
+  };
+  for (const [i, kind] of ['practice', 'race'].entries()) {
+    clock.now = 1_000_000_000_000 + 60_000_000 + i * 100_000;
+    const { session } = app.engine.start(ws, kind === 'race' ? { kind, roster: [abe.id, bea.id], durationMs: 600_000, countdownMs: 0 } : { kind });
+    const t = 60_001_000 + i * 100_000;
+    for (const [dt, code] of [[0, '95'], [100, '96'], [8_600, '95'], [9_100, '96'], [16_900, '95'], [18_000, '96']]) passIn(ws, t + dt, code);
+    for (const path of [`/clubs/${ws}/board`, `/clubs/${ws}/board?big`]) {
+      const body = await page(path);
+      assert.match(body, /class="mark mark-fl"|class="mark mark-tr"/, `${kind} ${path}: the fastest lap is marked`);
+      assert.doesNotMatch(body, SB, `${kind} ${path}`);
+    }
+    app.engine.end(ws, session.id);
+    assert.doesNotMatch(await page(`/clubs/${ws}/board`), SB, `the idle board after the ${kind}`);
+    const detail = await page(`/clubs/${ws}/sessions/${session.id}`);
+    assert.match(detail, /<dt>Fastest lap<\/dt>/);
+    assert.doesNotMatch(detail, SB, `the ${kind}'s page`);
+  }
+  assert.doesNotMatch(await page(`/clubs/${ws}/sessions`), SB, 'the sessions list');
+  assert.equal(pages.length, 9);
 });

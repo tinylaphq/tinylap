@@ -9,16 +9,6 @@
  * The one loud thing is the clock: a dark slab with a hard accent shadow,
  * like the display at a track's start line. The table around it stays plain. */
 
-/* Record marks (records spec §4.2), in the colours a timing screen uses:
- * purple for the fastest lap anyone has driven here, cyan for the session's
- * fastest (.mark-sb), green for a driver's own best. */
-:root {
-  --tl-record: var(--p-accent-2);
-  --tl-record-ink: var(--p-surface);
-  --tl-pb: var(--p-success);
-  --tl-pb-ink: var(--p-text);
-}
-
 body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-text); font-family: var(--p-font); }
 
 .navbar { gap: var(--p-space-md); }
@@ -191,8 +181,11 @@ tl-bridge { display: block; }
 .board-laps li { display: flex; gap: var(--p-space-sm); align-items: baseline; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-border-light); }
 .board-laps .num { margin-left: auto; }
 /* A lap on the board: the driver, any tags, then the time in a column of its own width, so tags never push it. */
-.board-feed .board-laps li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.7em; }
-.board-feed .has-minute-laps li { grid-template-columns: minmax(0, 1fr) auto 4.9em; }
+/* Its mark (TR or FL) follows the time in a column every row keeps, a mark
+ * wide and --p-space-xs from it, so the times stay aligned with or without one. */
+.board-feed .board-laps li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.7em calc(1.8em + var(--p-space-xs)); }
+.board-feed .has-minute-laps li { grid-template-columns: minmax(0, 1fr) auto 4.9em calc(1.8em + var(--p-space-xs)); }
+.board-feed .board-laps .mark-cell { white-space: nowrap; }
 .board-laps-tags { display: flex; flex-wrap: wrap; justify-content: end; gap: var(--p-space-xs); }
 .board-laps .tag { font-size: 10px; padding: 1px 6px; }
 
@@ -206,8 +199,8 @@ body.big .board {
   /* The pill (0.5rem down, 44px tall) plus a clear gap before the clock. */
   padding-top: calc(0.5rem + 44px + var(--p-space-md));
 }
-/* The table takes three quarters and the feed may shrink, so the table keeps every column and room for names. */
-@media (min-width: 721px) { body.big .board:not(.is-idle) { grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); } }
+/* The table takes 73% and the feed may shrink, so the table keeps every column and room for names, and at 1920×1080 the feed keeps a name whole beside a "Not counted" tag and the mark column. */
+@media (min-width: 721px) { body.big .board:not(.is-idle) { grid-template-columns: minmax(0, 73fr) minmax(0, 27fr); } }
 body.big .board-clock-label { font-size: 0.6em; }
 body.big .board-track { font-size: 0.75em; }
 @media (max-width: 600px) {
@@ -700,7 +693,11 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
  * cell gives up most of its right padding to bring the mark near. On the
  * baseline its box hangs low (its smaller letters and their descender room), so
  * it is lifted to centre on the time's digits; a relative nudge, because in a
- * flex row (the lap feed) vertical-align does nothing. */
+ * flex row (the lap feed) vertical-align does nothing. Where the browser
+ * trims a box to its text (Chrome, Safari; not yet Firefox), the box is
+ * trimmed to its capitals, so its letters sit centred, the same padding above
+ * and below, and the box is as tall as before; elsewhere the letters sit a
+ * little high. */
 .board-table th:has(+ .mark-cell), .board-table td:has(+ .mark-cell),
 .lap-table th:has(+ .mark-cell), .lap-table td:has(+ .mark-cell) { padding-right: var(--mark-gap); }
 .board-table .mark-cell, .lap-table .mark-cell { padding-left: 0; padding-right: var(--cell-x); white-space: nowrap; }
@@ -709,8 +706,13 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
   position: relative; top: -0.16em;
   font: 700 0.8em/1 var(--p-font); letter-spacing: 0.04em; border: var(--p-border-thin) solid var(--p-text);
 }
+@supports (text-box: trim-both cap alphabetic) {
+  .mark { text-box: trim-both cap alphabetic; padding-block: 0.3em; top: -0.1em; }
+  /* The crown follows the trimmed mark's line. */
+  .board-driver .driver > .crown { top: calc(0.16em + var(--p-border-thin)); }
+}
 .mark-tr { background: var(--tl-record); color: var(--tl-record-ink); }
-.mark-sb { background: var(--p-accent-3); color: var(--p-text); }
+.mark-fl { background: var(--tl-fastest); color: var(--tl-fastest-ink); }
 .mark-pb { background: var(--tl-pb); color: var(--tl-pb-ink); }
 
 /* A notice on the board ("Unknown cars…" while a session runs):
@@ -743,6 +745,14 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .session-facts dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
 .session-facts > div { min-width: 0; }
 .session-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* The fastest lap and who set it, a value and its credit (fastest lap spec
+ * §7): the time in bold, then the driver, quieter, the colour by the name,
+ * on one line; a name too long for it ends in "…". */
+.session-facts-fastest { display: flex; align-items: baseline; gap: var(--p-space-md); min-width: 0; }
+.session-facts-fastest .num { flex: none; font-weight: 700; }
+.session-facts-fastest .driver { display: flex; align-items: baseline; min-width: 0; }
+.session-facts-fastest .driver::before { flex: none; margin-right: var(--p-space-xs); }
+.session-facts-fastest .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--p-text-secondary); }
 .session-laps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: var(--p-space-md); }
 .session-laps .h3 { margin: 0 0 var(--p-space-sm); }
 /* A lap card is headed by the driver's name as it is written, not upper-cased. */
@@ -757,7 +767,8 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .lap-table { --cell-x: 8px; --mark-gap: var(--p-space-sm); table-layout: fixed; font-size: 13px; }
 .lap-table td, .lap-table th { padding: var(--p-space-xs) var(--cell-x); }
 .lap-table .tag { font-size: 10px; padding: 1px 6px; white-space: nowrap; }
-.lap-table tr.is-not-counted .num { color: var(--p-text-muted); }
+/* A time that did not count is muted, in a lap list and in Last laps alike. */
+.lap-table tr.is-not-counted .num, .board-laps li.is-not-counted .num { color: var(--p-text-muted); }
 /* A track's page: each layout drawn on the track's dark floor, the current one large. */
 .track-drawing { margin: 0; display: grid; gap: var(--p-space-xs); }
 .track-drawing-art { background: var(--tl-track-bg); padding: var(--p-space-md); display: grid; place-items: center; }

@@ -94,7 +94,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1920, height: 1080
   });
 }
 
-/** The crown and the mark in its row (the race's SB), and from the position's digit to the name's colour. */
+/** The crown and the mark in its row (the race's FL), and from the position's digit to the name's colour. */
 const crownAndPos = () => {
   const crown = document.querySelector('.standings-table .crown');
   const mark = crown.closest('tr').querySelector('.mark');

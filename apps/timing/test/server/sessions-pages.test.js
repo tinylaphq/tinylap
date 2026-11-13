@@ -426,7 +426,7 @@ test('a session page: the final table with marks and crown, then every lap', asy
   assert.match(table, /<thead><tr><th scope="col"><span class="visually-hidden">Position<\/span><\/th>/);
   assert.match(rows[0][0], /<span class="driver-name" title="Ana">Ana<\/span><svg class="crown" viewBox="0 0 26 18" role="img"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span>/, 'the crown after the holder');
   assert.match(rows[0][0], /<td class="num">7\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR<\/abbr><span class="visually-hidden">Track record<\/span><\/td>/, 'TR only');
-  assert.doesNotMatch(table, /mark-sb|is-best/, 'a practice table, sorted by best lap, shows no SB and no tint');
+  assert.doesNotMatch(table, /mark-fl|is-best/, 'Ana\'s fastest lap is the record: TR, not FL, and no tint');
   assert.match(rows[1][0], /<td class="num">7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB<\/abbr><span class="visually-hidden">Personal best<\/span><\/td>/);
   assert.doesNotMatch(rows[1][0], /crown/);
   const laps = /<section[^>]*aria-labelledby="laps-title"[\s\S]*?<\/section>/.exec(body)[0];
@@ -506,10 +506,10 @@ test('laps that did not count say so once a card when none counted, tags read in
   assert.equal(anaCard.match(/class="is-not-counted"/g).length, 3);
   assert.doesNotMatch(anaCard, /class="tag"/, 'no tag repeated on every row');
   assert.doesNotMatch(body, /class="tag">(tap|not counted)</);
-  assert.doesNotMatch(body, /table-key|Session best lap|is-best/);
+  assert.doesNotMatch(body, /table-key|is-best/);
 });
 
-test('a race\'s page: SB on the session\'s fastest lap in its table and its laps, TR alone on a record', async () => {
+test('a race\'s page: FL on the session\'s fastest lap in its table and its laps, and in its facts', async () => {
   const ws = lapless.id;
   const { Dee, Eve } = await driversIn(ws, { Dee: '51', Eve: '52' }, lena);
   clock.now = T0 + 30_000_000;
@@ -519,13 +519,40 @@ test('a race\'s page: SB on the session\'s fastest lap in its table and its laps
   app.engine.abort(ws, session.id);
   const body = await (await get(`/clubs/${ws}/sessions/${session.id}`, lena)).text();
   const table = /<table class="board-table standings-table[^"]*">[\s\S]*?<\/table>/.exec(body)[0];
-  assert.match(table, /<td class="num">9\.200<\/td>\s*<td class="mark-cell"><abbr class="mark mark-sb" title="Session best" aria-hidden="true">SB<\/abbr><span class="visually-hidden">Session best<\/span><\/td>/, 'SB, though it is a PB too');
-  assert.equal(table.match(/mark-sb/g).length, 1);
+  assert.match(table, /<td class="num">9\.200<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl" title="Fastest lap of the session" aria-hidden="true">FL<\/abbr><span class="visually-hidden">Fastest lap<\/span><\/td>/, 'FL, though it is a PB too');
+  assert.equal(table.match(/mark-fl/g).length, 1);
   const laps = /<section[^>]*aria-labelledby="laps-title"[\s\S]*?<\/section>/.exec(body)[0];
-  assert.equal(laps.match(/mark-sb/g).length, 1, 'one lap in the lists');
-  assert.match(laps, /<td class="num">9\.200<\/td>\s*<td class="mark-cell"><abbr class="mark mark-sb"/);
-  assert.doesNotMatch(laps, /<td class="num">9\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-sb"/);
+  assert.equal(laps.match(/mark-fl/g).length, 1, 'one lap in the lists');
+  assert.match(laps, /<td class="num">9\.200<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"/);
+  assert.doesNotMatch(laps, /<td class="num">9\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"/, 'Dee\'s 9.500 was the fastest when it was driven, and keeps no mark');
+  // The facts end with the fastest lap: its time, then who set it.
+  const facts = /<dl class="session-facts">[\s\S]*?<\/dl>/.exec(body)[0];
+  assert.match(facts, /<div><dt>Track<\/dt>[\s\S]*?<\/div>\s*<div><dt>Fastest lap<\/dt><dd class="session-facts-fastest"><span class="num">9\.200<\/span> <span class="driver" [^>]*><span class="driver-name" title="Dee">Dee<\/span><\/span><\/dd><\/div>\s*<\/dl>/);
   assert.doesNotMatch(body, /class="crown"/, 'nobody here holds the record');
+});
+
+test('FL on P1 of a qualifying; a tapped lap can hold it, a lap that did not count never does, and a tie keeps the earlier lap', async () => {
+  const ws = lapless.id;
+  const { Fay, Gus } = await driversIn(ws, { Fay: '61', Gus: '62', Hal: '63' }, lena);
+  clock.now = T0 + 40_000_000;
+  const { session } = app.engine.start(ws, { kind: 'qualifying', roster: [Fay.id, Gus.id], durationMs: 600_000, countdownMs: 0 });
+  // Hal is not on the roster: his 9.300 does not count. Gus and Fay both drive 9.600, Gus first.
+  for (const [t, code] of [[40_001_000, '61'], [40_001_100, '62'], [40_001_200, '63'], [40_010_500, '63'], [40_010_700, '62'], [40_010_800, '61'], [40_020_400, '61']]) pass(ws, t, code);
+  let page = await pageOf(ws, session.id);
+  assert.equal(page.table.match(/mark-fl/g).length, 1);
+  assert.match(page.table, /<td class="pos">1<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Gus">[\s\S]*?9\.600<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"/, 'P1, whose 9.600 came first');
+  assert.doesNotMatch(page.cards.find((c) => c.includes('title="Hal"')), /mark-fl/, 'Hal\'s faster lap did not count');
+  // Fay taps a lap faster than anyone's (a tapped lap runs from her last tap): it counts, and it is the fastest lap.
+  clock.now = T0 + 40_030_000;
+  app.engine.tap(ws, Fay.id);
+  clock.now = T0 + 40_039_000;
+  app.engine.tap(ws, Fay.id);
+  app.engine.abort(ws, session.id);
+  page = await pageOf(ws, session.id);
+  assert.match(page.table, /<td class="pos">1<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Fay">[\s\S]*?9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"/);
+  const fay = page.cards.find((c) => c.includes('title="Fay"'));
+  assert.match(fay, /<td class="num">9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"[\s\S]*?<span class="tag">Tap<\/span>/);
+  assert.equal([...page.cards.join('').matchAll(/mark-fl/g)].length, 1, 'Gus\'s 9.600 keeps no mark now');
 });
 
 test('a signed-out request for a session page goes to sign-in', async () => {

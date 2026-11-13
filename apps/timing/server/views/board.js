@@ -86,30 +86,40 @@ function header(snap) {
 }
 
 /**
- * The marks of a leaderboard (records spec §4.2), from what the snapshot
- * already holds: a row's best lap is the record or the driver's best when it
- * is the same lap (time, driver, when it was driven). Only on the track and
- * direction the record belongs to. SB only in a race's standings, in
- * finishing order: in a table sorted by best lap it would always be row 1.
+ * The marks of a leaderboard (records spec §4.2, fastest lap spec §2), from
+ * what the snapshot already holds: a row's best lap is the record or the
+ * driver's best when it is the same lap (time, driver, when it was driven).
+ * The record and personal bests only on the track and direction they belong
+ * to. FL on the session's fastest lap, in every kind of session: in a table
+ * sorted by best lap it is row 1's.
  */
 function markers(snap, session, standings) {
   const here = session.trackId === snap.track.id && session.direction === snap.direction;
   const record = here ? snap.record : null;
   const pbs = new Map(here ? snap.bests.map((b) => [b.driverId, b]) : []);
   const same = (lap, row) => lap !== null && lap !== undefined && row.bestMs !== null && lap.lapMs === row.bestMs && lap.at === row.bestAt;
-  // The session's best lap: one row only, the earlier lap on a tie.
+  // The session's fastest lap: one row only, the earlier lap on a tie.
   let best = null;
   for (const row of standings) {
     if (row.bestMs !== null && (!best || row.bestMs < best.bestMs || (row.bestMs === best.bestMs && row.bestAt < best.bestAt))) best = row;
   }
-  const sb = session.kind === 'race';
+  const fastest = best && { driverId: best.driverId, lapMs: best.bestMs, at: best.bestAt };
   return {
     /** Whether the row's driver holds the record: their name gets the crown. */
     holder: (row) => record?.driverId === row.driverId,
     /** The mark cell after a row's best lap; in a list, a span. */
     mark: (row, list = false) => {
       const pb = pbs.get(row.driverId);
-      return marks({ lapMs: row.bestMs, isRecord: record?.driverId === row.driverId && same(record, row), isSessionBest: sb && row === best, isPb: same(pb && { lapMs: pb.bestMs, at: pb.at }, row) }, { list });
+      return marks({ lapMs: row.bestMs, isRecord: record?.driverId === row.driverId && same(record, row), isFastest: row === best, isPb: same(pb && { lapMs: pb.bestMs, at: pb.at }, row) }, { list });
+    },
+    /**
+     * The mark after a lap in Last laps (fastest lap spec §3.3): TR on the
+     * record's lap, FL on the current fastest lap, and no PB, which would
+     * mark every early lap.
+     */
+    lap: (c) => {
+      const is = (lap) => Boolean(lap) && c.counts && c.driverId === lap.driverId && c.lapMs === lap.lapMs && c.at === lap.at;
+      return marks({ lapMs: c.lapMs, isRecord: is(record), isFastest: is(fastest), isPb: false }, { list: true });
     },
   };
 }
@@ -161,10 +171,11 @@ function standingsTable(snap) {
 }
 
 function feed(snap) {
+  const m = markers(snap, snap.session, snap.standings);
   const laps = snap.crossings.filter((c) => c.lapMs !== null).slice(0, 12);
   return html`<aside class="board-feed" aria-label="Last laps">
   <h2 class="h3">Last laps</h2>
-  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps${timeWidths(laps.map((c) => c.lapMs))}">${laps.map((c) => html`<li>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">Not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span></li>`)}</ol>`}
+  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps${timeWidths(laps.map((c) => c.lapMs))}">${laps.map((c) => html`<li${c.counts ? null : html` class="is-not-counted"`}>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">Not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span>${m.lap(c)}</li>`)}</ol>`}
 </aside>`;
 }
 
