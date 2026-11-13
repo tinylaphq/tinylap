@@ -106,12 +106,14 @@ test('a mark is a cell of its own after the time, empty or not; a record lap sho
   assert.equal(String(chip(drivers, null)), '<span class="driver"><span class="driver-name" title="Unknown car">Unknown car</span></span>');
 });
 
-test('one mark at most, the widest that is true: TR, then SB, then PB', () => {
-  const sb = '<abbr class="mark mark-sb" title="Session best" aria-hidden="true">SB</abbr><span class="visually-hidden">Session best</span>';
-  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isSessionBest: true, isPb: false })), `<td class="mark-cell">${sb}</td>`);
-  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isSessionBest: true, isPb: true })), `<td class="mark-cell">${sb}</td>`, 'SB, also when it is a PB');
-  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isSessionBest: true, isPb: true })), '<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR</abbr><span class="visually-hidden">Track record</span></td>', 'a record lap shows TR only');
-  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isSessionBest: true, isPb: false }, { list: true })), `<span class="mark-cell">${sb}</span>`);
+test('one mark at most, the widest that is true: TR, then FL, then PB', () => {
+  const fl = '<abbr class="mark mark-fl" title="Fastest lap of the session" aria-hidden="true">FL</abbr><span class="visually-hidden">Fastest lap</span>';
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isFastest: true, isPb: false })), `<td class="mark-cell">${fl}</td>`);
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isFastest: true, isPb: true })), `<td class="mark-cell">${fl}</td>`, 'FL, also when it is a PB');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: true, isFastest: true, isPb: true })), '<td class="mark-cell"><abbr class="mark mark-tr" title="Track record" aria-hidden="true">TR</abbr><span class="visually-hidden">Track record</span></td>', 'a record lap shows TR only');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isFastest: false, isPb: true })), '<td class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB</abbr><span class="visually-hidden">Personal best</span></td>');
+  assert.equal(String(marks({ lapMs: 7000, isRecord: false, isFastest: true, isPb: false }, { list: true })), `<span class="mark-cell">${fl}</span>`);
+  assert.equal(String(marks({ lapMs: null, isRecord: true, isFastest: true, isPb: true })), '<td class="mark-cell"></td>', 'no time, no mark');
 });
 
 test('the position column is one digit wide, two from ten rows, and has room for a flag in races', () => {

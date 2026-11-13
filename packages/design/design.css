@@ -21,6 +21,16 @@
   --tl-track-mat-edge: #3a3a3a;
   --tl-track-grid: #1f1f1f;
   --tl-track-wall: var(--p-surface);
+
+  /* The marks after a lap time, in the colours a timing screen uses: purple
+     for the track record (TR), cyan for the session's fastest lap (FL),
+     green for a driver's own best (PB). */
+  --tl-record: var(--p-accent-2);
+  --tl-record-ink: var(--p-surface);
+  --tl-fastest: var(--p-accent-3);
+  --tl-fastest-ink: var(--p-text);
+  --tl-pb: var(--p-success);
+  --tl-pb-ink: var(--p-text);
 }
 
 /* Custom elements are inline by default; a frame holds a card. */

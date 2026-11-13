@@ -28,15 +28,15 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
   }
   /** The crossing a row's best lap came from: its first counted lap of that time. */
   const bestOf = (row) => laps.get(row.driverId)?.find((c) => c.counts && c.lapMs === row.bestMs) ?? null;
-  // The session's best lap: one lap only, the earlier on a tie. It is SB in the
-  // laps and in a race's table; a table sorted by best lap would always have it in row 1.
+  // The session's fastest lap: one lap only, the earlier on a tie. It is FL
+  // in the table, P1 included, and in its driver's laps (fastest lap spec §5).
   let best = null;
   for (const row of standings) {
     const c = bestOf(row);
     if (c && (!best || c.lapMs < best.lapMs || (c.lapMs === best.lapMs && c.seq < best.seq))) best = c;
   }
-  /** A lap's mark; SB, the session's fastest lap, where `sb` allows it. */
-  const markOf = (c, { sb = true } = {}) => marks({ lapMs: c?.lapMs, isRecord: c?.seq === record?.seq, isSessionBest: sb && best !== null && c?.seq === best.seq, isPb: pbSeq.has(c?.seq) });
+  /** A lap's mark: TR, FL (the session's fastest lap) or PB. */
+  const markOf = (c) => marks({ lapMs: c?.lapMs, isRecord: c?.seq === record?.seq, isFastest: best !== null && c?.seq === best.seq, isPb: pbSeq.has(c?.seq) });
   const order = [...standings.map((r) => r.driverId), ...[...laps.keys()].filter((id) => !standings.some((r) => r.driverId === id))];
   const ended = session.state === 'done' || session.state === 'aborted';
 
@@ -50,7 +50,7 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
     <td class="board-driver">${chip(drivers, row.driverId, { holder: record?.driverId === row.driverId })}</td>
     <td class="num">${row.laps}</td>
     <td class="num">${formatLap(row.bestMs)}</td>
-    ${markOf(bestOf(row), { sb: race })}
+    ${markOf(bestOf(row))}
     ${race ? html`<td class="num">${formatLap(row.elapsedMs)}</td>` : null}
   </tr>`)}</tbody>
 </table></div>`;
@@ -90,6 +90,7 @@ export function sessionPage(request, { session, standings, crossings, drivers, t
       <div><dt>Started</dt><dd>${safe(localTime(session.opensAt ?? session.createdAt, 'datetime'))}</dd></div>
       <div><dt>Ended</dt><dd>${ended ? safe(localTime(session.endedAt, 'time')) : 'Still running'}</dd></div>
       <div><dt>Track</dt><dd class="cut-words">${trackName(track, session.direction)}</dd></div>
+      ${best ? html`<div><dt>Fastest lap</dt><dd class="session-facts-fastest"><span class="num">${formatLap(best.lapMs)}</span> ${chip(drivers, best.driverId)}</dd></div>` : null}
     </dl>
   </div>
   <section class="space-md" aria-labelledby="standings-title">
