@@ -5,8 +5,8 @@
 // Tap and Setup in the browser, at a phone's and a laptop's width: a long
 // name stays inside its tile, unbroken inside its words, never under 16px,
 // and the result bar keeps its height after a tap; on Setup a section's
-// heading keeps its gap to what follows, actions in a row of text share one
-// lighter height, the row's
+// heading keeps its gap to what follows, actions in a row of text share
+// palace's small control height, the row's
 // actions end at the section's edge, a driver's add list has 52 px rows, and a
 // fold's error takes the fold's width.
 import test, { after, before } from 'node:test';
@@ -134,7 +134,7 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
     for (const [id, gap] of m.gaps) assert.equal(gap, 16, `${id}: 16px to what follows`);
     const inText = m.actions;
     assert.ok(inText.length, `rows of text: ${JSON.stringify(m.actions)}`);
-    assert.deepEqual([...new Set(inText.map((a) => a.h))], [36], `actions in a row of text: one lighter height, ${JSON.stringify(inText)}`);
+    assert.deepEqual([...new Set(inText.map((a) => a.h))], [32], `actions in a row of text: palace's small control height, ${JSON.stringify(inText)}`);
     assert.equal(m.assign, 0, 'Assign ends at the section edge');
     assert.equal(m.unpair, 0, 'Unpair ends at the section edge');
     assert.ok(m.docW <= viewport.width, 'no sideways scroll');
