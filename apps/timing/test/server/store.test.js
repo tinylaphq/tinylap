@@ -8,7 +8,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { IDLE_SQL, TRACK_SQL, openStore } from '../../server/store.js';
+import { IDLE_SQL, TRACK_SQL, TRANSPONDER_SQL, openStore } from '../../server/store.js';
 
 const W = 'ws-1';
 
@@ -495,6 +495,20 @@ test('the idle board reads the fastest and whether a club has driven through ind
   const plan = (sql) => db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all().map((r) => String(r.detail)).join(' | ');
   assert.match(plan(IDLE_SQL.fastest), /^SEARCH personal_best USING INDEX personal_best_fastest \(workspace_id=\? AND track_id=\? AND direction=\?\)$/, 'ordered by the index, no sort');
   assert.match(plan(IDLE_SQL.driven), /^SEARCH crossing USING COVERING INDEX \w+ \(workspace_id=\?\)$/);
+  db.close();
+});
+
+test("a club's transponders and its unassigned ones read their newest crossing or passing through an index", () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'timing-store-')), 'db.sqlite');
+  openStore(path).close();
+  const db = new DatabaseSync(path);
+  const plan = (sql) => db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all().map((r) => String(r.detail)).join(' | ');
+  const transponders = plan(TRANSPONDER_SQL.transponders);
+  assert.match(transponders, /SEARCH c USING COVERING INDEX crossing_transponder_at \(workspace_id=\? AND transponder=\?\)/);
+  assert.match(transponders, /SEARCH p USING COVERING INDEX passing_transponder_received \(workspace_id=\? AND transponder=\?\)/);
+  const unknown = plan(TRANSPONDER_SQL.unknownSince);
+  assert.match(unknown, /SEARCH crossing USING INDEX crossing_workspace_at \(workspace_id=\? AND at>\?\)/);
+  assert.match(unknown, /SEARCH passing USING INDEX passing_workspace_received \(workspace_id=\? AND received_at>\?\)/);
   db.close();
 });
 
