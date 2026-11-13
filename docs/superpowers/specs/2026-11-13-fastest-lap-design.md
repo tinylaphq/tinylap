@@ -114,6 +114,11 @@ Sound: none for FL or PB; TR rings as today (call).
 
 The server decides which moment a lap earns, as it already decides the record (`recordNew`). The board's snapshot gives each standings row the moment of its driver's latest counted lap, when that lap set a mark that plays: `data-moment="<seq> fl|pb|tr"`, `seq` being the lap's crossing. The PB rule (an earlier session's best on this track and direction) and the first-counted-lap rule are the server's. The client only plays what it is given, once per `seq`.
 
+- A moment is offered only while it is fresh: a TR moment as long as `recordNew` shows (`RECORD_SHOW_MS`), an FL or PB moment for 10 s (call). A board that reconnects later does not play it.
+- A TR moment follows `recordNew`'s track and direction rule: when the club's current track differs from the record's, neither shows.
+- Assigning a transponder rebuilds a session's laps: the moments of the rebuilt session are dropped, and each driver's earlier-session best is read again.
+- Moments are for the board's pages only: they stay out of the JSON API (`GET /workspaces/{w}`), the watchers' JSON and the MCP tools.
+
 ## 5. The session page
 
 - The facts (`dl.session-facts`) end with **Fastest lap** "7.106 ■ Ben Okafor", the time and the name on one baseline.
