@@ -9,10 +9,12 @@
 // - spacing: a margin, padding or gap in px or rem is a --p-space-* token
 //   (0, percentages and em, which follow the type, stay allowed);
 // - borders and outlines: a width in px is --p-border-width or --p-border-thin;
-// - transitions: palace's 0.1s (var(--p-transition)), or none.
+// - transitions: palace's 0.1s (var(--p-transition)), or none;
+// - font sizes: a size in px or rem is a --p-text-* step (em and %, which
+//   follow the parent, as the big screen's sizes follow --board-font, stay
+//   allowed).
 //
-// Shadows have their own check (shadows.test.js). Font sizes are not checked:
-// palace has no type scale tokens yet (palace-ui#21). Pages that must stand alone (the
+// Shadows have their own check (shadows.test.js). Pages that must stand alone (the
 // exported layout, the API docs) write palace's look out literally in their
 // own <style>, by design; they are not .css files and are not read here.
 import test from 'node:test';
@@ -26,34 +28,22 @@ const SKIP = new Set(['node_modules', 'dist', 'test', '.turbo', 'pkg', 'vendor']
 
 /**
  * Values a rule may still use, each with its reason: `file|selector|property: value`.
- * Each waits on a size palace-ui lacks (the issue named) or is geometry, not
- * spacing; take an entry out when its value becomes a token.
+ * Each is a size palace has no token for, or geometry, not spacing; take an
+ * entry out when its value becomes a token.
  */
 const EXCEPTIONS = new Map([
-  // A small tag, smaller than palace's .tag: palace-ui#23.
-  ['apps/timing/public/app.css|.board-laps .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
-  ['apps/timing/public/app.css|.board-last-meta .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
-  ['apps/timing/public/app.css|.history-table .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
-  ['apps/timing/public/app.css|.lap-table .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
-  ['apps/track-planner/css/app.css|.library-ws-head .tag|padding: 1px 6px', 'a lap tag (palace-ui#23)'],
-  // 2px, a step below --p-space-xs: palace-ui#22.
-  ['apps/timing/public/app.css|.net-note|margin-top: 2px', 'a note under its name (palace-ui#22)'],
-  ['apps/timing/public/app.css|.nav-account-hint|margin-top: 2px', 'a hint under its setting (palace-ui#22)'],
-  ['apps/track-planner/css/app.css|.library-meta|margin: 2px 0 0', 'a meta line under its name (palace-ui#22)'],
-  ['apps/timing/public/app.css|.bridge-stat|gap: 2px', 'a stat\'s label over its count (palace-ui#22)'],
-  ['apps/timing/public/app.css|.decoder-info|gap: 2px', 'a decoder\'s name over its meta (palace-ui#22)'],
-  ['apps/track-planner/css/app.css|.preset-info|gap: 2px', 'a card\'s name over its source (palace-ui#22)'],
-  ['apps/track-planner/css/app.css|.dialog-dismiss .btn|padding: 2px 8px', 'the dialogs\' close button (palace-ui#22)'],
-  ['apps/track-planner/css/app.css|.chip|padding: 2px 8px', 'a filter chip (palace-ui#22)'],
-  ['apps/track-planner/css/app.css|.library-current|padding: 2px var(--p-space-sm)', 'the library name in the navbar (palace-ui#22)'],
-  // Navbar controls, sized as palace's navbar menu summary: palace-ui#24.
-  ['apps/timing/public/app.css|.live-status:not(:empty)::before|margin-right: 6px', 'the live lamp before its word (palace-ui#24)'],
-  ['apps/timing/public/app.css|.navbar-right .btn, .navbar-right .live-status|padding: 6px 14px', 'palace\'s .navbar-menu summary padding, written out (palace-ui#24)'],
-  ['apps/timing/public/app.css|body.big .navbar-right .btn-icon|padding-inline: 12px', 'the big screen\'s icon button (palace-ui#24)'],
-  ['apps/track-planner/css/app.css|.navbar-right > .btn|padding: 6px 10px', 'the phone navbar\'s buttons (palace-ui#24)'],
-  // A small field beside a .btn-sm: palace-ui#25.
-  ['apps/track-planner/css/app.css|.library-form-row input|padding: 0 10px', 'a small field (palace-ui#25)'],
-  ['apps/track-planner/css/app.css|.library-form-row select|padding: 0 2.5rem 0 10px', 'a small select, room for palace\'s arrow (palace-ui#25)'],
+  // Navbar controls beside palace's navbar menu summary.
+  ['apps/timing/public/app.css|.live-status:not(:empty)::before|margin-right: 6px', 'the live lamp before its word, between palace\'s steps'],
+  ['apps/timing/public/app.css|.navbar-right .btn, .navbar-right .live-status|padding: 0 14px', '.btn-sm\'s and the menu summary\'s sides, which palace writes out too'],
+  ['apps/timing/public/app.css|body.big .navbar-right .btn-icon|padding-inline: 12px', 'the big screen\'s icon button, between palace\'s steps'],
+  ['apps/track-planner/css/app.css|.navbar-right > .btn|padding: 6px 10px', 'the phone navbar\'s buttons, narrower than .btn-sm so one row holds them'],
+  // Display sizes that follow the screen between two sizes, one of them off the scale.
+  ['apps/timing/public/app.css|.board-title|font-size: clamp(1.75rem, 5vw, 3.5rem)', 'the board\'s title'],
+  ['apps/timing/public/app.css|.board-clock-time|font: 700 clamp(2.5rem, 9vw, 6rem) / 1 var(--p-font-mono)', 'the session clock'],
+  ['apps/timing/public/app.css|.board-hero-time|font: 700 clamp(3.5rem, 11vw, 8rem) / 0.95 var(--p-font-mono)', 'the record\'s time'],
+  ['apps/timing/public/app.css|.board-hero-none|font-size: clamp(var(--p-text-3xl), 5vw, 3.5rem)', 'the hero with no record yet'],
+  ['apps/timing/public/app.css|.board-first h1|font-size: clamp(1.75rem, 4vw, var(--p-text-4xl))', 'the first-run heading'],
+  ['apps/timing/public/app.css|.tap-bar .tap-result|font: 700 clamp(1.25rem, 5vw, 1.75rem)/1.2 var(--p-font-mono)', 'the tap screen\'s last time'],
   // Geometry, not spacing.
   ['apps/timing/public/app.css|.tp-rows > li > .tp|margin-top: 0.15rem', 'drops a number onto its row\'s first line'],
   ['apps/track-planner/css/app.css|.library-version::before|margin-top: -5px', 'centres a 10px stop on its line'],
@@ -106,6 +96,7 @@ function problem({ property, value }) {
   if (/^transition(-duration)?$/.test(property) && /\d*\.?\d+m?s\b/.test(bare) && !/(^|\s)0?\.1s\b/.test(bare)) {
     return 'a raw duration: use var(--p-transition) (0.1s)';
   }
+  if (/^font(-size)?$/.test(property) && px.test(bare)) return 'a raw font size: use a --p-text-* step';
   return null;
 }
 
@@ -113,7 +104,8 @@ test('the rules catch raw values and leave tokens alone', () => {
   const bad = [
     ['color', '#fff'], ['background', 'rgba(0, 0, 0, 0.5)'], ['margin', '12px 0'], ['padding', '0 var(--p-space-md) 6px'],
     ['gap', '0.5rem'], ['margin-top', '-5px'], ['border-left-width', '8px'], ['outline', '3px solid var(--p-text)'],
-    ['transition', 'transform 0.15s'],
+    ['transition', 'transform 0.15s'], ['font-size', '13px'], ['font-size', '0.875rem'], ['font', '700 1rem/1 var(--p-font)'],
+    ['font-size', 'clamp(1rem, 3.5vw, var(--p-text-2xl))'], ['font-size', 'max(0.7em, 14px)'],
   ];
   for (const [property, value] of bad) assert.ok(problem({ property, value }), `${property}: ${value}`);
   const good = [
@@ -121,7 +113,9 @@ test('the rules catch raw values and leave tokens alone', () => {
     ['padding', 'var(--p-space-sm) var(--p-space-md)'], ['padding', '0.1em 0.5em'], ['gap', 'calc(var(--p-space-xs) - var(--p-space-md))'],
     ['padding-left', '1.25em'], ['border', 'var(--p-border-width) solid var(--p-text)'], ['border-left', '0.75rem solid var(--driver)'],
     ['outline', 'none'], ['transition', 'var(--p-transition)'], ['transition', 'none'], ['transition-property', 'box-shadow'],
-    ['color', 'var(--driver, #888)'],
+    ['color', 'var(--driver, #888)'], ['font-size', 'var(--p-text-sm)'], ['font-size', '0.75em'], ['font-size', 'inherit'],
+    ['font', '600 var(--p-text-2xs)/1.4 var(--p-font)'], ['font', 'inherit'], ['font-size', 'max(0.7em, var(--p-text-md))'],
+    ['font-size', 'clamp(var(--p-text-lg), 3.5vw, var(--p-text-2xl))'], ['--board-font', 'clamp(1rem, 2.4vw, 2.6rem)'],
   ];
   for (const [property, value] of good) assert.equal(problem({ property, value }), null, `${property}: ${value}`);
 });
@@ -135,7 +129,7 @@ test('reads declarations with their selector, inside @media too', () => {
   ]);
 });
 
-test('every stylesheet takes its colours, spaces, borders and durations from tokens', () => {
+test('every stylesheet takes its colours, spaces, borders, durations and font sizes from tokens', () => {
   const found = [];
   const used = new Set();
   for (const dir of ['apps', 'packages']) {

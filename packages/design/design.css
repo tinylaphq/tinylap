@@ -22,18 +22,11 @@
   --tl-track-grid: #1f1f1f;
   --tl-track-wall: var(--p-surface);
 
-  /* Two text roles, until palace has a type scale (palace-ui#21); then
-     these become its tokens. Meta: text that qualifies something next to
-     it (a track's "No layout", a driver's "has 32"). Body: a row's only
-     text ("first crossed just now"), at palace's body size. */
-  --tl-text-meta: 12px;
-  --tl-text-body: 14px;
-
   /* The marks after a lap time, in the colours a timing screen uses: purple
      for the track record (TR), cyan for the session's fastest lap (FL),
      green for a driver's own best (PB). */
   --tl-record: var(--p-accent-2);
-  --tl-record-ink: var(--p-surface);
+  --tl-record-ink: var(--p-text-on-fill);
   --tl-fastest: var(--p-accent-3);
   --tl-fastest-ink: var(--p-text);
   --tl-pb: var(--p-success);

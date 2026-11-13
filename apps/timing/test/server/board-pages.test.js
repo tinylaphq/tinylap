@@ -312,7 +312,7 @@ test('a race table: Last shows counted laps only, the mark has its own column, a
   assert.match(body, /<table class="board-table standings-table is-race has-flags">\s*<colgroup><col class="col-pos"><col><col class="col-laps"><col class="col-time"><col class="col-mark"><col class="col-time col-last"><col class="col-total"><\/colgroup>/);
   assert.match(body, /<th scope="col" class="num col-last">Last<\/th><th scope="col" class="num">Time<\/th>/);
   assert.match(body, /<td class="num col-last">—<\/td>/, 'the lap before the start is not the last lap');
-  assert.match(body, /<li class="is-not-counted"><span [^>]+><span class="driver-name" title="Cleo">Cleo<\/span><\/span><span class="board-laps-tags"><span class="tag">Not counted<\/span><\/span><span class="num">8\.000<\/span><span class="mark-cell"><\/span><\/li>/, 'the tag before the time, and a lap that did not count is never FL');
+  assert.match(body, /<li class="is-not-counted"><span [^>]+><span class="driver-name" title="Cleo">Cleo<\/span><\/span><span class="board-laps-tags"><span class="tag tag-sm">Not counted<\/span><\/span><span class="num">8\.000<\/span><span class="mark-cell"><\/span><\/li>/, 'the tag before the time, and a lap that did not count is never FL');
   app.engine.abort(countedClub.id, session.id);
 });
 
