@@ -137,6 +137,36 @@ A decoder is on a cable for exactly as long as a Bridge tab holds its cable stre
 
 The whole API is described at `/openapi.json` and `/api` on any timing server.
 
+## Drivers and transponders
+
+A transponder is the number a decoder reports; a driver is a person who may have several. Laps count for a driver, so a transponder nobody has assigned gets none. Pages say "transponder 41" or "the number", never "code".
+
+### Setup
+
+- **Drivers** lists each driver with their transponders. One transponder sits beside the name; from two on, each is listed with its label. Every transponder has a quiet **Remove**, which sets it back to "Not assigned yet" and clears its label. **Edit** opens the driver's page; **Delete** is for those who may delete.
+- **Add a transponder** (**Add another transponder** once the driver has one) opens a list of one row per number: first the ones "Not assigned yet", newest first, then "Someone else's", then "Not in the list? Enter its number". A row opens a small form, one row at a time: "Add 41 to Simon". From the driver's second transponder on it has an optional label, whose hint says what it tells apart ("Tells it apart from Simon's 17."). A row shows "Crossing now" for 10 seconds after the number crossed, and then "crossed 2 min ago". With no number in the club yet, the list says to run its car over the line.
+- **Transponders** lists every number the club has seen: "Not assigned yet" first, newest first, with **Assign** (and **Assign all N** from two on); then "Assigned", with the driver and the label, and **Move**. **Forget**, for those who may delete, asks first, then takes a number off the list; its laps stay, and it shows up as new if it crosses again. Numbers show up here when a car first crosses the line.
+
+### Assigning
+
+**Assign** and **Move** open "Whose transponder is 41?": a button per driver ("Assign it to", each with their numbers), and "Or a new driver" with a name field and **Assign to a new driver**. While that number crosses the line the page says "It's on the track now." **Not now** goes back to where the form was opened from (`returnTo`, a path on the same site).
+
+If the number is someone else's, the server asks before it moves it: "Transponder 17 is Simon's. Giving it to Mia takes it off Simon." with **Give it to Mia** and **Keep it with Simon**. The answer sends the same choice again with `confirm=1`. A refused form comes back as the same page, 422, with the input kept.
+
+**New transponders** (`<space>/transponders/new`) collects every unassigned number on one page, newest first. Its subtitle counts those that crossed the line since the page's club last saw them ("3 crossed the line and aren't assigned yet."). Each row shows the number, "Crossing now" while it crosses and "Crossed 2 min ago", then two forms: **Assign** to a driver chosen from the list, or **Add and assign** with a new driver's name. An assignment swaps the list in place and says "Transponder 41 is Lena's now. Change"; the move question is the row itself. Both pages keep "Crossing now" current from the club's live stream; an event older than 10 seconds, as a reconnect replays them, lights nothing.
+
+### The driver's page
+
+A driver's name, colour and, for each transponder, its label (up to 24 characters) and **Remove**. Under it, **Best laps here**: the driver's best on this track and direction, and, once two or more of their transponders have labels, the best of each labelled transponder with its label. A label counts only while the transponder is the driver's.
+
+### On the board
+
+While a session runs, a number that crossed in it and is not assigned gets a warning above the standings: "Transponder 41 isn't assigned yet, so its laps aren't counted." with **Assign it**; for several, "Transponders 41, 52 and 66 aren't assigned yet, so their laps aren't counted." with **Assign them**. One goes to its form and back to the board; several go to New transponders. The line lists numbers in numeric order, so it doesn't change while the same cars keep crossing, and it goes when the last one is assigned. Watchers and the big board never show it. Without a session, the idle board's start button is followed by a quiet line about the numbers that crossed in the last hour, with the same links.
+
+**One mark per lap time**, the widest that is true: **TR** (the track record), then **SB** (the session's fastest lap; only in a race's standings), then **PB** (the driver's own best here). Marks show only on the track and direction the record belongs to. The record holder's **crown** follows their name in the standings (not in a session's history); it keeps its place when the name is cut short.
+
+**The record moment:** when a new track record comes in while a board is open, the record card plays a burst and its time bounces, and the crown flies from the old holder's name to the new one's. It plays once, on boards open at that moment, never on load and never with reduced motion; nothing it adds stays on the page.
+
 ## Without hardware
 
 Start the timing server (`apps/timing/README.md`, Development) with `TINYLAP_SIMULATE=<model>[,fast]`, where `<model>` is `tinylap`, `zround` or `easylap` (`,fast` makes a lap 2 s). The bridge's Connect buttons then open a simulated decoder of that kind, in place of the browser's picker. Never set it in production. The `tinylap` one behaves as the board does: four cars (codes `20` to `23`), already running when the port opens (no reset), and paired for good once paired, in this browser's storage. `tools/decoder-sim.js` plays a decoder on Wi-Fi, or on a serial pty; on Wi-Fi it sends `now`, a `stat` line every 10 s and a `quiet` batch as the board does, keeps beating while the answers say `watched`, and `--silent-after <s>` makes it stop posting, to see the banner.
