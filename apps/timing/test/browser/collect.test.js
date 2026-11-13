@@ -117,7 +117,9 @@ test("with script, a row whose number became someone else's asks in the row, the
   tc.after(() => context.close());
   const posts = [];
   page.on('request', (r) => { if (r.method() === 'POST') posts.push(new URL(r.url()).pathname); });
+  const live = page.waitForResponse((r) => r.url().endsWith('/live'));
   await page.goto('/personal/transponders/new');
+  await live;
   assert.equal((await takenMeanwhile('66')).status, 303);
   const row = page.locator('.collect-row[data-code="66"]');
   await row.locator('select').selectOption({ label: 'Ben Okafor' });
