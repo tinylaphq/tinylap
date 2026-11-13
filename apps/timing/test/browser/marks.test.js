@@ -143,7 +143,8 @@ test('on the big screen at 1920×1080, Last laps keeps whole names beside a "Not
   }));
   assert.ok(rows.some((r) => r.marked), 'a mark in the feed');
   const tagged = rows.filter((r) => r.tagged);
-  assert.ok(tagged.some((r) => r.name === 'Ben Okafor') && tagged.some((r) => r.name === 'Mia Schulz'), 'long names beside the tag');
+  // The big screen's eleven rows reach Ben's lap that did not count, not Mia's.
+  assert.ok(tagged.some((r) => r.name === 'Ben Okafor'), 'a long name beside the tag');
   for (const r of rows) {
     assert.ok(!r.cut, `${r.name}${r.tagged ? ' (Not counted)' : ''}: the name is whole`);
     assert.equal(r.notCounted, r.tagged, `${r.name}: muted exactly when it did not count`);
