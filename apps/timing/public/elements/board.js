@@ -38,6 +38,13 @@
 //   the time. All of it aria-hidden, absolute and clipped to the card;
 //   nothing stays. A swap during it carries it over to the new card; a new
 //   record or disconnecting stops it.
+// - A row's moment (fastest lap spec §4): a swap that brings a standings row
+//   whose data-moment this page has not seen lights that row in its mark's
+//   colour (TR, FL or PB), behind its text; never on the first render. A
+//   swap during it carries it to the same driver's row at its elapsed time;
+//   a newer fastest lap slides an older one out; while three rows are lit, PBs
+//   are dropped. With reduced motion the row takes the colour, holds and
+//   fades. No sound: the record rings as above.
 // Without EventSource there is no stream; without JavaScript the page
 // reloads every ten seconds (<noscript> refresh).
 
@@ -145,6 +152,171 @@ function lightCard(time, crown, elapsed) {
   return { fx, animations };
 }
 
+/**
+ * A row's moment (fastest lap spec §4), one for each mark: its length, when
+ * its head has crossed the row, and when its fill slides out, in ms.
+ */
+const ROW_KINDS = {
+  fl: { ms: 1600, cross: 520, out: 1150 },
+  pb: { ms: 1600, cross: 520, out: 1150 },
+  tr: { ms: 2400, cross: 700, out: 1900 },
+};
+/** The head's and the fill's crossing share one easing; the slide out eases in. */
+const CROSS_EASE = 'cubic-bezier(.45,.05,.55,.95)';
+const OUT_EASE = 'cubic-bezier(.6,0,.8,.4)';
+/** A newer fastest lap slides the older row out this fast; with reduced motion a row fades this fast. */
+const CUT_MS = 300;
+const FADE_MS = 200;
+/** While this many rows are lit, further PB moments are dropped. */
+const MAX_LIT = 3;
+const LIT = ['is-lit', 'is-lit-fl', 'is-lit-pb', 'is-lit-tr'];
+
+/**
+ * A row's moment while it plays: whose row, which lap (`seq`) and mark, when
+ * it began, whether motion was reduced then, when a newer fastest lap cut it
+ * short, and what of it is on the row now.
+ * @typedef {{ driver: string, seq: string, kind: keyof typeof ROW_KINDS, start: number, reduced: boolean, cut: number | null,
+ *   row: HTMLElement, fx: HTMLElement | null, animations: Animation[], cues: Animation[], frame: number, edge?: number }} RowMoment
+ */
+
+/**
+ * Draws `m` on its row as it stands at time `t`, whether it starts now or a
+ * swap carries it over: one aria-hidden .row-fx in the row's first cell, the
+ * head and fill animated to their elapsed time, the row's classes (lit; a
+ * record row's text white until its fill begins to leave), and a cue for
+ * each change still to come. `end` runs when its fill is gone.
+ * @param {RowMoment} m @param {number} t @param {() => void} end
+ */
+function drawRow(m, t, end) {
+  const k = ROW_KINDS[m.kind];
+  const elapsed = t - m.start;
+  const fx = document.createElement('div');
+  fx.className = 'row-fx';
+  fx.setAttribute('aria-hidden', 'true');
+  const fill = document.createElement('span');
+  fill.className = 'row-fx-fill';
+  fx.append(fill);
+  /** @type {Animation[]} */
+  const main = [];
+  const timing = { duration: k.ms, fill: /** @type {const} */ ('forwards') };
+  if (m.reduced) {
+    // No head and no sweep: the colour at once, held, then faded.
+    main.push(fill.animate([{ opacity: 1 }, { opacity: 1, offset: (k.ms - FADE_MS) / k.ms }, { opacity: 0 }], timing));
+  } else {
+    const head = document.createElement('span');
+    head.className = 'row-fx-head';
+    fx.append(head);
+    const cross = k.cross / k.ms;
+    // The head is 40% of the row: from just off its left edge to just off its right edge, in the head's own widths.
+    main.push(head.animate([
+      { transform: 'translateX(-100%)', easing: CROSS_EASE },
+      { transform: 'translateX(250%)', offset: cross },
+      { transform: 'translateX(250%)' },
+    ], timing));
+    // The fill follows the head's back edge (the head starts in the fill's colour, so there is no seam), holds, then slides out.
+    main.push(fill.animate([
+      { clipPath: 'inset(0 135% 0 0)', easing: CROSS_EASE },
+      { clipPath: 'inset(0 -5% 0 0)', offset: cross },
+      { clipPath: 'inset(0 0 0 0)', offset: k.out / k.ms, easing: OUT_EASE },
+      { clipPath: 'inset(0 0 0 100%)' },
+    ], timing));
+  }
+  for (const a of main) a.currentTime = elapsed;
+  // Cut short by a newer fastest lap: the whole moment slides out with a plain edge (or fades), wherever it was.
+  let over = k.ms;
+  // With reduced motion a record row's text is white while the colour shows, until it begins to fade.
+  let lightOff = k.ms - FADE_MS;
+  if (m.cut !== null) {
+    const cutAt = m.cut - m.start;
+    const leave = m.reduced
+      ? fx.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FADE_MS, fill: 'forwards' })
+      : fx.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(0 0 0 100%)' }], { duration: CUT_MS, easing: OUT_EASE, fill: 'forwards' });
+    leave.currentTime = t - m.cut;
+    main.push(leave);
+    over = Math.min(over, cutAt + (m.reduced ? FADE_MS : CUT_MS));
+    lightOff = Math.min(lightOff, cutAt);
+  }
+  m.row.classList.add('is-lit', `is-lit-${m.kind}`);
+  m.row.firstElementChild?.append(fx);
+  m.fx = fx;
+  m.animations = main;
+  // Later changes run on the animations' clock, not on timers, so the row's classes go exactly when its fill does.
+  /** @type {(when: number, run: () => void) => void} */
+  const at = (when, run) => {
+    if (when <= elapsed) {
+      run();
+      return;
+    }
+    const cue = new Animation(new KeyframeEffect(null, null, when));
+    cue.currentTime = elapsed;
+    cue.play();
+    cue.finished.then(run, () => {}); // cancelled: the moment was taken off its row
+    m.cues.push(cue);
+  };
+  if (m.kind === 'tr') {
+    // Each frame, every piece of a record row's text is white while the purple covers it, and ink otherwise.
+    const frame = () => {
+      m.frame = requestAnimationFrame(frame);
+      lightText(m, fill, fx, lightOff);
+    };
+    frame();
+  }
+  at(over, end);
+}
+
+/** The px span of `el`'s box its clip-path (an inset, or none) leaves showing. @param {Element} el @param {number} width */
+function shown(el, width) {
+  const inset = getComputedStyle(el).clipPath.match(/^inset\(([^)]*)\)$/);
+  if (!inset) return [0, width];
+  const v = inset[1].trim().split(/\s+/).map((x) => (x.endsWith('%') ? (parseFloat(x) / 100) * width : parseFloat(x)));
+  const right = v[1] ?? v[0], left = v[3] ?? right;
+  return [left, width - right];
+}
+
+/**
+ * A record row's text on its fill: each cell (the driver's name, crown and
+ * second line apart) is white while the purple is under all of it, and ink
+ * otherwise, read from the fill's own animation as it is this frame. With
+ * reduced motion it is white until the colour begins to fade.
+ * @param {RowMoment} m @param {HTMLElement} fill @param {HTMLElement} fx @param {number} lightOff
+ */
+function lightText(m, fill, fx, lightOff) {
+  const box = fx.getBoundingClientRect();
+  const [fillFrom, fillTo] = shown(fill, box.width);
+  const [fxFrom, fxTo] = shown(fx, box.width);
+  const edge = Math.max(fillFrom, fxFrom);
+  // The slide-out's edge may be painted a frame ahead of what script reads (a composited clip): ink one frame early.
+  const from = box.left + edge + Math.max(0, edge - (m.edge ?? edge)), to = box.left + Math.min(fillTo, fxTo);
+  m.edge = edge;
+  const now = Number(m.animations[0]?.currentTime ?? 0);
+  const range = document.createRange();
+  for (const cell of m.row.children) {
+    if (cell.matches('.mark-cell')) continue; // the mark keeps its own ink box
+    const parts = cell.matches('.board-driver') ? cell.querySelectorAll('.driver-name, .crown, .board-ago') : [cell];
+    for (const part of parts) {
+      range.selectNodeContents(part);
+      if (part.contains(fx)) range.setEndBefore(fx); // the moment itself is no text
+      const text = part instanceof SVGElement ? part.getBoundingClientRect() : range.getBoundingClientRect();
+      const lit = m.reduced ? now < lightOff : text.width > 0 && text.left >= from && text.right <= to;
+      part.classList.toggle('is-lit-light', lit);
+    }
+  }
+}
+
+/** Takes `m` off its row: nothing of it stays. @param {RowMoment} m */
+function undrawRow(m) {
+  for (const cue of m.cues) cue.cancel();
+  m.cues = [];
+  cancelAnimationFrame(m.frame);
+  delete m.edge;
+  for (const part of m.row.querySelectorAll('.is-lit-light')) part.classList.remove('is-lit-light');
+  for (const a of m.animations) a.cancel();
+  m.animations = [];
+  m.fx?.remove();
+  m.fx = null;
+  m.row.classList.remove(...LIT);
+}
+
 /** The focused element's counterpart in `next`, by href or id. @param {Element} next @param {Element | null} focused */
 function counterpart(next, focused) {
   const href = focused?.getAttribute('href');
@@ -195,9 +367,14 @@ class TlBoard extends HTMLElement {
    * @type {{ seq: string, start: number, card: { fx: HTMLElement, animations: Animation[] } | null, flyer: Element | null, jump: Animation | null, crown: SVGElement | null, timer: ReturnType<typeof setTimeout> } | null}
    */
   moment = null;
+  /** The row moments' seqs this page has shown or skipped. @type {Set<string>} */
+  seenRows = new Set();
+  /** The row moments playing, by driver. @type {Map<string, RowMoment>} */
+  rows = new Map();
 
   connectedCallback() {
     this.seen = this.recordSeq();
+    for (const r of this.rowMoments()) this.seenRows.add(r.seq);
     this.initSound();
     if (!('EventSource' in window)) return;
     addEventListener('pagehide', this);
@@ -212,6 +389,7 @@ class TlBoard extends HTMLElement {
     this.audio = null;
     this.close();
     this.stopMoment();
+    this.stopRows();
     removeEventListener('pagehide', this);
     removeEventListener('pageshow', this);
   }
@@ -365,6 +543,69 @@ class TlBoard extends HTMLElement {
     }
   }
 
+  /** The standings rows that offer a moment (fastest lap spec §4.1): `data-moment="<seq> fl|pb|tr"`. */
+  rowMoments() {
+    return [...this.querySelectorAll('#board-live .standings-table tbody tr[data-moment][data-driver]')].flatMap((row) => {
+      const [seq, kind] = (row.getAttribute('data-moment') ?? '').split(' ');
+      const driver = row.getAttribute('data-driver') ?? '';
+      return seq && (kind === 'fl' || kind === 'pb' || kind === 'tr') ? [{ row: /** @type {HTMLElement} */ (row), driver, seq, kind: /** @type {keyof typeof ROW_KINDS} */ (kind) }] : [];
+    });
+  }
+
+  /**
+   * After a swap: playing row moments move to their driver's row in the new
+   * render, at their elapsed time (a driver who left the table, or whose row
+   * brings a new moment, ends theirs); a new fastest lap or record cuts an
+   * older one short; then each moment this page has not seen plays, records
+   * and fastest laps first, and a PB only while fewer than MAX_LIT rows are lit.
+   */
+  playRows() {
+    const t = performance.now();
+    const fresh = this.rowMoments().filter((r) => !this.seenRows.has(r.seq));
+    for (const r of fresh) this.seenRows.add(r.seq);
+    const renewed = new Set(fresh.map((r) => r.driver));
+    for (const m of [...this.rows.values()]) {
+      undrawRow(m);
+      const row = this.querySelector(`#board-live .standings-table tbody tr[data-driver="${CSS.escape(m.driver)}"]`);
+      if (!(row instanceof HTMLElement) || renewed.has(m.driver)) {
+        this.rows.delete(m.driver);
+        continue;
+      }
+      m.row = row;
+      this.drawRow(m, t);
+    }
+    if (fresh.some((r) => r.kind !== 'pb')) {
+      for (const m of this.rows.values()) {
+        if (m.kind === 'pb' || m.cut !== null) continue;
+        undrawRow(m);
+        m.cut = t;
+        this.drawRow(m, t);
+      }
+    }
+    const reduced = still.matches;
+    for (const r of [...fresh.filter((f) => f.kind !== 'pb'), ...fresh.filter((f) => f.kind === 'pb')]) {
+      if (r.kind === 'pb' && [...this.rows.values()].filter((m) => m.cut === null).length >= MAX_LIT) continue;
+      /** @type {RowMoment} */
+      const m = { driver: r.driver, seq: r.seq, kind: r.kind, start: t, reduced, cut: null, row: r.row, fx: null, animations: [], cues: [], frame: 0 };
+      this.rows.set(r.driver, m);
+      this.drawRow(m, t);
+    }
+  }
+
+  /** Draws a row moment, which leaves the board when it is over. @param {RowMoment} m @param {number} t */
+  drawRow(m, t) {
+    drawRow(m, t, () => {
+      undrawRow(m);
+      if (this.rows.get(m.driver) === m) this.rows.delete(m.driver);
+    });
+  }
+
+  /** Ends every row moment at once: nothing of them stays. */
+  stopRows() {
+    for (const m of this.rows.values()) undrawRow(m);
+    this.rows.clear();
+  }
+
   open() {
     const url = /** @type {HTMLElement | null} */ (this.querySelector('#board-live'))?.dataset.events;
     if (!url) return;
@@ -424,7 +665,10 @@ class TlBoard extends HTMLElement {
         const current = this.querySelector('#board-live');
         // Where the old holder's crown was, for the jump, before the swap takes it away.
         const from = current?.querySelector('.crown')?.getBoundingClientRect() ?? null;
-        if (next && current) swap(current, next);
+        if (next && current) {
+          swap(current, next);
+          this.playRows();
+        }
         const seq = this.recordSeq();
         const fresh = seq !== null && seq !== this.seen;
         this.seen = seq ?? this.seen; // first, so a failing bell or notification can't repeat

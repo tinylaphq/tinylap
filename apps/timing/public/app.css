@@ -600,6 +600,38 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .hero-fx .fx-ray { position: absolute; left: 0; bottom: 0; translate: -50% 0; transform-origin: 50% 100%; }
 .crown-flyer { position: fixed; z-index: 10; margin: 0; pointer-events: none; }
 
+/* A row's moment (fastest lap spec §4), played by tl-board on the standings
+ * row whose lap set a mark: a rainbow head in palace's colours, starting and
+ * ending in the mark's colour, sweeps across the row and lays the mark's
+ * colour behind it; the fill holds, then slides out to the right. The lit row
+ * is the moment's containing block and its own stacking context, so the
+ * moment paints over the table's white but under the row's text, clipped to
+ * the row. Only transforms and clip-path move; nothing stays. */
+.board-table tbody tr.is-lit { position: relative; isolation: isolate; }
+.row-fx { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.row-fx-fill { position: absolute; inset: 0; background: var(--row-fx); }
+.row-fx-head { position: absolute; inset-block: 0; left: 0; width: 40%; }
+.is-lit-fl { --row-fx: var(--tl-fastest); }
+.is-lit-pb { --row-fx: var(--tl-pb); }
+.is-lit-tr { --row-fx: var(--tl-record); }
+.is-lit-fl .row-fx-head { background: linear-gradient(90deg, var(--tl-fastest), var(--p-accent-2) 25%, var(--p-accent-1) 50%, var(--p-accent-2) 75%, var(--tl-fastest)); }
+.is-lit-pb .row-fx-head { background: linear-gradient(90deg, var(--tl-pb), var(--p-accent-3) 20%, var(--p-accent-2) 38%, var(--p-accent-1) 50%, var(--p-accent-2) 62%, var(--p-accent-3) 80%, var(--tl-pb)); }
+.is-lit-tr .row-fx-head { background: linear-gradient(90deg, var(--tl-record), var(--p-accent-1) 25%, var(--p-accent-3) 50%, var(--p-accent-1) 75%, var(--tl-record)); }
+/* While lit, the row's mark turns ink so it does not vanish into the fill (the
+ * record's purple would be about 3.7:1 on ink: its letters take the record's
+ * ink, as on its own box), and driver squares keep an ink edge. */
+.is-lit-fl .mark-fl { background: var(--p-text); color: var(--tl-fastest); }
+.is-lit-pb .mark-pb { background: var(--p-text); color: var(--tl-pb); }
+.is-lit-tr .mark-tr { background: var(--p-text); color: var(--tl-record-ink); }
+.is-lit .driver::before { outline: var(--p-border-width) solid var(--p-text); outline-offset: calc(-1 * var(--p-border-thin)); }
+/* On purple, ink text falls to about 3.7:1: in a record row, each cell's
+ * text (and the driver's name, crown outline and second line) turns white
+ * while the purple is under it, as tl-board marks it, with no transition so
+ * it keeps up with the fill's edge. White is the text-on-fill colour; until
+ * TinyLap takes palace-ui's --p-text-on-fill (palace-ui#26) it is --p-surface. */
+.is-lit-tr .is-lit-light { color: var(--p-surface); }
+.is-lit-tr .crown.is-lit-light { stroke: var(--p-surface); }
+
 /* The navbar's right side: the live status, Big screen and Sign in take the
  * btn-sm box (same padding, 1px border, line height) that the shared account
  * menu's summary has, so they share one height and baseline. Buttons keep
