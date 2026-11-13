@@ -35,7 +35,7 @@ function boardStream(request, workspaceId, { watcher, token = null }) {
         if (res.writableEnded) return;
         last = Date.now();
         try {
-          res.write(sse(String(boardLive(request, request.engine.snapshot(workspaceId, { watcher }), { watcher, big, token }))));
+          res.write(sse(String(boardLive(request, request.engine.snapshot(workspaceId, { watcher, moments: true }), { watcher, big, token }))));
         } catch (error) {
           // The page reconnects and gets whatever the server answers now (the board, or a not-found page).
           console.error('board stream: render failed', error);

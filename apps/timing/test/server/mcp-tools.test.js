@@ -301,4 +301,5 @@ test('get_live answers the board now', async () => {
   assert.equal(live.error, false, live.text);
   assert.equal(typeof live.value.track.name, 'string');
   assert.ok(Array.isArray(live.value.drivers));
+  assert.equal('moments' in live.value, false, 'the rows\' moments are the board\'s only');
 });

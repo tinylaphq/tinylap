@@ -16,6 +16,8 @@ export const LOOSE_PASSING_MS = 24 * 60 * 60_000;
 const LOOSE_SWEEP_MS = 10 * 60_000;
 /** A new record shows this long from its arrival (records spec §4.3). */
 export const RECORD_SHOW_MS = 30_000;
+/** A row's FL or PB moment is offered this long from its lap's arrival; a TR one as long as its record shows (fastest lap spec §4.1). */
+export const MOMENT_SHOW_MS = 10_000;
 /** A record lap driven longer than this before it arrived falls silently. */
 export const RECORD_FRESH_MS = 60_000;
 /** Offsets older than this don't count for mapping decoder time (spec §6). */
@@ -61,6 +63,10 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const recordNews = new Map();
   /** Workspace id → the last ended session's id and standings, so an idle board doesn't replay it on every render. */
   const endedStandings = new Map();
+  /** Session id → each driver's moment, when their latest counted lap set a mark that plays (fastest lap spec §4.1). */
+  const moments = new Map();
+  /** Session id → each driver's best on its track and direction from earlier sessions, as it stood when it started. */
+  const earlierBests = new Map();
   let lastSweep = -Infinity;
 
   const rulesOf = (s) => ({ kind: s.kind, roster: s.roster, opensAt: s.opensAt, closesAt: s.closesAt });
@@ -111,6 +117,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const ws = store.ensureWorkspace(workspaceId);
     const session = { id: randomUUID(), workspaceId, trackId: ws.trackId, direction: ws.direction, createdAt: now(), endedAt: null, roster: null, durationMs: null, ...fields };
     store.addSession(session);
+    earlierBestsOf(session);
     publishSession(session);
     return session;
   }
@@ -121,6 +128,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const rows = standings(rulesOf(ended), stateOf(session));
     endedStandings.set(session.workspaceId, { sessionId: session.id, rows });
     states.delete(session.id);
+    moments.delete(session.id);
+    earlierBests.delete(session.id);
     publishSession(ended);
     refreshUnknown(session.workspaceId);
     if (session.kind !== 'practice') hub.publish(session.workspaceId, 'results', { sessionId: session.id, session: publicSession(ended), standings: rows });
@@ -141,10 +150,52 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return t + best;
   }
 
+  /**
+   * Each driver's best on a session's track and direction from its other sessions, read from their crossings once, when
+   * it starts (or first asked after a restart): personal_best moves on with every lap of this one.
+   */
+  function earlierBestsOf(session) {
+    let bests = earlierBests.get(session.id);
+    if (!bests) {
+      bests = session.trackId === null ? new Map() : store.otherBests(session.workspaceId, session.trackId, session.direction, session.id);
+      earlierBests.set(session.id, bests);
+    }
+    return bests;
+  }
+  /** The session's fastest counted lap so far, or null before one. */
+  function fastestOf(state) {
+    let fastest = null;
+    for (const d of Object.values(state.drivers)) if (d.bestMs !== null && (fastest === null || d.bestMs < fastest)) fastest = d.bestMs;
+    return fastest;
+  }
+  /**
+   * The moments a session's rows offer now, by driver: FL and PB for MOMENT_SHOW_MS, TR exactly while its record is the
+   * snapshot's `recordNew`, so the row, the strip and the bell agree.
+   */
+  function momentsOf(session, recordNew, t = now()) {
+    const out = {};
+    for (const [driverId, m] of moments.get(session.id) ?? []) {
+      if (m.mark === 'tr' ? recordNew?.seq === m.seq : t - m.since < MOMENT_SHOW_MS) out[driverId] = { seq: m.seq, mark: m.mark };
+    }
+    return out;
+  }
+  /**
+   * The moment a counted lap earns (fastest lap spec §4): the widest of its marks that plays, TR, then FL, then PB; none
+   * for a late lap. It is its driver's until their next counted lap.
+   */
+  function noteMoment(session, { seq, driverId, at }, { fl, pb, tr }) {
+    const mark = now() - at >= RECORD_FRESH_MS ? null : tr ? 'tr' : fl ? 'fl' : pb ? 'pb' : null;
+    let byDriver = moments.get(session.id);
+    if (!byDriver) moments.set(session.id, (byDriver = new Map()));
+    if (mark) byDriver.set(driverId, { seq, mark, since: now() });
+    else byDriver.delete(driverId);
+  }
+
   function cross(workspaceId, session, passing, { at, driverId, via }) {
     const reference = store.lastReference(passing.decoder, passing.transponder);
     const step = nextLap(reference, { boot: passing.boot, t: passing.t }, { minLap, maxLap });
     const lapMs = step.kind === 'lap' ? step.ms : null;
+    const fastest = fastestOf(stateOf(session));
     const counts = applyCrossing(rulesOf(session), stateOf(session), { driverId, at, lapMs });
     const row = {
       workspaceId, sessionId: session.id, ...passing, driverId, at, lapMs, counts, via,
@@ -152,28 +203,38 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       flag: step.kind === 'backwards' || step.kind === 'double' ? step.kind : null,
     };
     row.seq = store.addCrossing(row);
-    if (counts && via !== 'tap' && driverId !== null && lapMs !== null && session.trackId !== null) noteLap(session, row);
+    const qualifies = counts && via !== 'tap' && driverId !== null && lapMs !== null && session.trackId !== null;
+    // A PB plays only once the driver had a best here before this session, and the lap beats their best so far.
+    const earlier = qualifies ? earlierBestsOf(session).get(driverId) : undefined;
+    const pb = earlier !== undefined && lapMs < Math.min(earlier, store.personalBests(workspaceId, session.trackId, session.direction, [driverId])[0]?.bestMs ?? Infinity);
+    const tr = qualifies && noteLap(session, row);
+    // The session's first counted lap beat no fastest lap.
+    if (counts) noteMoment(session, row, { fl: fastest !== null && lapMs < fastest, pb, tr });
     hub.publish(workspaceId, 'crossing', memberCrossing(row), watcherCrossing(row));
     if (counts) publishStandings(session);
     if (session.state === 'finishing' && isComplete(rulesOf(session), stateOf(session), now(), maxLap)) endSession(session, now());
     return row;
   }
 
-  /** A qualifying lap updates its driver's best and, if faster than the record when it was driven, the record (records spec §4). */
+  /**
+   * A qualifying lap updates its driver's best and, if faster than the record when it was driven, the record (records spec §4).
+   * Returns whether it is a new record live (`recordNew`).
+   */
   function noteLap({ workspaceId, trackId, direction }, { seq, driverId, lapMs, at, sessionId }) {
     store.offerPersonalBest(workspaceId, trackId, direction, { driverId, lapMs, at, seq });
     const before = store.recordAt(workspaceId, trackId, direction, at);
-    if (before && lapMs >= before.lapMs) return;
+    if (before && lapMs >= before.lapMs) return false;
     const latest = store.currentRecord(workspaceId, trackId, direction);
     if (latest && at < latest.at) {
       store.rebuildRecords(workspaceId, trackId, direction);
-      return;
+      return false;
     }
     store.addRecord({ workspaceId, trackId, direction, seq, driverId, lapMs, at, sessionId });
-    if (!before || now() - at >= RECORD_FRESH_MS) return;
+    if (!before || now() - at >= RECORD_FRESH_MS) return false;
     const recordNew = { seq, driverId, lapMs, at, beat: { driverId: before.driverId, lapMs: before.lapMs, at: before.at } };
     recordNews.set(workspaceId, { recordNew, since: now(), trackId, direction });
     hub.publish(workspaceId, 'record', { recordNew });
+    return true;
   }
   /** Ends the live record state, and tells every board. */
   function clearRecord(workspaceId) {
@@ -453,6 +514,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     }
     if (ACTIVE.has(session.state)) states.set(sessionId, state);
     else states.delete(sessionId);
+    // Its laps counted anew: a moment they earned may no longer be true.
+    moments.delete(sessionId);
     if (endedStandings.get(session.workspaceId)?.sessionId === sessionId) endedStandings.delete(session.workspaceId);
     publishStandings(session);
   }
@@ -469,6 +532,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
         if (trackId !== null && store.track(workspaceId, trackId)) tracks.set(`${trackId} ${direction}`, { trackId, direction });
       }
       for (const { trackId, direction } of tracks.values()) store.rebuildRecords(workspaceId, trackId, direction);
+      // Laps of earlier sessions may be a driver's now: the running session reads its earlier bests again.
+      if (tracks.size > 0) earlierBests.clear();
     });
     publishUnknown(workspaceId);
   }
@@ -479,7 +544,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     if (running?.kind === 'practice') endSession(running, practiceEnd(running));
   }
 
-  function snapshot(workspaceId, { watcher = false } = {}) {
+  /** What the board and the API know now. `moments` is for the board's views only (fastest lap spec §4.1). */
+  function snapshot(workspaceId, { watcher = false, moments: withMoments = false } = {}) {
     const ws = store.ensureWorkspace(workspaceId);
     const session = store.runningSession(workspaceId);
     // A club always has a current track (named tracks spec §3.1).
@@ -499,6 +565,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       direction: ws.direction,
       session: session && publicSession(session),
       standings: rows,
+      // Each driver's moment, of their latest counted lap, by driver id: the board's only.
+      ...(withMoments ? { moments: session ? momentsOf(session, recordNew) : {} } : {}),
       crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),
       drivers: store.drivers(workspaceId),
       bests: store.personalBests(workspaceId, track.id, ws.direction, [...rows, ...endedRows].map((r) => r.driverId)),

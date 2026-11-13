@@ -69,7 +69,7 @@ const watchBoard = (request, [, token]) => {
   }
   const headers = { 'Referrer-Policy': 'no-referrer' };
   if (!workspaceId) return varied(page(request, 404, watchGonePage(request), { headers }));
-  return varied(page(request, 200, boardPage(request, request.engine.snapshot(workspaceId, { watcher: true }), { watcher: true, big: request.url.searchParams.has('big'), token }), { headers }));
+  return varied(page(request, 200, boardPage(request, request.engine.snapshot(workspaceId, { watcher: true, moments: true }), { watcher: true, big: request.url.searchParams.has('big'), token }), { headers }));
 };
 
 export const streamRoutes = [

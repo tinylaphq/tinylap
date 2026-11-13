@@ -8,7 +8,7 @@ import { page } from './respond.js';
 import { spacePath } from './spaces.js';
 import { boardPage } from './views/board.js';
 
-const showBoard = (request) => page(request, 200, boardPage(request, request.engine.snapshot(request.workspaceId), { big: request.url.searchParams.has('big') }));
+const showBoard = (request) => page(request, 200, boardPage(request, request.engine.snapshot(request.workspaceId, { moments: true }), { big: request.url.searchParams.has('big') }));
 
 export const boardPageRoutes = [
   { pattern: spacePath('board'), credentials: true, methods: { GET: pageRoute('timing.run', showBoard) } },

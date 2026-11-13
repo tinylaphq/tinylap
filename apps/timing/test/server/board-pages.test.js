@@ -325,7 +325,7 @@ test('no note on a finished row, nor in the results', async () => {
   clock.now += 180_000;
   let body = await (await get(member, `/clubs/${finishClub.id}/board`)).text();
   assert.match(body, /data-state="finishing"/);
-  assert.match(body, /<tr class="is-finished[^"]*">\s*<td class="pos">\d<span class="finish" role="img" aria-label="Finished" title="Finished"><\/span><\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Abe">Abe<\/span><svg class="crown" viewBox="0 0 26 18" role="img"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span><\/td>/);
+  assert.match(body, /<tr class="is-finished[^"]*" data-driver="[^"]+"(?: data-moment="[^"]+")?>\s*<td class="pos">\d<span class="finish" role="img" aria-label="Finished" title="Finished"><\/span><\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Abe">Abe<\/span><svg class="crown" viewBox="0 0 26 18" role="img"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span><\/td>/);
   assert.match(body, />Bea<\/span><\/span><tl-relative-time class="board-ago"[^>]*>last lap <time [^>]+>3 min ago<\/time>/);
 
   app.engine.abort(finishClub.id, session.id);
@@ -597,7 +597,7 @@ test('a race table: SB on the session\'s fastest lap, also a PB; the crown after
   for (const [i] of names.entries()) passIn(marksClub.id, 20_101_000 + i * 10 + (i === 1 ? 8500 : 9000 + i * 10), String(61 + i));
   const body = await (await get(member, `/clubs/${marksClub.id}/board`)).text();
   assert.match(body, /<table class="board-table standings-table is-race has-two-digit-pos has-flags">/);
-  const rows = [...body.matchAll(/<tr(?: class="[^"]*")?>\s*<td class="pos">[\s\S]*?<\/tr>/g)].map((m) => m[0]);
+  const rows = [...body.matchAll(/<tr(?: class="[^"]*")? data-driver="[^"]+"(?: data-moment="[^"]+")?>\s*<td class="pos">[\s\S]*?<\/tr>/g)].map((m) => m[0]);
   assert.equal(rows.length, 12);
   const bea = rows.find((r) => r.includes('title="Bea"'));
   assert.match(bea, /8\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-sb" title="Session best" aria-hidden="true">SB<\/abbr><span class="visually-hidden">Session best<\/span><\/td>/);
