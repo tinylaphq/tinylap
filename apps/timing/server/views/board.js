@@ -204,7 +204,7 @@ function feed(snap) {
   const laps = snap.crossings.filter((c) => c.lapMs !== null).slice(0, 12);
   return html`<aside class="board-feed" aria-label="Last laps">
   <h2 class="h3">Last laps</h2>
-  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps${timeWidths(laps.map((c) => c.lapMs))}">${laps.map((c) => html`<li${c.counts ? null : html` class="is-not-counted"`}>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag">Tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag">Not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span>${m.lap(c)}</li>`)}</ol>`}
+  ${laps.length === 0 ? html`<p class="empty">Laps show up here as cars cross the line.</p>` : html`<ol class="board-laps${timeWidths(laps.map((c) => c.lapMs))}">${laps.map((c) => html`<li${c.counts ? null : html` class="is-not-counted"`}>${chip(snap, c.driverId)}<span class="board-laps-tags">${c.via === 'tap' ? html`<span class="tag tag-sm">Tap</span>` : null}${!c.counts && c.driverId ? html`<span class="tag tag-sm">Not counted</span>` : null}</span><span class="num">${formatLap(c.lapMs)}</span>${m.lap(c)}</li>`)}</ol>`}
 </aside>`;
 }
 
@@ -286,7 +286,7 @@ function lastSession(request, snap, link) {
   return html`<section class="board-last" aria-labelledby="board-last-title">
   <h2 class="h3" id="board-last-title">Last session</h2>
   ${r.standings.length === 0 ? html`<p class="empty">No laps were counted.</p>` : html`<ol class="board-ranks lap-credit">${r.standings.slice(0, 3).map((row) => html`<li><span class="pos">${row.position}</span><span class="board-driver">${chip(snap, row.driverId, { holder: m.holder(row) })}</span><span class="num">${formatLap(row.bestMs)}</span>${m.mark(row, true)}</li>`)}</ol>`}
-  <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'datetime-short'))}${r.session.state === 'aborted' ? html` <span class="tag">Aborted</span>` : null}${link ? html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>` : null}</p>
+  <p class="board-last-meta">${KIND[r.session.kind]}, ended ${safe(localTime(ended, 'datetime-short'))}${r.session.state === 'aborted' ? html` <span class="tag tag-sm">Aborted</span>` : null}${link ? html` · <a href="${request.space.base}/sessions/${r.session.id}">All laps</a>` : null}</p>
 </section>`;
 }
 

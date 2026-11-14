@@ -352,7 +352,7 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
     const sections = workspaces.map((w, i) => {
       const head = el(doc, 'div', { class: 'library-ws-head' }, [
         el(doc, 'h3', { class: 'h3', text: workspaceLabel(w, i) }),
-        ...(i === 0 ? [] : [el(doc, 'span', { class: 'tag', text: w.role[0].toUpperCase() + w.role.slice(1) })]),
+        ...(i === 0 ? [] : [el(doc, 'span', { class: 'tag tag-sm', text: w.role[0].toUpperCase() + w.role.slice(1) })]),
       ]);
       const list = w.tracks.length
         ? el(doc, 'ul', { class: 'library-tracks' }, w.tracks.map((t) => trackRow(t, w, current)))
@@ -456,7 +456,7 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
     return el(doc, 'form', { class: 'library-panel library-form', 'data-form': 'rename', 'data-panel': 'rename' }, [
       el(doc, 'label', { for: id, text: 'New name' }),
       el(doc, 'div', { class: 'library-form-row' }, [
-        el(doc, 'input', { type: 'text', id, name: 'name', value: t.name, maxLength: 100, required: true, autocomplete: 'off' }),
+        el(doc, 'input', { type: 'text', class: 'input-sm', id, name: 'name', value: t.name, maxLength: 100, required: true, autocomplete: 'off' }),
         el(doc, 'button', { type: 'submit', class: 'btn btn-sm btn-primary', text: 'Save name' }),
         action(doc, 'Cancel', 'close-panel'),
       ]),
@@ -469,7 +469,7 @@ export function initLibrary(host, { api = libraryApi({ onUnauthorized: host.unau
     return el(doc, 'form', { class: 'library-panel library-form', 'data-form': 'copy', 'data-panel': 'copy' }, [
       el(doc, 'label', { for: id, text: 'Copy to' }),
       el(doc, 'div', { class: 'library-form-row' }, [
-        el(doc, 'select', { id, name: 'workspace' }, targets.map((o) => el(doc, 'option', { value: o.id, text: workspaceLabel(o, workspaces.indexOf(o)) }))),
+        el(doc, 'select', { class: 'input-sm', id, name: 'workspace' }, targets.map((o) => el(doc, 'option', { value: o.id, text: workspaceLabel(o, workspaces.indexOf(o)) }))),
         el(doc, 'button', { type: 'submit', class: 'btn btn-sm btn-primary', text: 'Copy' }),
         action(doc, 'Cancel', 'close-panel'),
       ]),

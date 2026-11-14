@@ -14,17 +14,17 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .navbar { gap: var(--p-space-md); }
 .nav-tabs { display: flex; gap: var(--p-space-xs); align-self: stretch; margin-right: auto; margin-left: var(--p-space-lg); }
 .nav-tab {
-  display: flex; align-items: center; color: var(--p-surface); text-decoration: none; padding: 0 var(--p-space-md);
-  font-size: 13px; font-weight: 600; opacity: 0.7; transition: var(--p-transition);
+  display: flex; align-items: center; color: var(--p-text-on-fill); text-decoration: none; padding: 0 var(--p-space-md);
+  font-size: var(--p-text-sm); font-weight: 600; opacity: 0.7; transition: var(--p-transition);
 }
 .nav-tab, .nav-tab:hover { border-bottom: 0; }
 .nav-tab:hover { opacity: 1; }
 .nav-tab[aria-current="page"] { opacity: 1; box-shadow: inset 0 -3px 0 var(--p-accent-1); }
 .nav-tab:focus-visible { outline: var(--p-border-width) solid var(--p-accent-3); outline-offset: calc(-1 * var(--p-border-width)); }
-.live-status { color: var(--p-surface); white-space: nowrap; }
+.live-status { color: var(--p-text-on-fill); white-space: nowrap; }
 /* The stream's state as a square lamp, like a timing desk's: green live,
  * amber blinking while it reconnects, red once it has given up. */
-.live-status:not(:empty)::before { content: ''; display: inline-block; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); } /* 6px: between palace's steps, waits on palace-ui#24 */
+.live-status:not(:empty)::before { content: ''; display: inline-block; flex: none; width: 8px; height: 8px; margin-right: 6px; background: var(--p-warning); } /* 6px: between palace's steps */
 .live-status[data-state="live"]::before { background: var(--p-success); }
 .live-status[data-state="reconnecting"]::before { background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) infinite; }
 .live-status[data-state="off"]::before { background: var(--p-error); }
@@ -109,7 +109,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-track.is-record .board-track-record { display: grid; justify-items: end; gap: var(--p-space-xs); }
 .board-track-new, .board-track-beat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
 .board-track-new .board-track-label { font-size: 1.4em; letter-spacing: -0.01em; }
-.board-track-new .board-track-time { font-size: 1.8em; line-height: 1.1; }
+.board-track-new .board-track-time { font-size: 1.8em; line-height: var(--p-leading-tight); }
 .board-track-beat { opacity: 0.85; }
 /* The title sits on the clock's bottom edge, not floating at its top. */
 .board-head {
@@ -118,14 +118,14 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .board-title { margin: 0; font-size: clamp(1.75rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -0.02em; }
 .board-clock {
   display: grid; justify-items: end; align-content: center; gap: var(--p-space-xs);
-  padding: var(--p-space-sm) var(--p-space-lg); background: var(--p-dark); color: var(--p-surface);
+  padding: var(--p-space-sm) var(--p-space-lg); background: var(--p-dark); color: var(--p-text-on-fill);
   box-shadow: var(--p-shadow-lg) var(--p-accent-1);
 }
 .board-clock-label { color: var(--p-accent-3); margin: 0; }
 .board-clock-time { font: 700 clamp(2.5rem, 9vw, 6rem) / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
 /* The Sessions tab's clock: one row, the label as palace's .stat-label. */
 .race-clock { display: flex; align-items: baseline; gap: var(--p-space-sm); }
-.race-clock-time { font: 700 1.5rem / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
+.race-clock-time { font: 700 var(--p-text-2xl) / 1 var(--p-font-mono); font-variant-numeric: tabular-nums; }
 
 /* Wide tables scroll inside the board, not the page; the padding keeps the hard
  * shadow in view. Positioned, so palace's .visually-hidden text inside stays in it. */
@@ -140,7 +140,7 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   font-size: 1em; width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0;
   background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text);
 }
-.board-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--p-surface); background: var(--p-dark); }
+.board-table th { font-size: var(--p-text-2xs); text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-on-fill); background: var(--p-dark); }
 .board-table th, .board-table td { padding: var(--cell-y) var(--cell-x); text-align: left; border-bottom: var(--p-border-thin) solid var(--p-border-light); }
 .board-table th { border-bottom-color: var(--p-dark); }
 .board-table tr:last-child > td { border-bottom: 0; }
@@ -226,13 +226,12 @@ tl-bridge { display: block; }
 .board-feed .has-minute-laps li { grid-template-columns: minmax(0, 1fr) auto 4.9em calc(1.8em + var(--p-space-xs)); }
 .board-feed .board-laps .mark-cell { white-space: nowrap; }
 .board-laps-tags { display: flex; flex-wrap: wrap; justify-content: end; gap: var(--p-space-xs); }
-.board-laps .tag { font-size: 10px; padding: 1px 6px; } /* a small tag: waits on palace-ui#23 */
 
 /* The wall screen (?big, spec 6.1): every part follows .board's font size, which
    follows the smaller of the screen's width and height; only the way out stays fixed. */
 body.big .board {
   /* One size in rem and viewport units, so th and td can share paddings made from it. */
-  --board-font: clamp(1rem, min(2.4vw, 3.6vh), 2.6rem);
+  --board-font: clamp(var(--p-text-lg), min(2.4vw, 3.6vh), 2.6rem); /* fluid, past the scale's top step; the board's em sizes follow it */
   font-size: var(--board-font);
   min-height: 100dvh; box-sizing: border-box; max-width: none; align-content: start;
   /* The pill (space-sm down, a control tall) plus a clear gap before the clock. */
@@ -257,7 +256,7 @@ body.big .board-track:has(> .board-track-times) { padding-block: var(--p-space-x
 body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
 body.big .board-table { --cell-x: calc(var(--board-font) * 0.5); --cell-y: calc(var(--board-font) * 0.6); --mark-gap: calc(var(--board-font) * 0.4); }
-body.big .board-feed { font-size: max(0.7em, 0.875rem); }
+body.big .board-feed { font-size: max(0.7em, var(--p-text-md)); }
 body.big .board-ago { font-size: 0.6em; }
 body.big .board-hero-time { font-size: 4.5em; }
 body.big .board-hero-by, body.big .board-last-meta { font-size: 0.7em; }
@@ -270,12 +269,12 @@ body.big .navbar-right { margin: 0; gap: 0; }
 /* The pill's buttons share one border instead of showing the pill between them. */
 body.big .navbar-right > * + * { margin-left: calc(-1 * var(--p-border-thin)); }
 /* A wall screen nobody watches closely still shows when it has gone stale. */
-body.big .navbar-right .live-status:not([data-state="live"]):not([hidden]) { display: inline-flex; min-height: var(--p-control-height); font-size: 16px; padding-inline: var(--p-space-md); }
+body.big .navbar-right .live-status:not([data-state="live"]):not([hidden]) { display: inline-flex; min-height: var(--p-control-height); font-size: var(--p-text-lg); padding-inline: var(--p-space-md); }
 body.big .navbar-right .live-status::before { width: 0.75em; height: 0.75em; }
 body.big .navbar:has(.live-status:not([data-state="live"]):not([hidden])) { opacity: 1; }
-body.big .navbar-right .btn { font-size: 16px; min-height: var(--p-control-height); padding-inline: var(--p-space-md); color: var(--p-surface); }
+body.big .navbar-right .btn { font-size: var(--p-text-lg); min-height: var(--p-control-height); padding-inline: var(--p-space-md); color: var(--p-text-on-fill); }
 @media (max-width: 640px) {
-  body.big .board { --board-font: 0.9rem; }
+  body.big .board { --board-font: var(--p-text-md); }
   body.big .board-table { --cell-x: calc(var(--board-font) * 0.3); }
 }
 
@@ -300,15 +299,13 @@ ul.setup-list { list-style: none; padding: 0; } /* the element selector outweigh
 /* No margin of its own, at no weight, so a stack's gap above the list wins. */
 :where(ul.setup-list) { margin: 0; }
 .setup-row { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); align-items: center; padding-block: var(--p-space-xs); }
-.setup-row .meta { color: var(--p-text-muted); font-size: var(--tl-text-meta); margin-left: auto; }
+.setup-row .meta { color: var(--p-text-muted); font-size: var(--p-text-xs); margin-left: auto; }
 fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .choice input { width: 1.25rem; height: 1.25rem; margin: 0; accent-color: var(--p-text); }
-.choice { min-height: 2.5rem; } /* 40px, between palace's control heights; a choice's look waits on palace-ui#27 */
+.choice { min-height: 2.5rem; } /* 40px, between palace's control heights */
 /* The box keeps its size beside a long name, which wraps instead (and cuts a word too long for the line). */
 .choice input { flex: none; }
-/* belongs upstream in palace-ui: a choice reads as body text, not a label */
-.choice { text-transform: none; letter-spacing: 0; font-size: 1rem; font-weight: 400; color: var(--p-text); }
 .tap-tile:focus-visible { outline: var(--p-border-width) solid var(--p-accent-3); outline-offset: 2px; }
 
 .tap-screen { padding: var(--p-space-md); display: grid; gap: var(--p-space-md); }
@@ -330,7 +327,7 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
    * the tile allows for its longest word (--word, in letters, at about 0.6em
    * a letter), never under 1rem; it breaks between words only, and a word
    * still too long at 1rem ends in "…" (.tap-tile-name). */
-  font: 700 clamp(1rem, (100cqi - 2 * var(--p-space-sm)) / (var(--word, 8) * 0.6), 1.5rem)/1.15 var(--p-font);
+  font: 700 clamp(var(--p-text-lg), (100cqi - 2 * var(--p-space-sm)) / (var(--word, 8) * 0.6), var(--p-text-2xl))/1.15 var(--p-font);
   text-transform: none;
   letter-spacing: 0;
   padding: var(--p-space-sm);
@@ -361,9 +358,9 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .tap-bar[data-state="idle"] { color: var(--p-text-muted); border-left-color: var(--p-text-faint); }
 .tap-bar[data-state="error"] { border-left-color: var(--p-error); }
 .tap-bar .tap-result, .tap-bar .status { margin: 0; text-transform: none; letter-spacing: 0; }
-.tap-bar .status { border: 0; padding: 0; background: none; color: var(--p-text); font-size: clamp(1rem, 3.5vw, 1.5rem); line-height: 1.3; }
+.tap-bar .status { border: 0; padding: 0; background: none; color: var(--p-text); font-size: clamp(var(--p-text-lg), 3.5vw, var(--p-text-2xl)); line-height: 1.3; }
 .tap-bar .tap-result { font: 700 clamp(1.25rem, 5vw, 1.75rem)/1.2 var(--p-font-mono); }
-.tap-bar[data-state="idle"] .tap-result { font: 400 1.125rem var(--p-font); }
+.tap-bar[data-state="idle"] .tap-result { font: 400 var(--p-text-xl) var(--p-font); }
 /* One line: a long name ends in an ellipsis, and the time after it always shows. */
 .tap-bar .tap-result:has(.tap-detail) { display: flex; align-items: center; min-width: 0; }
 .tap-result .tap-state { flex: none; }
@@ -372,7 +369,7 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .tap-detail { flex: none; white-space: pre; }
 /* Too fast has no name, and wraps instead. */
 .tap-name:empty + .tap-detail { flex: 1 1 auto; white-space: normal; }
-.tap-state { display: inline-block; padding: 0.1em 0.5em; margin-right: 0.35em; border: var(--p-border-width) solid var(--p-text); font: 700 0.75rem/1.4 var(--p-font); text-transform: uppercase; letter-spacing: 0.08em; vertical-align: middle; background: var(--p-surface); color: var(--p-text); }
+.tap-state { display: inline-block; padding: 0.1em 0.5em; margin-right: 0.35em; border: var(--p-border-width) solid var(--p-text); font: 700 var(--p-text-xs)/1.4 var(--p-font); text-transform: uppercase; letter-spacing: 0.08em; vertical-align: middle; background: var(--p-surface); color: var(--p-text); }
 [data-state="started"] .tap-state, [data-state="lap"] .tap-state { background: var(--p-success); }
 [data-state="again"] .tap-state { background: var(--p-warning); }
 [data-state="error"] .tap-state { background: var(--p-error); color: var(--p-text); }
@@ -397,9 +394,9 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .decoder-row + .decoder-row { border-top: var(--p-border-thin) solid var(--p-border); }
 .decoder-row:first-child { padding-top: 0; }
 .decoder-row:last-child { padding-bottom: 0; }
-.decoder-row-name { font-size: 13px; color: var(--p-text-muted); margin: 0; }
-.decoder-row-state { font-size: 1.0625rem; font-weight: 700; line-height: 1.3; margin: 0; overflow-wrap: anywhere; }
-.decoder-row-help { font-size: 0.875rem; line-height: 1.45; color: var(--p-text-secondary); margin: var(--p-space-xs) 0 0; }
+.decoder-row-name { font-size: var(--p-text-sm); color: var(--p-text-muted); margin: 0; }
+.decoder-row-state { font-size: var(--p-text-xl); font-weight: 700; line-height: 1.3; margin: 0; overflow-wrap: anywhere; }
+.decoder-row-help { font-size: var(--p-text-md); line-height: 1.45; color: var(--p-text-secondary); margin: var(--p-space-xs) 0 0; }
 .decoder-row-state:empty, .decoder-row-help:empty, .decoder-row-action:empty { display: none; }
 .decoder-row time { white-space: nowrap; }
 /* The one action sits under its words. */
@@ -454,7 +451,7 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .wifi-dialog .wifi-menu > li { margin: 0; }
 .wifi-dialog .wifi-menu > .wifi-menu-end { margin-left: auto; }
 .wifi-dialog .wifi-menu .btn { flex: none; }
-.wifi-hint { font-size: 13px; color: var(--p-text-muted); }
+.wifi-hint { font-size: var(--p-text-sm); color: var(--p-text-muted); }
 /* Under the list, muted: what it can't show, and where the password goes. */
 .wifi-notes { display: grid; gap: var(--p-space-xs); }
 .wifi-state { display: flex; gap: var(--p-space-md); align-items: center; padding: var(--p-space-md); border: var(--p-border-width) solid var(--p-text); }
@@ -466,21 +463,21 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
    line up; the name takes what is left and wraps under itself. */
 .nets { display: grid; gap: var(--p-space-sm); min-width: 0; }
 .nets-head { display: flex; justify-content: space-between; align-items: center; gap: var(--p-space-md); }
-.nets-title { font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--p-text); margin: 0; }
+.nets-title { font-size: var(--p-text-md); font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--p-text); margin: 0; }
 .container .nets-list { list-style: none; padding: 0; margin: 0; }
 .container .nets-list > li { margin: 0; }
 .nets-list[hidden] { display: none; }
-.wifi-empty { font-size: 14px; color: var(--p-text-secondary); padding: var(--p-space-md); border: var(--p-border-width) dashed var(--p-border-dashed); }
+.wifi-empty { font-size: var(--p-text-md); color: var(--p-text-secondary); padding: var(--p-space-md); border: var(--p-border-width) dashed var(--p-border-dashed); }
 .nets [data-scan][hidden] { display: none; }
 .nets-list { border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); max-height: max(10rem, min(24rem, calc(100dvh - 26rem))); overflow-y: auto; overscroll-behavior: contain; }
 .nets-list > li + li { border-top: var(--p-border-thin) solid var(--p-border); }
-.net { display: grid; grid-template-columns: minmax(0, 1fr) 5.25rem 16px; gap: var(--p-space-sm); align-items: center; width: 100%; padding: var(--p-space-sm) var(--p-space-md); min-height: 48px; /* between palace's control heights: no palace size yet */ border: 0; background: none; font: 600 14px/1.35 var(--p-font); text-transform: none; letter-spacing: 0; color: var(--p-text); text-align: left; transition: none; }
+.net { display: grid; grid-template-columns: minmax(0, 1fr) 5.25rem 16px; gap: var(--p-space-sm); align-items: center; width: 100%; padding: var(--p-space-sm) var(--p-space-md); min-height: 48px; /* between palace's control heights: no palace size yet */ border: 0; background: none; font: 600 var(--p-text-md)/1.35 var(--p-font); text-transform: none; letter-spacing: 0; color: var(--p-text); text-align: left; transition: none; }
 .net:hover { background: var(--p-hover-bg); transform: none; box-shadow: none; }
 .net:focus-visible { outline: var(--p-border-width) solid var(--p-accent-2); outline-offset: -4px; transform: none; box-shadow: none; }
 .net-name { overflow-wrap: anywhere; }
-.net-note { display: block; font-size: var(--tl-text-meta); font-weight: 400; color: var(--p-text-muted); margin-top: 2px; } /* 2px: waits on palace-ui#22 */
+.net-note { display: block; font-size: var(--p-text-xs); font-weight: 400; color: var(--p-text-muted); margin-top: var(--p-space-2xs); }
 .net-note[hidden] { display: none; }
-.net-meta { display: flex; justify-content: flex-end; align-items: center; gap: var(--p-space-sm); font-size: var(--tl-text-meta); font-weight: 400; color: var(--p-text-muted); white-space: nowrap; }
+.net-meta { display: flex; justify-content: flex-end; align-items: center; gap: var(--p-space-sm); font-size: var(--p-text-xs); font-weight: 400; color: var(--p-text-muted); white-space: nowrap; }
 .bars { flex: none; width: 16px; height: 14px; fill: currentColor; }
 .bars rect { opacity: .25; }
 [data-signal="strong"] .bars rect, [data-signal="fair"] .bars rect:nth-child(-n+2), [data-signal="weak"] .bars rect:first-child { opacity: 1; }
@@ -491,21 +488,21 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-space-sm); }
 
 /* The bridge screen: the status strip is the loud part, like the lamp on a decoder. */
-.bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-surface); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
+.bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-text-on-fill); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
 .bridge-state p { margin: 0; }
 /* A failure sits at the top, above the card it is about. */
 #bridge > [data-bridge-error] { margin: 0 0 var(--p-space-md); }
 .bridge-state [data-bridge-status] { overflow-wrap: anywhere; min-width: 0; }
 .bridge-state.is-offline { box-shadow: var(--p-shadow-lg) var(--p-warning); }
 /* A stat: the label small, the count under it, at the right of the strip. */
-.bridge-stat { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } /* 2px: waits on palace-ui#22 */
+.bridge-stat { display: flex; flex-direction: column; align-items: flex-end; gap: var(--p-space-2xs); }
 /* At the strip's right, also when the status wraps it onto a line of its own. */
 .bridge-state .bridge-stat { margin-left: auto; }
-.bridge-stat-label { font-size: 0.8125rem; opacity: 0.8; white-space: nowrap; }
-.bridge-outbox { font: 700 1.5rem/1 var(--p-font-mono); }
+.bridge-stat-label { font-size: var(--p-text-sm); opacity: 0.8; white-space: nowrap; }
+.bridge-outbox { font: 700 var(--p-text-2xl)/1 var(--p-font-mono); }
 /* The preview shares the strip's edges; the strip's shadow hangs outside both. */
 .bridge-preview { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); padding: var(--p-space-xs) var(--p-space-md); }
-.bridge-head { display: flex; justify-content: space-between; margin: 0; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-text); font-size: 0.8125rem; font-weight: 600; color: var(--p-text-muted, var(--p-text)); }
+.bridge-head { display: flex; justify-content: space-between; margin: 0; padding-block: var(--p-space-xs); border-bottom: var(--p-border-thin) solid var(--p-text); font-size: var(--p-text-sm); font-weight: 600; color: var(--p-text-muted, var(--p-text)); }
 .container .bridge-preview ol { padding: 0; margin: 0; }
 .bridge-preview li { justify-content: space-between; }
 .bridge-code { font-family: var(--p-font-mono); font-variant-ligatures: none; }
@@ -527,7 +524,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
   background: none; -webkit-text-fill-color: currentColor; color: var(--p-text);
 }
 .board-hero-time { margin: 0; text-align: left; font: 700 clamp(3.5rem, 11vw, 8rem) / 0.95 var(--p-font-mono); letter-spacing: -0.04em; }
-.board-hero-none { margin: var(--p-space-xs) 0; font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.board-hero-none { margin: var(--p-space-xs) 0; font-size: clamp(var(--p-text-3xl), 5vw, 3.5rem); font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .board-hero-by { margin: 0; color: var(--p-text-secondary); }
 .board-hero-by .driver, .board-hero-by .num { color: var(--p-text); }
 /* Three rows, the first kept for the line that a car is on the track, so the button never moves when it comes or goes. */
@@ -559,10 +556,10 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-ranks li:last-child { border-bottom: 0; }
 .board-ranks .pos { font: 700 1em var(--p-font-mono); color: var(--p-text-muted); }
 .board-last-meta { margin: var(--p-space-sm) 0 0; font-size: 0.875em; color: var(--p-text-secondary); }
-.board-last-meta .tag { font-size: 10px; padding: 1px 6px; vertical-align: middle; } /* a small tag: waits on palace-ui#23 */
+.board-last-meta .tag { vertical-align: middle; }
 /* A club that has never driven: one card, the first thing to do as the button. */
 .board-first { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record); padding: var(--p-space-xl); }
-.board-first h1 { margin: 0 0 var(--p-space-xs); font-size: clamp(1.75rem, 4vw, 2.5rem); line-height: 1.05; letter-spacing: -0.02em; }
+.board-first h1 { margin: 0 0 var(--p-space-xs); font-size: clamp(1.75rem, 4vw, var(--p-text-4xl)); line-height: 1.05; letter-spacing: -0.02em; }
 .board-first p { margin: 0 0 var(--p-space-lg); max-width: 60ch; }
 .board-first .board-first-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm) var(--p-space-lg); margin: 0; }
 .board-first-links a:not(.btn) { font-weight: 600; }
@@ -625,23 +622,22 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .is-lit-tr .mark-tr { background: var(--p-text); color: var(--tl-record-ink); }
 .is-lit .driver::before { outline: var(--p-border-width) solid var(--p-text); outline-offset: calc(-1 * var(--p-border-thin)); }
 /* On purple, ink text falls to about 3.7:1: in a record row, each cell's
- * text (and the driver's name, crown outline and second line) turns white
- * while the purple is under it, as tl-board marks it, with no transition so
- * it keeps up with the fill's edge. White is the text-on-fill colour; until
- * TinyLap takes palace-ui's --p-text-on-fill (palace-ui#26) it is --p-surface. */
-.is-lit-tr .is-lit-light { color: var(--p-surface); }
-.is-lit-tr .crown.is-lit-light { stroke: var(--p-surface); }
+ * text (and the driver's name, crown outline and second line) turns
+ * palace's text-on-fill white while the purple is under it, as tl-board
+ * marks it, with no transition so it keeps up with the fill's edge. */
+.is-lit-tr .is-lit-light { color: var(--p-text-on-fill); }
+.is-lit-tr .crown.is-lit-light { stroke: var(--p-text-on-fill); }
 
 /* The navbar's right side: the live status, Big screen and Sign in take the
- * btn-sm box (same padding, 1px border, line height) that the shared account
+ * btn-sm box (its height, 14px sides, 1px border) that the shared account
  * menu's summary has, so they share one height and baseline. Buttons keep
  * palace's .navbar .btn border; the status has none. */
 .navbar-right { display: flex; align-items: center; gap: var(--p-space-sm); }
 .navbar-right > * { margin: 0; }
 .navbar-right .btn, .navbar-right .live-status {
   display: inline-flex; align-items: center; box-sizing: border-box;
-  padding: 6px 14px; /* palace's navbar menu summary, written out: waits on palace-ui#24 */ border: var(--p-border-thin) solid transparent;
-  font: 600 11px/1.4 var(--p-font); letter-spacing: 1px; text-transform: uppercase;
+  min-height: var(--p-control-height-sm); padding: 0 14px; /* .btn-sm's sides: palace writes them out too */ border: var(--p-border-thin) solid transparent;
+  font: 600 var(--p-text-2xs)/1.4 var(--p-font); letter-spacing: 1px; text-transform: uppercase;
 }
 .navbar-right .btn { border-color: var(--p-border-dark); }
 .navbar-right .btn[hidden] { display: none; }
@@ -664,14 +660,14 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 #sound-switch[data-state="wanted"]::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; background: var(--p-warning); animation: live-blink 1s steps(2, jump-none) 3; }
 @media (prefers-reduced-motion: reduce) { #sound-switch[data-state="wanted"]::after { animation: none; } }
 body.big .navbar:has(#sound-switch[data-state="wanted"]) { opacity: 1; }
-body.big .navbar-right .btn-icon { padding-inline: 12px; } /* waits on palace-ui#24 */
+body.big .navbar-right .btn-icon { padding-inline: 12px; } /* between palace's steps: as wide as tall */
 
 /* Notifications in the account menu: palace's setting in a group of its own,
  * its switch on or off, or, once the browser blocks them, a note on how to
  * allow them again. */
 .nav-account-setting[hidden] { display: none; }
-.nav-account-blocked { display: none; margin: 0; padding: var(--p-space-sm) var(--p-space-md); font: 600 13px/1.4 var(--p-font); color: var(--p-text); }
-.nav-account-hint { display: block; margin-top: 2px; font-weight: 400; font-size: var(--tl-text-meta); color: var(--p-text-faint); } /* 2px: waits on palace-ui#22 */
+.nav-account-blocked { display: none; margin: 0; padding: var(--p-space-sm) var(--p-space-md); font: 600 var(--p-text-sm)/1.4 var(--p-font); color: var(--p-text); }
+.nav-account-hint { display: block; margin-top: var(--p-space-2xs); font-weight: 400; font-size: var(--p-text-xs); color: var(--p-text-faint); }
 .nav-account-setting[data-state="blocked"] button { display: none; }
 .nav-account-setting[data-state="blocked"] .nav-account-blocked { display: block; }
 .nav-tabs { list-style: none; margin: 0 auto 0 var(--p-space-lg); padding: 0; display: flex; gap: var(--p-space-xs); align-self: stretch; }
@@ -722,7 +718,7 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; } /* waits on palace-ui
 /* A line that introduces a copyable value sits with it; the next line keeps its distance. */
 .status > p + .copy { margin-top: var(--p-space-xs); }
 .status > .copy + p { margin-top: var(--p-space-md); }
-.decoder-info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; } /* 2px: waits on palace-ui#22 */
+.decoder-info { display: flex; flex-direction: column; gap: var(--p-space-2xs); margin-right: auto; min-width: 0; }
 .decoder-info .meta { margin: 0; }
 /* On a line of its own, under a long name, Unpair keeps the right edge, as every row's actions do. */
 .decoder-info + .btn { margin-left: auto; }
@@ -730,7 +726,7 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; } /* waits on palace-ui
    board's track strip, with no left bar; inside its card it has the 2px border and no shadow. Rename and layout fold away under each track. */
 .track-now { padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); }
 .track-head { margin: 0; }
-.track-head .meta { color: var(--p-text-muted); font-size: var(--tl-text-meta); margin-left: var(--p-space-xs); }
+.track-head .meta { color: var(--p-text-muted); font-size: var(--p-text-xs); margin-left: var(--p-space-xs); }
 .track-now .control-row { --control-row-min: 9rem; }
 .track-subhead { margin: 0; }
 /* A row: the name and its note on the left, the actions on the right, the fold under both. */
@@ -739,7 +735,7 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; } /* waits on palace-ui
 .track-row + .track-row { border-top: var(--p-border-thin) solid var(--p-border-light); }
 .track-row .button-row form, .track-archive form { margin: 0; }
 .track-edit > summary, .track-archive > summary { cursor: pointer; font-weight: 600; width: fit-content; }
-.track-edit > summary { font-size: 13px; color: var(--p-text-secondary); }
+.track-edit > summary { font-size: var(--p-text-sm); color: var(--p-text-secondary); }
 .track-edit[open] > summary, .track-archive[open] > summary { margin-bottom: var(--p-space-sm); }
 /* The fold's two forms share one grid (subgrid), not a control row each: the
    fields end at one edge beside buttons of one width, each on one line even
@@ -816,13 +812,12 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 /* Dates in columns: digits of one width, so times line up row to row. */
 .history-started, .records-table td, .track-drawing figcaption { font-variant-numeric: tabular-nums; }
 /* An Aborted tag as small as the lap tables' tags, so it does not outweigh the session. */
-.history-table .tag { font-size: 10px; padding: 1px 6px; } /* a small tag: waits on palace-ui#23 */
 /* The track under the session, for a phone only; the Track column has it on a wider screen. */
 .history-track { display: none; }
 /* An aborted session's tag in its heading: palace's tag, not the heading's gradient capitals. */
 .sessions-screen h1 .tag { -webkit-text-fill-color: currentColor; color: var(--p-text); text-transform: none; letter-spacing: normal; line-height: normal; vertical-align: middle; }
 .session-facts { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-xl); margin: 0; }
-.session-facts dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
+.session-facts dt { font-size: var(--p-text-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
 .session-facts > div { min-width: 0; }
 .session-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* The fastest lap and who set it (.lap-credit) on one line; a name too long for it ends in "…". */
@@ -835,23 +830,23 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .session-laps .h3 { margin: 0 0 var(--p-space-sm); }
 /* A lap card is headed by the driver's name as it is written, not upper-cased. */
 .session-laps .h3 { text-transform: none; letter-spacing: 0; color: var(--p-text); }
-.session-laps-note { margin: 0 0 var(--p-space-sm); font-size: 13px; color: var(--p-text-muted); }
+.session-laps-note { margin: 0 0 var(--p-space-sm); font-size: var(--p-text-sm); color: var(--p-text-muted); }
 /* A confirmation's action is the destructive one, so it is the filled, main
  * button beside Cancel: palace's danger colours, filled as its error status is.
  * A filled danger button belongs upstream in palace-ui. */
 .confirm-actions .btn-danger { background: var(--p-error); color: var(--p-text); border-color: var(--p-text); }
 .confirm-actions .btn-danger:hover { background: var(--p-dark); color: var(--p-error); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-error); }
 /* A driver's laps: fixed columns, so a tag never moves the time, and every card's columns line up. */
-.lap-table { --cell-x: var(--p-space-sm); --mark-gap: var(--p-space-sm); table-layout: fixed; font-size: 13px; }
+.lap-table { --cell-x: var(--p-space-sm); --mark-gap: var(--p-space-sm); table-layout: fixed; font-size: var(--p-text-sm); }
 .lap-table td, .lap-table th { padding: var(--p-space-xs) var(--cell-x); }
-.lap-table .tag { font-size: 10px; padding: 1px 6px; white-space: nowrap; } /* a small tag: waits on palace-ui#23 */
+.lap-table .tag { white-space: nowrap; }
 /* A time that did not count is muted, in a lap list and in Last laps alike. */
 .lap-table tr.is-not-counted .num, .board-laps li.is-not-counted .num { color: var(--p-text-muted); }
 /* A track's page: each layout drawn on the track's dark floor, the current one large. */
 .track-drawing { margin: 0; display: grid; gap: var(--p-space-xs); }
 .track-drawing-art { background: var(--tl-track-bg); padding: var(--p-space-md); display: grid; place-items: center; }
 .track-drawing-art svg { display: block; width: 100%; height: auto; max-height: 26rem; }
-.track-drawing figcaption { font-size: 13px; color: var(--p-text-secondary); }
+.track-drawing figcaption { font-size: var(--p-text-sm); color: var(--p-text-secondary); }
 .track-drawing.is-current figcaption { font-weight: 600; color: var(--p-text); }
 .track-drawings { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--p-space-md); }
 .track-drawings .track-drawing-art { padding: var(--p-space-sm); }
@@ -940,9 +935,9 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .board-track.is-record .board-decoder::before { background: currentColor; }
 
 /* An avatar (drivers and transponders spec §3): the driver's initials on their colour. Square, as every palace box. */
-.avatar { display: inline-grid; place-items: center; flex: none; width: 2.75rem; height: 2.75rem; background: var(--c); color: var(--p-text); border: var(--p-border-width) solid var(--p-text); font: 700 1rem/1 var(--p-font); overflow: hidden; }
-.avatar.is-lg { width: 4rem; height: 4rem; font-size: 1.35rem; }
-.avatar.is-sm { width: 2rem; height: 2rem; font-size: 0.75rem; border-width: var(--p-border-thin); }
+.avatar { display: inline-grid; place-items: center; flex: none; width: 2.75rem; height: 2.75rem; background: var(--c); color: var(--p-text); border: var(--p-border-width) solid var(--p-text); font: 700 var(--p-text-lg)/1 var(--p-font); overflow: hidden; }
+.avatar.is-lg { width: 4rem; height: 4rem; font-size: var(--p-text-2xl); }
+.avatar.is-sm { width: 2rem; height: 2rem; font-size: var(--p-text-xs); border-width: var(--p-border-thin); }
 
 /* A driver's page (§3.5): the avatar beside the name, the colour a swatch beside the name field,
  * each transponder its number boxed as on its sticker, its label and a quiet Remove. */
@@ -964,12 +959,12 @@ ul.driver-transponders { list-style: none; margin: 0; padding: 0; } /* the eleme
 .driver-transponder > .field { flex: 1 1 auto; min-width: 0; }
 .transponder-number {
   display: inline-grid; place-items: center; flex: none; min-width: 3.5rem; height: var(--p-control-height); padding-inline: var(--p-space-sm);
-  font: 700 1rem/1 var(--p-font-mono); border: var(--p-border-width) solid var(--p-text); background: var(--p-surface-inset);
+  font: 700 var(--p-text-lg)/1 var(--p-font-mono); border: var(--p-border-width) solid var(--p-text); background: var(--p-surface-inset);
 }
 /* Remove is quiet: a link's look, palace's button look undone, 44 px to tap. */
 .driver-page .driver-remove, .roster .driver-remove {
   flex: none; min-height: var(--p-control-height); padding: 0 var(--p-space-xs); margin: 0; border: 0; border-radius: 0;
-  background: none; box-shadow: none; transform: none; font: inherit; font-size: 0.875rem; font-weight: 400; text-transform: none; letter-spacing: normal;
+  background: none; box-shadow: none; transform: none; font: inherit; font-size: var(--p-text-md); font-weight: 400; text-transform: none; letter-spacing: normal;
   color: var(--p-text-secondary); text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer;
 }
 .driver-page .driver-remove:hover, .roster .driver-remove:hover { color: var(--p-text); background: none; box-shadow: none; transform: none; }
@@ -977,7 +972,7 @@ ul.driver-transponders { list-style: none; margin: 0; padding: 0; } /* the eleme
 .best-laps { margin: 0; }
 .best-laps > div { display: flex; align-items: baseline; gap: var(--p-space-md); padding-block: var(--p-space-xs); }
 .best-laps > div + div { border-top: var(--p-border-thin) solid var(--p-border); }
-.best-laps dt { flex: none; min-width: 4.5rem; font-size: 1.125rem; font-weight: 400; }
+.best-laps dt { flex: none; min-width: 4.5rem; font-size: var(--p-text-xl); font-weight: 400; }
 .best-laps dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--p-text-secondary); }
 .best-lap-label { color: var(--p-text); font-weight: 600; }
 
@@ -987,7 +982,7 @@ ul.driver-transponders { list-style: none; margin: 0; padding: 0; } /* the eleme
 /* A pick list (§3.1, §3.3): one framed list, grey group bands, 52 px rows with dividers, a small
  * identity box at the start and quiet details at the right edge. On the form, each row is a submit button. */
 .pick { border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); }
-.pick > .pick-group { margin: 0; padding: var(--p-space-sm) var(--p-space-md); font-size: 0.75rem; font-weight: 700; color: var(--p-text-muted); background: var(--p-surface-inset); border-top: var(--p-border-thin) solid var(--p-border); }
+.pick > .pick-group { margin: 0; padding: var(--p-space-sm) var(--p-space-md); font-size: var(--p-text-xs); font-weight: 700; color: var(--p-text-muted); background: var(--p-surface-inset); border-top: var(--p-border-thin) solid var(--p-border); }
 .pick > .pick-group:first-child { border-top: 0; }
 /* A band can hold a field's label: it reads as the band, not as palace's field label. */
 .pick-group > label { font: inherit; text-transform: none; letter-spacing: normal; color: inherit; margin: 0; }
@@ -1000,7 +995,7 @@ ul.driver-transponders { list-style: none; margin: 0; padding: 0; } /* the eleme
 }
 .pick > .pick-group + .pick-button { border-top: 0; }
 .pick-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-.pick-button .meta { flex: none; margin-left: auto; text-align: right; white-space: nowrap; color: var(--p-text-secondary); font-size: var(--tl-text-meta); }
+.pick-button .meta { flex: none; margin-left: auto; text-align: right; white-space: nowrap; color: var(--p-text-secondary); font-size: var(--p-text-xs); }
 /* Hover and focus look like an open row in Setup's list: the selected-item bar on the inset ground, the name underlined. */
 .pick > .pick-button:hover, .pick > .pick-button:focus-visible { background: var(--p-surface-inset); box-shadow: inset var(--p-border-width) 0 0 var(--p-text); transform: none; outline: none; }
 .pick-button:hover .pick-name, .pick-button:focus-visible .pick-name { text-decoration: underline; text-underline-offset: 0.2em; }
@@ -1019,19 +1014,19 @@ ul.roster { list-style: none; padding: 0; } /* the element selector outweighs pa
 .roster-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--p-space-xs); min-width: 0; }
 .roster-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--p-space-xs) var(--p-space-sm); min-height: var(--p-control-height); }
 .roster-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--p-space-sm); margin: 0; min-width: 0; }
-.roster-name { font-size: 1.125rem; font-weight: 700; }
-.roster-line > .meta { color: var(--p-text-muted); font-size: var(--tl-text-meta); }
+.roster-name { font-size: var(--p-text-xl); font-weight: 700; }
+.roster-line > .meta { color: var(--p-text-muted); font-size: var(--p-text-xs); }
 .roster-head > .button-row { margin-left: auto; }
 ul.roster-tps { list-style: none; margin: 0; padding: 0; }
-.roster-tps { display: flex; flex-wrap: wrap; gap: 0 var(--p-space-md); font-size: 0.875rem; }
+.roster-tps { display: flex; flex-wrap: wrap; gap: 0 var(--p-space-md); font-size: var(--p-text-md); }
 .roster-tps > li { display: flex; align-items: center; gap: var(--p-space-sm); }
 .tp-remove { margin: 0; }
 .tp { display: inline-block; min-width: 2.4em; padding: 0.1em 0.4em; text-align: center; font: 700 0.9em/1.3 var(--p-font-mono); border: var(--p-border-thin) solid var(--p-text); background: var(--p-surface); }
 .tp-label { color: var(--p-text-secondary); }
 /* "Add another transponder" is quiet: a fold under the name, 44 px to tap. */
-.roster-add > summary { display: flex; align-items: center; width: fit-content; min-height: var(--p-control-height); cursor: pointer; font-size: 0.875rem; font-weight: 600; color: var(--p-text-secondary); }
+.roster-add > summary { display: flex; align-items: center; width: fit-content; min-height: var(--p-control-height); cursor: pointer; font-size: var(--p-text-md); font-weight: 600; color: var(--p-text-secondary); }
 .roster-add[open] > summary { color: var(--p-text); }
-.pick-empty { margin: 0 0 var(--p-space-sm); padding: var(--p-space-md); border: var(--p-border-width) dashed var(--p-border-dashed); background: var(--p-surface); font-size: 0.875rem; }
+.pick-empty { margin: 0 0 var(--p-space-sm); padding: var(--p-space-md); border: var(--p-border-width) dashed var(--p-border-dashed); background: var(--p-surface); font-size: var(--p-text-md); }
 /* Setup's add list: each row opens onto its own form. Open, it has the selected-item bar on the
  * inset ground, as a hovered row on the form has; the form lines up under the number. */
 .pick-row + .pick-row { border-top: var(--p-border-thin) solid var(--p-border); }
@@ -1040,11 +1035,11 @@ ul.roster-tps { list-style: none; margin: 0; padding: 0; }
 .pick-row > summary::-webkit-details-marker { display: none; }
 .pick-row > summary::before { content: ""; flex: none; border-block: 0.3em solid transparent; border-left: 0.45em solid var(--p-text-muted); transition: transform 0.1s; }
 .pick-row[open] > summary::before { transform: rotate(90deg); border-left-color: var(--p-text); }
-.pick-row > summary .meta { margin-left: auto; min-width: 0; text-align: right; color: var(--p-text-secondary); font-size: var(--tl-text-body); }
+.pick-row > summary .meta { margin-left: auto; min-width: 0; text-align: right; color: var(--p-text-secondary); font-size: var(--p-text-md); }
 /* A long name is cut, with "…": its whole name is in the title, and in the row's form. */
 .pick-row > summary .meta, .pick-act > .btn { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pick-act > .btn { display: block; max-width: 100%; }
-.pick-row.is-other > summary { font-size: 0.875rem; color: var(--p-text-secondary); }
+.pick-row.is-other > summary { font-size: var(--p-text-md); color: var(--p-text-secondary); }
 .pick-row > summary:hover, .pick-row[open] { background: var(--p-surface-inset); }
 .pick-row[open] { box-shadow: inset var(--p-border-width) 0 0 var(--p-text); }
 .pick-row[open] > summary { font-weight: 700; }
@@ -1060,22 +1055,22 @@ tl-crossing-now { display: block; }
 .pick-act .field { margin: 0; }
 .pick-act .field-hint { overflow-wrap: anywhere; } /* a long name breaks, never spills */
 .pick-number { max-width: 9rem; }
-.pick-move { margin: 0; font-size: 0.875rem; }
+.pick-move { margin: 0; font-size: var(--p-text-md); }
 @media (prefers-reduced-motion: reduce) { .pick-row > summary::before { transition: none; } }
 
 /* Setup's transponders (§3.2): group bands as in the pick list, then rows of number, who or when, actions. */
 .tp-list { border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); }
 .tp-group { display: flex; align-items: center; justify-content: space-between; gap: var(--p-space-sm); padding-right: var(--p-space-sm); background: var(--p-surface-inset); border-top: var(--p-border-thin) solid var(--p-border); }
 .tp-group:first-child { border-top: 0; }
-.tp-list .pick-group { margin: 0; padding: var(--p-space-sm) var(--p-space-md); font-size: 0.75rem; font-weight: 700; color: var(--p-text-muted); }
+.tp-list .pick-group { margin: 0; padding: var(--p-space-sm) var(--p-space-md); font-size: var(--p-text-xs); font-weight: 700; color: var(--p-text-muted); }
 .tp-group > .pick-group { background: none; }
 .tp-list > .pick-group { background: var(--p-surface-inset); }
 ul.tp-rows { list-style: none; margin: 0; padding: 0; }
 .tp-rows > li { display: flex; align-items: center; gap: var(--p-space-xs) var(--p-space-md); min-height: var(--p-control-height-lg); padding: var(--p-space-xs) var(--p-space-md); }
 .tp-rows > li + li { border-top: var(--p-border-thin) solid var(--p-border); }
-.tp-rows .meta, .tp-who { flex: 1 1 0; min-width: 0; font-size: var(--tl-text-body); color: var(--p-text-secondary); }
-.tp-who { font-size: 1rem; font-weight: 600; color: var(--p-text); }
-.tp-who .tp-label { margin-left: var(--p-space-xs); font-size: var(--tl-text-meta); font-weight: 400; color: var(--p-text-muted); }
+.tp-rows .meta, .tp-who { flex: 1 1 0; min-width: 0; font-size: var(--p-text-md); color: var(--p-text-secondary); }
+.tp-who { font-size: var(--p-text-lg); font-weight: 600; color: var(--p-text); }
+.tp-who .tp-label { margin-left: var(--p-space-xs); font-size: var(--p-text-xs); font-weight: 400; color: var(--p-text-muted); }
 /* On a phone the number keeps both lines; its meta or driver on the first, the actions on the second. */
 @media (max-width: 40rem) {
   .tp-rows > li { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; padding-block: var(--p-space-sm); }
@@ -1084,7 +1079,7 @@ ul.tp-rows { list-style: none; margin: 0; padding: 0; }
   .tp-who .tp-label { display: block; margin-left: 0; }
 }
 .tp-acts { flex: none; display: flex; align-items: center; gap: var(--p-space-sm); margin-left: auto; }
-.tp-forget { display: inline-flex; align-items: center; min-height: var(--p-control-height); padding: 0 var(--p-space-xs); font-size: 0.875rem; color: var(--p-text-secondary); text-decoration: underline; text-underline-offset: 0.2em; border: 0; box-shadow: none; background: none; }
+.tp-forget { display: inline-flex; align-items: center; min-height: var(--p-control-height); padding: 0 var(--p-space-xs); font-size: var(--p-text-md); color: var(--p-text-secondary); text-decoration: underline; text-underline-offset: 0.2em; border: 0; box-shadow: none; background: none; }
 .tp-forget:hover { color: var(--p-text); }
 
 /* Collect (§3.6): a framed row per new transponder, its number beside two small forms, one or the other.
@@ -1093,15 +1088,15 @@ ul.tp-rows { list-style: none; margin: 0; padding: 0; }
  * link outlined, the safe answer. tl-crossing-now only toggles .is-crossing. */
 /* The element selector outweighs palace's .container ul; the margin above stays the section's space-md. */
 ul.collect { list-style: none; margin-bottom: 0; padding: 0; display: grid; gap: var(--p-space-md); }
-.container li.collect-row { margin: 0; font-size: 1rem; }
+.container li.collect-row { margin: 0; font-size: var(--p-text-lg); }
 .collect-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--p-space-sm) var(--p-space-md); align-items: start; padding: var(--p-space-md); border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); transition: box-shadow 0.1s; }
-.collect-row > .tp { font-size: 1.4rem; min-width: 2.6em; padding-block: 0.25em; }
+.collect-row > .tp { font-size: var(--p-text-2xl); min-width: 2.6em; padding-block: 0.25em; }
 .collect-body { display: grid; gap: var(--p-space-sm); min-width: 0; container-type: inline-size; }
 .collect-body > form { margin: 0; }
-.collect-seen { margin: 0; min-height: 1.3em; font-size: 0.875rem; color: var(--p-text-secondary); }
-.collect-or { margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--p-text-muted); }
+.collect-seen { margin: 0; min-height: 1.3em; font-size: var(--p-text-md); color: var(--p-text-secondary); }
+.collect-or { margin: 0; font-size: var(--p-text-md); font-weight: 600; color: var(--p-text-muted); }
 .collect-row.is-crossing { box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
-.collect-row.is-crossing button.btn { background: var(--p-accent-1); color: var(--p-surface); border-color: var(--p-accent-1); }
+.collect-row.is-crossing button.btn { background: var(--p-accent-1); color: var(--p-text-on-fill); border-color: var(--p-accent-1); }
 .collect-row.is-crossing button.btn:hover { background: var(--p-dark); color: var(--p-accent-1); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-accent-1); }
 /* Narrow, the button goes under its field and takes the row's width. */
 @container (max-width: 24rem) { .collect-body .control-row > .btn { flex: 1 1 100%; } }

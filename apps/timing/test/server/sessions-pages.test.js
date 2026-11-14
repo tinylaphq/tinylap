@@ -504,8 +504,8 @@ test('laps that did not count say so once a card when none counted, tags read in
   const anaCard = cards.find((c) => c.includes('>Ana<'));
   assert.match(anaCard, /<p class="session-laps-note">None of these laps counted\.<\/p>/);
   assert.equal(anaCard.match(/class="is-not-counted"/g).length, 3);
-  assert.doesNotMatch(anaCard, /class="tag"/, 'no tag repeated on every row');
-  assert.doesNotMatch(body, /class="tag">(tap|not counted)</);
+  assert.doesNotMatch(anaCard, /class="tag[ "]/, 'no tag repeated on every row');
+  assert.doesNotMatch(body, /class="tag(?: tag-sm)?">(tap|not counted)</);
   assert.doesNotMatch(body, /table-key|is-best/);
 });
 
@@ -551,7 +551,7 @@ test('FL on P1 of a qualifying; a tapped lap can hold it, a lap that did not cou
   page = await pageOf(ws, session.id);
   assert.match(page.table, /<td class="pos">1<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Fay">[\s\S]*?9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"/);
   const fay = page.cards.find((c) => c.includes('title="Fay"'));
-  assert.match(fay, /<td class="num">9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"[\s\S]*?<span class="tag">Tap<\/span>/);
+  assert.match(fay, /<td class="num">9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"[\s\S]*?<span class="tag tag-sm">Tap<\/span>/);
   assert.equal([...page.cards.join('').matchAll(/mark-fl/g)].length, 1, 'Gus\'s 9.600 keeps no mark now');
 });
 
