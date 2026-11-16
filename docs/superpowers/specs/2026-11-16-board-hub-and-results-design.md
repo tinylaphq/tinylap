@@ -44,7 +44,7 @@ The same strip heads the idle board, the never-driven board, the live board and 
 
 ## 4. The board
 
-While nothing runs, two columns, `minmax(0, 1.75fr) minmax(16rem, 1fr)`, with a wide gap (the mockups use 48px: palace has no step that size yet, so add `--p-space-2xl` to palace-ui, or use `--p-space-xl` (call)). One level of box: the result's cards, the table, the Start panel and Fastest on this track are the only boxes; nothing wraps them.
+While nothing runs, two columns, `minmax(0, 1.75fr) minmax(16rem, 1fr)`, with `--p-space-2xl` (48px) between them. One level of box: the result's cards, the table, the Start panel and Fastest on this track are the only boxes; nothing wraps them.
 
 ### 4.1 Nothing running
 
