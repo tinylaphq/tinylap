@@ -392,7 +392,9 @@ export const TOOLS = [
       if (!running) return null;
       const minutes = Math.floor(Math.max(0, request.now() - (running.opensAt ?? running.createdAt)) / 60_000);
       const what = KIND_NAMES[args.kind];
-      const now = runningFor(running.kind, minutes, request.engine.driverCount(running), running.state === 'countdown');
+      // As the Sessions page counts them: the roster, or without one the drivers with a lap so far.
+      const drivers = running.roster ? running.roster.length : request.engine.driverCount(running);
+      const now = runningFor(running.kind, minutes, drivers, running.state === 'countdown');
       const fate = running.kind === 'practice' ? 'ends it, as a finished practice' : `aborts it; its laps stay in the history`;
       return { message: `${now} Starting this ${what} ${fate}.`, state: running.id };
     },

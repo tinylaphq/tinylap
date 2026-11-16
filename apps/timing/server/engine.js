@@ -196,7 +196,10 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const step = nextLap(reference, { boot: passing.boot, t: passing.t }, { minLap, maxLap });
     const lapMs = step.kind === 'lap' ? step.ms : null;
     const fastest = fastestOf(stateOf(session));
+    const entered = session.kind !== 'practice' && session.roster === null && driverId !== null && !(driverId in stateOf(session).drivers);
     const counts = applyCrossing(rulesOf(session), stateOf(session), { driverId, at, lapMs });
+    // Without a roster a driver's first crossing adds their row, counted or not.
+    const joined = entered && driverId in stateOf(session).drivers;
     const row = {
       workspaceId, sessionId: session.id, ...passing, driverId, at, lapMs, counts, via,
       ref: step.kind === 'start' || step.kind === 'lap',
@@ -211,7 +214,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     // The session's first counted lap beat no fastest lap.
     if (counts) noteMoment(session, row, { fl: fastest !== null && lapMs < fastest, pb, tr });
     hub.publish(workspaceId, 'crossing', memberCrossing(row), watcherCrossing(row));
-    if (counts) publishStandings(session);
+    if (counts || joined) publishStandings(session);
     if (session.state === 'finishing' && isComplete(rulesOf(session), stateOf(session), now(), maxLap)) endSession(session, now());
     return row;
   }

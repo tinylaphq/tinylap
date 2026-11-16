@@ -124,6 +124,20 @@ test('a race ends at the latest twice the slowest best lap after the close, and 
   assert.equal(finishLimit(open, fast, 10_000), 16_000);
 });
 
+test('without a roster, a crossing before the start makes no entrant', () => {
+  const open = { ...race, roster: null };
+  const { state, counted } = run(open, [['ben', 99_000, null], ['ana', 100_100, null], ['ana', 108_100, 8000]]);
+  assert.deepEqual(counted, [false, false, true]);
+  assert.deepEqual(Object.keys(state.drivers), ['ana']);
+  run(open, [['ana', 401_000, 8000]], state);
+  assert.equal(isComplete(open, state, 401_000), true, 'ben never raced');
+  const quali = { ...qualifying, roster: null };
+  const q = run(quali, [['ben', 99_500, 7000], ['ana', 108_000, 8000]]).state;
+  assert.deepEqual(standings(quali, q).map((s) => s.driverId), ['ana']);
+  // With a roster, as before, the countdown crossing keeps its driver's last crossing.
+  assert.equal(run(race, [['ben', 99_000, null]]).state.drivers.ben.lastAt, 99_000);
+});
+
 test('a qualifying without a roster ends when each who crossed has crossed after the close', () => {
   const open = { ...qualifying, roster: null };
   const { state } = run(open, [['ana', 108_000, 8000], ['ben', 109_000, 9000], ['ana', 401_000, 8000]]);

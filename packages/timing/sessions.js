@@ -36,6 +36,8 @@ function addLap(d, ms, at) {
 export function applyCrossing(rules, state, { driverId, at, lapMs }) {
   if (driverId === null) return false;
   if (rules.roster && !rules.roster.includes(driverId)) return false;
+  // Without a roster, only a crossing from the start on makes an entrant: not one in a race's countdown, nor a late one from before it.
+  if (!rules.roster && rules.kind !== 'practice' && (rules.opensAt === null || at < rules.opensAt)) return false;
   const d = (state.drivers[driverId] ??= fresh());
   d.lastAt = at;
   if (rules.kind === 'practice') {
