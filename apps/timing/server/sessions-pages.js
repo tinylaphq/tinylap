@@ -22,7 +22,8 @@ import { sessionsPage } from './views/sessions.js';
 const NO_RACE = { message: 'There is no running qualifying or race here.' };
 const NO_PRACTICE = { message: 'There is no running practice here.' };
 const PAGE = 20;
-const LATEST_RECORDS = 5;
+/** A gap longer than this between one session's end and the next's start begins another club night (board hub spec §7). */
+const NIGHT_GAP_MS = 6 * 3_600_000;
 /** A confirmation sent twice: the session running is the one its first send started, if of its kind and this new. */
 const DOUBLE_SUBMIT_MS = 10_000;
 /** The history's page cursor, "<createdAt>.<id>" of the last row shown. */
@@ -63,7 +64,32 @@ function historyOf(request, before) {
     }
   }
   const last = sessions[PAGE - 1];
-  return { rows, older: ended.length > PAGE ? `${last.createdAt}.${last.id}` : null, newer: before === null ? null : newerOf(request, sessions[0]) };
+  return { rows, nights: nightsOf(rows), older: ended.length > PAGE ? `${last.createdAt}.${last.id}` : null, newer: before === null ? null : newerOf(request, sessions[0]) };
+}
+
+/**
+ * The rows, newest first, cut into club nights: a run of sessions with no gap over
+ * NIGHT_GAP_MS between one's end and the next's start, on one track and direction.
+ * The server knows no time zone, so a night is never a calendar day. Each night
+ * starts at its first (oldest) session on the page.
+ * @param {any[]} rows
+ */
+function nightsOf(rows) {
+  const startOf = (session) => session.opensAt ?? session.createdAt;
+  const nights = [];
+  let night = null;
+  for (const row of rows) {
+    const { session } = row;
+    const older = night?.rows.at(-1).session;
+    const apart = older && startOf(older) - (session.endedAt ?? startOf(session)) > NIGHT_GAP_MS;
+    if (!night || apart || session.trackId !== older.trackId || session.direction !== older.direction) {
+      night = { track: row.track, direction: session.direction, rows: [] };
+      nights.push(night);
+    }
+    night.rows.push(row);
+    night.at = startOf(session);
+  }
+  return nights;
 }
 
 /**
@@ -77,15 +103,14 @@ function newerOf(request, first) {
   return next.length > PAGE ? `${next[PAGE].createdAt}.${next[PAGE].id}` : '';
 }
 
-/** The record history of the current track and direction; `limit` -1 for all of it. */
-function recordsOf(request, limit) {
+/** The record history of the current track and direction, all of it. */
+function recordsOf(request) {
   const { track, direction } = trackOf(request);
-  return { track, direction, rows: track ? request.store.recordHistory(request.workspaceId, track.id, direction, { limit }) : [] };
+  return { track, direction, rows: track ? request.store.recordHistory(request.workspaceId, track.id, direction, { limit: -1 }) : [] };
 }
 
 /**
- * The Sessions tab. Only a 200, the answer to GET, lets the clock reload the page: a reload
- * of the answer to a POST would send the form again.
+ * The Sessions tab: the history, and a line while a session runs (board hub spec §7).
  * @param {any} request @param {number} status @param {{ error?: any, errors?: any[] }} [extras]
  */
 function renderTab(request, status, { error = null, errors = error ? [error] : [] } = {}) {
@@ -93,12 +118,10 @@ function renderTab(request, status, { error = null, errors = error ? [error] : [
   const cursor = CURSOR.exec(request.url.searchParams.get('before') ?? '');
   const before = cursor ? { createdAt: Number(cursor[1]), id: cursor[2] } : null;
   return page(request, status, sessionsPage(request, {
-    session: request.store.runningSession(ws),
+    running: request.store.runningSession(ws),
     drivers: request.store.drivers(ws),
     history: historyOf(request, before),
-    records: recordsOf(request, LATEST_RECORDS),
     errors,
-    reload: status === 200,
   }));
 }
 
@@ -225,7 +248,7 @@ function showSession(request, match) {
 
 function showRecords(request) {
   const { store, workspaceId: ws } = request;
-  const records = recordsOf(request, -1);
+  const records = recordsOf(request);
   // The Layout column only where the track has had a layout.
   const layoutOf = records.track?.layout ? (at) => store.layoutAt(ws, records.track.id, at) : null;
   return page(request, 200, recordsPage(request, { ...records, drivers: store.drivers(ws), layoutOf }));

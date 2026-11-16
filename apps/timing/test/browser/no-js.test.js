@@ -141,7 +141,10 @@ test('a race and Back and Forward across a POST and its 303 change nothing twice
   assert.equal(pathOf(page), '/personal/board');
   assert.equal(app.engine.snapshot(personal).session?.id, started);
 
+  // Sessions says a race runs, and leads to the board, which aborts it.
   await page.getByRole('link', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('link', { name: 'Go to the board' }).click();
+  assert.equal(pathOf(page), '/personal/board');
   await page.getByRole('link', { name: 'Abort' }).click();
   await page.getByRole('heading', { name: 'Abort the race?' }).waitFor();
   await page.getByRole('button', { name: 'Abort' }).click();
