@@ -27,7 +27,7 @@ function notice(request, { title, heading = title, text, action, navSignIn }) {
 export const startPage = (request) => notice(request, {
   title: 'TinyLap Timing',
   heading: 'Lap times, live',
-  text: 'Time your track from a decoder on USB or Wi-Fi, or tap laps by hand, and show the board on every screen.',
+  text: 'Time your track from a decoder on USB or Wi-Fi, and show the board on every screen.',
   action: { href: '/auth/login?returnTo=%2F', label: 'Sign in' },
   navSignIn: false, // the card's button is the one Sign in
 });

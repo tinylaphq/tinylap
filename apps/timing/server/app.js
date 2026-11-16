@@ -112,14 +112,14 @@ async function dispatch(request, routes, serveStatic) {
 
 /** Per-minute and per-hour budgets (spec §9). */
 // mcp: calls per member per minute; mcpAnon: refused /mcp requests per client per minute.
-const LIMITS = { ingest: 600, logs: 600, tap: 120, pair: 10, mcp: 300, mcpAnon: 60 };
+const LIMITS = { ingest: 600, logs: 600, pair: 10, mcp: 300, mcpAnon: 60 };
 /** When an open member stream checks its viewer's access again after an outage or error (#39). */
 const ACCESS_CHECK_MS = 15_000;
 
 /**
  * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string,
  *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
- *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, logs?: number, tap?: number, pair?: number, mcp?: number, mcpAnon?: number }, accessCheckMs?: number, noticeToken?: string,
+ *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, logs?: number, pair?: number, mcp?: number, mcpAnon?: number }, accessCheckMs?: number, noticeToken?: string,
  *   streams?: import('./member-streams.js').MemberStreams }} options
  */
 export function createHandler(options) {
@@ -155,8 +155,6 @@ export function createHandler(options) {
       ingest: rateLimiter({ limit: limits.ingest, windowMs: 60_000, now }),
       // Decoder log lines per decoder per minute.
       logs: rateLimiter({ limit: limits.logs, windowMs: 60_000, now }),
-      // Taps per member per minute.
-      tap: rateLimiter({ limit: limits.tap, windowMs: 60_000, now }),
       // New decoders per member per hour.
       pair: rateLimiter({ limit: limits.pair, windowMs: 3_600_000, now }),
       // MCP tool calls per member, and refused MCP requests per client address, per minute.

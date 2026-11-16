@@ -177,27 +177,6 @@ test('Start practice pressed twice starts one practice and lands on the board', 
   app.engine.end(office.id, started.id);
 });
 
-test('Start practice on the Tap page leads back to the Tap page', async () => {
-  const first = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['from', 'tap']]);
-  assert.equal(first.status, 303);
-  assert.equal(first.headers.get('location'), `${base}/tap`);
-  const started = app.store.runningSession(office.id);
-  clock.now += 2000;
-  const again = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['from', 'tap']]);
-  assert.equal(again.headers.get('location'), `${base}/tap`, 'pressed twice: back to Tap too');
-  clock.now += 10_000;
-  const ask = await (await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['from', 'tap']])).text();
-  const fields = [...ask.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(fields, [['kind', 'practice'], ['from', 'tap'], ['replace', started.id]], 'the confirmation keeps where it came from');
-  const replaced = await app.form(member, `${base}/sessions`, fields);
-  assert.equal(replaced.headers.get('location'), `${base}/tap`);
-  app.engine.end(office.id, app.store.runningSession(office.id).id);
-  clock.now += 20_000;
-  const forged = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['from', 'https://example.com/']]);
-  assert.equal(forged.headers.get('location'), `${base}/board`, 'only tap is a place to go back to');
-  app.engine.end(office.id, app.store.runningSession(office.id).id);
-});
-
 test('a practice\'s confirmation carries only its kind and the session it ends', async () => {
   const [a] = app.store.drivers(office.id);
   await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['qualifying-drivers', 'chosen'], ['qualifying-roster', a.id], ['qualifying-minutes', '5']]);
@@ -504,15 +483,16 @@ test('laps that did not count say so once a card when none counted, tags read in
   const { session } = app.engine.start(ws, { kind: 'race', roster: [cy.id], durationMs: 600_000, countdownMs: 0 });
   // Ana is not on the roster: none of her laps count.
   for (const [t, code] of [[20_001_000, '31'], [20_002_000, '41'], [20_010_000, '31'], [20_011_000, '41'], [20_019_000, '31'], [20_028_000, '31']]) pass(ws, t, code);
-  clock.now = T0 + 20_030_000;
-  app.engine.tap(ws, cy.id);
   app.engine.abort(ws, session.id);
+  // A lap tapped by hand, from before the Tap page went: it stays, tagged.
+  app.store.addCrossing({ workspaceId: ws, sessionId: session.id, decoder: `tap:${ws}`, boot: session.id, transponder: cy.id, t: T0 + 20_030_000, driverId: cy.id, at: T0 + 20_030_000, lapMs: 2000, counts: true, ref: true, via: 'tap', flag: null });
   const body = await (await get(`/clubs/${ws}/sessions/${session.id}`, lena)).text();
   const cards = [...body.matchAll(/<div class="card-static session-laps" id="driver-[^"]+">[\s\S]*?<\/table>/g)].map((m) => m[0]);
   const anaCard = cards.find((c) => c.includes('>Ana<'));
   assert.match(anaCard, /<p class="session-laps-note">None of these laps counted\.<\/p>/);
   assert.equal(anaCard.match(/class="is-not-counted"/g).length, 3);
   assert.doesNotMatch(anaCard, /class="tag[ "]/, 'no tag repeated on every row');
+  assert.match(body, /<span class="tag tag-sm">Tap<\/span>/, 'an old tapped lap keeps its tag');
   assert.doesNotMatch(body, /class="tag(?: tag-sm)?">(tap|not counted)</);
   assert.doesNotMatch(body, /table-key|is-best/);
 });
@@ -541,30 +521,21 @@ test('a race\'s page: FL on the session\'s fastest lap in its table and its laps
   assert.doesNotMatch(body, /class="crown"/, 'nobody here holds the record');
 });
 
-test('FL on P1 of a qualifying; a tapped lap can hold it, a lap that did not count never does, and a tie keeps the earlier lap', async () => {
+test('FL on P1 of a qualifying; a lap that did not count never holds it, and a tie keeps the earlier lap', async () => {
   const ws = lapless.id;
   const { Fay, Gus } = await driversIn(ws, { Fay: '61', Gus: '62', Hal: '63' }, lena);
   clock.now = T0 + 40_000_000;
   const { session } = app.engine.start(ws, { kind: 'qualifying', roster: [Fay.id, Gus.id], durationMs: 600_000, countdownMs: 0 });
   // Hal is not on the roster: his 9.300 does not count. Gus and Fay both drive 9.600, Gus first.
   for (const [t, code] of [[40_001_000, '61'], [40_001_100, '62'], [40_001_200, '63'], [40_010_500, '63'], [40_010_700, '62'], [40_010_800, '61'], [40_020_400, '61']]) pass(ws, t, code);
-  let page = await pageOf(ws, session.id);
+  const page = await pageOf(ws, session.id);
   /** P1's card: its name and its figure, the best lap with its mark. */
   const pole = (result) => /<article class="place is-first">[\s\S]*?<\/article>/.exec(result)[0];
   assert.equal(page.result.match(/mark-fl/g).length, 1);
   assert.match(pole(page.result), /<span class="driver-name" title="Gus">[\s\S]*?<p class="place-figure"><span class="num">9\.600<\/span><span class="mark-cell"><abbr class="mark mark-fl"/, 'P1, whose 9.600 came first');
   assert.doesNotMatch(page.cards.find((c) => c.includes('title="Hal"')), /mark-fl/, 'Hal\'s faster lap did not count');
-  // Fay taps a lap faster than anyone's (a tapped lap runs from her last tap): it counts, and it is the fastest lap.
-  clock.now = T0 + 40_030_000;
-  app.engine.tap(ws, Fay.id);
-  clock.now = T0 + 40_039_000;
-  app.engine.tap(ws, Fay.id);
+  assert.doesNotMatch(page.cards.find((c) => c.includes('title="Fay"')), /mark-fl/, 'Fay\'s 9.600 came after Gus\'s');
   app.engine.abort(ws, session.id);
-  page = await pageOf(ws, session.id);
-  assert.match(pole(page.result), /<span class="driver-name" title="Fay">[\s\S]*?<p class="place-figure"><span class="num">9\.000<\/span><span class="mark-cell"><abbr class="mark mark-fl"/);
-  const fay = page.cards.find((c) => c.includes('title="Fay"'));
-  assert.match(fay, /<td class="num">9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-fl"[\s\S]*?<span class="tag tag-sm">Tap<\/span>/);
-  assert.equal([...page.cards.join('').matchAll(/mark-fl/g)].length, 1, 'Gus\'s 9.600 keeps no mark now');
 });
 
 test('a signed-out request for a session page goes to sign-in', async () => {

@@ -117,7 +117,7 @@ export function runningFor(kind, minutes, drivers, countingDown = false) {
  * `replace` naming that session (records spec §5.2), so it ends only what it named.
  * @param {any} request @param {{ kind: string, fields: string[][] }} sent readStart's kind and fields
  */
-function askReplace(request, { kind, fields }, running, from = null) {
+function askReplace(request, { kind, fields }, running) {
   const base = request.space.base;
   const minutes = Math.floor(Math.max(0, request.now() - (running.opensAt ?? running.createdAt)) / 60_000);
   const drivers = running.roster ? running.roster.length : request.engine.driverCount(running);
@@ -128,9 +128,9 @@ function askReplace(request, { kind, fields }, running, from = null) {
     text: `${runningFor(running.kind, minutes, drivers, running.state === 'countdown' && request.now() < running.opensAt)} Starting this ${what} ends it.`,
     action: `${base}/sessions`,
     button: 'Start',
-    back: from === 'tap' ? `${base}/tap` : `${base}/board`,
-    screen: from === 'tap' ? 'tap' : 'board',
-    fields: [...fields, ...(from ? [['from', from]] : []), ['replace', running.id]],
+    back: `${base}/board`,
+    screen: 'board',
+    fields: [...fields, ['replace', running.id]],
   }));
 }
 
@@ -147,19 +147,18 @@ async function start(request) {
   const sent = readStart(request, form);
   // Every field's error at once, in the form's order, so one round trip shows all that needs fixing.
   if (sent.errors.length) return startFailed(request, sent.errors[0].status, sent.errors, sent.values);
-  // Where a start leads: the board, or back to the Tap page its form came from (a fixed name, never a URL).
-  const from = form.get('from') === 'tap' ? 'tap' : null;
-  const done = `${request.space.base}/${from ?? 'board'}`;
+  // A start leads to the board.
+  const done = `${request.space.base}/board`;
   // A confirmation replaces only the session it named. From here to the start nothing awaits,
   // so what runs cannot change in between.
   // Sent twice (a double click, two members): the session running is the one the first send started.
   const twice = (running) => running.kind === sent.kind && request.now() - running.createdAt < DOUBLE_SUBMIT_MS;
   const named = form.get('replace');
   const running = named ? request.store.runningSession(request.workspaceId) : null;
-  if (running && running.id !== named) return twice(running) ? seeOther(done) : askReplace(request, sent, running, from);
+  if (running && running.id !== named) return twice(running) ? seeOther(done) : askReplace(request, sent, running);
   const result = ops.startSession(request, { roster: undefined, durationSeconds: undefined, countdownSeconds: undefined, ...sent.args, replace: running !== null });
   if (!result.error) return seeOther(done);
-  if ('running' in result.error) return twice(result.error.running) ? seeOther(done) : askReplace(request, sent, result.error.running, from);
+  if ('running' in result.error) return twice(result.error.running) ? seeOther(done) : askReplace(request, sent, result.error.running);
   return startFailed(request, result.error.status, [result.error], sent.values);
 }
 

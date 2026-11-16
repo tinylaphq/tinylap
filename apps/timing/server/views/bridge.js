@@ -248,7 +248,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     <template data-bridge-sign-in><a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}">Sign in again</a> to send them.</template>
     <section data-bridge-state="unsupported" class="card-static space-md">
       <p>The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID.</p>
-      <p>Timing still works without it: the decoder can send its passings over Wi-Fi (<a href="${base}/setup">Pair over Wi-Fi only</a> on Setup), and you can <a href="${base}/tap">tap laps by hand</a>.</p>
+      <p>Timing still works without it: the decoder can send its passings over Wi-Fi (<a href="${base}/setup">Pair over Wi-Fi only</a> on Setup).</p>
     </section>
     ${decoderCards(request, connections, { mayPair })}
     <section data-bridge-state="connect" hidden class="bridge-more space-sm">

@@ -4,14 +4,13 @@
 
 // Passings in (spec §5). A decoder posts with its own token over Wi-Fi; the
 // bridge tab posts the same passings with a member's session, from the
-// cable. The engine keeps one copy. Tap entry is a passing by hand.
+// cable. The engine keeps one copy.
 import { can } from '@tinylap/auth';
 import { parseLog, readBatch } from '@tinylap/timing';
-import { NO_STORE, workspaceRoute } from './access.js';
+import { NO_STORE } from './access.js';
 import { withSession } from './auth.js';
 import { rateLimited, readJson } from './body.js';
-import * as ops from './operations.js';
-import { json, opProblem, problem } from './responses.js';
+import { json, problem } from './responses.js';
 import { tokenHash } from './setup.js';
 
 // A key that would only be there by mistake: the firmware never logs these.
@@ -88,14 +87,6 @@ const postPassings = withSession(async (request, match) => {
   return json(200, { ...answer, watched: request.boardViewers.count(decoder.workspaceId) > 0 }, NO_STORE);
 });
 
-async function postTap(request) {
-  const { body, error } = await readJson(request);
-  if (error) return error;
-  const r = ops.tap(request, { driverId: body.driverId });
-  return r.error ? opProblem(request, r.error) : json(200, r.value, NO_STORE);
-}
-
 export const ingestRoutes = [
   { pattern: /^\/decoders\/([^/]+)\/passings$/, credentials: true, methods: { POST: postPassings } },
-  { pattern: /^\/workspaces\/([^/]+)\/tap$/, credentials: true, methods: { POST: workspaceRoute('timing.run', postTap, { write: true }) } },
 ];

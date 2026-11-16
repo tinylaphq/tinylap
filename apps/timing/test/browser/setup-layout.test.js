@@ -2,9 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Tap and Setup in the browser, at a phone's and a laptop's width: a long
-// name stays inside its tile, unbroken inside its words, never under 16px,
-// and the result bar keeps its height after a tap; on Setup a section's
+// Setup in the browser, at a phone's and a laptop's width: a section's
 // heading keeps its gap to what follows, actions in a row of text share
 // palace's small control height, the row's
 // actions end at the section's edge, a driver's add list has 52 px rows, and a
@@ -44,67 +42,6 @@ after(async () => {
 });
 
 for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['phone', PHONE], ['desktop', DESKTOP]]) {
-  test(`tap at ${size} width: every name stays inside its tile, broken only between words, in its own case, at 16px or more`, async (t) => {
-    const { context, page, errors } = await pageAs(browser, app, member, { viewport });
-    t.after(() => context.close());
-    await page.goto('/personal/tap');
-    const tiles = await page.locator('.tap-tile').evaluateAll((els) => els.map((el) => {
-      const box = el.getBoundingClientRect();
-      const range = document.createRange();
-      const name = el.querySelector('.tap-tile-name');
-      range.selectNodeContents(name);
-      const text = range.getBoundingClientRect();
-      // Each word's own boxes: a word broken inside itself has more than one line box.
-      const words = [];
-      const node = name.firstChild;
-      let at = 0;
-      for (const word of el.textContent.split(' ')) {
-        const r = document.createRange();
-        r.setStart(node, at);
-        r.setEnd(node, at + word.length);
-        const lines = new Set([...r.getClientRects()].map((rect) => Math.round(rect.top)));
-        words.push({ word, lines: lines.size });
-        at += word.length + 1;
-      }
-      return { name: el.textContent, transform: getComputedStyle(el).textTransform, transition: getComputedStyle(el).transitionProperty, size: parseFloat(getComputedStyle(el).fontSize), inside: text.left >= box.left && text.right <= box.right + 0.5 && el.scrollWidth <= el.clientWidth && name.scrollWidth <= name.clientWidth, words };
-    }));
-    for (const tile of tiles) {
-      assert.ok(tile.inside, `${tile.name} inside its tile`);
-      assert.equal(tile.transform, 'none', `${tile.name} keeps its case`);
-      // A size that follows the tile must not animate, or it passes through sizes under 1rem on the way.
-      assert.doesNotMatch(tile.transition, /\ball\b|font/, `${tile.name}: its size never animates`);
-      assert.ok(tile.size >= 16, `${tile.name}: ${tile.size}px, not under 16px`);
-      for (const w of tile.words) assert.equal(w.lines, 1, `${tile.name}: "${w.word}" on one line`);
-    }
-    assert.deepEqual(errors, []);
-  });
-
-  test(`tap at ${size} width: the result bar keeps its height after a long name's tap, and the time stays in view`, async (t) => {
-    const { context, page, errors } = await pageAs(browser, app, member, { viewport });
-    t.after(() => context.close());
-    await page.goto('/personal/tap');
-    const bar = page.locator('.tap-bar');
-    const before = (await bar.boundingBox()).height;
-    const firstTile = (await page.locator('.tap-tile').first().boundingBox()).y;
-    app.engine.start(ws, { kind: 'practice', replace: true });
-    clock.now += 1000;
-    await page.getByRole('button', { name: LONG }).click();
-    await page.locator('#tap-result').filter({ hasText: `${LONG}: started` }).waitFor();
-    clock.now += 8000;
-    await page.getByRole('button', { name: LONG }).click();
-    await page.locator('#tap-result').filter({ hasText: `${LONG}: 8.000` }).waitFor();
-    assert.equal((await bar.boundingBox()).height, before, 'the bar keeps its height');
-    assert.equal((await page.locator('.tap-tile').first().boundingBox()).y, firstTile, 'the tiles stay put');
-    const time = await page.locator('#tap-result .tap-detail').evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      const b = el.closest('.tap-bar').getBoundingClientRect();
-      return { right: r.right, barRight: b.right, text: el.textContent };
-    });
-    assert.equal(time.text, ': 8.000');
-    assert.ok(time.right <= time.barRight, 'the time is inside the bar');
-    assert.deepEqual(errors, []);
-  });
-
   test(`setup at ${size} width: a heading keeps its gap, row actions share one lighter height, and end at the section's edge`, async (t) => {
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());
