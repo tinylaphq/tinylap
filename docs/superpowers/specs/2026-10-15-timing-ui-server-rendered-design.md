@@ -28,7 +28,7 @@ and how it talks back.
 | Where are pages made? | **On the server**, from the store, with an escaping HTML template helper (§4). No client-side rendering of pages. |
 | URLs | **Real paths**, one per screen, under the space they belong to: `/clubs/<id>/…` or `/personal/…` (§3). No hash routes, no client router. The address bar is always a link to what you see. |
 | How do changes reach the server? | **Plain `<form method="post">`** to the page's own resource URLs; the server answers **303 See Other** to the page that shows the result (POST/redirect/GET). A failed form comes back as the same page, **status 422**, with the error next to the field and the input kept. |
-| Where does JavaScript stay? | **Progressive enhancement only** (§7): live board updates over SSE, the ticking clock, instant tap entry, full-screen mode, and the USB bridge (Web Serial, which only exists in JavaScript). Every other page works fully without it. |
+| Where does JavaScript stay? | **Progressive enhancement only** (§7): live board updates over SSE, the ticking clock, full-screen mode, and the USB bridge (Web Serial, which only exists in JavaScript). Every other page works fully without it. |
 | Live updates | The server **renders the board's HTML** and streams it over SSE to pages; a small script swaps it in. One renderer, on the server; the browser never rebuilds the board from JSON. |
 | Confirming destructive actions | A **confirmation page** with its own form (works without JavaScript); with JavaScript the same form can open in a `<dialog>`. Never `confirm()` or `prompt()`. |
 | Account controls | A native **`<details>` menu** in the navbar: your name, then your clubs and personal space, Account, Sign out. No script needed. |
@@ -59,7 +59,6 @@ personal space's id redirects to `/personal`.
 | `/` | Signed in: **303** to `<last>/board`, where `<last>` is the space prefix in the `tl-space` cookie (set on every space page), else `/personal`. Signed out: the start page (what TinyLap Timing is, Sign in). Everyone has a personal space, so there is always somewhere to go. |
 | `<space>/board` | The live board (§6.1). `?big` renders the wall-screen layout. |
 | `<space>/race` | Race control: the start form, or the running session with Abort (§6.2). |
-| `<space>/tap` | Tap entry: one button per driver (§6.3). |
 | `<space>/setup` | Track, drivers, transponders, decoders, watchers link (§6.4). |
 | `<space>/drivers/<d>/delete` | "Delete Ana?" confirmation with its form. |
 | `<space>/decoders/<id>/unpair` | "Unpair Gate?" confirmation. |
@@ -77,7 +76,6 @@ permission matrix), and answers 303 on success.
 | --- | --- | --- |
 | `<space>/sessions` | `kind`, `roster` (repeated), `duration` (whole minutes), `countdown` | `<space>/board` |
 | `<space>/sessions/<s>/abort` | — | `<space>/race` |
-| `<space>/tap` | `driver` | `<space>/tap` |
 | `<space>/drivers` | `name` | `<space>/setup#drivers` |
 | `<space>/drivers/<d>` | `name` | `<space>/setup#drivers` |
 | `<space>/drivers/<d>/delete` | — | `<space>/setup#drivers` |
@@ -108,7 +106,7 @@ which stay for API clients.
   interpolated value (`& < > " '`), flattens arrays, and passes through values
   made by `html` itself or marked with `safe()`. Nothing else may produce HTML.
   Unit-tested for escaping, nesting, arrays, `null`/`false` (render nothing).
-- One module per page under `server/views/` (`board.js`, `race.js`, `tap.js`,
+- One module per page under `server/views/` (`board.js`, `race.js`,
   `setup.js`, `confirm.js`, `bridge.js`, `watch.js`, `start.js`, `notice.js`).
   Each exports a pure function from a view model to HTML, so pages are tested
   without a server.
@@ -158,7 +156,7 @@ which stay for API clients.
   what was typed, the field gets `aria-invalid="true"` and its message
   (`aria-describedby`), and a `.status-error` summary sits at the top of the
   form.
-- Rate limits are the JSON routes' (pairing per member, taps per member); a
+- Rate limits are the JSON routes' (pairing per member); a
   limit renders the page with the message and status 429.
 - The planner unreachable while importing a track: the setup page with the
   error, status 502, as the JSON route's problem says.
@@ -207,16 +205,10 @@ which stay for API clients.
 - A running one: what it is, its state, "Show the board", and a form with
   "Abort". Buttons sit in a row with one size.
 
-### 6.3 Tap entry
+### 6.3 Laps
 
-- One `<form method="post" action="<space>/tap">` per driver, a big button
-  each. The response page says what the tap did ("Ana: 8.412", "Ana:
-  started", "Too fast, tap again").
-- With JavaScript, `public/tap.js` submits the same forms with `fetch`
-  (form-encoded, `Accept: application/json`) and shows the result in place,
-  so taps don't wait for a page load. The page route answers JSON when asked
-  for it.
-- No drivers: a notice linking to Setup; no tiles, no instruction.
+- Laps come only from decoders, through the bridge or over Wi-Fi. No page
+  times laps by hand.
 
 ### 6.4 Setup
 
@@ -259,7 +251,6 @@ which stay for API clients.
 | Script | Page | Without it |
 | --- | --- | --- |
 | `board.js` | board, watchers board | snapshot, reloaded every 10 s; "Big screen" is `?big` |
-| `tap.js` | tap | each tap is a page load |
 | `bridge.js` | bridge | the page explains that the bridge needs JavaScript and Web Serial |
 | `confirm.js` (optional) | setup | confirmation pages instead of `<dialog>`s |
 
@@ -275,8 +266,8 @@ bridge, and touches only the page it is loaded on.
 - **Moves to `public/`:** `bridge.js`, `outbox.js`, `sim-port.js`,
   `format.js` (also used by the server views, so it moves to a module both
   can import).
-- **Stays:** everything under `server/` except that `workspace.js`, `setup.js`,
-  `control.js` and `ingest.js`'s tap handler move their logic into
+- **Stays:** everything under `server/` except that `workspace.js`, `setup.js` and
+  `control.js` move their logic into
   `operations.js`; the JSON and SSE API and its tests; `openapi.json` (pages
   and form routes are not API and are not described there).
 - **Accounts:** the `workspaces` claim gains `kind` (§3), with a test; `@tinylap/auth`'s types follow.
@@ -309,10 +300,10 @@ bridge, and touches only the page it is loaded on.
   stream sending HTML and closing on token rotation.
 - **Browser, JavaScript off** (`javaScriptEnabled: false`): choose the track, add
   and rename a driver, assign a transponder, delete via the confirmation
-  page, start and abort a race, tap, sign out. Back and Forward work, every
+  page, start and abort a race, sign out. Back and Forward work, every
   link is a URL.
 - **Browser, JavaScript on:** the board updates live and the clock ticks;
-  taps don't reload; the bridge with `?simulate=fast` pairs and forwards.
+  the bridge with `?simulate=fast` pairs and forwards.
 - **Production build:** the existing assembled-build test runs every page
   under `/v/<build>/` assets.
 

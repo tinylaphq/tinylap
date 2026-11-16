@@ -1,14 +1,13 @@
-# Custom elements, step three: tap and bridge
+# Custom elements, step three: the bridge
 
 It follows the step-one spec (`2026-10-16-custom-elements-step-one-design.md`), the step-two spec (`2026-10-18-custom-elements-step-two-board.md`) and AGENTS.md "Web platform first". Paths are relative to `apps/timing/` unless they say otherwise.
 
 Product owner rulings recorded here:
-- **Why this step.** Users gain little from it. It is for consistency and testability, and tap comes first.
+- **Why this step.** Users gain little from it. It is for consistency and testability.
 - **Two roles for an element.** A custom element can:
   - enhance existing server HTML, with a managed lifecycle;
   - load behaviour into a page: an element whose presence has a side effect.
 - **The bridge becomes `tl-bridge`.** It is mainly the second role: its job, the link from the serial port to the server, lasts as long as the element is on the page. It is partly the first: it fills the server-rendered state sections. It stays a thin wrapper, migrated in steps (§3.5).
-- **Tap: a pending fill is cancelled** (§2.2, item 10).
 - **The bridge's preview rows become server `<template>`s**, inside `tl-bridge` (§3.4).
 - **One fix in `bridge.js`:** a closed `Bridge` no longer flushes (§3.1). This is the only change to that file.
 - **The element file** is `public/elements/bridge.js`, so `bridge-pages.test.js:35` changes.
@@ -17,130 +16,17 @@ Product owner rulings recorded here:
 
 | Element | Where | Job |
 |---|---|---|
-| `tl-tap` | `public/elements/tap.js` | Submits the tap forms inside it with fetch and shows the answer in the result bar. It replaces `public/tap.js`. |
 | `tl-bridge` | `public/elements/bridge.js` | While it is on the page, it runs the page side of the bridge: the Connect buttons, pairing, the state sections, the preview, the earlier-passings note and the leave-page guard. It replaces `public/bridge-page.js`. The preview rows are cloned from server templates. |
 
 **Unchanged:**
-- the tap routes, the JSON answer, the 303 flow, the rate limit and the tap screen's look;
 - `public/bridge.js` (`Bridge`, `sendOutbox`), except that a closed bridge no longer flushes (§3.1);
 - `public/outbox.js` and `public/sim-port.js`;
 - the import map and its CSP hash;
 - the decoder protocol (`docs/timing.md`) and the ingest API.
 
-## 2. `tl-tap`
+## 2. Tap
 
-### 2.1 What moves where
-
-| Today in `public/tap.js` | Becomes |
-|---|---|
-| `NO_ANSWER` (`:11`) | `tl-tap`, unchanged |
-| `LABEL` (`:12`) | `tl-tap`, without `error`. The alert template carries "Failed", as `views/tap.js:23` does. |
-| `SIGNED_OUT` (`:10`) | server markup: a `<template>` (§2.4) |
-| `bar`, `status`, `alertBox`, read once from `document` (`:13-15`) | looked up inside the element on each `show`, never once at module level or in the constructor |
-| `content()`, which builds spans and a link (`:20-35`) | gone. `show` clones server templates and sets `textContent`. The signed-out `href` comes from the server: the script never sets an attribute. |
-| `show()` (`:37-54`) | `tl-tap`, same steps, plus item 10 of §2.2 |
-| `timers` (`:16`), the tile flash (`:60-65`) | `tl-tap`, unchanged. The tile is `form.querySelector('.tap-tile')`, from the submitted form, never from the element. |
-| `latest` (`:17`), module-level | a field of the element |
-| — | `frame`: a field of the element, the pending `requestAnimationFrame` id |
-| one `submit` listener per form (`:56-57`) | one delegated `submit` listener on the element |
-| the request (`:66-90`) | `tl-tap`, verbatim |
-
-**Header comment.** Like `elements/board.js:5-18`, it states the element's contract. It keeps the reason from `tap.js:5-9`: never retried, never a normal submit, because the server may already have stored the tap. It also notes the one change (§2.2, item 10), and why disconnect doesn't abort a request (§2.3).
-
-### 2.2 Kept exactly, with one change
-
-1. **The request** (`tap.js:71-78`):
-   - `method: 'POST'`, `accept: application/json`;
-   - the body is `new URLSearchParams(Object.fromEntries(new FormData(form)))`, with no submitter. The tile buttons have no name;
-   - `credentials: 'same-origin'`;
-   - `redirect: 'manual'`. An expired session answers 303 to sign-in, which then goes across origins. `res.type === 'opaqueredirect'` then means signed out (`:79`).
-
-   Unlike `tl-frame` (step one §3.3), tap must not follow the redirect. Tap has no fallback load, so a followed redirect would only end in a CSP-blocked fetch and the "No answer" text.
-2. **Never resubmitted.**
-   - `preventDefault()` on every tap-form submit (`:58`), as the handler's first statement, before any `await`.
-   - A failure never retries, and never falls back to `form.submit()` or `location.assign`: the server may already have stored the tap (`:5-9`).
-3. **The request counter.**
-   - `const mine = ++this.latest`, and the answer is shown only if `mine === this.latest` (`:59`, `:90`).
-   - Every tap sends its own request, and none is dropped or serialised, because each tap is a crossing.
-4. **The outcome** (`:80-86`):
-   - `res.ok` with a string `text`: `started`, `lap` or `again`, from `stored` and `lapMs`;
-   - otherwise a string `error`: that text, as an error. This covers 422 and 429;
-   - otherwise, or on any throw: `NO_ANSWER`.
-5. **The alert on errors** (`:42-49`):
-   - `#tap-alert` gets a new `<p class="status status-error" role="alert">`, which is a new node, so it is announced;
-   - `#tap-result` is emptied;
-   - `--driver` is left as it is: `show` gets an empty colour on errors (`:90`);
-   - `data-state="error"`.
-6. **The sticky result bar.** The bar stays the server's `.tap-bar` inside `.tap-screen`, its sticky containing block (`app.css:179-187`). On success:
-   - `data-state` is set;
-   - `--driver` comes from the tapped tile;
-   - `#tap-alert` is emptied;
-   - `#tap-result` is emptied first, then filled in the next animation frame, so identical text is announced again (`:51-53`).
-7. **The signed-out message.** "Sign in again to keep tapping.", inside the alert's `.tap-text` (`:26-30`). "Sign in again" links to the current path and query.
-8. **The tile flash.** The submitted form's tile gets `is-tapped` for 150 ms. Each tap restarts the timer (`:60-65`).
-9. **Missing nodes.** If the bar, `#tap-result`, `#tap-alert` or a template that `show` needs is missing, `show` does nothing (`:38`).
-10. **The one change: a pending fill is cancelled.** `show` starts with `cancelAnimationFrame(this.frame)`. The success path keeps the id: `this.frame = requestAnimationFrame(() => status.replaceChildren(…))`.
-    - An error that lands before a success's frame now leaves `#tap-result` empty. Today the frame still fills it, under the alert (`tap.js:48`, `:53`).
-    - Two successes within one frame end as today: the later one shows.
-
-Before the module runs, a tap submits normally, as a POST and a 303 (`tap-pages.js:49-50`). This is unchanged: module scripts already run after parsing today.
-
-### 2.3 Lifecycle and teardown
-
-```
-connectedCallback    → this.addEventListener('submit', this)
-disconnectedCallback → this.removeEventListener('submit', this)
-handleEvent(submit)  → form = event.target. It does nothing unless that is an
-                       HTMLFormElement matching form.tap-form inside this element.
-                       Otherwise preventDefault(), then the steps of §2.2.
-```
-
-- **Delegation.** One listener on the element, as `tl-frame` does (`packages/design/elements/frame.js:80`). There is no listener per form. A move adds the same `handleEvent` object again, and the browser keeps one.
-- **What disconnect does not stop, and why:**
-  - **A request in flight** is neither aborted nor ignored. An abort can't unsend a tap the server may have stored. The answer writes only into the element's own children, looked up on each `show`. That is harmless while detached, and correct after a move: it is still the latest tap.
-  - **The flash timers and a pending frame.** Each one touches one of the element's own nodes and ends within 150 ms, or within one frame.
-- **A swap hides the old element's pending answer.** The answer lands in the detached bar, and the new bar never shows it. The tap is still stored. Nothing in the app swaps `tl-tap`.
-- **A move to another document** is neither supported nor tested. Tap lives in one document.
-- **No `pagehide`/`pageshow` handling.** Tap holds no connection.
-- **Define guard:** `if (!customElements.get('tl-tap')) customElements.define('tl-tap', TlTap)`, as `elements/board.js:120` does.
-
-### 2.4 Markup (`views/tap.js:35-49`)
-
-```html
-<tl-tap>
-<div class="tap-screen">
-  <h1 class="visually-hidden">Tap</h1>
-  <div class="tap-bar" data-state="idle"><div id="tap-alert"></div>
-  <p class="tap-result" id="tap-result" role="status" aria-live="polite"><span class="tap-text">Tap a driver as their car crosses the line.</span></p></div>
-  <div class="tap-grid"><form method="post" action="/personal/tap" class="tap-form">
-    <input type="hidden" name="driver" value="…">
-    <button type="submit" class="tap-tile" style="--driver: #e4572e">Ana</button>
-  </form>…</div>
-</div>
-<template data-tap="result"><span class="tap-state"></span> <span class="tap-text"></span></template>
-<template data-tap="alert"><p class="status status-error" role="alert"><span class="tap-state">Failed</span> <span class="tap-text"></span></p></template>
-<template data-tap="signed-out"><a href="/personal/tap?driver=…&amp;result=started">Sign in again</a> to keep tapping.</template>
-</tl-tap>
-```
-
-- **The wrapper.** `tl-tap` wraps the whole `.tap-screen`, as `tl-board` wraps `#board-live`.
-  - `app.css` gets `tl-tap { display: block; }`, next to `tl-board` (`app.css:77`).
-  - Neither `palace.css` 0.12 nor `app.css` has a `main > …` selector, so the wrapper changes nothing on screen.
-- **The templates sit outside `.tap-screen`.** They don't become grid items, and they stay out of `#tap-alert`, where `.tap-bar:has(#tap-alert > *)` (`app.css:198`) would match them. Template content is inert, so `getByRole('alert')` doesn't see it.
-- **Each template is one line in the view,** exactly as above, with no whitespace beyond the single space between the spans. A multi-line `html` literal would add text nodes. The server tests pin the strings (§4).
-- **Composition.**
-  - Success: clone `result`, set `.tap-state` to `LABEL[state]` and `.tap-text` to the text, and put the clone in `#tap-result`.
-  - Error: clone `alert`, set its `.tap-text` to the text, and put the clone in `#tap-alert`.
-  - Signed out: clone `alert`, then `.tap-text.replaceChildren(signed-out clone)`. No other text is shown.
-
-  These clones match today's DOM node for node: `content()`'s `[label, ' ', words]` (`:34`), and the alert `show` builds (`:43-47`).
-- **The signed-out `href`** is `request.url.pathname + request.url.search`, escaped by `html`, as the navbar's sign-in link already does (`views/layout.js:35`). It is the same string as `location.pathname + location.search` on every page with tiles:
-  - a GET carries the page URL;
-  - the 422 and 429 answers carry the POST URL, which is also what `location` shows.
-- **The wrapper and templates are rendered with tiles only.** They are on the 200 `GET` and on the 422 and 429 answers (`tap-pages.js:42`). A page without drivers (`views/tap.js:50-54`) has no `tl-tap` and no script, as today.
-- **The script:** `scripts: drivers.length ? ['elements/tap.js'] : []` (`views/tap.js:40`), and `public/tap.js` is deleted.
-- **Comments.** The ones that name `tap.js` (`views/tap.js:5-6`, `tap-pages.js:5-7`) now name `tl-tap`.
-- **Design check.** The look must not change. The implementer confirms it at 390×844 and 1280×800 with the `frontend-design` skill (CLAUDE.local.md).
+Laps are timed only by decoders, so there is no tap element. The section number is kept so that references to §3 and §4 stay valid.
 
 ## 3. `tl-bridge`
 
@@ -332,17 +218,11 @@ The branch review added E4c and E7, a `beforeunload` listener count in E2, and t
 ## 4. Tests
 
 **Must pass unchanged:**
-- `test/browser/tap.test.js`, all four tests:
-  - in place, with no load (`:27-41`);
-  - the alert, one POST and no navigation on a network failure (`:43-61`);
-  - a stale answer doesn't overwrite the latest (`:63-96`);
-  - the signed-out link (`:98-111`).
-- `test/server/tap-pages.test.js`, every test but `:32`, `:55` and `:72`.
 - **The bridge's tests:**
   - `test/bridge.test.js`, its seven tests (one test is added), and `test/outbox.test.js`;
   - `test/browser/bridge.test.js`, all seven tests;
   - `test/server/bridge-pages.test.js:19-34`.
-- `test/browser/no-js.test.js`, including `:92-125` (no tap again on Back and Forward) and `:127-134` (the bridge's links).
+- `test/browser/no-js.test.js`, including `:127-134` (the bridge's links).
 - `test/browser/navigation.test.js`, `test/server/csp.test.js`.
 - `test/server/frames.test.js:46-48`. The no-import rule already covers `public/elements/`.
 
@@ -350,35 +230,8 @@ The branch review added E4c and E7, a `beforeunload` listener count in E2, and t
 
 | File | Change |
 |---|---|
-| `test/server/tap-pages.test.js` | - `:32` expects `/public/elements/tap.js`.<br>- `:55` tests the bar only: `doesNotMatch(bar, /tap-state/)` with `bar = /<div class="tap-bar"[\s\S]*?<\/p><\/div>/.exec(body)[0]`. `doesNotMatch(body, /<script>alert/)` stays on the whole body.<br>- `:72` is anchored to the slot: `/<div id="tap-alert"><p class="status status-error" role="alert">/`.<br>- New: `<tl-tap>\s*<div class="tap-screen">`, and the three templates as exact strings from §2.4, with no `\s*`.<br>- New: on a club, a GET of `/clubs/<id>/tap?driver=<id>&result=started` has `href="/clubs/<id>/tap?driver=<id>&amp;result=started"` in the signed-out template.<br>- The 422 page with tiles has the wrapper and the script. The page without drivers has neither. |
 | `test/server/bridge-pages.test.js` | - `:35` expects `/public/elements/bridge.js` (owner's ruling).<br>- New: `<tl-bridge>\s*<div id="bridge"`, and both row templates as exact strings from §3.4, right after `<ol class="board-laps" data-bridge-preview></ol>`. |
-| `test/browser/assembled.test.js:39-61` | - On tap: `/v/<sha>/public/elements/tap.js` loads, and `tl-tap` is defined.<br>- On the bridge: `/v/<sha>/public/elements/bridge.js` loads and `tl-bridge` is defined. The import map check (`:55-61`) stays. |
-
-**New: `test/browser/tap-element.test.js`.** It has its own app, `startTiming({ clock })` with a fixed `clock = { now: Date.now() }`, and two drivers, Ana and Ben, in different colours. `tap.test.js` stays unchanged. Each case counts POSTs with `page.on('request')`, as `tap.test.js:49` does.
-- **T1 Disconnect tears down.** Call `tl-tap.remove()`, then dispatch `new SubmitEvent('submit', { bubbles: true, cancelable: true })` on a detached form. (`requestSubmit` does nothing on a detached form.) No POST.
-- **T2 No double listeners after a move.** `document.querySelector('main').append(tlTap)`, then one click: exactly one POST, and one result.
-- **T3 A swap.** `tlTap.replaceWith(tlTap.cloneNode(true))`, then one click on the new tile: exactly one POST, with the result in the new bar.
-- **T4 An answer across a move.** Hold the answer (`page.route` and `route.fetch()`, as `tap.test.js:74-82` does). Move the element, then release: the result shows in the bar.
-- **T5 The same text twice is announced again.**
-  - Set up: the personal space id comes from `/auth/me` (`board-elements.test.js:38`). One `app.form` tap for Ana, and then two clicks on Ana, at the same `clock.now`: both clicks answer "Too fast, tap again." (`server/engine.js:152`). `clock.now` doesn't move between the `app.form` and the clicks.
-  - A `MutationObserver` on `#tap-result` records `childNodes.length` in each callback. After each click, the test waits for the POST's answer and for two more records, not for the text, which is already there after the first click. After the first "Again" fill, some callback sees `0` before a callback sees the second fill.
-  - Callbacks run at the end of a task, so a clear and a fill in the same task show up as filled.
-- **T6 The server's error text.**
-  - Load a fresh `GET /personal/tap`, idle and with no `style` on the bar. Register the route after `goto`, as `tap.test.js:51` does.
-  - The route answers `{ status: 429, contentType: 'application/json', body: '{"error":"Try again in 5 seconds."}' }`.
-  - Expect: the alert shows that text, `data-state="error"`, `bar.style.getPropertyValue('--driver') === ''`, and `#tap-result` is empty.
-- **T7 The colour follows the tapped tile.** Tap Ben: the bar's `--driver` is Ben's, not Ana's.
-- **T8 An error cancels a pending fill.**
-  1. `page.clock.install()` before `goto`, so frames run only when the test says.
-  2. After `goto` (the pattern also matches the page's GET), route the first POST to `{"stored":true,"lapMs":null,"text":"Ana: started"}`, and the second to a 429 with `{"error":"…"}`.
-  3. Click once, then wait for `.tap-bar[data-state="started"]`. The fill is now pending.
-  4. Click again, then wait for the alert.
-  5. `page.clock.runFor(100)`.
-  6. `#tap-result` has no child nodes, and `data-state="error"`.
-- **T9 The flash.**
-  1. `page.clock.install()`, then tap Ben: Ben's tile has `is-tapped`, and Ana's doesn't.
-  2. `runFor(149)`: it is still there. `runFor(2)`: it is gone.
-  3. Tap twice, 100 ms apart: it is still there 140 ms after the second tap.
+| `test/browser/assembled.test.js:39-61` | - On the bridge: `/v/<sha>/public/elements/bridge.js` loads and `tl-bridge` is defined. The import map check (`:55-61`) stays. |
 
 **New: `test/browser/bridge-element.test.js`.** It uses `?simulate=fast` (laps every 2 s).
 - **Counting ports.** An init script wraps `WritableStream` and `ReadableStream`, as `bridge.test.js:99-108` does. Only `sim-port.js` constructs them with a JS sink or source (`sim-port.js:19-20`).
@@ -431,7 +284,7 @@ The branch review added E4c and E7, a `beforeunload` listener count in E2, and t
 - **E5 The lap row's template.** Wait for a row `li > .bridge-code + .num` whose text matches `/\d+\.\d{3}/`. The first-pass row is already covered by `bridge.test.js:85`.
 - **E6 A pairing answer across a move.**
   1. On the pairing form, `page.route('**/workspaces/*/decoders', …)` holds the POST only: `route.request().method() === 'POST'`, otherwise `route.continue()`. The GET of `learnName` (`bridge-page.js:94`) matches the same pattern.
-  2. Press Pair, move the element, then release the answer. Wait for `page.waitForEvent('requestfinished')`, as `tap.test.js:89` does, and then two frames, as `tap.test.js:93` does.
+  2. Press Pair, move the element, then release the answer. Wait for `page.waitForEvent('requestfinished')`, and then two frames.
   3. Then expect: the Connect section shows, the name field is editable, no alert is visible, and exactly one decoder is added to the store, orphaned as §3.3 says.
 - **E7 An old pairing's answer after a move leaves the new pairing alone.**
   1. Hold every `POST …/decoders`, in order. Pair as `Old run`, move the element, Connect again, and Pair as `New run`. The Pair button is disabled.
@@ -448,23 +301,6 @@ The branch review added E4c and E7, a `beforeunload` listener count in E2, and t
 
 | Mutation | Caught by |
 |---|---|
-| tap: `redirect: 'manual'` → `'follow'` | signed-out (`tap.test.js:98-111`) |
-| tap: drop `preventDefault()`, or call it after an `await` | in place (`tap.test.js:38`, `loads === 0`) |
-| tap: fall back to `form.submit()` in `catch` | failed request (`tap.test.js:57-58`) |
-| tap: drop `mine === latest` | rapid taps (`tap.test.js:94`) |
-| tap: drop the clear, or fill in the same task as the clear | T5 |
-| tap: drop `cancelAnimationFrame` in `show` | T8 |
-| tap: drop `removeEventListener` in `disconnectedCallback` | T1 |
-| tap: a listener per form, never removed | T2 |
-| tap: the bar, result or alert looked up once (module level or constructor) | T3 |
-| tap: abort the request on disconnect (`AbortController`) | T4 |
-| tap: a disconnect bumps `latest`, or sets a flag that is never cleared | T4 |
-| tap: `error` text ignored | T6 |
-| tap: colour set on errors, or not on success | T6, T7 |
-| tap: the tile from the element, not the form | T7, T9 |
-| tap: drop the flash, or don't restart its timer | T9 |
-| tap: the signed-out `href` without the query | `tap-pages.test.js`, club case |
-| tap: a template with extra whitespace or a wrong class | `tap-pages.test.js`, exact strings |
 | bridge: drop the `#closed` checks in `flush`, or only the first one | the new `bridge.test.js` case, E2 |
 | bridge: drop `run.bridge.close()` in `stop` | E2 (`__cancelled`, passings) |
 | bridge: keep the `beforeunload` listener after `stop`, or let it read a stale bridge rather than `this.run?.bridge` | E2 (the listener count; `defaultPrevented`) |
@@ -486,10 +322,6 @@ The branch review added E4c and E7, a `beforeunload` listener count in E2, and t
 
 ## 5. Risks
 
-- **Tap is the timing path when there is no decoder.** A bug drops laps silently, which is why the §4 mutation table is part of the definition of done.
-- **The tap templates must match the old DOM.** `.tap-state`, `.tap-text` and `role="alert"` are styled (`app.css:190-198`). The exact-string server tests and the `frontend-design` check guard them.
-- **The pending-frame fix (§2.2, item 10)** is tap's only behaviour change. T8 guards it.
-- **No abort on disconnect** is intended (§2.3). Adding an `AbortController` changes nothing on the server, but it would hide the latest result after a move (T4).
 - **The bridge rewrite touches timing-sensitive glue.** These paths are carried over verbatim; only the run guard, the reset and the two `#closed` checks are new:
   - the old bridge closed before the next opens;
   - the `bridge === next` checks;
@@ -505,9 +337,8 @@ The branch review added E4c and E7, a `beforeunload` listener count in E2, and t
 - Any change to `bridge.js` beyond the two `#closed` checks (§3.1).
 - Any change to `outbox.js`, `sim-port.js`, the decoder protocol, the ingest API, the import map or the pairing flow.
 - Re-opening a granted port without a click after a move (`navigator.serial.getPorts()`).
-- `pagehide`/`pageshow` handling on tap or on the bridge.
-- A queue, a retry or a debounce for taps.
-- A new look for the tap or bridge screens.
+- `pagehide`/`pageshow` handling on the bridge.
+- A new look for the bridge screen.
 
 ## 7. Decided
 

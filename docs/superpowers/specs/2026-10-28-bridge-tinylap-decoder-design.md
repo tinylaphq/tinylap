@@ -132,7 +132,7 @@ What it costs, and how that is contained:
 | --- | --- | --- |
 | Lines per batch | 64, and at most 32 KiB of entries | 32 KiB of lines plus 500 worst-case passings (about 27.5 KB) fits under the 64 KiB body limit (`body.js` `MAX_BODY`). Values contain no `"` or `\`, so no line grows when it is escaped |
 | Bytes per line | 512 for the line, 510 for the entry (§2.1) | the firmware's bound |
-| Lines per decoder per minute, on the server | 600; past that they are skipped and counted | the firmware's own limits give at most about 210 a minute: 6 `stat`, 120 `event` (20 per 10 s; the rest are only counted, as `suppressed=`), one `pass` per passing (eight cars at a lap every 6 s is 80), and one `boot` per boot. Enforced by a new `logs` limiter in `app.js`, beside `ingest`, `tap` and `pair`, taken once per line |
+| Lines per decoder per minute, on the server | 600; past that they are skipped and counted | the firmware's own limits give at most about 210 a minute: 6 `stat`, 120 `event` (20 per 10 s; the rest are only counted, as `suppressed=`), one `pass` per passing (eight cars at a lap every 6 s is 80), and one `boot` per boot. Enforced by a new `logs` limiter in `app.js`, beside `ingest` and `pair`, taken once per line |
 | Batches per decoder per minute | 600, unchanged | the `ingest` limiter. A logs-only batch counts as one batch |
 | Lines held or queued in the bridge | 256, oldest dropped first | about a minute of the worst case above |
 

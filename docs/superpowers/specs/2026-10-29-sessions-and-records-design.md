@@ -51,11 +51,10 @@ Anti-goals (a failure even if it works):
 - The server stores it (`passing`) and notes the transponder (`transponder.first_seen_at`), as today: the first keeps the decoder's outbox and the USB/Wi-Fi de-duplication working, the second is how a code reaches Setup. It makes **no crossing and no lap**.
 - Members' screens show a notice (§5.3) with a **Start practice** button. Read-only screens show nothing of it.
 - **Loose passings are deleted after a day.** A passing that made no crossing and is older than 24 hours is removed (a periodic job, or on `tick`). The transponder row stays. *My call: 24 hours, long enough for every decoder resend and the cable and Wi-Fi copies to settle.*
-- **Tap with no session.** The Tap page records nothing without a running session and offers Start practice instead. *My call: a tap is a passing by hand, so it follows the same rule.*
 
 ### 3.3 What changes in the engine
 
-- `practiceFor` (the automatic practice) goes. `cross` runs only with a session; `ingest` and `tap` skip it otherwise.
+- `practiceFor` (the automatic practice) goes. `cross` runs only with a session; `ingest` skips it otherwise.
 - `start` takes `practice` too, and ends any running session (§3.1) rather than answering `conflict`.
 - A practice's `end` by a member is new (today only qualifying and races can be aborted). It ends with `state` `done`, at its last passing or now.
 - `snapshot` keeps answering the running session, or else the last ended one (`lastResults`).

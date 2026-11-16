@@ -33,7 +33,7 @@ decoder firmware and hardware.
 | How do passings arrive? | **Both a cable and the internet, at once.** Over USB the decoder talks to a browser tab (Web Serial), which forwards to the server. Over Wi-Fi the decoder posts to the server itself. The server drops duplicates, so whichever arrives first wins and either path can fail. |
 | Is the internet fast enough? | **Yes**, because the **decoder stamps every passing** on its own clock. A lap is the difference of two stamps from the same decoder, so network delay never changes a lap time. It only delays the screens (typically 0.1–0.5 s). |
 | Who computes laps? | **The server**, as the authority. The same code (`packages/timing`) runs in the bridge tab for an offline preview. |
-| Hardware today? | **None.** A simulator and tap entry stand in until the firmware exists. |
+| Hardware today? | **None.** A simulator stands in until the firmware exists. |
 | Session modes | **Practice** (best lap, ends by hand or when idle), **qualifying** (a time window, best lap), **race** (a timed race, most laps). A member starts each one; only one runs at a time. |
 | Race and qualifying format | **The RC norm: time windows.** Qualifying: laps anytime within X minutes, best lap ranks. Race: X minutes, most laps wins, ties broken by total time; when time is up each driver finishes their current lap. |
 | Race start | **A grid behind the line** and an on-screen countdown. Each driver's first crossing after "go" starts their race. |
@@ -49,7 +49,7 @@ decoder firmware and hardware.
     │                       │ IndexedDB buffer, local preview        │
     └──────────── Wi-Fi, HTTPS (fallback) ──────────────────────────►│
                                                                      ▼
- phone (tap entry) ──HTTPS──────────────────────────────────► apps/timing server
+                                                             apps/timing server
                                                        node:http + node:sqlite
                                                                      │ SSE
                                    live board · race control · watchers view
@@ -135,13 +135,14 @@ A passing is one car crossing the line:
 **Key:** `(decoder, boot, transponder, t)`. The same passing arriving over
 the cable and over Wi-Fi has the same key; the server stores it once.
 
-The server adds `receivedAt` (its own clock) and `via` (`serial`, `net` or
-`tap`) for the first copy it stores.
+The server adds `receivedAt` (its own clock) and `via` (`serial` or `net`)
+for the first copy it stores.
 
-**Tap entry** has no decoder. Each workspace has one virtual tap decoder,
-`boot` = the session id, the driver's id as the transponder, and `t` = the
-server's receive time in milliseconds. Tap laps are marked `via: 'tap'` and
-never count towards personal bests.
+**Stored tap laps** were timed by hand, with no decoder: their `via` is
+`tap`, their decoder a virtual one per workspace, `boot` = the session id,
+the driver's id as the transponder, and `t` = the server's receive time in
+milliseconds. No new ones arrive, and they never count towards records or
+personal bests.
 
 ## 5. Transports
 
@@ -267,7 +268,6 @@ bundler, like the planner. Screens:
   screen; a full screen mode for the big screen.
 - **Sessions:** start practice, qualifying or a race (drivers, duration), end
   or abort; the history, a page per session and the track record history.
-- **Tap entry:** a tile per driver; a tap is a passing.
 - **Setup:** drivers, transponders, decoders and pairing, the tracks (a name, an
   optional planner layout), the current track and direction, the watchers link.
 - **Bridge:** serial connection status, outbox, local preview.
@@ -290,7 +290,7 @@ leaderboard table) go into `@tinylap/design` when a second app needs them.
   decoders or setup.
 - **Member writes** use the BFF session cookie with the planner's CSRF check.
 - **Rate limits:** ingest per decoder (generous: a race of 8 cars is a few
-  passings per second), tap entry per member, pairing per member.
+  passings per second), pairing per member.
 - **Permissions:** any workspace member may run sessions, edit drivers and
   transponders, and pair decoders; deleting drivers or decoders needs
   `admin`. New actions join the `@tinylap/auth` permission matrix
@@ -316,7 +316,7 @@ leaderboard table) go into `@tinylap/design` when a second app needs them.
   SQLite: ingest repeated and out of order, duplicates from both transports,
   SSE resume and snapshot, permissions, a whole race driven by
   `tools/decoder-sim`.
-- **Browser:** Playwright for the live board, race control, tap entry and the
+- **Browser:** Playwright for the live board, race control and the
   watchers view. The bridge is tested with a fake serial port injected into
   the page; Playwright can't open real ones.
 

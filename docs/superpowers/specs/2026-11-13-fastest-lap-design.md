@@ -27,7 +27,7 @@ Non-goals:
 - One mark per lap time stays, the widest that is true: **TR**, then **FL**, then **PB**.
 - **A mark always follows its time**, the way a unit follows a number: in the standings, the lap lists, Last laps and the strip. The mark carries its name for the eye as a `title` and for a screen reader as visually hidden text.
 - "Session best", `mark-sb`, `isSessionBest`, `--tl-session-best` and SB leave the code, the docs (`docs/timing.md`) and the tests. The API and MCP never exposed it and do not change.
-- A tie keeps the lap set first. FL is the fastest of the laps the standings count (a tapped lap included, a lap marked "Not counted" not), so it is always somebody's Best (call).
+- A tie keeps the lap set first. FL is the fastest of the laps the standings count (a stored tap lap included, a lap marked "Not counted" not), so it is always somebody's Best (call).
 
 Every mark's box is trimmed to its capitals (`text-box: trim-both cap alphabetic`), so its padding is the same above and below its letters (call: where `text-box` is unsupported the box keeps today's padding, and the letters sit a little high).
 
@@ -148,7 +148,7 @@ The same rules hold wherever live standings show: the board at a laptop's width,
 
 ## 9. Tests
 
-- Marks: FL replaces SB in every view; the widest mark wins; FL on P1 in practice and qualifying; a tie keeps the earlier lap; a not-counted lap never holds FL, a tapped one can.
+- Marks: FL replaces SB in every view; the widest mark wins; FL on P1 in practice and qualifying; a tie keeps the earlier lap; a not-counted lap never holds FL, a stored tap lap can.
 - Marks follow their times everywhere, the feed included, and the feed's times stay aligned with or without a mark.
 - Strip: each line is time, mark, driver, with no visible words; the fastest lap's dash and "No laps yet" title before a counted lap; absent on the idle board; hidden while the strip shows a fallen record; names cut, lines not moving when the holder changes (layout measured before and after a swap).
 - Feed: TR and FL only; only the current fastest lap keeps FL.

@@ -22,7 +22,7 @@ The board's page script (`apps/timing/public/board.js`) becomes light-DOM elemen
 `board.js` stays as the page script for the full-screen button only (§6).
 
 **Not in this step:**
-- `tl-tap` and `tl-bridge`.
+- `tl-bridge`.
 - A ticking time on Setup (§2.3).
 - Stream formats. The SSE and `/live` formats are unchanged. Their `standings` payloads gain one additive field, `lastAt` (§2.3).
 
@@ -105,7 +105,6 @@ export function clockAt({ kind, state, opensAt, closesAt }, now) { … }
 
 **What time a lap has.**
 - **Decoder passings** arrive in decoder time `t`. `ingest` maps each to server wall time: `t` plus the smallest receive offset of the last minute (`engine.js:99-104`), so `at ≤ receivedAt`. The result is stored as `crossing.at` (`engine.js:106-117`).
-- **Taps** use `now()` (`engine.js:153`).
 - **The session state** sets `d.lastAt = at` for every crossing of a roster driver, counted or not (`packages/timing/sessions.js:39-40`). Standings don't expose it (`sessions.js:81`).
 
 **The minimal server change.** `standings()` adds `lastAt: d.lastAt` to each row (`sessions.js:81`), and `Standing` (`packages/timing/types.d.ts:70-80`) gains `lastAt: number | null`.
@@ -361,7 +360,7 @@ The button is rendered only when `big`, and stays hidden without JavaScript, by 
 
 ## 9. Non-goals
 
-- `tl-tap` and `tl-bridge`.
+- `tl-bridge`.
 - A ticking "seen … ago" on Setup.
 - A live race-page state beyond the two reloads; no reload at `done` or at `closesAt + MAX_LAP_MS`.
 - Changes to the SSE framing, the throttle, the retry or `/live`, beyond the additive `lastAt`.
