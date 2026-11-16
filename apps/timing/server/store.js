@@ -337,6 +337,10 @@ export function openStore(path) {
     otherBests: q(`SELECT c.driver_id, MIN(c.lap_ms) AS lap_ms FROM session s JOIN crossing c ON c.session_id = s.id
       WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND s.id != ? AND c.counts = 1 AND c.via != 'tap' AND c.driver_id IS NOT NULL AND c.lap_ms IS NOT NULL
       GROUP BY c.driver_id`),
+    // Each driver's best on a track and direction before a moment, as personal_best counts them: what a session's personal bests beat.
+    bestsBefore: q(`SELECT c.driver_id, MIN(c.lap_ms) AS lap_ms FROM session s JOIN crossing c ON c.session_id = s.id
+      WHERE s.workspace_id = ? AND s.track_id = ? AND s.direction = ? AND c.at < ? AND c.counts = 1 AND c.via != 'tap' AND c.driver_id IS NOT NULL AND c.lap_ms IS NOT NULL
+      GROUP BY c.driver_id`),
     // A driver's best lap per transponder (drivers and transponders spec §3.5); SQLite takes at from the MIN row. A label is theirs only while the transponder is.
     bestLapsByTransponder: q(`SELECT c.transponder, MIN(c.lap_ms) AS lap_ms, c.at, t.label FROM session s JOIN crossing c ON c.session_id = s.id
       LEFT JOIN transponder t ON t.workspace_id = c.workspace_id AND t.code = c.transponder AND t.driver_id = c.driver_id
@@ -668,6 +672,9 @@ export function openStore(path) {
     },
     /** Each driver's best lap on a track and direction in sessions other than `sessionId`, by driver. @returns {Map<string, number>} */
     otherBests: (ws, trackId, direction, sessionId) => new Map(s.otherBests.all(ws, trackId, direction, sessionId)
+      .map((r) => [String(r.driver_id), Number(r.lap_ms)])),
+    /** Each driver's best lap on a track and direction from laps driven before `at`, by driver. @returns {Map<string, number>} */
+    bestsBefore: (ws, trackId, direction, at) => new Map(s.bestsBefore.all(ws, trackId, direction, at)
       .map((r) => [String(r.driver_id), Number(r.lap_ms)])),
     /** A driver's best lap with each transponder on a track and direction, best first. */
     bestLapsByTransponder: (ws, driverId, trackId, direction) => s.bestLapsByTransponder.all(ws, trackId, direction, driverId)

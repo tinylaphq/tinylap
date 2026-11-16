@@ -703,7 +703,9 @@ test('no board and no session page says "Session best" or shows SB: the fastest 
     app.engine.end(ws, session.id);
     assert.doesNotMatch(await page(`/clubs/${ws}/board`), SB, `the idle board after the ${kind}`);
     const detail = await page(`/clubs/${ws}/sessions/${session.id}`);
-    assert.match(detail, /<dt>Fastest lap<\/dt>/);
+    // A practice's P1 card is its fastest lap; a race's or qualifying's facts name it.
+    if (kind === 'practice') assert.doesNotMatch(detail, /<dt>Fastest lap<\/dt>/);
+    else assert.match(detail, /<dt>Fastest lap<\/dt>/);
     assert.doesNotMatch(detail, SB, `the ${kind}'s page`);
   }
   assert.doesNotMatch(await page(`/clubs/${ws}/sessions`), SB, 'the sessions list');

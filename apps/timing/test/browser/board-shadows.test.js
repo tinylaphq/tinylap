@@ -63,14 +63,14 @@ test('the session page\'s Laps cards and the idle board\'s lists carry the same 
   app.engine.end(ws, session.id);
   const { context, page, errors } = await pageAs(browser, app, member);
   const shadow = (selector) => page.locator(selector).first().evaluate((el) => getComputedStyle(el).boxShadow);
-  await page.goto(`/personal/sessions/${session.id}`);
-  const table = await shadow('.standings-table');
+  // One driver: the result is P1's card alone, so the board's table is the measure.
+  await page.goto('/personal/board');
+  const table = await shadow('.board-ranks');
   assert.match(table, /4px 4px 0px/);
-  assert.equal(await shadow('.session-laps'), table, 'a Laps card matches the Final table');
+  await page.goto(`/personal/sessions/${session.id}`);
+  assert.equal(await shadow('.session-laps'), table, 'a Laps card matches the board\'s lists');
   await page.locator('.session-laps').first().hover();
   assert.equal(await shadow('.session-laps'), table, 'and keeps it under the pointer');
-  await page.goto('/personal/board');
-  assert.equal(await shadow('.board-ranks'), table, 'an idle board list matches too');
   assert.deepEqual(errors, []);
   await context.close();
 });

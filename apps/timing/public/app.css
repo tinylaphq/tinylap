@@ -1101,3 +1101,111 @@ ul.collect { list-style: none; margin-bottom: 0; padding: 0; display: grid; gap:
 /* Narrow, the button goes under its field and takes the row's width. */
 @container (max-width: 24rem) { .collect-body .control-row > .btn { flex: 1 1 100%; } }
 @media (prefers-reduced-motion: reduce) { .collect-row { transition: none; } }
+
+/* A session's result (board hub and results spec §6): one ranked list whose
+ * top three are set larger. A rank gutter, --rank, runs through all of it:
+ * every position numeral ends one gap (--rank-gap) left of it, every colour
+ * square starts on it, in the placed cards and in the table, so the podium
+ * reads as the top of the list. Every block shares one width and stands
+ * --p-space-md from the next. 64px on a page, 40px on a phone. */
+.result {
+  --rank: calc(var(--p-space-2xl) + var(--p-space-md));
+  --rank-gap: var(--p-space-md);
+  display: grid; gap: var(--p-space-md); min-width: 0;
+}
+/* Elsewhere the table's scroll wrapper keeps room inside its width for the table's shadow,
+ * which would make the table narrower than the cards. A result's table always fits (its one
+ * free column is the driver's, cut with "…"), so here it doesn't scroll: its shadow hangs
+ * outside, where the cards' shadows hang, and all blocks share both edges. */
+.result .board-scroll { overflow: visible; padding: 0; }
+
+/* The placed card: position, name and main figure on one baseline, then the
+ * facts at the card's foot, so P2 and P3 keep their rules level. */
+.place {
+  display: grid; align-items: baseline; min-width: 0;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: calc(var(--rank) - var(--rank-gap)) minmax(0, 1fr) auto;
+  column-gap: var(--rank-gap); row-gap: var(--p-space-md);
+  padding: var(--p-space-md) var(--p-space-lg) var(--p-space-md) 0;
+  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text);
+  box-shadow: var(--p-shadow-lg) var(--p-text);
+}
+.place > * { margin: 0; min-width: 0; }
+.place.is-first { padding-block: var(--p-space-lg) var(--p-space-md); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
+/* A practice's lead card whose lap is the new record: the record's shadow. */
+.place.is-first.is-record { box-shadow: var(--p-shadow-lg) var(--tl-record); }
+/* The position: mono, the name's size, on its baseline, no box. P1's is the one pink figure. */
+.place-pos { grid-column: 1; justify-self: end; font: 700 var(--p-text-2xl) / var(--p-leading-tight) var(--p-font-mono); }
+.is-first .place-pos { font-size: var(--p-text-4xl); color: var(--p-accent-1); }
+.place-name { grid-column: 2; font: 700 var(--p-text-2xl) / var(--p-leading-tight) var(--p-font); text-transform: none; letter-spacing: -0.01em; color: var(--p-text); }
+.is-first .place-name { font-size: var(--p-text-4xl); letter-spacing: -0.02em; }
+/* A long name wraps between words, and a word too long for its line ends in "…"; the square stays on the first line. */
+.place-name .driver { display: flex; align-items: baseline; min-width: 0; }
+.place-name .driver::before { flex: none; width: 0.6em; height: 0.6em; margin-right: 0.3em; }
+.place-name .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.place-name .crown { height: 0.6em; margin-left: 0.25em; }
+/* The main figure: one step under the name, so the name leads. */
+.place-figure { grid-column: 3; justify-self: end; white-space: nowrap; font: 700 var(--p-text-xl) / var(--p-leading-tight) var(--p-font-mono); }
+.is-first .place-figure { font-size: var(--p-text-3xl); }
+.place-figure .mark { font-size: var(--p-text-xs); margin-left: var(--p-space-sm); top: -0.5em; }
+.is-first .place-figure .mark { font-size: var(--p-text-md); top: -0.6em; }
+/* The facts: a rule from the name's edge, label over value in fixed columns
+ * (the session facts' labels), and the link to the driver's laps closing the row. */
+.place-foot {
+  grid-column: 2 / -1; align-self: end; display: flex; justify-content: space-between; align-items: end; gap: var(--p-space-md);
+  padding-top: var(--p-space-sm); border-top: var(--p-border-thin) solid var(--p-border);
+}
+.place-facts { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-xl); margin: 0; min-width: 0; }
+.place-facts dt { font-size: var(--p-text-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
+.place-facts dd { margin: 0; font-size: var(--p-text-md); font-weight: 700; white-space: nowrap; }
+.is-first .place-facts dd { font-size: var(--p-text-lg); }
+.place-facts .mark { margin-left: var(--p-space-xs); }
+.place-facts .fact-word { font-weight: 600; color: var(--p-text-secondary); white-space: normal; }
+.place-facts .fact-beat { font-weight: 600; }
+.place-facts .lap-credit { display: inline; }
+.place-facts .lap-credit .driver { margin-inline-start: var(--p-space-xs); }
+.place-facts .lap-credit .driver-name { font-weight: 400; }
+.place-more { font-size: var(--p-text-sm); white-space: nowrap; }
+/* P2 and P3 side by side; a practice's personal bests three to a row, the Laps grid's columns. */
+.place-tier { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--p-space-md); }
+.result-pbs .place-tier { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* A personal best: the same card without a position. */
+.place.is-pb { grid-template-columns: minmax(0, 1fr) auto; padding-left: var(--p-space-lg); }
+.place.is-pb .place-name { grid-column: 1; font-size: var(--p-text-xl); }
+.place.is-pb .place-figure { grid-column: 2; font-size: var(--p-text-xl); }
+.place.is-pb .place-foot { grid-column: 1 / -1; }
+
+/* The rest: the same list continued. The position column is the gutter: its
+ * numeral ends one gap before it, and the name's square starts on it. */
+.result-table .col-pos { width: var(--rank); }
+.result-table .pos { padding-right: var(--rank-gap); }
+.result-table th:nth-child(2), .result-table td.board-driver { padding-left: 0; }
+.result-table .col-gap { width: calc(4.4em + 2 * var(--cell-x)); }
+.result-table td.gap { color: var(--p-text-secondary); }
+.result-table .board-driver a { display: inline-flex; max-width: 100%; min-width: 0; }
+
+/* The session page: its head, the result under a head with All laps at its far end, the laps, the way back. */
+.session-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--p-space-sm); }
+.session-head > * { margin: 0; }
+.session-head .session-facts { margin-top: var(--p-space-xs); }
+.result-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--p-space-md); }
+.result-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--p-space-xs) var(--p-space-md); }
+.result-head h2 { margin: 0; }
+.session-laps { scroll-margin-top: var(--p-space-lg); }
+.session-laps:target { box-shadow: var(--p-shadow-lg) var(--p-accent-2); }
+.session-back { margin-bottom: 0; }
+
+@media (max-width: 720px) {
+  .result { --rank: calc(var(--p-space-xl) + var(--p-space-sm)); --rank-gap: var(--p-space-sm); }
+  .place { padding-right: var(--p-space-md); }
+  .place.is-first { padding-block: var(--p-space-md); }
+  .is-first .place-pos, .is-first .place-name { font-size: var(--p-text-3xl); }
+  .is-first .place-figure { font-size: var(--p-text-2xl); }
+  .place:not(.is-first) .place-pos, .place:not(.is-first) .place-name { font-size: var(--p-text-xl); }
+  .place:not(.is-first) .place-figure { font-size: var(--p-text-lg); }
+  .place-tier, .result-pbs .place-tier { grid-template-columns: minmax(0, 1fr); }
+  .place-facts { column-gap: var(--p-space-lg); }
+  .place-foot { flex-wrap: wrap; }
+  /* Who and how fast stay: Time and Laps go. */
+  .result-table .v-laps, .result-table .v-total { display: none; }
+}

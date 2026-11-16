@@ -12,6 +12,7 @@ import { spacePath } from './spaces.js';
 import { notFoundPage } from './views/notice.js';
 import { confirmPage } from './views/confirm.js';
 import { recordsPage } from './views/records.js';
+import { resultOf } from './views/result.js';
 import { sessionPage } from './views/session.js';
 import { sessionsPage } from './views/sessions.js';
 
@@ -232,7 +233,13 @@ function showSession(request, match) {
   const track = session.trackId ? store.track(ws, session.trackId) : null;
   const record = track ? store.currentRecord(ws, track.id, session.direction) : null;
   const bests = track ? store.personalBests(ws, track.id, session.direction, standings.map((r) => r.driverId)) : [];
-  return page(request, 200, sessionPage(request, { session, standings, crossings, drivers: store.drivers(ws), track, record, bests }));
+  // The record that fell here: the fastest one set in this session, and the one standing before the session.
+  const history = track ? store.recordHistory(ws, track.id, session.direction) : [];
+  const here = history.flatMap((r, i) => (r.sessionId === session.id ? [i] : []));
+  const fell = here.length ? { lap: history[here[0]], beat: history[here[here.length - 1] + 1] ?? null } : null;
+  const before = track ? store.bestsBefore(ws, track.id, session.direction, session.createdAt) : new Map();
+  const result = resultOf({ session, standings, crossings, record, bests, fell, before });
+  return page(request, 200, sessionPage(request, { session, crossings, drivers: store.drivers(ws), track, result }));
 }
 
 function showRecords(request) {

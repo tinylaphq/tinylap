@@ -277,7 +277,7 @@ const credits = (selector) => {
   });
 };
 
-test('a time and who set it: the strip, the idle board’s record card and lists, and the session page’s Fastest lap', async (t) => {
+test('a time and who set it: the strip, the idle board’s record card and lists, and none in a practice’s facts', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   const check = (list, label, { gap }) => {
@@ -301,7 +301,8 @@ test('a time and who set it: the strip, the idle board’s record card and lists
   await page.locator('.board-hero').waitFor();
   check(await page.evaluate(credits, '.board-hero-record'), 'the record card', { gap: false });
   check(await page.evaluate(credits, '.board-ranks li'), 'the idle lists', { gap: false });
+  // A practice's page names its fastest lap on its P1 card, not in its facts; results.test.js measures a race's.
   await page.goto(`/personal/sessions/${session.id}`);
-  check(await page.evaluate(credits, '.session-facts .lap-credit'), 'the session page', { gap: true });
+  assert.equal(await page.locator('.session-facts .lap-credit').count(), 0);
   assert.deepEqual(errors, []);
 });
