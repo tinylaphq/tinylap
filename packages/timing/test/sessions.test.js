@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyCrossing, emptyState, isComplete, standings } from '../index.js';
+import { applyCrossing, emptyState, finishLimit, isComplete, standings } from '../index.js';
 
 const practice = { kind: 'practice', roster: null, opensAt: null, closesAt: null };
 const qualifying = { kind: 'qualifying', roster: ['ana', 'ben'], opensAt: 100_000, closesAt: 400_000 };
@@ -93,6 +93,58 @@ test('a race is complete when everyone finished, or a lap after time up', () => 
   assert.equal(isComplete(race, state, 402_000), true);
   assert.equal(isComplete(race, emptyState(), 460_000), true); // 400 000 + maxLap
   assert.equal(isComplete(race, emptyState(), 459_999), false);
+});
+
+test('a race without a roster classifies whoever crossed, and leaves out a car that never did', () => {
+  const open = { ...race, roster: null };
+  const { state, counted } = run(open, [['ana', 100_100, null], ['ana', 108_100, 8000], ['cy', 100_300, null], ['cy', 109_300, 9000], ['cy', 118_200, 8900], [null, 118_300, 7000]]);
+  assert.deepEqual(counted, [false, true, false, true, true, false]);
+  assert.deepEqual(standings(open, state).map((s) => [s.driverId, s.position, s.laps]), [['cy', 1, 2], ['ana', 2, 1]]);
+});
+
+test('a race without a roster ends when each who crossed has finished', () => {
+  const open = { ...race, roster: null };
+  assert.equal(isComplete(open, emptyState(), 400_000), true); // nobody drove
+  const { state } = run(open, [['ana', 100_100, null], ['ben', 100_200, null], ['ana', 401_000, 8000]]);
+  assert.equal(isComplete(open, state, 401_000), false); // ben has not finished
+  run(open, [['ben', 402_000, 8000]], state);
+  assert.equal(isComplete(open, state, 402_000), true);
+});
+
+test('a race ends at the latest twice the slowest best lap after the close, and never under maxLap', () => {
+  const open = { ...race, roster: null };
+  // ana stopped for good; ben's best is 45 s, so the limit is 90 s.
+  const { state } = run(open, [['ana', 100_100, null], ['ana', 108_100, 8000], ['ben', 100_200, null], ['ben', 145_200, 45_000], ['ben', 401_000, 50_000]]);
+  assert.equal(finishLimit(open, state), 90_000);
+  assert.equal(isComplete(open, state, 489_999), false);
+  assert.equal(isComplete(open, state, 490_000), true);
+  // With fast laps only, maxLap is the limit.
+  const fast = run(open, [['ana', 100_100, null], ['ana', 108_100, 8000]]).state;
+  assert.equal(finishLimit(open, fast), 60_000);
+  assert.equal(finishLimit(open, fast, 10_000), 16_000);
+});
+
+test('without a roster, a crossing before the start makes no entrant', () => {
+  const open = { ...race, roster: null };
+  const { state, counted } = run(open, [['ben', 99_000, null], ['ana', 100_100, null], ['ana', 108_100, 8000]]);
+  assert.deepEqual(counted, [false, false, true]);
+  assert.deepEqual(Object.keys(state.drivers), ['ana']);
+  run(open, [['ana', 401_000, 8000]], state);
+  assert.equal(isComplete(open, state, 401_000), true, 'ben never raced');
+  const quali = { ...qualifying, roster: null };
+  const q = run(quali, [['ben', 99_500, 7000], ['ana', 108_000, 8000]]).state;
+  assert.deepEqual(standings(quali, q).map((s) => s.driverId), ['ana']);
+  // With a roster, as before, the countdown crossing keeps its driver's last crossing.
+  assert.equal(run(race, [['ben', 99_000, null]]).state.drivers.ben.lastAt, 99_000);
+});
+
+test('a qualifying without a roster ends when each who crossed has crossed after the close', () => {
+  const open = { ...qualifying, roster: null };
+  const { state } = run(open, [['ana', 108_000, 8000], ['ben', 109_000, 9000], ['ana', 401_000, 8000]]);
+  assert.deepEqual(standings(open, state).map((s) => s.driverId), ['ana', 'ben']);
+  assert.equal(isComplete(open, state, 401_000), false);
+  run(open, [['ben', 402_000, 9000]], state);
+  assert.equal(isComplete(open, state, 402_000), true);
 });
 
 test('qualifying is complete when every driver crossed after the close', () => {

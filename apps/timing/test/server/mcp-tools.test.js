@@ -256,6 +256,25 @@ test('sessions: start, the replace question bound to the running session, end an
   assert.ok(Array.isArray(withCrossings.value.crossings));
 });
 
+test('a race or qualifying without a roster is everyone on the track', async () => {
+  for (const kind of ['race', 'qualifying']) {
+    const started = await call(member, 'start_session', { kind, duration_seconds: 60, countdown_seconds: 0 });
+    assert.equal(started.value.status, 'done', started.text);
+    assert.deepEqual([started.value.result.kind, started.value.result.roster], [kind, null]);
+    t.engine.abort(clubId, started.value.result.id);
+  }
+});
+
+test('the replace question counts a roster, or without one the drivers with a lap, as the Sessions page does', async () => {
+  const [driver] = t.store.drivers(clubId);
+  for (const [roster, who] of [[[driver.id], /with 1 driver\./], [undefined, /with no drivers yet\./]]) {
+    const { value } = await call(member, 'start_session', { kind: 'race', roster, duration_seconds: 60, countdown_seconds: 0 });
+    const asked = await call(member, 'start_session', { kind: 'practice' });
+    assert.match(asked.value.message, who);
+    t.engine.abort(clubId, value.result.id);
+  }
+});
+
 test('switching tracks during a practice asks first', async () => {
   const { value: track } = await call(owner, 'add_track', { name: 'Hall' });
   await call(member, 'start_session', { kind: 'practice' });

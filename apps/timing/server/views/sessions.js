@@ -77,10 +77,10 @@ function runningPanel(request, session, drivers, { reload }) {
   </div>
 </div>`;
   }
-  const names = (session.roster ?? []).map((id) => drivers.find((d) => d.id === id)?.name ?? 'Former driver');
+  const names = session.roster ? session.roster.map((id) => drivers.find((d) => d.id === id)?.name ?? 'Former driver').join(', ') : 'Everyone on the track';
   return html`<div class="card-static space-md running-panel">
   <h2>${KIND[session.kind]}, ${STATE[session.state] ?? session.state}</h2>
-  <p>${names.join(', ')}. ${formatLength(session.durationMs ?? 0)}.</p>
+  <p>${names}. ${formatLength(session.durationMs ?? 0)}.</p>
   <tl-countdown class="race-clock"${reload ? html` reload-on-phase` : null}><span class="stat-label" data-clock-label>${clock.label}</span> ${time}</tl-countdown>
   <div class="button-row">
     <a class="btn btn-outline" href="${base}/board">Show the board</a>

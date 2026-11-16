@@ -40,7 +40,7 @@ export type SessionKind = 'practice' | 'qualifying' | 'race';
 /** What sessions.js needs to know about a session. Times are server epoch ms. */
 export interface SessionRules {
   kind: SessionKind;
-  /** Driver ids, or null for practice (anyone). */
+  /** Driver ids, or null: anyone in a practice, everyone whose car crosses in a qualifying or race. */
   roster: string[] | null;
   /** Qualifying: the window opens. Race: "go". Practice: unused. */
   opensAt: number | null;

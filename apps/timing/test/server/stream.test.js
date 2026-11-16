@@ -120,3 +120,18 @@ test('the rows\' moments reach the board pages only, not the API, the stream or 
   assert.match(await (await app.api(member, 'GET', `/clubs/${office.id}/board`)).text(), / data-moment="\d+ fl"/, 'the board');
   assert.match(await (await fetch(`${app.base}/watch/${token}`, { headers: { accept: 'text/html' } })).text(), / data-moment="\d+ fl"/, 'the watchers\' board');
 });
+
+test('without a roster, a driver\'s first crossing sends the standings with their row, before any counted lap', async () => {
+  const { session } = app.engine.start(office.id, { kind: 'race', durationMs: 60_000, countdownMs: 0, replace: true });
+  const res = await app.api(member, 'GET', path('/live'));
+  const it = events(res);
+  await next(it, 'snapshot');
+  await tap(); // ana's start: no lap yet
+  const crossing = await next(it, 'crossing');
+  assert.equal(crossing.data.counts, false);
+  const sent = await next(it, 'standings');
+  assert.deepEqual(sent.data.standings.map((s) => [s.driverId, s.laps]), [[ana.id, 0]]);
+  await it.return();
+  app.engine.abort(office.id, session.id);
+  app.engine.start(office.id, { kind: 'practice' });
+});

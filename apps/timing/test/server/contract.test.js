@@ -22,6 +22,13 @@ test('every documented operation has a route', () => {
   }
 });
 
+test('a start documents its roster as optional, as the operation takes it', () => {
+  const { schema } = openapi.paths['/workspaces/{workspace}/sessions'].post.requestBody.content['application/json'];
+  assert.deepEqual(schema.required, ['kind']);
+  assert.deepEqual(schema.properties.roster.type, ['array', 'null']);
+  assert.deepEqual([schema.properties.roster.minItems, schema.properties.roster.maxItems], [1, 20]);
+});
+
 test('every route is documented', () => {
   const docs = Object.entries(openapi.paths).map(([path, item]) => [sample(path), item]);
   for (const route of real) {

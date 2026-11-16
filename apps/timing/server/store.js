@@ -309,6 +309,7 @@ export function openStore(path) {
     updateSession: q('UPDATE session SET state = ?, ended_at = COALESCE(?, ended_at) WHERE id = ?'),
     runningSession: q(`SELECT * FROM session WHERE workspace_id = ? AND state IN ${ACTIVE} ORDER BY created_at DESC LIMIT 1`),
     lastSession: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'),
+    lastSessionOf: q('SELECT * FROM session WHERE workspace_id = ? AND kind = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'),
     activeAll: q(`SELECT * FROM session WHERE state IN ${ACTIVE} ORDER BY created_at`),
     listSessions: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, id DESC LIMIT ?'),
     listSessionsBefore: q('SELECT * FROM session WHERE workspace_id = ? AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?'),
@@ -633,6 +634,11 @@ export function openStore(path) {
       const r = s.lastSession.get(ws);
       const session = r ? sessionOf(r) : null;
       return session && (session.state === 'done' || session.state === 'aborted') ? session : null;
+    },
+    /** The latest session of a kind, in any state, or null. @param {string} ws @param {string} kind */
+    lastSessionOf(ws, kind) {
+      const r = s.lastSessionOf.get(ws, kind);
+      return r ? sessionOf(r) : null;
     },
     activeAll: () => s.activeAll.all().map(sessionOf),
     /** Sessions newest first; `before`, the last row of a page, pages on to older ones. @param {string} ws @param {number} limit @param {{ createdAt: number, id: string } | null} [before] */

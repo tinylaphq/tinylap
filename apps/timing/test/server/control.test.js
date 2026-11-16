@@ -57,6 +57,18 @@ test('start, list, read and abort a race; one at a time', async () => {
   await problemOf(await app.api(member, 'GET', path('sessions/nope')), 404, 'not-found');
 });
 
+test('a race or qualifying without a roster is everyone on the track', async () => {
+  for (const body of [{ kind: 'race', countdownSeconds: 0 }, { kind: 'qualifying', roster: null }]) {
+    const res = await app.api(member, 'POST', path('sessions'), body);
+    assert.equal(res.status, 201);
+    const session = await res.json();
+    assert.deepEqual([session.kind, session.roster], [body.kind, null]);
+    const detail = await (await app.api(member, 'GET', path(`sessions/${session.id}`))).json();
+    assert.deepEqual(detail.standings, []); // nobody has crossed yet
+    await app.api(member, 'POST', path(`sessions/${session.id}/abort`));
+  }
+});
+
 test('qualifying ignores the countdown', async () => {
   const q = await (await app.api(member, 'POST', path('sessions'), { kind: 'qualifying', roster: [ana.id], countdownSeconds: 10 })).json();
   assert.deepEqual([q.state, q.durationMs], ['running', 300_000]);

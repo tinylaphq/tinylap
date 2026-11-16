@@ -36,6 +36,8 @@ function addLap(d, ms, at) {
 export function applyCrossing(rules, state, { driverId, at, lapMs }) {
   if (driverId === null) return false;
   if (rules.roster && !rules.roster.includes(driverId)) return false;
+  // Without a roster, only a crossing from the start on makes an entrant: not one in a race's countdown, nor a late one from before it.
+  if (!rules.roster && rules.kind !== 'practice' && (rules.opensAt === null || at < rules.opensAt)) return false;
   const d = (state.drivers[driverId] ??= fresh());
   d.lastAt = at;
   if (rules.kind === 'practice') {
@@ -71,9 +73,15 @@ const byBest = (a, b) => (a.bestMs ?? INF) - (b.bestMs ?? INF) || (a.bestAt ?? I
 /** @param {Standing} a @param {Standing} b */
 const byRace = (a, b) => b.laps - a.laps || (a.elapsedMs ?? INF) - (b.elapsedMs ?? INF) || a.driverId.localeCompare(b.driverId);
 
+/**
+ * Who a session is about: its roster, or without one everyone whose car (assigned to a driver) crossed in it.
+ * @param {SessionRules} rules @param {SessionState} state
+ */
+const entrantsOf = (rules, state) => rules.roster ?? Object.keys(state.drivers);
+
 /** The standings, positions from 1. @param {SessionRules} rules @param {SessionState} state @returns {Standing[]} */
 export function standings(rules, state) {
-  const ids = rules.roster ?? Object.keys(state.drivers);
+  const ids = entrantsOf(rules, state);
   /** @type {Standing[]} */
   const rows = [];
   for (const driverId of ids) {
@@ -90,16 +98,29 @@ export function standings(rules, state) {
 }
 
 /**
- * Whether a qualifying or race past its close is over: every roster driver
- * finished (race) or crossed after the close (qualifying), or a whole
- * `maxLap` has passed since the close. Practice never completes.
+ * How long past its close a qualifying or race waits at most: twice its
+ * slowest entrant's best lap, and never less than `maxLap`, so a driver who
+ * stopped for good cannot hold it open.
+ * @param {SessionRules} rules @param {SessionState} state @param {number} [maxLap]
+ */
+export function finishLimit(rules, state, maxLap = MAX_LAP_MS) {
+  let slowest = 0;
+  for (const id of entrantsOf(rules, state)) slowest = Math.max(slowest, state.drivers[id]?.bestMs ?? 0);
+  return Math.max(maxLap, 2 * slowest);
+}
+
+/**
+ * Whether a qualifying or race past its close is over: every entrant (its
+ * roster, or without one everyone who crossed in it) finished (race) or
+ * crossed after the close (qualifying), or its `finishLimit` has passed since
+ * the close. Practice never completes.
  * @param {SessionRules} rules @param {SessionState} state @param {number} now @param {number} [maxLap]
  */
 export function isComplete(rules, state, now, maxLap = MAX_LAP_MS) {
   if (rules.kind === 'practice' || rules.closesAt === null) return false;
-  if (now >= rules.closesAt + maxLap) return true;
+  if (now >= rules.closesAt + finishLimit(rules, state, maxLap)) return true;
   const closesAt = rules.closesAt;
-  const roster = rules.roster ?? [];
-  if (rules.kind === 'race') return roster.every((id) => state.drivers[id]?.finished === true);
-  return roster.every((id) => (state.drivers[id]?.lastAt ?? -INF) >= closesAt);
+  const entrants = entrantsOf(rules, state);
+  if (rules.kind === 'race') return entrants.every((id) => state.drivers[id]?.finished === true);
+  return entrants.every((id) => (state.drivers[id]?.lastAt ?? -INF) >= closesAt);
 }

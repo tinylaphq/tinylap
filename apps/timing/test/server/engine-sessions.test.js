@@ -59,6 +59,87 @@ test('qualifying: a window, best lap, complete once everyone crossed after the c
   assert.deepEqual(results.standings.map((s) => [s.driverId, s.bestMs, s.laps]), [['ana', 7500, 4]]);
 });
 
+test('a race without a roster: whoever crossed, over when each finished or at the limit', () => {
+  const { engine, store, clock, events, pass } = rig();
+  store.addDriver(W, { id: 'cy', name: 'Cy', colour: '#ffb82d' });
+  store.assignTransponder(W, '0D', 'cy', 0); // never crosses
+  clock.now = T0 + 1000;
+  const { session } = engine.start(W, { kind: 'race', durationMs: 30_000, countdownMs: 0 });
+  assert.equal(session.roster, null);
+  pass(2000); // ana's start
+  pass(2500, '0B'); // ben's start
+  pass(2700, '0C'); // a car with no driver
+  pass(10_000);
+  pass(10_500, '0B');
+  pass(18_000);
+  clock.now = T0 + 31_000;
+  engine.tick();
+  assert.equal(store.session(session.id).state, 'finishing');
+  pass(33_000); // ana finishes; ben has parked
+  assert.equal(store.session(session.id).state, 'finishing', 'ben has not finished');
+  clock.now = T0 + 31_000 + 60_000 - 1;
+  engine.tick();
+  assert.equal(store.session(session.id).state, 'finishing');
+  clock.now = T0 + 31_000 + 60_000; // the limit: twice the slowest best (8 s) is under a minute
+  engine.tick();
+  assert.equal(store.session(session.id).state, 'done');
+  const results = events.filter((e) => e.type === 'results').at(-1).data;
+  assert.deepEqual(results.standings.map((s) => [s.driverId, s.laps, s.finished]), [['ana', 3, true], ['ben', 1, false]]);
+});
+
+test('a race without a roster ends as soon as each who crossed has finished', () => {
+  const { engine, store, clock, pass } = rig();
+  clock.now = T0 + 1000;
+  const { session } = engine.start(W, { kind: 'race', durationMs: 10_000, countdownMs: 0 });
+  pass(2000);
+  pass(2500, '0B');
+  clock.now = T0 + 11_000;
+  engine.tick();
+  pass(12_000);
+  assert.equal(store.session(session.id).state, 'finishing');
+  pass(12_500, '0B');
+  assert.equal(store.session(session.id).state, 'done');
+});
+
+test('without a roster, a crossing before go makes no entrant: not one in the countdown, nor a late one from before', () => {
+  const { engine, store, clock, events, pass } = rig();
+  pass(1000, '0B'); // ben, before the race was started
+  clock.now = T0 + 2000;
+  const { session } = engine.start(W, { kind: 'race', durationMs: 10_000, countdownMs: 3000 });
+  pass(3000, '0B'); // ben, in the countdown; he then parks
+  // A batch from before the start, late: filed under the race by its arrival, at its decoder time.
+  clock.now = T0 + 4500;
+  engine.ingest({ workspaceId: W, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', now: 4500, passings: [{ transponder: '0B', t: 1500 }] } });
+  clock.now = T0 + 5000;
+  engine.tick();
+  pass(5500); // ana's start
+  pass(13_500);
+  clock.now = T0 + 15_000;
+  engine.tick();
+  assert.equal(store.session(session.id).state, 'finishing');
+  pass(21_500); // ana finishes: nobody else is in it
+  assert.equal(store.session(session.id).state, 'done');
+  const results = events.filter((e) => e.type === 'results').at(-1).data;
+  assert.deepEqual(results.standings.map((s) => [s.driverId, s.laps]), [['ana', 2]]);
+});
+
+test('without a roster, a qualifying’s entrants crossed at or after its start', () => {
+  const { engine, store, clock, events, pass } = rig();
+  pass(1000, '0B');
+  clock.now = T0 + 2000;
+  const { session } = engine.start(W, { kind: 'qualifying', durationMs: 10_000 });
+  clock.now = T0 + 2500;
+  engine.ingest({ workspaceId: W, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', now: 2500, passings: [{ transponder: '0B', t: 1800 }] } });
+  pass(3000);
+  pass(11_000);
+  clock.now = T0 + 12_000;
+  engine.tick();
+  pass(19_000); // ana crossed after the close: complete
+  assert.equal(store.session(session.id).state, 'done');
+  const results = events.filter((e) => e.type === 'results').at(-1).data;
+  assert.deepEqual(results.standings.map((s) => s.driverId), ['ana']);
+});
+
 test('abort ends a race at once', () => {
   const { engine, store, clock } = rig();
   const { session } = engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 60_000, countdownMs: 0 });
