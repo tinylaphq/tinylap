@@ -17,7 +17,7 @@ Without JavaScript nothing changes: the forms, redirects and server text work as
 
 **Not in this step:**
 - `tl-relative-time` moved out of this step. Ticking "seen 5 min ago" forward while `lastSeenAt` stays a snapshot from page load makes a working decoder look stale. It comes back with step two, where the live stream updates the value.
-- Moving `board.js`, `tap.js` and `bridge-page.js` to `tl-board`, `tl-countdown`, `tl-tap` and `tl-bridge` is step two.
+- Moving `board.js` and `bridge-page.js` to `tl-board`, `tl-countdown` and `tl-bridge` is step two.
 - Page-to-page view transitions and speculation rules are a separate small change.
 
 ## 2. Where the code lives
@@ -49,7 +49,7 @@ Without JavaScript nothing changes: the forms, redirects and server text work as
 - `design.css` also gets `[hidden] { display: none !important }`. palace's `button, .btn { display: inline-block }` beats the browser's `[hidden]` rule, so without it a hidden button still shows. It is generic, so it also goes upstream to palace-ui. Once palace ships it, the TinyLap copy is removed.
 - **Frames on Setup:** `track`, `drivers` (`refreshes="transponders"`), `transponders` and `watchers`. `decoders` is not a frame: its only form, Wi-Fi pairing, is left to the browser (§3.2 step 1), and Unpair is a link.
 - `refreshes` names the other frames this one's writes change, separated by spaces. No other frame is ever touched. Without the rule, a later swap could wipe the one-time pairing token, or someone's typing in another card.
-- On Setup, the error summary moves into a slot that is always rendered: `<div id="page-status">…</div>`, right after the `<h1>` where the summary is today, and empty when there is no error. Only `setup.js` changes. Race, tap and bridge keep their summaries as they are, since they have no frames.
+- On Setup, the error summary moves into a slot that is always rendered: `<div id="page-status">…</div>`, right after the `<h1>` where the summary is today, and empty when there is no error. Only `setup.js` changes. Race and bridge keep their summaries as they are, since they have no frames.
 
 ### 3.2 Submitting
 
@@ -105,7 +105,7 @@ The frame falls back to `location.assign(action)` in these cases:
 - a response without the frame;
 - an exception during the swap.
 
-It never re-sends the form. A GET on every Setup form target answers 303 to its page (`form-targets.test.js`), so the user lands on the real page with no second write, and that page shows whether the write happened. This is the tap.js rule: a write is never retried.
+It never re-sends the form. A GET on every Setup form target answers 303 to its page (`form-targets.test.js`), so the user lands on the real page with no second write, and that page shows whether the write happened. A write is never retried.
 
 **Expired session:**
 1. The POST answers 303 to `/auth/login?returnTo=/` (`page-access.js`).

@@ -13,7 +13,6 @@ let stranger;
 let office;
 let gate;
 let spare;
-let ana;
 const logged = [];
 
 before(async () => {
@@ -30,7 +29,7 @@ before(async () => {
   const pair = async (name) => (await app.api(member, 'POST', `/workspaces/${office.id}/decoders`, { name })).json();
   gate = await pair('Gate');
   spare = await pair('Spare');
-  ana = await (await app.api(member, 'POST', `/workspaces/${office.id}/drivers`, { name: 'Ana' })).json();
+  await app.api(member, 'POST', `/workspaces/${office.id}/drivers`, { name: 'Ana' });
   app.engine.start(office.id, { kind: 'practice' });
 });
 after(() => app.close());
@@ -196,16 +195,6 @@ test('a body the bridge never sends is a 422 and logs nothing', async () => {
   await problemOf(await asDecoder(d.id, d.token, withLogs(Array.from({ length: 65 }, () => 'stat up=1'))), 422, 'invalid-request');
   await problemOf(await asDecoder(d.id, d.token, withLogs([`stat k=${'a'.repeat(504)}`])), 422, 'invalid-request');
   assert.deepEqual(decoderLogs(), []);
-});
-
-test('tap entry times a driver by hand', async () => {
-  const tap = () => app.api(member, 'POST', `/workspaces/${office.id}/tap`, { driverId: ana.id });
-  assert.deepEqual(await (await tap()).json(), { stored: true, lapMs: null });
-  clock.now += 8000;
-  assert.deepEqual(await (await tap()).json(), { stored: true, lapMs: 8000 });
-  assert.deepEqual(await (await tap()).json(), { stored: false, lapMs: null }, 'the same millisecond');
-  await problemOf(await app.api(member, 'POST', `/workspaces/${office.id}/tap`, { driverId: 'nobody' }), 422, 'invalid-request');
-  await problemOf(await app.api(stranger, 'POST', `/workspaces/${office.id}/tap`, { driverId: ana.id }), 404, 'not-found');
 });
 
 test('the answer says watched while a board stream is open', async () => {

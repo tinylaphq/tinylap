@@ -78,7 +78,7 @@ test('a club that has never driven: No sessions yet, one sentence, and its first
   assert.match(body, /<div class="board-none"><p>Start a session and drive\. Every lap shows up here as it is timed, and the first one sets the track record on Track\.<\/p><\/div>/);
   // No drivers: a session would time nothing, so the first steps stand where Start goes (board hub spec §4.1).
   assert.match(body, new RegExp(`<h2 id="start-title" class="board-next-title">Start</h2>\\s*<div class="board-next-body"><div class="start-panel start-first">[\\s\\S]*<a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>\\s*<a class="btn btn-outline" href="${base}/bridge">Connect the decoder</a>`));
-  assert.doesNotMatch(body, /Start practice|Tap laps by hand|Full results|Ended at/);
+  assert.doesNotMatch(body, /Start practice|Full results|Ended at/);
   assert.doesNotMatch(body, /No track set|Last laps|board-steps|board-hero|board-first"|status-warning/);
   assert.doesNotMatch(body, /http-equiv="refresh"/, 'nothing runs: no refresh, which would reload the form away');
   assert.match(body, new RegExp(`<div id="board-live"[^>]* data-events="${base}/board/events"`));
@@ -604,7 +604,7 @@ test('every live board says whether each decoder is reporting, idle or not repor
   await app.form(member, `${path}/watch-link`, {});
   const token = app.store.workspace(club.id).watchToken;
   const pages = async () => (await Promise.all([`${path}/board`, `${path}/board?big`].map((p) => get(member, p)).concat(get(null, `/watch/${token}`)))).map((res) => res.text());
-  for (const body of await Promise.all(await pages())) assert.doesNotMatch(body, /board-decoders/, 'tap-only club');
+  for (const body of await Promise.all(await pages())) assert.doesNotMatch(body, /board-decoders/, 'a club without decoders');
   clock.now = 1_000_000_000_000;
   app.store.addDecoder(club.id, { id: 's1', name: 'Start <b>', tokenHash: 'h1', createdAt: clock.now });
   app.store.addDecoder(club.id, { id: 's2', name: 'Pit', tokenHash: 'h2', createdAt: clock.now });

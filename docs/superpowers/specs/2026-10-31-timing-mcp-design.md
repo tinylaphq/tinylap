@@ -10,7 +10,7 @@ Timing has a JSON API, but the API takes only the app's own session cookie, and 
 
 Goals:
 
-1. **The full suite, not a read-only subset.** Every member operation the JSON API offers is a tool, except the tap and pairing a decoder (§5.3).
+1. **The full suite, not a read-only subset.** Every member operation the JSON API offers is a tool, except pairing a decoder (§5.3).
 2. **The assistant is the member.** It signs in through accounts and gets the same `timing.run`, `timing.setup` and `timing.delete` checks the pages use. A member who can't delete a track on the pages can't delete it over MCP.
 3. **Any MCP client can connect, and the member knows which one did.** Consent names the client and its domain. The account page lists every connected app and disconnects any of them.
 4. **Nothing is lost without the member saying so.** Every tool that loses data or interrupts a running session asks for a confirmation first, and the server, not the assistant, decides whether it was given (§6).
@@ -158,7 +158,6 @@ The Action column is what each route in `server/setup.js`, `server/control.js` a
 
 ### 5.3 Left out, on purpose
 
-- **`POST …/tap`**, the tap entry. A tap's lap time is the moment it arrives, and an assistant's round trip makes that moment meaningless.
 - **`POST …/decoders`**, pairing. The bridge page hands the new token to the decoder over its USB cable. An assistant can't do that, so pairing over MCP would only put a credential in its context. Pairing stays on the bridge page.
 - **`POST /decoders/{d}/passings`.** It belongs to a decoder's token, not a member.
 - **`GET …/live` (SSE)** is covered by `get_live` (§2).

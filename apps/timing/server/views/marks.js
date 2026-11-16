@@ -80,15 +80,6 @@ export function chip(drivers, id, { holder = false } = {}) {
   return html`<span class="driver"${d ? html` style="--driver: ${d.colour}"` : null}><span class="driver-name" title="${name}">${name}</span>${holder ? crownMark : null}</span>`;
 }
 
-/** Starts a practice: one button, no settings; from the Tap page, it leads back there. @param {any} request @param {{ from?: 'tap' }} [options] */
-export function startPracticeForm(request, { from } = {}) {
-  return html`<form method="post" action="${request.space.base}/sessions" class="start-practice">
-  <input type="hidden" name="kind" value="practice">
-  ${from === 'tap' ? html`<input type="hidden" name="from" value="tap">
-  ` : null}<button type="submit" class="btn btn-primary">Start practice</button>
-</form>`;
-}
-
 /**
  * "Transponder 23 is on the track": a live line, not a warning, while a car crosses
  * with no session running (named tracks spec §4); for members only, from the

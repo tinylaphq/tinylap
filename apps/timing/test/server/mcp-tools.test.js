@@ -85,7 +85,7 @@ test('tools/list has every tool, with its annotations and an output schema', asy
   const del = tools.find((x) => x.name === 'delete_driver');
   assert.equal(del.annotations.destructiveHint, true);
   assert.ok(del.outputSchema);
-  assert.ok(!tools.some((x) => x.name === 'pair_decoder' || x.name === 'tap'));
+  assert.ok(!tools.some((x) => x.name === 'pair_decoder'));
 });
 
 test('list_spaces lists the member\'s clubs and personal space, and a single space is the default', async () => {

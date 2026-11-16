@@ -4,7 +4,6 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { useTrack } from './helpers.js';
 import { BOOT, T0, W, rig } from './rig.js';
 
 test('passings become laps in a practice session', () => {
@@ -171,25 +170,6 @@ test('a passing older than the reference is stored and flagged, without a lap', 
   pass(5000);
   const last = store.crossings(practice.id).at(-1);
   assert.deepEqual([last.t, last.lapMs, last.counts, last.flag], [5000, null, false, 'backwards']);
-});
-
-test('tap entry makes tap laps that never count as personal bests', () => {
-  const { engine, store, clock, startPractice } = rig();
-  useTrack(store, W, 'Office', 'ccw', 't1');
-  clock.now = T0;
-  startPractice();
-  engine.tap(W, 'ben');
-  clock.now = T0 + 8000;
-  const row = engine.tap(W, 'ben');
-  assert.deepEqual([row.lapMs, row.counts, row.via], [8000, true, 'tap']);
-  assert.equal(engine.tap(W, 'ben'), null, 'same millisecond');
-  assert.deepEqual(store.personalBests(W, 't1', 'ccw', ['ben']), []);
-});
-
-test('a tap with no session is refused and stores nothing', () => {
-  const { engine, store } = rig();
-  assert.deepEqual(engine.tap(W, 'ben'), { error: 'no-session' });
-  assert.equal(store.listSessions(W, 10).length, 0);
 });
 
 test('publishUnknown announces the transponders without a driver', () => {

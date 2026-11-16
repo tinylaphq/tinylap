@@ -121,7 +121,7 @@ test('a typed number of someone else\'s asks in the driver\'s list, and Give it 
   assert.equal(app.store.transponders(personal).find((x) => x.code === '7C').driverId, app.store.drivers(personal).find((d) => d.name === 'Ana').id);
 });
 
-test('race, tap and Back and Forward across a POST and its 303 change nothing twice', async (t) => {
+test('a race and Back and Forward across a POST and its 303 change nothing twice', async (t) => {
   const page = await plainPage(t);
   await page.goto('/personal/board');
   await page.locator('.start-kind-option', { hasText: 'Race' }).click();
@@ -141,16 +141,6 @@ test('race, tap and Back and Forward across a POST and its 303 change nothing tw
   assert.equal(pathOf(page), '/personal/board');
   assert.equal(app.engine.snapshot(personal).session?.id, started);
 
-  await page.getByRole('link', { name: 'Tap', exact: true }).click();
-  await page.getByRole('button', { name: 'Ana' }).click();
-  await page.getByRole('status').filter({ hasText: 'Ana: started' }).waitFor();
-  const crossings = app.engine.snapshot(personal).crossings.length;
-  await page.goBack();
-  await page.goForward();
-  assert.equal(pathOf(page), '/personal/tap');
-  await page.getByRole('status').filter({ hasText: 'Ana: started' }).waitFor();
-  assert.equal(app.engine.snapshot(personal).crossings.length, crossings, 'Back and Forward did not tap again');
-
   await page.getByRole('link', { name: 'Sessions', exact: true }).click();
   await page.getByRole('link', { name: 'Abort' }).click();
   await page.getByRole('heading', { name: 'Abort the race?' }).waitFor();
@@ -164,9 +154,6 @@ test('the bridge page offers its links without JavaScript', async (t) => {
   const page = await plainPage(t);
   await page.getByRole('link', { name: 'Pair over Wi-Fi only' }).click();
   assert.equal(pathOf(page), '/personal/setup');
-  await page.goBack();
-  await page.getByRole('link', { name: 'tap laps by hand' }).click();
-  assert.equal(pathOf(page), '/personal/tap');
 });
 
 test('without JavaScript the watchers link and a pairing token show no Copy button or hint', async (t) => {
@@ -232,12 +219,8 @@ test('sign out ends on the start page or the issuer, signed out', async (t) => {
   await page.getByRole('link', { name: 'Sign in' }).first().waitFor();
 });
 
-test('without JavaScript the tap and bridge templates stay inert', async (t) => {
+test('without JavaScript the bridge templates stay inert', async (t) => {
   const page = await plainPage(t);
-  await page.goto('/personal/tap');
-  assert.ok(await page.locator('tl-tap template[data-tap="signed-out"]').count(), 'the tap page has its templates');
-  assert.equal(await page.getByText('Sign in again').isVisible(), false);
-  assert.equal(await page.getByRole('alert').count(), 0);
   await page.goto('/personal/bridge');
   assert.equal(await page.locator('template[data-bridge-row]').count(), 2);
   assert.equal(await page.getByText('first pass').isVisible(), false);

@@ -133,7 +133,7 @@ At the track the question is "are laps counted right now?". Every live board (th
 - **Not reporting** (red): in the expected set and offline; the existing banner (Wi-Fi spec §6) says the rest.
 - **Not reporting** (red) also for a decoder whose last cable holder let go within the last 30 minutes, while it isn't reporting over Wi-Fi: its cable path just ended (cable presence spec §2).
 
-Decoders silent for longer show nothing; a tap-only club shows nothing. The words are "<name>: reporting|idle|not reporting", short enough for a phone. The item is part of `#board-live`, so the board stream keeps it current; the engine publishes `decoders` (Wi-Fi spec §6) on any change of these states, not only of the offline set.
+Decoders silent for longer show nothing; a club with no decoder shows nothing. The words are "<name>: reporting|idle|not reporting", short enough for a phone. The item is part of `#board-live`, so the board stream keeps it current; the engine publishes `decoders` (Wi-Fi spec §6) on any change of these states, not only of the offline set.
 
 **Staying awake while someone watches.** A board that went quiet looks the same as a switched-off one, so the beamer could only say "idle" between sessions. To keep "reporting" true while a board is on screen:
 - The ingest answer gains `"watched": true|false`: whether any live board stream (member or watcher, `board-stream.js`) is open for the decoder's club.

@@ -22,13 +22,15 @@ before(async () => {
   member = await app.login(owner);
   stranger = await app.login(zed);
   ana = await (await app.api(member, 'POST', path('/drivers'), { name: 'Ana' })).json();
+  app.engine.assign(office.id, 'A1', ana.id);
   app.engine.start(office.id, { kind: 'practice' });
 });
 after(() => app.close());
 
-const tap = async () => {
+/** Ana's car crosses the line 8 s after the clock: decoder time is server time. */
+const cross = async () => {
   clock.now += 8000;
-  await app.api(member, 'POST', path('/tap'), { driverId: ana.id });
+  app.engine.ingest({ workspaceId: office.id, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings: [{ transponder: 'A1', t: clock.now }] } });
 };
 
 test('a member stream starts with a snapshot and carries crossings', async () => {
@@ -39,7 +41,7 @@ test('a member stream starts with a snapshot and carries crossings', async () =>
   const first = await next(it);
   assert.equal(first.type, 'snapshot');
   assert.deepEqual(first.data.drivers.map((d) => d.name), ['Ana']);
-  await tap();
+  await cross();
   const crossing = await next(it, 'crossing');
   assert.equal(crossing.data.driverId, ana.id);
   await it.return();
@@ -50,7 +52,7 @@ test('a reconnect with Last-Event-ID gets only what it missed', async () => {
   const it = events(res);
   const snapshot = await next(it);
   await it.return();
-  await tap();
+  await cross();
   const again = await app.api(member, 'GET', path('/live'), undefined, { 'last-event-id': String(snapshot.id) });
   const replay = events(again);
   const first = await next(replay);
@@ -72,7 +74,7 @@ test('watchers: a snapshot and a stream without setup, ended by rotating the lin
   assert.equal(res.status, 200);
   const it = events(res);
   assert.equal((await next(it)).type, 'snapshot');
-  await tap();
+  await cross();
   const crossing = await next(it, 'crossing');
   assert.equal('transponder' in crossing.data, false);
   await app.api(member, 'POST', path('/watch-token'));
@@ -106,19 +108,19 @@ test('the request log never holds a watchers token', async () => {
 });
 
 test('the rows\' moments reach the board pages only, not the API, the stream or the watchers\' JSON', async () => {
-  await tap();
-  await tap();
+  await cross();
+  await cross();
   clock.now -= 3000;
-  await tap();
+  await cross();
   const { token } = await (await app.api(member, 'POST', path('/watch-token'))).json();
-  assert.deepEqual(Object.values(app.engine.snapshot(office.id, { moments: true }).moments).map((m) => m.mark), ['fl'], 'a faster lap: FL');
+  assert.deepEqual(Object.values(app.engine.snapshot(office.id, { moments: true }).moments).map((m) => m.mark), ['tr'], 'a faster lap on the track: TR');
   assert.equal('moments' in await (await app.api(member, 'GET', path(''))).json(), false, 'GET /workspaces/{workspace}');
   assert.equal('moments' in await (await fetch(`${app.base}/watch/${token}`)).json(), false, 'the watchers\' JSON');
   const it = events(await app.api(member, 'GET', path('/live')));
   assert.equal('moments' in (await next(it)).data, false, 'the live stream\'s snapshot');
   await it.return();
-  assert.match(await (await app.api(member, 'GET', `/clubs/${office.id}/board`)).text(), / data-moment="\d+ fl"/, 'the board');
-  assert.match(await (await fetch(`${app.base}/watch/${token}`, { headers: { accept: 'text/html' } })).text(), / data-moment="\d+ fl"/, 'the watchers\' board');
+  assert.match(await (await app.api(member, 'GET', `/clubs/${office.id}/board`)).text(), / data-moment="\d+ tr"/, 'the board');
+  assert.match(await (await fetch(`${app.base}/watch/${token}`, { headers: { accept: 'text/html' } })).text(), / data-moment="\d+ tr"/, 'the watchers\' board');
 });
 
 test('without a roster, a driver\'s first crossing sends the standings with their row, before any counted lap', async () => {
@@ -126,7 +128,7 @@ test('without a roster, a driver\'s first crossing sends the standings with thei
   const res = await app.api(member, 'GET', path('/live'));
   const it = events(res);
   await next(it, 'snapshot');
-  await tap(); // ana's start: no lap yet
+  await cross(); // ana's start: no lap yet
   const crossing = await next(it, 'crossing');
   assert.equal(crossing.data.counts, false);
   const sent = await next(it, 'standings');

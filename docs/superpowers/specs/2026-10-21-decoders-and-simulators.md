@@ -288,7 +288,7 @@ The two buttons sit inline in one paragraph and wrap at phone width; palace 0.12
 
 | State | Section (server-rendered) | Live text (`STATE_TEXT`, `elements/bridge.js:64-70`) |
 |---|---|---|
-| `unsupported` | "The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID." (R8) + today's Wi-Fi and tap links (`views/bridge.js:36-39`) | — |
+| `unsupported` | "The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID." (R8) + the Wi-Fi link (`views/bridge.js:36-39`) | — |
 | `connect` | §4.1 | "Ready to connect." |
 | `connecting` | "Talking to the decoder…" (unchanged) | "Talking to the decoder." |
 | `listening` (replaces `not-tinylap`, `views/bridge.js:45-48`) | `<p class="status status-warning" data-bridge-listening>Connected, but nothing has come from this device yet.</p><p>A decoder answers within a few seconds. If this is the wrong device, try another.</p>` + "Try another device" | "Connected. Nothing from the device yet." When the reader has counted checksum mismatches (R8): "Data is coming, but it can't be read. Report this device." (set as `textContent` of `[data-bridge-listening]`, and put back by `reset`) |

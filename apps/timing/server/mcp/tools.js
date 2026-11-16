@@ -15,8 +15,6 @@ import { runningFor } from '../sessions-pages.js';
 
 /** API operations deliberately not offered as tools (spec §5.3), as `METHOD path`. */
 export const LEFT_OUT = new Set([
-  // A tap's lap time is the moment it arrives; an assistant's round trip makes it meaningless.
-  'POST /workspaces/{workspace}/tap',
   // Pairing hands the token to the decoder over its cable; over MCP it would only reach the assistant.
   'POST /workspaces/{workspace}/decoders',
   // The live stream; get_live answers the board as it is now.

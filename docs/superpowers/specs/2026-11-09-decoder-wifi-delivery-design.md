@@ -128,7 +128,7 @@ The server maps a decoder's `t` to server time with the smallest `receivedAt - t
 
 **Which decoders:** only those that have sent over Wi-Fi, which the store already knows (`store.js`, `netDecoders`: a passing with `via = 'net'`) (call). Only those send a heartbeat. A plain ZRound or EasyLap decoder on the bridge posts only when a car passes, so 25 s without a car would look like an outage. No schema change.
 
-**When it shows:** such a decoder is **expected**, and has been silent for 25 s (call: 2½ heartbeats). It is expected from any batch without `quiet`, by either path, until a batch with `quiet: true` or 30 minutes of silence (then it counts as switched off, and the banner goes). Tap-only clubs never see it. A board whose last batch was lost with the Wi-Fi never got its `quiet` through, so the banner rightly shows until the 30 minutes are up.
+**When it shows:** such a decoder is **expected**, and has been silent for 25 s (call: 2½ heartbeats). It is expected from any batch without `quiet`, by either path, until a batch with `quiet: true` or 30 minutes of silence (then it counts as switched off, and the banner goes). A club whose decoders use only the cable never sees it. A board whose last batch was lost with the Wi-Fi never got its `quiet` through, so the banner rightly shows until the 30 minutes are up.
 
 **What it says:** "<decoder name> isn't reporting. Laps will appear once it's back." No clock time: the server doesn't know the club's time zone. Plain, one line, palace's notice or alert style with the `--tl-*` tokens (whoever builds it uses the `frontend-design` skill, `CLAUDE.local.md`). It shows on every live board: the member's board, the big board and the watchers link.
 
@@ -148,7 +148,7 @@ The cable path already counts as the decoder reporting, since the bridge's posts
 ## 8. Tests
 
 - **Host (`pio test -e native`):** `outbox`: dropping only what a batch carried, `through` below a batch's passings, boots in order, full outbox drops the oldest, `401` pauses until `%TLPAIR`, `404`/`422` drop, back-off and `Retry-After`, the heartbeat every 10 s with `now` while in use, the `quiet` batch after 15 idle minutes, and a passing ending the quiet. `session`: `%TLSERVER` from the shared vectors.
-- **Packages and server:** `readBatch` with and without `now` and `quiet`; the engine's offset after a long gap with `now`; the banner's rules (25 s, `quiet`, 30 min, either path, Wi-Fi decoders only, tap-only) with a fake clock; the board pages and stream with and without the banner.
+- **Packages and server:** `readBatch` with and without `now` and `quiet`; the engine's offset after a long gap with `now`; the banner's rules (25 s, `quiet`, 30 min, either path, Wi-Fi decoders only, cable-only clubs) with a fake clock; the board pages and stream with and without the banner.
 - **Bridge:** pairing sends `%TLPAIR`, `%TLSERVER` (the page's public URL), then `%TLWIFI`; the simulator answers `%TLSERVER`; a decoder that doesn't answer it gets no `%TLWIFI` and shows the firmware message.
 - **`tools/decoder-sim.js`** already plays a decoder on Wi-Fi; it sends `now` and heartbeats as the board does, so the banner can be tried without hardware.
 - **On the board (owner):** the §3.1 accuracy check; pull the router's power mid-session and see the banner within about 25 s, then the laps from the gap arrive with their right times once it's back; cable and Wi-Fi together store each passing once; a wrong Wi-Fi password shows `state=failed` with a reason.

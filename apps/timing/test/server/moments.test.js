@@ -64,17 +64,6 @@ test('FL plays on every improvement of the session\'s fastest lap', () => {
   assert.deepEqual(moments(r), {}, 'a tie is no improvement, and the latest counted lap decides');
 });
 
-test('a tapped lap can play FL, never PB or TR', () => {
-  const r = onTrack();
-  practiceAt(r, 0);
-  laps(r.pass, '0A', 1000, 8000);
-  r.clock.now = T0 + 20_000;
-  r.engine.tap(W, 'ben');
-  r.clock.now = T0 + 25_000;
-  r.engine.tap(W, 'ben');
-  assert.deepEqual(moments(r), { ben: `${lastSeq(r)} fl` });
-});
-
 test('PB plays only once the driver had a best here from an earlier session, then on every improvement', () => {
   const r = onTrack();
   practiceAt(r, 0);

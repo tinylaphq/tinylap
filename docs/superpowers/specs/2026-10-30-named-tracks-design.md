@@ -75,7 +75,7 @@ No migration. The deployed timing database holds no real club yet, so it starts 
   - Beside it, **Start practice** (members, not on the big board or the watch link). While a car crosses with no session, a live line says so ("Car 23 is on the track") instead of a yellow notice.
   - Cars without a driver are one quiet line under the button ("2 cars have no driver yet. Assign them"), not a notice.
   - Below: **Fastest on this track** (each driver's best on the current track and direction) and **Last session** (its top finishers, when it ended, a link to its page).
-  - A club that has never driven a lap gets one card instead: "Ready when your cars are", with Add drivers, Connect the decoder and Tap laps by hand.
+  - A club that has never driven a lap gets one card instead: "Ready when your cars are", with Add drivers and Connect the decoder.
   - Gone: the "No session yet" headline, the empty "Last laps" card, the setup steps for clubs that have driven, and both yellow notices. Yellow notices stay for things that are wrong, such as a decoder offline.
 - The words follow the glossary: a *track* is what a club races on; a *layout* is the planner's drawing of it.
 

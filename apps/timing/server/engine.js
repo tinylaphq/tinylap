@@ -208,7 +208,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       flag: step.kind === 'backwards' || step.kind === 'double' ? step.kind : null,
     };
     row.seq = store.addCrossing(row);
-    const qualifies = counts && via !== 'tap' && driverId !== null && lapMs !== null && session.trackId !== null;
+    const qualifies = counts && driverId !== null && lapMs !== null && session.trackId !== null;
     // A PB plays only once the driver had a best here before this session, and the lap beats their best so far.
     const earlier = qualifies ? earlierBestsOf(session).get(driverId) : undefined;
     const pb = earlier !== undefined && lapMs < Math.min(earlier, store.personalBests(workspaceId, session.trackId, session.direction, [driverId])[0]?.bestMs ?? Infinity);
@@ -414,18 +414,6 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     if (!force && key === (offlineShown.get(workspaceId) ?? '{"offline":[],"header":[],"states":[]}')) return;
     offlineShown.set(workspaceId, key);
     hub.publish(workspaceId, 'decoders', { offline, decoders: header });
-  }
-
-  /** A passing by hand (spec §4): a virtual decoder per workspace, a boot per session, server time. */
-  function tap(workspaceId, driverId) {
-    const t = now();
-    return store.transaction(() => {
-      const session = store.runningSession(workspaceId);
-      if (!session) return { error: 'no-session' };
-      const passing = { decoder: `tap:${workspaceId}`, boot: session.id, transponder: driverId, t };
-      if (!store.insertPassing({ ...passing, receivedAt: t, via: 'tap', workspaceId })) return null;
-      return cross(workspaceId, session, passing, { at: t, driverId, via: 'tap' });
-    });
   }
 
   function setState(session, state) {
@@ -645,5 +633,5 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return resultInput(workspaceId, kept);
   }
 
-  return { ingest, holdCable, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail, resultInput };
+  return { ingest, holdCable, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail, resultInput };
 }

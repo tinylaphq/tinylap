@@ -120,27 +120,18 @@ for (const width of [320, 390, 1280]) {
   });
 }
 
-test('while a session runs (Tap, the start form, the board\'s track strip), the long names stay inside their boxes, cut with "…", at 320 and 390', async (t) => {
+test('while a session runs (the start form, the board\'s track strip), the long names stay inside their boxes, cut with "…", at 320 and 390', async (t) => {
   const running = app.engine.start(ws, { kind: 'practice' }).session;
   t.after(() => app.engine.end(ws, running.id));
   for (const width of [320, 390]) {
     const { context, page, errors } = await pageAs(browser, app, member, { viewport: { width, height: 900 } });
-    for (const path of ['/personal/tap', '/personal/sessions', '/personal/board', '/personal/board?big']) {
+    for (const path of ['/personal/sessions', '/personal/board', '/personal/board?big']) {
       await page.goto(path);
       await page.evaluate(() => document.fonts.ready);
       const m = await page.evaluate(spills);
       assert.deepEqual(m.out, [], `${path} at ${width}: nothing spills`);
       assert.equal(m.sideways, 0, `${path} at ${width}: no sideways scroll`);
     }
-    await page.goto('/personal/tap');
-    const tile = await page.locator('.tap-tile', { hasText: WORD }).evaluate((el) => {
-      const name = el.querySelector('.tap-tile-name');
-      const grid = el.closest('.tap-grid').getBoundingClientRect();
-      return { cut: name.scrollWidth > name.clientWidth, overflow: getComputedStyle(name).textOverflow, size: parseFloat(getComputedStyle(el).fontSize), inGrid: el.getBoundingClientRect().right <= grid.right + 0.5, title: name.title };
-    });
-    assert.deepEqual(tile, { cut: true, overflow: 'ellipsis', size: 16, inGrid: true, title: WORD });
-    // A screen reader hears the whole name on the button.
-    assert.equal(await page.getByRole('button', { name: WORD }).count(), 1);
     await context.close();
     assert.deepEqual(errors, []);
   }

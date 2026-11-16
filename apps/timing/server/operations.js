@@ -388,11 +388,3 @@ export function endSession(request, { id }) {
   return ended ? { value: publicSession(ended) } : missing('running practice');
 }
 
-export function tap(request, { driverId }) {
-  if (typeof driverId !== 'string' || !request.store.driver(request.workspaceId, driverId)) return invalid('Pick one of the drivers here.', 'driver');
-  const wait = request.limiters.tap.take(request.userId);
-  if (wait) return limited(`That's a lot of taps. Try again in ${wait} seconds.`, wait);
-  const row = request.engine.tap(request.workspaceId, driverId);
-  if (row?.error) return fail('no-session', 'No session is running. Start a practice first.');
-  return { value: { stored: row !== null, lapMs: row?.lapMs ?? null } };
-}

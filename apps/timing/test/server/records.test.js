@@ -89,15 +89,14 @@ test('a tie does not take the record', () => {
   assertProjection(r.store);
 });
 
-test('tapped laps never set a record or a personal best', () => {
+test('laps tapped before the Tap page went never set a record or a personal best, even when the records are rebuilt', () => {
   const r = onTrack();
   laps(r.pass, '0A', 1000, 8000);
-  r.clock.now = T0 + 20_000;
-  r.engine.tap(W, 'ben');
-  r.clock.now = T0 + 25_000;
-  r.engine.tap(W, 'ana');
-  r.clock.now = T0 + 27_000;
-  r.engine.tap(W, 'ben');
+  const sessionId = r.engine.snapshot(W).session.id;
+  const tapped = (driverId, at, lapMs) => r.store.addCrossing({ workspaceId: W, sessionId, decoder: `tap:${W}`, boot: sessionId, transponder: driverId, t: at, driverId, at, lapMs, counts: true, ref: true, via: 'tap', flag: null });
+  tapped('ben', T0 + 20_000, 5000);
+  tapped('ana', T0 + 25_000, 4000);
+  r.store.rebuildRecords(W, 'trk', 'cw');
   assert.deepEqual(history(r.store), [['ana', 8000]]);
   assert.deepEqual(r.store.personalBests(W, 'trk', 'cw', ['ana', 'ben']).map((b) => [b.driverId, b.bestMs]), [['ana', 8000]]);
   assert.deepEqual(recordEvents(r.events), []);

@@ -38,7 +38,7 @@ test('every screen loads its assets from /v/<build>/', async (t) => {
   t.after(() => context.close());
   const failed = [];
   page.on('response', (res) => { if (res.status() >= 400) failed.push(`${res.status()} ${res.url()}`); });
-  for (const screen of ['board', 'race', 'tap', 'setup', 'bridge']) {
+  for (const screen of ['board', 'race', 'setup', 'bridge']) {
     await page.goto(`/personal/${screen}`);
     await page.locator('main h1, main .board-title').first().waitFor();
     const css = await page.evaluate(() => [...document.styleSheets].map((s) => s.href).filter(Boolean));
@@ -53,10 +53,6 @@ test('every screen loads its assets from /v/<build>/', async (t) => {
     if (screen === 'setup') {
       for (const name of ['frame', 'copy']) assert.ok(scripts.some((src) => new URL(src).pathname === `/v/${SHA}/pkg/design/elements/${name}.js`), `setup loads ${name}.js`);
       assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-frame') && customElements.get('tl-copy'))), true, 'and defines both');
-    }
-    if (screen === 'tap') {
-      assert.ok(scripts.some((src) => new URL(src).pathname === `/v/${SHA}/public/elements/tap.js`), 'tap loads public/elements/tap.js');
-      assert.equal(await page.evaluate(() => Boolean(customElements.get('tl-tap'))), true, 'and defines tl-tap');
     }
     if (screen === 'bridge') {
       assert.ok(scripts.length, 'the bridge loads a script');
