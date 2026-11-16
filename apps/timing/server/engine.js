@@ -63,6 +63,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   const recordNews = new Map();
   /** Workspace id → the last ended session's id and standings, so an idle board doesn't replay it on every render. */
   const endedStandings = new Map();
+  /** Workspace id → its latest finished session on its track, with its standings and laps, for the idle board's result. */
+  const finishedDetails = new Map();
   /** Session id → each driver's moment, when their latest counted lap set a mark that plays (fastest lap spec §4.1). */
   const moments = new Map();
   /** Session id → each driver's best on its track and direction from earlier sessions, as it stood when it started. */
@@ -571,6 +573,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       standings: rows,
       // Each driver's moment, of their latest counted lap, by driver id: the board's only.
       ...(withMoments ? { moments: session ? momentsOf(session, recordNew) : {} } : {}),
+      // The idle board's result, what resultOf makes it from: the board's views only (board hub spec §4.1).
+      ...(withMoments ? { latest: session ? null : latestResult(workspaceId, ws) } : {}),
       crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),
       drivers: store.drivers(workspaceId),
       bests: store.personalBests(workspaceId, track.id, ws.direction, [...rows, ...endedRows].map((r) => r.driverId)),
@@ -607,5 +611,39 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return { session: publicSession(session), standings: standingsOf(session), crossings: store.crossings(sessionId).map(memberCrossing) };
   }
 
-  return { ingest, holdCable, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail };
+  /**
+   * What a session's result is made from (board hub spec §6), given its detail:
+   * the track's record and personal bests now (the marks are present tense), the
+   * fastest record set in the session and the one standing before it, and each
+   * driver's best on the track before the session.
+   * @param {string} workspaceId @param {{ session: any, standings: any[], crossings: any[] }} detail
+   */
+  function resultInput(workspaceId, { session, standings, crossings }) {
+    const track = session.trackId ? store.track(workspaceId, session.trackId) : null;
+    const record = track ? store.currentRecord(workspaceId, track.id, session.direction) : null;
+    const bests = track ? store.personalBests(workspaceId, track.id, session.direction, standings.map((r) => r.driverId)) : [];
+    const history = track ? store.recordHistory(workspaceId, track.id, session.direction) : [];
+    const here = history.flatMap((r, i) => (r.sessionId === session.id ? [i] : []));
+    const fell = here.length ? { lap: history[here[0]], beat: history[here[here.length - 1] + 1] ?? null } : null;
+    const before = track ? store.bestsBefore(workspaceId, track.id, session.direction, session.createdAt) : new Map();
+    return { session, standings, crossings, record, bests, fell, before, track };
+  }
+
+  /**
+   * The idle board's result (board hub spec §4.1): the latest finished session,
+   * never an aborted one, on the club's current track and direction. Its
+   * standings and laps never change, so they are read once and kept.
+   */
+  function latestResult(workspaceId, ws) {
+    const finished = store.lastFinished(workspaceId, ws.trackId, ws.direction);
+    if (!finished) return null;
+    let kept = finishedDetails.get(workspaceId);
+    if (kept?.session.id !== finished.id) {
+      kept = { session: publicSession(finished), standings: standingsOf(finished), crossings: store.crossings(finished.id).map(memberCrossing) };
+      finishedDetails.set(workspaceId, kept);
+    }
+    return resultInput(workspaceId, kept);
+  }
+
+  return { ingest, holdCable, tap, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail, resultInput };
 }

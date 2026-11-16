@@ -56,7 +56,8 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 /* The live board: a subgrid of the board's columns, so the record cell's left edge is Last laps' (the gutter between is the box's white). */
 .board:not(.is-idle) > .board-track { grid-template-columns: subgrid; }
 /* The idle board (until its two columns land): the record cell over the record card's Start column, on its edge. */
-.board.is-idle:has(.board-hero-go) > .board-track { grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 1fr); }
+/* The idle board too, but on the TV, which is one column: there the record takes what it needs at the right. */
+body:not(.big) .board.is-idle > .board-track { grid-template-columns: subgrid; }
 .board-track p { margin: 0; }
 .strip-where { grid-column: 1; display: flex; flex-wrap: wrap; align-content: center; gap: var(--p-space-xs) var(--p-space-lg); padding: var(--p-space-sm) var(--p-space-md); min-width: 0; }
 .board-track-name { color: var(--p-text-secondary); display: flex; align-items: center; min-width: 0; }
@@ -104,6 +105,11 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
   display: flex; justify-content: space-between; align-items: end; gap: var(--p-space-md); flex-wrap: wrap;
 }
 .board-title { margin: 0; font-size: clamp(1.75rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -0.02em; }
+/* Under the title, what runs and End or Abort (board hub spec §4.2): the block ends on the clock's bottom edge, as the title alone did. */
+.board-title-block { display: grid; gap: var(--p-space-sm); }
+.board-session-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-xs) var(--p-space-md); margin: 0; font-weight: 600; color: var(--p-text-secondary); }
+.board-stop { min-height: var(--p-control-height-sm); }
+body.big .board-session-line { font-size: 0.6em; }
 .board-clock {
   display: grid; justify-items: end; align-content: center; gap: var(--p-space-xs);
   padding: var(--p-space-sm) var(--p-space-lg); background: var(--p-dark); color: var(--p-text-on-fill);
@@ -241,7 +247,7 @@ body.big .board-track.is-live .strip-figure { font-size: 1.6em; }
 body.big .strip-by { gap: 0 0.5em; }
 /* A phone stacks the strip: the track and its decoders, then each cell at full width. */
 @media (max-width: 720px) {
-  .board-track, .board:not(.is-idle) > .board-track, .board.is-idle:has(.board-hero-go) > .board-track { grid-template-columns: minmax(0, 1fr); }
+  .board-track, .board:not(.is-idle) > .board-track, body:not(.big) .board.is-idle > .board-track { grid-template-columns: minmax(0, 1fr); }
   .strip-cells { grid-column: 1; grid-auto-flow: row; border-left: 0; border-top: var(--p-border-width) solid var(--p-text); }
   .strip-cell + .strip-cell { border-left: 0; border-top: var(--p-border-width) solid var(--p-text); }
 }
@@ -250,9 +256,6 @@ body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em
 body.big .board-table { --cell-x: calc(var(--board-font) * 0.5); --cell-y: calc(var(--board-font) * 0.6); --mark-gap: calc(var(--board-font) * 0.4); }
 body.big .board-feed { font-size: max(0.7em, var(--p-text-md)); }
 body.big .board-ago { font-size: 0.6em; }
-body.big .board-hero-time { font-size: 4.5em; }
-body.big .board-hero-by, body.big .board-last-meta { font-size: 0.7em; }
-body.big .board .board-last-meta .tag { font-size: 0.8em; }
 /* The way out: a dark pill at the top right, always there, big enough to hit by touch. */
 body.big .navbar { position: fixed; top: var(--p-space-sm); right: var(--p-space-sm); left: auto; width: auto; height: auto; padding: 0; border: 0; background: var(--p-dark); opacity: 0.7; z-index: 10; }
 body.big .navbar:hover, body.big .navbar:focus-within { opacity: 1; }
@@ -501,76 +504,119 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .bridge-first { color: var(--p-text-muted, var(--p-text)); font-style: italic; }
 .bridge-preview li:last-child { border-bottom: 0; }
 
-/* The board while nobody races (named tracks spec §4): the track record is
- * the one big thing, in the record colour's shadow; Start practice sits
- * beside it. Below, two plain ranked lists. Nothing here is a warning. */
-.board.is-idle { grid-template-columns: minmax(0, 1fr); }
-.board-hero {
-  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 1fr);
-  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record);
+/* The board while nobody races (board hub spec §4.1): two columns, the
+ * latest result on the left and on the right the Start panel, then Fastest on
+ * this track. Rows: the strip, today's warnings, the heads, the bodies. The
+ * side is a subgrid of the last two, so its title is level with the result's
+ * and its first box with the result's first card. One level of box: the
+ * result's cards, its table, the Start panel and the list; nothing wraps them. */
+.board.is-idle {
+  grid-template-columns: minmax(0, 1.75fr) minmax(16rem, 1fr);
+  grid-template-rows: auto auto auto 1fr;
+  column-gap: var(--p-space-2xl); row-gap: 0;
 }
-.board-hero-record { display: grid; align-content: center; gap: var(--p-space-xs); padding: var(--p-space-lg) var(--p-space-xl); min-width: 0; }
-/* A label over the time, not palace's gradient headline. */
-.board-hero-label {
-  margin: 0; font-size: 1em; font-weight: 600; letter-spacing: 0; line-height: 1.3; text-transform: none;
+.board.is-idle > .board-track { grid-row: 1; margin-bottom: var(--p-space-lg); }
+.board-notices { grid-column: 1 / -1; grid-row: 2; display: grid; gap: var(--p-space-sm); margin-bottom: var(--p-space-lg); }
+.board-notices > * { margin: 0; }
+.board-result { display: contents; }
+.board-result > .result-head { grid-column: 1; grid-row: 3; margin-bottom: var(--p-space-md); }
+.board-result > :not(.result-head) { grid-column: 1; grid-row: 4; align-self: start; min-width: 0; margin: 0; }
+.board-next { grid-column: 2; grid-row: 3 / span 2; display: grid; grid-template-rows: subgrid; row-gap: 0; min-width: 0; }
+.board-next-title { margin: 0 0 var(--p-space-md); align-self: start; font-size: var(--p-text-xl); line-height: var(--p-leading-tight); }
+.board-next-body { display: grid; gap: var(--p-space-xl); align-content: start; min-width: 0; }
+/* The result's head: its title (the page's h1, set as a section head), when it
+ * ended under it, and Full results at its far end. */
+.result-head.is-board { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 var(--p-space-md); }
+.result-head.is-board > a { grid-column: 2; grid-row: 1; font-weight: 600; }
+.board-result-title {
+  grid-column: 1; margin: 0; font-size: var(--p-text-xl);
   background: none; -webkit-text-fill-color: currentColor; color: var(--p-text);
 }
-.board-hero-time { margin: 0; text-align: left; font: 700 clamp(3.5rem, 11vw, 8rem) / 0.95 var(--p-font-mono); letter-spacing: -0.04em; }
-.board-hero-none { margin: var(--p-space-xs) 0; font-size: clamp(var(--p-text-3xl), 5vw, 3.5rem); font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
-.board-hero-by { margin: 0; color: var(--p-text-secondary); }
-.board-hero-by .driver, .board-hero-by .num { color: var(--p-text); }
-/* Three rows, the first kept for the line that a car is on the track, so the button never moves when it comes or goes. */
-.board-hero-go {
-  display: grid; grid-template-rows: minmax(1.5em, auto) auto auto; align-content: center; gap: var(--p-space-md);
-  padding: var(--p-space-lg); border-left: var(--p-border-width) solid var(--p-text);
+.result-when { grid-column: 1; margin: 0; font-weight: 600; color: var(--p-text-secondary); }
+.board.is-idle .result-table { font-size: var(--p-text-md); }
+.result-more { margin: 0; font-weight: 600; color: var(--p-text-secondary); }
+/* Never driven: one sentence in the result's place, in the record's shadow. */
+.board-none { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record); padding: var(--p-space-xl); }
+.board-none p { margin: 0; max-width: 34ch; font: 700 var(--p-text-2xl) / var(--p-leading-tight) var(--p-font); letter-spacing: -0.01em; }
+/* The Start panel's place: palace's box. The line that a car is on the track
+ * is the reason to press the button under it; its row is kept, so the button
+ * never moves when the line comes or goes. */
+.board-start {
+  display: grid; gap: var(--p-space-md); padding: var(--p-space-md);
+  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text);
 }
-.board-hero-go > .board-on-track { grid-row: 1; }
-.board-hero-go > .start-practice { grid-row: 2; }
-.board-hero-go > .board-quiet { grid-row: 3; }
-.board-hero-go .btn { width: 100%; font-size: 1.15em; padding-block: var(--p-space-md); }
+.board-start:has(> .start-practice) { grid-template-rows: minmax(1.5em, auto) auto auto; }
+.board-start > .board-on-track { grid-row: 1; }
+.board-start > .start-practice { grid-row: 2; }
+.board-start > .board-quiet { grid-row: 3; }
+.board-start > * { margin: 0; }
+.board-start .start-practice .btn { width: 100%; min-height: var(--p-control-height-lg); font-size: var(--p-text-lg); }
+.board-first-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm) var(--p-space-lg); }
+.board-first-links a:not(.btn) { font-weight: 600; }
+.board-fastest h2 { margin: 0 0 var(--p-space-sm); }
 /* A car on the track with no session: the live lamp, in the accent, blinking like the stream's. */
 .board-on-track { display: flex; align-items: center; gap: var(--p-space-sm); margin: 0; font-weight: 600; }
 .board-on-track::before { content: ''; flex: none; width: 10px; height: 10px; background: var(--p-accent-1); animation: live-blink 1s steps(2, jump-none) infinite; }
 @media (prefers-reduced-motion: reduce) { .board-on-track::before { animation: none; } }
 .board-quiet { margin: 0; font-size: 0.875em; color: var(--p-text-secondary); }
 .board-quiet a { font-weight: 600; }
-.board-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--p-space-lg); align-items: start; margin-top: var(--p-space-sm); }
-.board-idle h2 { margin: 0 0 var(--p-space-sm); }
 .board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
-/* Pos, driver, time and mark, the time and mark in columns of fixed width:
- * both lists put their times at the same place, side by side or stacked.
- * The fastest list's mark column holds the track record's TR. */
+/* Pos, driver, time and mark, the time and mark in columns of fixed width.
+ * The mark column holds the track record's TR. */
 .board-ranks li {
   display: grid; grid-template-columns: 2em minmax(0, 1fr) 3.7em 1.8em; align-items: baseline; gap: var(--p-space-sm);
   padding: var(--p-space-sm) var(--p-space-md); border-bottom: var(--p-border-thin) solid var(--p-border-light);
 }
-.has-minute-laps .board-ranks li { grid-template-columns: 2em minmax(0, 1fr) 4.9em 1.8em; }
+.board-ranks.has-minute-laps li { grid-template-columns: 2em minmax(0, 1fr) 4.9em 1.8em; }
 .board-ranks li:last-child { border-bottom: 0; }
 .board-ranks .pos { font: 700 1em var(--p-font-mono); color: var(--p-text-muted); }
-.board-last-meta { margin: var(--p-space-sm) 0 0; font-size: 0.875em; color: var(--p-text-secondary); }
-.board-last-meta .tag { vertical-align: middle; }
-/* A club that has never driven: one card, the first thing to do as the button. */
-.board-first { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record); padding: var(--p-space-xl); }
-.board-first h1 { margin: 0 0 var(--p-space-xs); font-size: clamp(1.75rem, 4vw, var(--p-text-4xl)); line-height: 1.05; letter-spacing: -0.02em; }
-.board-first p { margin: 0 0 var(--p-space-lg); max-width: 60ch; }
-.board-first .board-first-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm) var(--p-space-lg); margin: 0; }
-.board-first-links a:not(.btn) { font-weight: 600; }
 @media (max-width: 720px) {
-  .board-hero { box-shadow: var(--p-shadow-lg) var(--tl-record); grid-template-columns: minmax(0, 1fr); }
-  .board-hero-record { padding: var(--p-space-lg); }
-  /* Stacked on a phone, no row is kept: the line that a car is on the track
-     comes under Start practice, so the button still never moves, and
-     the space is there only while the line is. */
-  .board-hero-go { border-left: 0; border-top: var(--p-border-width) solid var(--p-text); grid-template-rows: none; }
-  .board-hero-go > :is(.board-on-track, .start-practice, .board-quiet) { grid-row: auto; }
-  .board-hero-go > .board-on-track { order: 1; }
-  .board-hero-go > .board-quiet { order: 2; }
-  .board-first { padding: var(--p-space-lg); box-shadow: var(--p-shadow-lg) var(--tl-record); }
+  /* One column: the result, then the Start panel and the fastest laps. */
+  .board.is-idle { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .board-next { grid-column: 1; grid-row: 5; grid-template-rows: none; margin-top: var(--p-space-xl); }
+  .board-none { padding: var(--p-space-lg); }
+  /* Stacked on a phone no row is kept: the line comes under the button, so the button still never moves. */
+  .board-start:has(> .start-practice) { grid-template-rows: none; }
+  .board-start > :is(.board-on-track, .start-practice, .board-quiet) { grid-row: auto; }
+  .board-start > .board-on-track { order: 1; }
+  .board-start > .board-quiet { order: 2; }
 }
-/* The display and the watchers have the record alone, in the middle. */
-.board-hero:not(:has(.board-hero-go)) { grid-template-columns: minmax(0, 1fr); }
-.board-hero:not(:has(.board-hero-go)) .board-hero-record { justify-items: center; text-align: center; }
-.board-hero:not(:has(.board-hero-go)) .board-hero-time { text-align: center; }
+
+/* The idle TV (board hub spec §4.3, §6.4): the strip and the result, in one
+ * column, every size a multiple of the board's font. Three reads: who won (P1
+ * at 2.3em, its figure 1.15em, one fact), who followed (P2 and P3 at 1.15em,
+ * name and gap), everyone else (the table at 0.8em, no header, no Laps or
+ * Time). With six drivers it fits 1920×1080. */
+body.big .board.is-idle { grid-template-columns: minmax(0, 1fr); }
+body.big .board.is-idle > .board-track { margin-bottom: calc(var(--board-font) * 0.6); }
+body.big .board-notices { margin-bottom: calc(var(--board-font) * 0.6); }
+body.big .result-head.is-board { display: flex; justify-content: start; align-items: baseline; gap: var(--p-space-md); font-size: 0.6em; margin-bottom: calc(var(--board-font) * 0.6); }
+body.big .board-result-title { font-size: 1em; }
+body.big .result {
+  --rank: calc(var(--board-font) * 2.4);
+  --rank-gap: calc(var(--board-font) * 0.45);
+  gap: 0.6em;
+}
+body.big .place { padding: 0.45em 0.7em 0.45em 0; row-gap: 0.3em; }
+body.big .place.is-first { padding-block: 0.5em 0.45em; }
+body.big .place-pos, body.big .place-name { font-size: 1.15em; }
+body.big .place-figure { font-size: 1em; }
+body.big .is-first .place-pos, body.big .is-first .place-name { font-size: 2.3em; }
+body.big .is-first .place-figure { font-size: 1.15em; color: var(--p-text-secondary); }
+body.big .place-figure .mark { font-size: 0.55em; top: -0.35em; }
+body.big .place-foot { padding-top: 0.25em; }
+body.big .place:not(.is-first) { grid-template-rows: auto; }
+body.big .place:not(.is-first) .place-foot { display: none; }
+/* P1's one fact is its best lap: a race's Laps goes; ranked by best lap, the figure already is it. */
+body.big .result.is-race .is-first .place-facts > :first-child { display: none; }
+body.big .result:not(.is-race) .place.is-first .place-foot { display: none; }
+body.big .result:not(.is-race) .place.is-first { grid-template-rows: auto; row-gap: 0; }
+body.big .place-facts dt { font-size: 0.4em; }
+body.big .is-first .place-facts dd { font-size: 0.7em; }
+body.big .board.is-idle .result-table { font-size: 0.8em; }
+body.big .result-table thead { display: none; }
+body.big .result-table .v-laps, body.big .result-table .v-total { display: none; }
+body.big .result-more { font-size: 0.6em; }
 
 /* The record moment (drivers and transponders spec §4), played by tl-board on
  * the card that says a record has just fallen: behind the new time a big
@@ -578,8 +624,8 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
  * the time bounces as the finale. It sits behind the card's content, clipped
  * to the card, and moves nothing; nothing stays. The crown's jump from the
  * old holder's row to the new one's flies over the page. */
-.board-hero-record, .strip-cell { position: relative; }
-:is(.board-hero-record, .strip-cell) > :not(.hero-fx) { position: relative; z-index: 1; }
+.strip-cell { position: relative; }
+.strip-cell > :not(.hero-fx) { position: relative; z-index: 1; }
 .hero-fx { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 .hero-fx .fx-at { position: absolute; width: 0; height: 0; }
 /* Behind the time it has no outline: black lines would run into the digits. */

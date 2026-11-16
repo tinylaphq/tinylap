@@ -7,7 +7,7 @@
 // session runs the session's fastest lap as a second; no TR or FL mark, the
 // fills say them. With no record yet the record cell keeps its place,
 // unfilled. The record cell's left edge falls on the right column's (Last
-// laps' while running, the Start practice column's while idle). The fastest
+// laps' while running, the Start column's while idle). The fastest
 // lap cell is a polite live region that a swap keeps, so a new fastest lap is
 // read out, and a new holder never moves the strip. On a phone the cells
 // stack. And a time with its driver reads as a value and its credit wherever
@@ -125,8 +125,8 @@ const read = () => {
     where: box(strip.querySelector('.strip-where')),
     cellsBox: box(strip.querySelector('.strip-cells')),
     cells,
-    // The column the record cell lines up with: Last laps while running, Start practice while idle.
-    column: box(document.querySelector('.board-feed, .board-hero-go')),
+    // The column the record cell lines up with: Last laps while running, the side (Start, Fastest on this track) while idle.
+    column: box(document.querySelector('.board-feed, .board-next')),
     pageScroll: document.documentElement.scrollWidth - innerWidth,
   };
 };
@@ -256,7 +256,7 @@ for (const [label, viewport, path] of [['a laptop', { width: 1280, height: 800 }
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
     t.after(() => context.close());
     await page.goto(path);
-    await page.locator('.board-hero').waitFor();
+    await page.locator('.board-result').waitFor();
     await page.evaluate(() => document.fonts.ready);
     const m = await page.evaluate(read);
     box(m, label);
@@ -311,7 +311,7 @@ const credits = (selector) => {
   });
 };
 
-test('a time and who set it: the idle board’s record card and lists, and none in a practice’s facts', async (t) => {
+test('a time and who set it: the idle board’s list, and none in a practice’s facts', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   const check = (list, label, { gap }) => {
@@ -328,9 +328,8 @@ test('a time and who set it: the idle board’s record card and lists, and none 
   };
   if (app.store.runningSession(ws)) app.engine.end(ws, session.id);
   await page.goto('/personal/board');
-  await page.locator('.board-hero').waitFor();
-  check(await page.evaluate(credits, '.board-hero-record'), 'the record card', { gap: false });
-  check(await page.evaluate(credits, '.board-ranks li'), 'the idle lists', { gap: false });
+  await page.locator('.board-result').waitFor();
+  check(await page.evaluate(credits, '.board-ranks li'), 'the idle list', { gap: false });
   // A practice's page names its fastest lap on its P1 card, not in its facts; results.test.js measures a race's.
   await page.goto(`/personal/sessions/${session.id}`);
   assert.equal(await page.locator('.session-facts .lap-credit').count(), 0);

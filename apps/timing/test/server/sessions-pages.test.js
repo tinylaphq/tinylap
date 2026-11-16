@@ -106,7 +106,7 @@ test('start a race from the form, confirm before replacing it, then abort it aft
 
   const aborted = await app.form(member, `${base}/sessions/${session.id}/abort`, {});
   assert.equal(aborted.status, 303);
-  assert.equal(aborted.headers.get('location'), `${base}/sessions`);
+  assert.equal(aborted.headers.get('location'), `${base}/board`, 'back to the board, where the night is run');
   assert.equal(app.store.session(session.id).state, 'aborted');
 
   const gone = await app.form(member, `${base}/sessions/${session.id}/abort`, {});
@@ -327,7 +327,7 @@ test('a practice: Start practice, its start time, End after confirming', async (
   assert.equal(app.store.runningSession(office.id).id, session.id, 'asking ends nothing');
   const ended = await app.form(member, `${base}/sessions/${session.id}/end`, {});
   assert.equal(ended.status, 303);
-  assert.equal(ended.headers.get('location'), `${base}/sessions`);
+  assert.equal(ended.headers.get('location'), `${base}/board`);
   assert.equal(app.store.session(session.id).state, 'done');
   assert.equal((await app.form(member, `${base}/sessions/${session.id}/end`, {})).status, 404);
   assert.equal((await get(`${base}/sessions/${session.id}/end`)).status, 404);

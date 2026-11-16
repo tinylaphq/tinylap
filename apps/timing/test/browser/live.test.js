@@ -34,7 +34,7 @@ test('the board updates live and its clock ticks', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/board');
-  await page.getByRole('heading', { name: 'Ready when your cars are' }).waitFor();
+  await page.getByRole('heading', { name: 'No sessions yet' }).waitFor();
   app.engine.start((await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id, { kind: 'practice' });
   clock.offset += 10_000; // a practice starts clean: the lap begins after its start
   await postPassings(app, decoder, [{ transponder: '10', t: 1000 }, { transponder: '10', t: 9000 }]);
@@ -212,7 +212,7 @@ test('the track strip has no left bar: one box, raised in ink, the same idle and
     return { left: s.borderLeftWidth, top: s.borderTopWidth, bottom: s.borderBottomWidth, shadow: s.boxShadow };
   });
   await page.goto('/personal/board');
-  await page.locator('.board-hero').waitFor();
+  await page.locator('.board-result').waitFor();
   const idle = await look('.board-track');
   assert.deepEqual([idle.left, idle.top, idle.bottom], ['2px', '2px', '2px'], 'palace\'s box: one border all round, no 6px bar');
   const ink = await page.evaluate(() => {
@@ -224,7 +224,6 @@ test('the track strip has no left bar: one box, raised in ink, the same idle and
     return colour;
   });
   assert.equal(idle.shadow, `${ink} 4px 4px 0px 0px`, 'raised in ink');
-  assert.equal(await page.locator('.board-hero .board-track').count(), 0, 'its own box, not a band of the record card');
   // The link under the live line goes to the transponder's form, back to the board after.
   await page.getByRole('link', { name: 'Assign it' }).click();
   await page.waitForURL(/\/personal\/transponders\/88\?returnTo=/);

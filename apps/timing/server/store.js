@@ -310,6 +310,7 @@ export function openStore(path) {
     runningSession: q(`SELECT * FROM session WHERE workspace_id = ? AND state IN ${ACTIVE} ORDER BY created_at DESC LIMIT 1`),
     lastSession: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'),
     lastSessionOf: q('SELECT * FROM session WHERE workspace_id = ? AND kind = ? ORDER BY created_at DESC, rowid DESC LIMIT 1'),
+    lastFinished: q(`SELECT * FROM session WHERE workspace_id = ? AND state = 'done' AND track_id = ? AND direction = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`),
     activeAll: q(`SELECT * FROM session WHERE state IN ${ACTIVE} ORDER BY created_at`),
     listSessions: q('SELECT * FROM session WHERE workspace_id = ? ORDER BY created_at DESC, id DESC LIMIT ?'),
     listSessionsBefore: q('SELECT * FROM session WHERE workspace_id = ? AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?'),
@@ -638,6 +639,14 @@ export function openStore(path) {
       const r = s.lastSession.get(ws);
       const session = r ? sessionOf(r) : null;
       return session && (session.state === 'done' || session.state === 'aborted') ? session : null;
+    },
+    /**
+     * The latest finished session (done, never aborted) on a track and direction, or null (board hub spec §4.1).
+     * @param {string} ws @param {string} trackId @param {string} direction
+     */
+    lastFinished(ws, trackId, direction) {
+      const r = s.lastFinished.get(ws, trackId, direction);
+      return r ? sessionOf(r) : null;
     },
     /** The latest session of a kind, in any state, or null. @param {string} ws @param {string} kind */
     lastSessionOf(ws, kind) {

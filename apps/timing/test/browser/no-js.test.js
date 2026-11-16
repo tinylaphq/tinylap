@@ -153,7 +153,9 @@ test('race, tap and Back and Forward across a POST and its 303 change nothing tw
   await page.getByRole('link', { name: 'Abort' }).click();
   await page.getByRole('heading', { name: 'Abort the race?' }).waitFor();
   await page.getByRole('button', { name: 'Abort' }).click();
-  await page.getByRole('button', { name: 'Start', exact: true }).waitFor();
+  // Back to the board, where the night is run; an aborted race never takes it.
+  await page.getByRole('heading', { name: 'No sessions yet' }).waitFor();
+  assert.equal(pathOf(page), '/personal/board');
 });
 
 test('the bridge page offers its links without JavaScript', async (t) => {
@@ -184,7 +186,8 @@ test('the watchers page works without JavaScript or a log-in', async (t) => {
   await page.context().clearCookies();
   await page.goto(`/watch/${token}`);
   assert.equal(pathOf(page), `/watch/${token}`);
-  assert.equal(await page.getByText('Ana', { exact: true }).first().isVisible(), true);
+  // The board, with nothing to press: the only race was aborted, so no result yet.
+  assert.equal(await page.getByRole('heading', { name: 'No sessions yet' }).isVisible(), true);
   assert.equal(await page.getByRole('link', { name: 'Setup' }).count(), 0);
 });
 
