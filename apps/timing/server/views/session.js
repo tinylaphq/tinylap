@@ -62,7 +62,7 @@ export function sessionPage(request, { session, crossings, drivers, track, resul
       <div><dt>Ended</dt><dd>${ended ? safe(localTime(session.endedAt, 'time')) : 'Still running'}</dd></div>
       ${ended ? html`<div><dt>Length</dt><dd>${shortLength(session.durationMs ?? drivenMs(session))}</dd></div>` : null}
       <div><dt>Track</dt><dd class="cut-words">${trackName(track, session.direction)}</dd></div>
-      ${fastest ? html`<div><dt>Fastest lap</dt><dd class="lap-credit"><span class="num">${formatLap(fastest.lapMs)}</span> ${chip(drivers, fastest.driverId)}</dd></div>` : null}
+      ${fastest && session.kind !== 'practice' ? html`<div><dt>Fastest lap</dt><dd class="lap-credit"><span class="num">${formatLap(fastest.lapMs)}</span> ${chip(drivers, fastest.driverId)}</dd></div>` : null}
     </dl>
   </div>
   <section class="result-section" aria-labelledby="result-title">

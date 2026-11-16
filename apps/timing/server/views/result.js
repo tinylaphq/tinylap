@@ -113,15 +113,17 @@ export function resultView(result, { drivers, links = true, personalBests = link
   const lapTimes = (row) => (links ? html`<a class="place-more" href="#driver-${row.driverId}">Lap times</a>` : null);
   const name = (row) => chip(drivers, row.driverId, { holder: holderId === row.driverId });
 
-  // A record that fell in a practice is said by the card whose lap it is (§6.6); that
-  // card already tells what the lap beat, so its driver has no personal-best card besides.
+  // A record set in a practice is said by the card whose lap it is (§6.6): what it beat, or that it
+  // is the first on this track. That card already says it, so its driver has no personal-best card besides.
   const lead = rows[0];
-  const beat = practice && lead && fell && fell.beat && lead.best?.seq === fell.lap.seq ? fell.beat : null;
+  const setHere = Boolean(practice && lead && fell && lead.best?.seq === fell.lap.seq);
+  const beat = setHere ? fell?.beat ?? null : null;
 
   /** @param {Row} row @param {number} i */
   const card = (row, i) => {
     const first = i === 0;
     const record = first ? beat : null;
+    const firstRecord = first && setHere && !beat;
     const bestLap = html`${num(formatLap(row.bestMs))}${markOf(row.best, { list: true })}`;
     let figure;
     let facts;
@@ -132,7 +134,8 @@ export function resultView(result, { drivers, links = true, personalBests = link
     } else if (first) {
       figure = html`${num(formatLap(row.bestMs))}${markOf(row.best, { list: true })}`;
       facts = [fact('Laps', num(row.laps)), row.setOnLap ? fact('Set on lap', num(row.setOnLap)) : null,
-        record ? fact('New track record', html`<span class="fact-beat">Beat <span class="lap-credit">${num(formatLap(record.lapMs))} ${chip(drivers, record.driverId)}</span></span>`) : null];
+        record ? fact('New track record', html`<span class="fact-beat">Beat <span class="lap-credit">${num(formatLap(record.lapMs))} ${chip(drivers, record.driverId)}</span></span>`) : null,
+        firstRecord ? fact('Track record', html`<span class="fact-word">First on this track</span>`) : null];
     } else {
       figure = num(row.gap ?? '');
       facts = [fact('Best lap', bestLap), fact('Laps', num(row.laps))];
@@ -159,7 +162,7 @@ export function resultView(result, { drivers, links = true, personalBests = link
   </tr>`)}</tbody>
 </table></div>`;
 
-  const shownBests = result.personalBests.filter((pb) => !(beat && pb.driverId === lead.driverId));
+  const shownBests = result.personalBests.filter((pb) => !(setHere && pb.driverId === lead.driverId));
   const pbs = practice && personalBests && shownBests.length ? html`<section class="result-pbs" aria-label="Personal bests">
   <div class="place-tier">${shownBests.map((pb) => html`<article class="place is-pb">
   <h3 class="place-name">${chip(drivers, pb.driverId)}</h3>

@@ -114,3 +114,19 @@ test('a name in the table opens its lap card, which takes the accent shadow', as
   assert.deepEqual(errors, []);
   await context.close();
 });
+
+test('a race\'s Fastest lap fact: the time, then the driver a gap after it, the name regular', async () => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  await page.goto(`/personal/sessions/${sessions.race}`);
+  const fact = await page.evaluate(() => {
+    const dd = document.querySelector('.session-facts .lap-credit');
+    const time = dd.querySelector('.num').getBoundingClientRect();
+    const driver = dd.querySelector('.driver').getBoundingClientRect();
+    return { gap: driver.left - time.right, text: dd.textContent.replace(/\s+/g, ' ').trim(), weight: getComputedStyle(dd.querySelector('.driver-name')).fontWeight };
+  });
+  assert.equal(fact.text, '7.095 Ana');
+  assert.ok(Math.abs(fact.gap - 16) <= 1, `the driver ${fact.gap}px after the time`);
+  assert.equal(fact.weight, '400');
+  assert.deepEqual(errors, []);
+  await context.close();
+});

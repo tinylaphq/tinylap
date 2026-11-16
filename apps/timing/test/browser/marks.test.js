@@ -176,16 +176,8 @@ test('on the session page a mark follows its time and centres on its digits, in 
     const heights = rows.map((r) => r.height);
     assert.ok(Math.max(...heights) - Math.min(...heights) <= 0.5, `session page at ${viewport.width}: every lap row is as tall, tag or not: ${heights.map((h) => h.toFixed(1)).join(', ')}`);
     assert.deepEqual(m.marks.filter((x) => x.where.endsWith('FL')).map((x) => x.where.split(' ')[0]), ['place', 'lap-table'], 'FL once on P1\'s card, once in the laps');
-    // The fact: the time, then the driver, a gap apart, on one baseline.
-    const fact = await page.evaluate(() => {
-      const dd = document.querySelector('.session-facts .lap-credit');
-      const time = dd.querySelector('.num').getBoundingClientRect();
-      const driver = dd.querySelector('.driver').getBoundingClientRect();
-      return { gap: driver.left - time.right, text: dd.textContent.replace(/\s+/g, ' ').trim(), weight: getComputedStyle(dd.querySelector('.driver-name')).fontWeight };
-    });
-    assert.equal(fact.text, '8.900 Ana');
-    assert.ok(Math.abs(fact.gap - 16) <= 1, `the driver ${fact.gap}px after the time`);
-    assert.equal(fact.weight, '400');
+    // A practice's facts leave out the fastest lap: its P1 card is that lap (results.test.js measures a race's).
+    assert.equal(await page.locator('.session-facts .lap-credit').count(), 0);
     assert.deepEqual(errors, []);
   }
 });

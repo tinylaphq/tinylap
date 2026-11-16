@@ -118,10 +118,30 @@ test('a practice that beat the record: one card from inside says it, the table f
   assert.match(body, /<section class="result-pbs" aria-label="Personal bests">/);
 });
 
-test('a practice that beat no record says nothing of one', async () => {
-  const { cards } = await pageOf('plain');
+test('a practice that beat no record says nothing of one, and its facts leave out the fastest lap, its P1 card', async () => {
+  const { cards, body } = await pageOf('plain');
   assert.match(cards[0], /^<article class="place is-first">/);
-  assert.doesNotMatch(cards[0], /New track record/);
+  assert.doesNotMatch(cards[0], /<dt>(?:New track record|Track record)<\/dt>/);
+  const facts = [.../<dl class="session-facts">([\s\S]*?)<\/dl>/.exec(body)[1].matchAll(/<dt>([^<]+)<\/dt>/g)].map((m) => m[1]);
+  assert.deepEqual(facts, ['Started', 'Ended', 'Length', 'Track']);
+});
+
+test('a practice that set the first record on a track says so on its P1 card, and holds back that driver\'s personal best', () => {
+  const lap = { seq: 1, driverId: 'a', lapMs: 7000, counts: true, via: 'net', at: 1 };
+  const result = resultOf({
+    session: { kind: 'practice' },
+    standings: [{ driverId: 'a', position: 1, laps: 1, bestMs: 7000, elapsedMs: null }, { driverId: 'b', position: 2, laps: 1, bestMs: 7500, elapsedMs: null }],
+    crossings: [lap, { seq: 2, driverId: 'b', lapMs: 7500, counts: true, via: 'net', at: 2 }],
+    record: { driverId: 'a', seq: 1 }, bests: [{ seq: 1 }, { seq: 2 }],
+    fell: { lap: { driverId: 'a', lapMs: 7000, seq: 1 }, beat: null },
+  });
+  const markup = String(resultView(result, { drivers: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] }));
+  const p1 = /<article class="place is-first">[\s\S]*?<\/article>/.exec(markup)[0];
+  assert.match(p1, /<div><dt>Track record<\/dt><dd><span class="fact-word">First on this track<\/span><\/dd><\/div>/);
+  assert.doesNotMatch(p1, /New track record/);
+  const pbs = [...markup.matchAll(/<article class="place is-pb">[\s\S]*?<\/article>/g)].map((m) => m[0]);
+  assert.equal(pbs.length, 1);
+  assert.match(pbs[0], /title="B"/);
 });
 
 test('the names and Lap times link to lap cards, and the page\'s one action is Back to Sessions', async () => {
