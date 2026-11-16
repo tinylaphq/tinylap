@@ -72,14 +72,14 @@ const measure = () => {
     return { top: baseline - m.actualBoundingBoxAscent, bottom: baseline + m.actualBoundingBoxDescent, right: rect.right };
   };
   const marks = [...document.querySelectorAll('.mark')].map((mark) => {
-    // In a column of its own after its time's, or on the strip's line after the time.
+    // In a column of its own after its time's (the strip has no marks: its cells' fills say them).
     const cell = mark.closest('.mark-cell');
-    const before = cell ? cell.previousElementSibling : mark.parentElement.querySelector('.board-track-time');
+    const before = cell.previousElementSibling;
     const time = ink(before);
     const letters = ink(mark);
     const box = mark.getBoundingClientRect();
     return {
-      where: `${cell ? cell.closest('table, ol, .place').classList[0] : 'board-track'} ${before.textContent.trim()} ${mark.textContent}`,
+      where: `${cell.closest('table, ol, .place').classList[0]} ${before.textContent.trim()} ${mark.textContent}`,
       off: (box.top + box.bottom) / 2 - (time.top + time.bottom) / 2,
       padTop: letters.top - box.top,
       padBottom: box.bottom - letters.bottom,

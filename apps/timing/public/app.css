@@ -43,74 +43,58 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 }
 .board-track, .board-head, .board > .flag { grid-column: 1 / -1; }
 .board > .flag { margin: 0; }
-/* The track and its record (records spec §5.1): a strip raised in the record
- * colour's shadow, like the record card, with no left bar (in palace that
- * marks the selected item of a list). While nobody races it is the record
- * card's top band instead (drivers and transponders spec §4): one box, one
- * shadow. When a record falls it fills with that colour and stands out like
- * the clock (§4.3); that is the board's one moment of colour. */
+/* The strip (board hub spec §3): one component heading every board. palace's
+ * box; inside, cells share its borders, and nothing inside is a box of its
+ * own. On the left, on white, where you are: the track, its direction, its
+ * decoders. On the right the track record, filled in the record's colour, and
+ * while a session runs the session's fastest lap beside it in the fastest
+ * lap's. No left bar: in palace that marks the selected item of a list. */
 .board-track {
-  min-width: 0;
-  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--p-space-xs) var(--p-space-lg);
-  padding: var(--p-space-sm) var(--p-space-md); background: var(--p-surface);
-  border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record);
+  min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); align-items: stretch;
+  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text);
 }
-.board-track.is-band {
-  grid-column: 1 / -1; padding-inline: var(--p-space-xl);
-  border: 0; border-bottom: var(--p-border-width) solid var(--p-text); box-shadow: none; background: var(--p-surface-inset);
-}
+/* The live board: a subgrid of the board's columns, so the record cell's left edge is Last laps' (the gutter between is the box's white). */
+.board:not(.is-idle) > .board-track { grid-template-columns: subgrid; }
+/* The idle board (until its two columns land): the record cell over the record card's Start column, on its edge. */
+.board.is-idle:has(.board-hero-go) > .board-track { grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 1fr); }
 .board-track p { margin: 0; }
+.strip-where { grid-column: 1; display: flex; flex-wrap: wrap; align-content: center; gap: var(--p-space-xs) var(--p-space-lg); padding: var(--p-space-sm) var(--p-space-md); min-width: 0; }
 .board-track-name { color: var(--p-text-secondary); display: flex; align-items: center; min-width: 0; }
 .board-track-name > .direction-icon { flex: none; }
-.board-track-name strong { color: var(--p-text); font-size: 1.15em; margin-right: var(--p-space-xs); }
+.board-track-name strong { color: var(--p-text); font-size: var(--p-text-xl); margin-right: var(--p-space-xs); }
 /* The direction as an open loop with one accent arrowhead (named tracks spec §4); its <title> says which. */
 .direction-icon { width: 2.5em; height: auto; vertical-align: -0.35em; color: var(--p-text); overflow: visible; }
-/* While a session runs (fastest lap spec §3.1): the track and its decoders on
- * the left, the two times to beat on the right, one under the other. Each is
- * time, mark, driver, in columns the two lines share; the name's column has a
- * fixed width and cuts a long name, so a new holder never moves a line. */
-.board-track:has(> .board-track-times) {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name times" "decoders times"; align-items: center;
+.strip-cells { grid-column: -2; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); min-width: 0; border-left: var(--p-border-width) solid var(--p-text); }
+/* A cell: its label, then the figure with who and when beside it, and the record's crown at its far end. */
+.strip-cell {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "label label crown" "figure by crown";
+  align-items: baseline; align-content: center; gap: var(--p-space-2xs) var(--p-space-md);
+  padding: var(--p-space-sm) var(--p-space-md); min-width: 0;
 }
-.board-track:has(> .board-track-times):not(:has(> .board-decoders)) { grid-template-areas: "name times"; }
-.board-track:has(> .board-track-times) > .board-track-name { grid-area: name; }
-.board-track:has(> .board-track-times) > .board-decoders { grid-area: decoders; }
-.board-track-times {
-  grid-area: times; display: grid; grid-template-columns: auto auto minmax(9em, 12em);
-  row-gap: var(--p-space-xs); align-items: baseline;
-  /* How much further a mark rises here than after a time of its own size:
-   * the strip's time is larger than the line's text (1.15em), so its digits
-   * sit higher. In the mark's em, so it scales with the board; fitted so the
-   * mark centres on the digits (marks.test.js pins it within 0.75px). */
-  --tl-mark-nudge: -0.075em;
-}
-.board-track-times > p { position: relative; display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; }
-.board-track-times .board-track-time { grid-column: 1; justify-self: end; }
-.board-track-times .mark { grid-column: 2; justify-self: start; margin-left: var(--p-space-xs); translate: 0 var(--tl-mark-nudge); }
-.board-track-times .driver { grid-column: 3; display: flex; align-items: baseline; min-width: 0; }
-.board-track-times .driver::before { flex: none; }
-.board-track-times .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* No lap yet: a muted dash where the time goes. */
-.board-track-times .is-empty .board-track-time { font-weight: 400; color: var(--p-text-muted); }
-.board-track-record { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); min-width: 0; }
-.board-track-label { font-weight: 700; }
-.board-track-time { font-weight: 700; font-size: 1.15em; }
-.board-track-by { color: var(--p-text-secondary); }
-.board-track-by .driver { color: var(--p-text); }
-.board-track.is-record {
-  background: var(--tl-record); color: var(--tl-record-ink);
-  box-shadow: var(--p-shadow-lg) var(--p-text); padding-block: var(--p-space-md);
-}
-.board-track.is-record .board-track-name, .board-track.is-record .board-track-name strong,
-.board-track.is-record .board-track-by, .board-track.is-record .board-track-by .driver,
-.board-track.is-record .direction-icon { color: inherit; }
-/* The accent arrowhead is too faint on the record colour (about 1.6:1): it takes the ink there. */
-.board-track.is-record .direction-icon path:last-child { stroke: currentColor; }
-.board-track.is-record .board-track-record { display: grid; justify-items: end; gap: var(--p-space-xs); }
-.board-track-new, .board-track-beat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); }
-.board-track-new .board-track-label { font-size: 1.4em; letter-spacing: -0.01em; }
-.board-track-new .board-track-time { font-size: 1.8em; line-height: var(--p-leading-tight); }
-.board-track-beat { opacity: 0.85; }
+.strip-cell + .strip-cell { border-left: var(--p-border-width) solid var(--p-text); }
+.strip-label { grid-area: label; font-size: var(--p-text-2xs); font-weight: 700; line-height: var(--p-leading-tight); text-transform: uppercase; letter-spacing: 1px; }
+.strip-figure { grid-area: figure; justify-self: start; text-align: left; font: 700 var(--p-text-3xl) / 1 var(--p-font-mono); letter-spacing: -0.02em; }
+.strip-by { grid-area: by; display: flex; align-items: baseline; gap: 0 var(--p-space-sm); min-width: 0; font-weight: 600; }
+.strip-by .driver { display: flex; align-items: baseline; min-width: 0; }
+.strip-by .driver::before { flex: none; }
+.strip-by .driver-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strip-when { flex: none; font-weight: 400; opacity: 0.85; white-space: nowrap; }
+.strip-crown { grid-area: crown; align-self: center; height: 1.6em; margin: 0; vertical-align: baseline; }
+.strip-cell.is-record { background: var(--tl-record); color: var(--tl-record-ink); }
+.strip-cell.is-fastest { background: var(--tl-fastest); color: var(--tl-fastest-ink); }
+/* None yet: the cell keeps its place, unfilled; the figure's slot says so. */
+.strip-cell.is-empty { background: var(--p-surface); color: var(--p-text-muted); }
+.strip-none { grid-area: figure; font: 700 var(--p-text-2xl) / 1 var(--p-font); color: var(--p-text-secondary); }
+/* A record that has just fallen: the record it beat, on a line of its own. */
+.strip-cell.is-new { grid-template-areas: "label label crown" "figure by crown" "beat beat crown"; }
+.strip-beat { grid-area: beat; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--p-space-sm); min-width: 0; font-size: 0.875em; opacity: 0.85; }
+.strip-beat .num { font-family: var(--p-font-mono); font-weight: 700; }
+.strip-beat .driver { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* While a session runs two cells share the right column: the figures step down and the driver takes its own line, so names keep room; the crown sits beside the time. */
+.board-track.is-live .strip-cell { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label label" "figure crown" "by by"; align-content: start; }
+.board-track.is-live .strip-cell.is-new { grid-template-areas: "label label" "figure crown" "by by" "beat beat"; }
+.board-track.is-live .strip-figure { font-size: var(--p-text-2xl); }
 /* The title sits on the clock's bottom edge, not floating at its top. */
 .board-head {
   display: flex; justify-content: space-between; align-items: end; gap: var(--p-space-md); flex-wrap: wrap;
@@ -240,18 +224,22 @@ body.big .board {
 /* The table takes 73% and the feed may shrink, so the table keeps every column and room for names, and at 1920×1080 the feed keeps a name whole beside a "Not counted" tag and the mark column. */
 @media (min-width: 721px) { body.big .board:not(.is-idle) { grid-template-columns: minmax(0, 73fr) minmax(0, 27fr); } }
 body.big .board-clock-label { font-size: 0.6em; }
-body.big .board-track { font-size: 0.75em; }
-/* The two times to beat close up to the height of the track and its decoders beside them, so the board does not grow. */
-body.big .board-track-times { row-gap: 0; line-height: 1.35; }
-body.big .board-track:has(> .board-track-times) { padding-block: var(--p-space-xs); }
-/* A phone stacks the strip: the track, its decoders, then the two lines, at the left. */
+/* The strip on the wall screen: every size follows the board's font; it has no links. */
+/* 0.6em, so two cells fit the live board's narrow column, labels on one line, and the board still fits 1080 (#118). */
+body.big .board-track { font-size: 0.6em; }
+body.big .board-track-name strong { font-size: 1.4em; }
+body.big .strip-where, body.big .strip-cell { padding: 0.35em 0.8em; }
+body.big .strip-cell { column-gap: 0.6em; }
+body.big .strip-label { font-size: 0.7em; }
+body.big .strip-figure { font-size: 2.2em; }
+body.big .strip-none { font-size: 1.6em; }
+body.big .board-track.is-live .strip-figure { font-size: 1.6em; }
+body.big .strip-by { gap: 0 0.5em; }
+/* A phone stacks the strip: the track and its decoders, then each cell at full width. */
 @media (max-width: 720px) {
-  .board-track:has(> .board-track-times) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "decoders" "times"; }
-  .board-track:has(> .board-track-times):not(:has(> .board-decoders)) { grid-template-areas: "name" "times"; }
-  .board-track-times { grid-template-columns: auto auto minmax(0, 1fr); margin-top: var(--p-space-xs); }
-}
-@media (max-width: 600px) {
-  .board-track.is-record .board-track-record { justify-items: start; }
+  .board-track, .board:not(.is-idle) > .board-track, .board.is-idle:has(.board-hero-go) > .board-track { grid-template-columns: minmax(0, 1fr); }
+  .strip-cells { grid-column: 1; grid-auto-flow: row; border-left: 0; border-top: var(--p-border-width) solid var(--p-text); }
+  .strip-cell + .strip-cell { border-left: 0; border-top: var(--p-border-width) solid var(--p-text); }
 }
 body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
@@ -564,9 +552,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .board-first .board-first-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm) var(--p-space-lg); margin: 0; }
 .board-first-links a:not(.btn) { font-weight: 600; }
 @media (max-width: 720px) {
-  .board-hero, .board-track:not(.is-record, .is-band) { box-shadow: var(--p-shadow-lg) var(--tl-record); }
-  .board-hero { grid-template-columns: minmax(0, 1fr); }
-  .board-track.is-band { padding-inline: var(--p-space-lg); }
+  .board-hero { box-shadow: var(--p-shadow-lg) var(--tl-record); grid-template-columns: minmax(0, 1fr); }
   .board-hero-record { padding: var(--p-space-lg); }
   /* Stacked on a phone, no row is kept: the line that a car is on the track
      comes under Start practice, so the button still never moves, and
@@ -588,8 +574,8 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
  * the time bounces as the finale. It sits behind the card's content, clipped
  * to the card, and moves nothing; nothing stays. The crown's jump from the
  * old holder's row to the new one's flies over the page. */
-.board-hero-record, .board-track.is-record { position: relative; }
-:is(.board-hero-record, .board-track.is-record) > :not(.hero-fx) { position: relative; z-index: 1; }
+.board-hero-record, .strip-cell { position: relative; }
+:is(.board-hero-record, .strip-cell) > :not(.hero-fx) { position: relative; z-index: 1; }
 .hero-fx { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 .hero-fx .fx-at { position: absolute; width: 0; height: 0; }
 /* Behind the time it has no outline: black lines would run into the digits. */
@@ -931,8 +917,6 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .board-decoder.is-offline { color: var(--p-error-text); }
 .board-decoder.is-offline::before { background: var(--p-error); }
 .board-decoder.is-idle { color: var(--p-text-secondary); }
-.board-track.is-record .board-decoder { color: inherit; }
-.board-track.is-record .board-decoder::before { background: currentColor; }
 
 /* An avatar (drivers and transponders spec §3): the driver's initials on their colour. Square, as every palace box. */
 .avatar { display: inline-grid; place-items: center; flex: none; width: 2.75rem; height: 2.75rem; background: var(--c); color: var(--p-text); border: var(--p-border-width) solid var(--p-text); font: 700 var(--p-text-lg)/1 var(--p-font); overflow: hidden; }

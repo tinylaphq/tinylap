@@ -4,16 +4,17 @@
 
 // The board (spec §6.1), rendered on the server from engine.snapshot. All
 // that changes lives in #board-live, which the stream replaces whole; the
-// watchers board is the same without member parts. While a session runs it
-// is the table and the last laps; while nobody races, the track record, the
-// fastest here and the last session (named tracks spec §4).
+// watchers board is the same without member parts. Every board is headed by
+// the strip (board hub spec §3). While a session runs it is the table and the
+// last laps; while nobody races, the track record, the fastest here and the
+// last session (named tracks spec §4).
 import { clockAt, formatClock, formatLap } from '../../public/format.js';
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
 import { directionIcon } from './direction.js';
-import { chip as driverChip, idleNotice, markLetters, marks, marksHead, posHead, startPracticeForm, tableClasses, timeWidths } from './marks.js';
+import { chip as driverChip, idleNotice, marks, marksHead, posHead, startPracticeForm, tableClasses, timeWidths } from './marks.js';
 
 const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
 
@@ -26,9 +27,6 @@ export function clockOf(session, now) {
 
 const chip = (snap, id, options) => driverChip(snap.drivers, id, options);
 
-/** A record's time and holder, apart by their line's gap, not by dots: "7.412  Haris". Its date stays on the session pages (fastest lap spec §3.1). */
-const recordLine = (snap, r) => html`<span class="num board-track-time">${formatLap(r.lapMs)}</span> <span class="board-track-by cut-words">${chip(snap, r.driverId)}</span>`;
-
 /** The session's fastest lap's row: the fastest counted best, the earlier lap on a tie (fastest lap spec §2). */
 function fastestRow(standings) {
   let best = null;
@@ -38,28 +36,36 @@ function fastestRow(standings) {
   return best;
 }
 
+/** The record's crown at the end of its cell, for the eye only: the label says whose record it is. */
+const stripCrown = html`<svg class="crown strip-crown" viewBox="0 0 26 18" aria-hidden="true"><path d="M1.125 16.875V4.5l6.5 5.5L13 1.6l5.375 8.4 6.5-5.5v12.475Z"/></svg>`;
+
 /**
- * One of the strip's two times to beat (fastest lap spec §3.1): the time, its
- * mark, the driver, and no words on screen; the line's name is for screen
- * readers. Without a lap, a muted dash and the mark, and the line's title says why.
+ * The strip's record cell (board hub spec §3), the track's headline: filled in
+ * the record's colour, its label, the time, who drove it and when, and the
+ * crown; no TR mark, the fill says it. With no record yet the cell keeps its
+ * place, unfilled. While a record has just fallen it says so: "New track
+ * record", the new time and holder, and the record it beat.
  */
-function toBeat(snap, { kind, letters, title, name, none }, lap, attributes = null) {
-  const mark = markLetters(letters.toLowerCase(), letters, title);
-  if (!lap) return html`<p class="board-${kind}-line lap-credit is-empty" title="${none}"${attributes}><span class="visually-hidden">${name}: ${none.toLowerCase()}</span><span class="num board-track-time" aria-hidden="true">—</span>${mark}</p>`;
-  return html`<p class="board-${kind}-line lap-credit"${attributes}><span class="visually-hidden">${name} </span><span class="num board-track-time">${formatLap(lap.lapMs)}</span><span class="visually-hidden">, </span>${mark}${chip(snap, lap.driverId)}</p>`;
+function recordCell(snap) {
+  const n = snap.recordNew;
+  if (n) {
+    return html`<p class="strip-cell is-record is-new board-record-line"><span class="strip-label">New track record</span><span class="num strip-figure">${formatLap(n.lapMs)}</span><span class="strip-by">${chip(snap, n.driverId)}</span>${n.beat ? html`<span class="strip-beat">Beat <span class="num">${formatLap(n.beat.lapMs)}</span> ${chip(snap, n.beat.driverId)}</span>` : null}${stripCrown}</p>`;
+  }
+  const r = snap.record;
+  if (!r) return html`<p class="strip-cell is-record is-empty board-record-line"><span class="strip-label">Track record</span><span class="strip-none">None yet</span><span class="strip-by">The first lap sets it.</span></p>`;
+  return html`<p class="strip-cell is-record board-record-line"><span class="strip-label">Track record</span><span class="num strip-figure">${formatLap(r.lapMs)}</span><span class="strip-by">${chip(snap, r.driverId)} <span class="strip-when">${safe(localTime(r.at, 'date'))}</span></span>${stripCrown}</p>`;
 }
 
 /**
- * The strip's two times to beat while a session runs: the track record, then
- * the session's fastest lap. The fastest lap's line is a polite live region,
- * which tl-board keeps across swaps, so a new fastest lap is read out.
+ * The strip's fastest lap cell while a session runs (§3): the session's
+ * fastest lap and its driver, filled in the fastest lap's colour; before any
+ * lap counts, unfilled. It is a polite live region, which tl-board keeps
+ * across swaps, so a new fastest lap is read out.
  */
-function timesToBeat(snap) {
+function fastestCell(snap) {
   const best = fastestRow(snap.standings);
-  return html`<div class="board-track-times">
-    ${toBeat(snap, { kind: 'record', letters: 'TR', title: 'Track record', name: 'Track record', none: 'No record yet' }, snap.record)}
-    ${toBeat(snap, { kind: 'fastest', letters: 'FL', title: 'Fastest lap of the session', name: 'Fastest lap', none: 'No laps yet' }, best && { lapMs: best.bestMs, driverId: best.driverId }, html` role="status"`)}
-  </div>`;
+  if (!best) return html`<p class="strip-cell is-fastest is-empty board-fastest-line" role="status"><span class="strip-label">Fastest lap</span><span class="strip-none">No laps yet</span></p>`;
+  return html`<p class="strip-cell is-fastest board-fastest-line" role="status"><span class="strip-label">Fastest lap</span><span class="num strip-figure">${formatLap(best.bestMs)}</span><span class="strip-by">${chip(snap, best.driverId)}</span></p>`;
 }
 
 /** One item per decoder heard in the last 30 minutes, beside the track (decoder connections spec §6). */
@@ -70,33 +76,23 @@ function decoderStates(snap) {
 }
 
 /**
- * The track, its direction as an icon, and while a session runs the two times
- * to beat, above every board (records spec §5.1, named tracks spec §4,
- * fastest lap spec §3.1). While nobody races the record is the big thing
- * below, so the header leaves them out. While a record has just
- * fallen it is in the record state (§4.3): the new time and holder in the
- * record colour, and the record it beat; the record lap is the fastest lap
- * too, so that line waits until the state is over. While nobody races it is the top
- * band of the record card (`band`, drivers and transponders spec §4).
+ * The strip (board hub spec §3): one box above every board, the same on each.
+ * On the left where you are: the track, its direction as an icon, its
+ * decoders. On the right the track record and, while a session runs, the
+ * session's fastest lap beside it. While a record has just fallen it carries
+ * data-record-new, so tl-board plays the record moment on its record cell.
  */
-function trackHeader(snap, { band = false } = {}) {
-  const states = decoderStates(snap);
-  const where = html`<p class="board-track-name"><strong class="cut-words">${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>`;
+function strip(snap) {
   const n = snap.recordNew;
-  if (n) {
-    return html`<header class="board-track is-record" data-record-new="${n.seq}">
-  ${where}
-  <div class="board-track-record">
-    <p class="board-track-new cut-words"><strong class="board-track-label">New track record</strong> <span class="num board-track-time">${formatLap(n.lapMs)}</span> ${chip(snap, n.driverId)}</p>
-    ${n.beat ? html`<p class="board-track-beat cut-words">Beat ${recordLine(snap, n.beat)}</p>` : null}
+  return html`<header class="board-track strip${snap.session ? ' is-live' : ''}"${n ? html` data-record-new="${n.seq}"` : null}>
+  <div class="strip-where">
+    <p class="board-track-name"><strong class="cut-words">${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>
+    ${decoderStates(snap)}
   </div>
-  ${states}
-</header>`;
-  }
-  return html`<header class="board-track${band ? ' is-band' : ''}">
-  ${where}
-  ${snap.session ? timesToBeat(snap) : null}
-  ${states}
+  <div class="strip-cells">
+    ${recordCell(snap)}
+    ${snap.session ? fastestCell(snap) : null}
+  </div>
 </header>`;
 }
 
@@ -216,14 +212,12 @@ const beaten = (snap, r) => html`, beat ${r.beat.driverId === r.driverId ? 'thei
  * The track record as the big thing (named tracks spec §4): the time, the
  * holder (no crown: the card says whose record it is), when it was set and what it beat. Beside it, for
  * members on their own screen, Start practice: over it the line saying a car
- * is on the track, under it the transponders not assigned yet, quietly; and
- * while nobody races, the track strip as its top band.
+ * is on the track, under it the transponders not assigned yet, quietly.
  */
-function hero(request, snap, members, band) {
+function hero(request, snap, members) {
   const r = snap.record;
   // While a record has just fallen the card says so like the strip, so tl-board can play its moment here.
   return html`<section class="board-hero"${snap.recordNew ? html` data-record-new="${snap.recordNew.seq}"` : null}>
-  ${band}
   <div class="board-hero-record lap-credit">
     <h1 class="board-hero-label">Track record</h1>
     ${r ? html`<p class="num board-hero-time">${formatLap(r.lapMs)}</p>
@@ -311,15 +305,13 @@ function firstRun(request, snap) {
 /** Whether the idle board is the first-run card: a member's own screen, for a club that has never driven. */
 const isFirstRun = (snap, { watcher, big }) => !watcher && !big && !snap.driven && !snap.idle;
 
-/** The board while nobody races: the record and what is worth seeing, not warnings. `band` is the track strip, when it is the record card's top. */
-function idleBoard(request, snap, { watcher, big, band }) {
+/** The board while nobody races: the record and what is worth seeing, not warnings. */
+function idleBoard(request, snap, { watcher, big }) {
   // The display (?big) and the watchers never get a member line or a button (records spec §5.3).
   const members = !watcher && !big;
   if (isFirstRun(snap, { watcher, big })) return firstRun(request, snap);
   const lists = [fastest(snap), lastSession(request, snap, members)].filter(Boolean);
-  // Under the card whose top band names the decoders, a warning that one has gone quiet.
-  return html`${hero(request, snap, members, band)}
-${band ? offlineBanners(snap) : null}
+  return html`${hero(request, snap, members)}
 ${lists.length ? html`<div class="board-idle${timeWidths([...snap.fastest.map((b) => b.bestMs), ...(snap.lastResults?.standings ?? []).slice(0, 3).map((row) => row.bestMs)])}">${lists}</div>` : null}`;
 }
 
@@ -332,12 +324,10 @@ function offlineBanners(snap) {
 export function boardLive(request, snap, { watcher = false, big = false, token = null } = {}) {
   const events = `${watcher ? `/watch/${token}` : `${request.space.base}/board`}/events${big ? '?big' : ''}`;
   if (!snap.session) {
-    // The strip is the record card's top band (spec §4), unless a record has just fallen or there is no card yet.
-    const band = !snap.recordNew && !isFirstRun(snap, { watcher, big }) ? trackHeader(snap, { band: true }) : null;
     return html`<div id="board-live" class="board is-idle" data-events="${events}">
-${band ? null : trackHeader(snap)}
-${band ? null : offlineBanners(snap)}
-${idleBoard(request, snap, { watcher, big, band })}
+${strip(snap)}
+${offlineBanners(snap)}
+${idleBoard(request, snap, { watcher, big })}
 </div>`;
   }
   // A transponder not assigned yet loses its laps while a session runs: that is worth a warning (spec §4).
@@ -348,7 +338,7 @@ ${idleBoard(request, snap, { watcher, big, band })}
       : html`Transponders ${andList(codes)} aren't assigned yet, so their laps aren't counted.`} <a href="${assignHref(request.space.base, codes)}">${codes.length === 1 ? 'Assign it' : 'Assign them'}</a></p>`
     : null;
   return html`<div id="board-live" class="board" data-events="${events}">
-${trackHeader(snap)}
+${strip(snap)}
 ${offlineBanners(snap)}
 ${header(snap)}
 ${unknown}

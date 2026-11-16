@@ -95,10 +95,10 @@ test('a falling record lights the record card and the crown jumps to the new hol
   const seq = await newRecord('20');
   await page.locator('.hero-fx').waitFor({ state: 'attached' });
   assert.equal(await page.locator(`[data-record-new="${seq}"] .hero-fx`).count(), 1, 'on the card that says so');
-  // On the strip, the burst and the bounce: no crown behind its digits, it is too shallow.
+  // On the strip's record cell, the burst and the bounce: no crown behind its digits, it is too shallow.
   assert.equal(await page.locator('.hero-fx .fx-ray').count(), 12);
   assert.equal(await page.locator('.hero-fx .fx-crown').count(), 0);
-  assert.equal(await page.locator(`[data-record-new="${seq}"] .board-track-new .board-track-time`).evaluate((e) => e.getAnimations().length), 1, 'the time bounces');
+  assert.equal(await page.locator(`[data-record-new="${seq}"] .strip-cell.is-record .strip-figure`).evaluate((e) => e.getAnimations().length), 1, 'the time bounces');
   // The crown flies on its own; the new holder's waits, hidden, until it lands.
   await page.locator('.crown-flyer').waitFor({ state: 'attached' });
   const crown = page.locator('.board-table tr', { hasText: 'Ben' }).locator('.crown');
@@ -108,7 +108,7 @@ test('a falling record lights the record card and the crown jumps to the new hol
     const s = getComputedStyle(fx);
     return [s.position, s.overflow, s.pointerEvents];
   }), ['absolute', 'hidden', 'none']);
-  const time = page.locator(`[data-record-new="${seq}"] .board-track-new .board-track-time`);
+  const time = page.locator(`[data-record-new="${seq}"] .strip-cell.is-record .strip-figure`);
   const [front, back] = await time.evaluate((e) => {
     const fx = /** @type {Element} */ (document.querySelector('.hero-fx'));
     const layer = [...(fx.parentElement?.children ?? [])].find((child) => child.contains(e));

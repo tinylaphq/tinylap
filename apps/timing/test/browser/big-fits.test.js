@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The wall screen fits its screen (spec 6.1): at 1920×1080, with four drivers,
-// a decoder on the strip, both times to beat and a full Last laps, the board
+// a decoder on the strip, its record and fastest lap cells and a full Last laps, the board
 // ends inside 1080: the server sends Last laps' eleven newest, not twelve,
 // and every row shows whole.
 import test, { after, before } from 'node:test';
@@ -55,7 +55,7 @@ test('at 1920×1080 the big board ends inside the screen, and Last laps shows wh
     return {
       height: document.documentElement.scrollHeight,
       decoders: document.querySelectorAll('.board-track .board-decoders').length,
-      times: document.querySelectorAll('.board-track-times > p').length,
+      cells: document.querySelectorAll('.board-track .strip-cell').length,
       drivers: document.querySelectorAll('.standings-table tbody tr').length,
       rows: rows.length,
       shown: shown.length,
@@ -65,7 +65,7 @@ test('at 1920×1080 the big board ends inside the screen, and Last laps shows wh
   });
   assert.equal(read.drivers, 4);
   assert.equal(read.decoders, 1, 'the strip shows its decoder');
-  assert.equal(read.times, 2, 'and both times to beat');
+  assert.equal(read.cells, 2, 'and both cells: the track record and the fastest lap');
   assert.equal(read.rows, 11, 'Last laps shows the eleven newest');
   assert.equal(read.shown, 11);
   assert.ok(read.height <= 1080, `the board is ${read.height}px tall`);
