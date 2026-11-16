@@ -93,7 +93,11 @@ body { margin: 0; min-height: 100dvh; background: var(--p-bg); color: var(--p-te
 .strip-beat .driver { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* While a session runs two cells share the right column: the figures step down and the driver takes its own line, so names keep room; the crown sits beside the time. */
 .board-track.is-live .strip-cell { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label label" "figure crown" "by by"; align-content: start; }
-.board-track.is-live .strip-cell.is-new { grid-template-areas: "label label" "figure crown" "by by" "beat beat"; }
+/* A record that has just fallen keeps the running cell's three lines, so nothing moves: the new holder on the figure's line, as idle, then
+ * what it beat. In half the column there is no room for the crown too, beside the label or the name: for those seconds the label
+ * says it, and the crown lands after the new holder's name in the standings. */
+.board-track.is-live .strip-cell.is-new { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "label label" "figure by" "beat beat"; }
+.board-track.is-live .strip-cell.is-new .strip-crown { display: none; }
 .board-track.is-live .strip-figure { font-size: var(--p-text-2xl); }
 /* The title sits on the clock's bottom edge, not floating at its top. */
 .board-head {

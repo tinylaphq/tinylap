@@ -15,6 +15,8 @@ const clock = { offset: 0, get now() { return Date.now() + this.offset; } };
 let app;
 let browser;
 let member;
+let decoder;
+let lastAna;
 const start = Date.now();
 const decoderNow = () => clock.now - start;
 
@@ -27,7 +29,7 @@ before(async () => {
   for (const name of names) await app.form(member, '/personal/drivers', { name });
   app.store.drivers(ws).forEach((d, i) => app.engine.assign(ws, String(10 + i), d.id));
   useTrack(app.store, ws, 'Ring', 'cw', 't1');
-  const decoder = await (await app.api(member, 'POST', `/workspaces/${ws}/decoders`, { name: 'Start line' })).json();
+  decoder = await (await app.api(member, 'POST', `/workspaces/${ws}/decoders`, { name: 'Start line' })).json();
   app.engine.start(ws, { kind: 'practice' });
   clock.offset += 10_000;
   // Four laps each, a car every ~2 s: 16 laps, more than Last laps keeps.
@@ -37,6 +39,7 @@ before(async () => {
   }
   clock.offset += 4 * 8000 + 4 * 1900 + 1000;
   assert.equal((await postPassings(app, decoder, passings)).status, 200);
+  lastAna = passings.filter((p) => p.transponder === '10').at(-1).t;
 });
 after(async () => {
   await browser?.close();
@@ -81,6 +84,28 @@ test('a laptop\'s board still shows all twelve', async () => {
   await page.locator('.board-feed .board-laps li').first().waitFor();
   const shown = await page.evaluate(() => [...document.querySelectorAll('.board-feed .board-laps li')].filter((li) => li.getBoundingClientRect().height > 0).length);
   assert.equal(shown, 12);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('at 1920×1080 the big board still ends inside the screen while a record falls, and the strip keeps its height', async () => {
+  const { context, page, errors } = await pageAs(browser, app, member, { viewport: { width: 1920, height: 1080 } });
+  await page.goto('/personal/board?big');
+  await page.locator('#live-status[data-state="live"]').waitFor({ state: 'attached' });
+  await page.evaluate(() => document.fonts.ready);
+  const strip = () => page.locator('.board-track').evaluate((el) => el.getBoundingClientRect().height);
+  const before = await strip();
+  // Ana beats the record she set (8.000): the record cell says New track record, and what it beat.
+  clock.offset += 8000;
+  assert.equal((await postPassings(app, decoder, [{ transponder: '10', t: lastAna + 7500 }])).status, 200);
+  await page.locator('.board-track[data-record-new] .strip-cell.is-new .strip-beat').waitFor();
+  const read = await page.evaluate(() => ({
+    height: document.documentElement.scrollHeight,
+    feedBottom: document.querySelector('.board-feed').getBoundingClientRect().bottom,
+  }));
+  assert.ok(Math.abs(await strip() - before) <= 0.5, `the strip keeps its height: ${before.toFixed(1)} → ${(await strip()).toFixed(1)}`);
+  assert.ok(read.height <= 1080, `the board is ${read.height}px tall`);
+  assert.ok(read.feedBottom <= 1080, `Last laps ends at ${read.feedBottom}px`);
   assert.deepEqual(errors, []);
   await context.close();
 });

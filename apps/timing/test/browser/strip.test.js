@@ -212,6 +212,8 @@ test('a new fastest lap is read out, and a new holder moves nothing; a long name
   await page.locator('.board-track[data-record-new] .strip-cell.is-new').waitFor();
   const record = await page.evaluate(read);
   box(record, 'record');
+  assert.ok(Math.abs(record.strip.height - after.strip.height) <= 0.5, `the strip keeps its height when the record falls: ${after.strip.height.toFixed(1)} → ${record.strip.height.toFixed(1)}`);
+  for (const [i, cell] of record.cells.entries()) assert.ok(Math.abs(cell.box.top - after.cells[i].box.top) <= 0.5, `${cell.kind}: nothing moves`);
   assert.equal(record.cells[0].spoken, 'New track record 7.900 Ana Beat 8.000 Ana');
   assert.equal(record.cells[0].fill, 'record');
   assert.equal(record.cells[1].spoken, 'Fastest lap 7.900 Ana');
