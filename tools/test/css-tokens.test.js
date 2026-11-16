@@ -40,7 +40,6 @@ const EXCEPTIONS = new Map([
   // Display sizes that follow the screen between two sizes, one of them off the scale.
   ['apps/timing/public/app.css|.board-title|font-size: clamp(1.75rem, 5vw, 3.5rem)', 'the board\'s title'],
   ['apps/timing/public/app.css|.board-clock-time|font: 700 clamp(2.5rem, 9vw, 6rem) / 1 var(--p-font-mono)', 'the session clock'],
-  ['apps/timing/public/app.css|.tap-bar .tap-result|font: 700 clamp(1.25rem, 5vw, 1.75rem)/1.2 var(--p-font-mono)', 'the tap screen\'s last time'],
   // Geometry, not spacing.
   ['apps/timing/public/app.css|.tp-rows > li > .tp|margin-top: 0.15rem', 'drops a number onto its row\'s first line'],
   ['apps/track-planner/css/app.css|.library-version::before|margin-top: -5px', 'centres a 10px stop on its line'],
