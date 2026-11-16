@@ -7,7 +7,7 @@
 // session runs the session's fastest lap as a second; no TR or FL mark, the
 // fills say them. With no record yet the record cell keeps its place,
 // unfilled. The record cell's left edge falls on the right column's (Last
-// laps' while running, the Start column's while idle). The fastest
+// laps' while running, the Start panel's while idle). The fastest
 // lap cell is a polite live region that a swap keeps, so a new fastest lap is
 // read out, and a new holder never moves the strip. On a phone the cells
 // stack. And a time with its driver reads as a value and its credit wherever
@@ -125,8 +125,8 @@ const read = () => {
     where: box(strip.querySelector('.strip-where')),
     cellsBox: box(strip.querySelector('.strip-cells')),
     cells,
-    // The column the record cell lines up with: Last laps while running, the side (Start, Fastest on this track) while idle.
-    column: box(document.querySelector('.board-feed, .board-next')),
+    // The column the record cell lines up with: Last laps while running, the Start panel's while idle.
+    column: box(document.querySelector('.board-feed, #board-start')),
     pageScroll: document.documentElement.scrollWidth - innerWidth,
   };
 };

@@ -3,12 +3,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The Sessions tab, a session's page and the records page (records spec §5.2),
-// and their forms: start, end a practice, abort a qualifying or race.
+// and their forms: start (the board's Start panel posts here), end a practice,
+// abort a qualifying or race.
 import * as ops from './operations.js';
 import { readForm } from './form.js';
 import { pageRoute, toPage } from './page-access.js';
 import { page, seeOther } from './respond.js';
 import { spacePath } from './spaces.js';
+import { readStart } from './start-form.js';
+import { boardPage } from './views/board.js';
 import { notFoundPage } from './views/notice.js';
 import { confirmPage } from './views/confirm.js';
 import { recordsPage } from './views/records.js';
@@ -19,8 +22,6 @@ import { sessionsPage } from './views/sessions.js';
 const NO_RACE = { message: 'There is no running qualifying or race here.' };
 const NO_PRACTICE = { message: 'There is no running practice here.' };
 const PAGE = 20;
-/** The start form's fields, in its order. */
-const FIELDS = ['kind', 'roster', 'duration', 'countdown'];
 const LATEST_RECORDS = 5;
 /** A confirmation sent twice: the session running is the one its first send started, if of its kind and this new. */
 const DOUBLE_SUBMIT_MS = 10_000;
@@ -85,20 +86,18 @@ function recordsOf(request, limit) {
 /**
  * The Sessions tab. Only a 200, the answer to GET, lets the clock reload the page: a reload
  * of the answer to a POST would send the form again.
- * @param {any} request @param {number} status @param {{ error?: any, errors?: any[], values?: any }} [extras]
+ * @param {any} request @param {number} status @param {{ error?: any, errors?: any[] }} [extras]
  */
-function renderTab(request, status, { error = null, errors = error ? [error] : [], values = null } = {}) {
+function renderTab(request, status, { error = null, errors = error ? [error] : [] } = {}) {
   const ws = request.workspaceId;
   const cursor = CURSOR.exec(request.url.searchParams.get('before') ?? '');
   const before = cursor ? { createdAt: Number(cursor[1]), id: cursor[2] } : null;
   return page(request, status, sessionsPage(request, {
     session: request.store.runningSession(ws),
     drivers: request.store.drivers(ws),
-    idle: request.engine.idleOf(ws),
     history: historyOf(request, before),
     records: recordsOf(request, LATEST_RECORDS),
     errors,
-    values,
     reload: status === 200,
   }));
 }
@@ -116,65 +115,54 @@ export function runningFor(kind, minutes, drivers, countingDown = false) {
 /**
  * Starting while a session runs: say what runs, and send the same form again with
  * `replace` naming that session (records spec §5.2), so it ends only what it named.
+ * @param {any} request @param {{ kind: string, fields: string[][] }} sent readStart's kind and fields
  */
-function askReplace(request, values, running, from = null) {
+function askReplace(request, { kind, fields }, running, from = null) {
   const base = request.space.base;
   const minutes = Math.floor(Math.max(0, request.now() - (running.opensAt ?? running.createdAt)) / 60_000);
   const drivers = running.roster ? running.roster.length : request.engine.driverCount(running);
-  const what = values.kind === 'race' || values.kind === 'qualifying' ? values.kind : 'practice';
-  const fields = values.kind === 'practice'
-    ? [['kind', 'practice']]
-    : [['kind', values.kind], ...values.roster.map((id) => ['roster', id]), ['duration', values.duration], ['countdown', values.countdown]];
-  if (from) fields.push(['from', from]);
+  const what = kind === 'race' || kind === 'qualifying' ? kind : 'practice';
   return page(request, 200, confirmPage(request, {
     title: what === 'qualifying' ? 'Start qualifying?' : `Start a ${what}?`,
     // The engine moves a race out of its countdown on its next tick, up to a second late; the clock says it has started.
     text: `${runningFor(running.kind, minutes, drivers, running.state === 'countdown' && request.now() < running.opensAt)} Starting this ${what} ends it.`,
     action: `${base}/sessions`,
     button: 'Start',
-    back: from === 'tap' ? `${base}/tap` : `${base}/sessions`,
-    screen: 'sessions',
-    fields: [...fields, ['replace', running.id]],
+    back: from === 'tap' ? `${base}/tap` : `${base}/board`,
+    screen: from === 'tap' ? 'tap' : 'board',
+    fields: [...fields, ...(from ? [['from', from]] : []), ['replace', running.id]],
   }));
 }
 
+/** A start that failed: the board again, its Start panel with the errors and what was sent (board hub spec §5). */
+const startFailed = (request, status, errors, values) => page(request, status, boardPage(request, request.engine.snapshot(request.workspaceId, { moments: true }), { start: { errors, values } }));
+
+/**
+ * The board's Start form (board hub spec §5): only the sent kind's own fields
+ * are read (readStart), then 303 to the board; a failure is the board again.
+ */
 async function start(request) {
   const { form, error } = await readForm(request);
   if (error) return error;
-  const values = { kind: form.get('kind') ?? '', roster: form.getAll('roster'), duration: form.get('duration') ?? '', countdown: form.get('countdown') ?? '' };
-  const practice = values.kind === 'practice';
-  // A blank box is "use the default" on a form; the operation only takes a missing value.
-  // The box takes whole minutes, as its min and max say: plain digits only, not "1e1" or "0x10".
-  const minutes = practice || values.duration === '' ? undefined : /^[0-9]+$/.test(values.duration) ? Number(values.duration) : NaN;
-  const badMinutes = minutes !== undefined && !(Number.isInteger(minutes) && minutes >= 1 && minutes <= 60);
-  const args = {
-    kind: values.kind,
-    roster: practice ? undefined : values.roster,
-    durationSeconds: minutes === undefined || badMinutes ? undefined : minutes * 60,
-    countdownSeconds: practice || values.countdown === '' ? undefined : values.countdown,
-  };
+  const sent = readStart(request, form);
   // Every field's error at once, in the form's order, so one round trip shows all that needs fixing.
-  const errors = ops.startErrors(request, args);
-  if (badMinutes) errors.push(ops.fail('invalid-request', 'A session lasts 1 to 60 minutes.', 'duration').error);
-  if (errors.length) {
-    errors.sort((a, b) => FIELDS.indexOf(a.field) - FIELDS.indexOf(b.field));
-    return renderTab(request, errors[0].status, { errors, values });
-  }
+  if (sent.errors.length) return startFailed(request, sent.errors[0].status, sent.errors, sent.values);
   // Where a start leads: the board, or back to the Tap page its form came from (a fixed name, never a URL).
   const from = form.get('from') === 'tap' ? 'tap' : null;
   const done = `${request.space.base}/${from ?? 'board'}`;
   // A confirmation replaces only the session it named. From here to the start nothing awaits,
   // so what runs cannot change in between.
   // Sent twice (a double click, two members): the session running is the one the first send started.
-  const twice = (running) => running.kind === values.kind && request.now() - running.createdAt < DOUBLE_SUBMIT_MS;
+  const twice = (running) => running.kind === sent.kind && request.now() - running.createdAt < DOUBLE_SUBMIT_MS;
   const named = form.get('replace');
   const running = named ? request.store.runningSession(request.workspaceId) : null;
-  if (running && running.id !== named) return twice(running) ? seeOther(done) : askReplace(request, values, running, from);
-  const result = ops.startSession(request, { ...args, replace: running !== null });
+  if (running && running.id !== named) return twice(running) ? seeOther(done) : askReplace(request, sent, running, from);
+  const result = ops.startSession(request, { roster: undefined, durationSeconds: undefined, countdownSeconds: undefined, ...sent.args, replace: running !== null });
   if (!result.error) return seeOther(done);
-  if ('running' in result.error) return twice(result.error.running) ? seeOther(done) : askReplace(request, values, result.error.running, from);
-  return renderTab(request, result.error.status, { error: result.error, values });
+  if ('running' in result.error) return twice(result.error.running) ? seeOther(done) : askReplace(request, sent, result.error.running, from);
+  return startFailed(request, result.error.status, [result.error], sent.values);
 }
+
 
 /** The running session `match[2]`, if it is of a kind `ok` accepts. */
 function runningAs(request, match, ok) {

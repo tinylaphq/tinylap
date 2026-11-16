@@ -65,13 +65,14 @@ const measure = () => {
   };
   const board = document.querySelector('.board');
   return {
-    gap: getComputedStyle(board).columnGap,
+    // With the Start panel beside it, tl-board is the idle board's grid.
+    gap: getComputedStyle(document.querySelector('#board-start:not([hidden])') ? document.querySelector('tl-board') : board).columnGap,
     space2xl: getComputedStyle(document.documentElement).getPropertyValue('--p-space-2xl').trim(),
     font: parseFloat(getComputedStyle(board).fontSize),
     title: box('#result-title'),
     side: box('.board-next'),
     sideTitle: box('.board-next-title'),
-    start: box('.board-start'),
+    start: box('.start-panel'),
     first: box('.place.is-first'),
     result: box('.board-result .result'),
     record: box('.board-track .strip-cells'),

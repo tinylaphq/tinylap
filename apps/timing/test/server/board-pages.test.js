@@ -77,10 +77,10 @@ test('a club that has never driven: No sessions yet, one sentence, and its first
   assert.match(body, /<h1 class="board-result-title" id="result-title">No sessions yet<\/h1>/);
   assert.match(body, /<div class="board-none"><p>Start a session and drive\. Every lap shows up here as it is timed, and the first one sets the track record on Track\.<\/p><\/div>/);
   // No drivers: a session would time nothing, so the first steps stand where Start goes (board hub spec §4.1).
-  assert.match(body, new RegExp(`<h2 class="board-next-title" id="start-title">Start</h2>\\s*<div class="board-next-body">\\s*<div class="board-start is-first-steps">[\\s\\S]*<a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a> <a href="${base}/bridge">Connect the decoder</a>`));
+  assert.match(body, new RegExp(`<h2 id="start-title" class="board-next-title">Start</h2>\\s*<div class="board-next-body"><div class="start-panel start-first">[\\s\\S]*<a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>\\s*<a class="btn btn-outline" href="${base}/bridge">Connect the decoder</a>`));
   assert.doesNotMatch(body, /Start practice|Tap laps by hand|Full results|Ended at/);
   assert.doesNotMatch(body, /No track set|Last laps|board-steps|board-hero|board-first"|status-warning/);
-  assert.match(body, /<noscript><meta http-equiv="refresh" content="10"><\/noscript>/);
+  assert.doesNotMatch(body, /http-equiv="refresh"/, 'nothing runs: no refresh, which would reload the form away');
   assert.match(body, new RegExp(`<div id="board-live"[^>]* data-events="${base}/board/events"`));
   assert.match(body, /<script type="module" src="\/public\/board.js"><\/script>/);
   assert.match(body, /<script type="module" src="\/public\/elements\/board.js"><\/script>/);
@@ -398,7 +398,7 @@ test('the watchers board and the big board show the note too', async () => {
 });
 
 // The track header, marks, the crown and the idle board (records spec §4.2, §4.3, §5.1, §5.3).
-const START = /<button type="submit" class="btn btn-primary">Start practice<\/button>/;
+const START = /<form method="post" action="[^"]*\/sessions" class="start-panel"/;
 const NOTICE = /No session is running/;
 test('the track header, the idle board, the notice, marks, the crown and the record state', async () => {
   const club = recordsClub;
@@ -426,7 +426,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   }
   assert.match(s.board, START, 'with drivers, Start practice in the Start panel\'s place');
   for (const body of [s.big, s.watch]) {
-    assert.doesNotMatch(body, /setup#drivers|board-next|board-start/, 'no side: nothing to press and no fastest yet');
+    assert.doesNotMatch(body, /setup#drivers|board-next|board-start|start-panel/, 'no side: nothing to press and no fastest yet');
     assert.doesNotMatch(body, START);
   }
 
@@ -434,8 +434,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   passIn(club.id, 5_000_000, '63');
   passIn(club.id, 5_000_500, '61');
   s = await screens();
-  assert.match(s.board, /<div class="board-start">\s*<p class="board-on-track" role="status"><span><span class="driver" style="--driver: [^"]+"><span class="driver-name" title="Haris">Haris<\/span><\/span> is on the track<\/span><\/p>\s*<form method="post"/);
-  assert.match(s.board, new RegExp(`<form method="post" action="${path}/sessions" class="start-practice">\\s*<input type="hidden" name="kind" value="practice">`));
+  assert.match(s.board, /<div class="start-on-track" id="start-on-track"><p class="board-on-track" role="status"><span><span class="driver" style="--driver: [^"]+"><span class="driver-name" title="Haris">Haris<\/span><\/span> is on the track<\/span><\/p><\/div>\s*<button type="submit"/);
   assert.equal(s.board.match(new RegExp(START, 'g')).length, 1);
   assert.match(s.board, new RegExp(`<div class="board-notices"><p class="board-quiet" role="status">Transponder 63 isn't assigned yet\\. <a href="${path}/transponders/63\\?returnTo=${encodeURIComponent(`${path}/board`)}">Assign it</a></p></div>\\s*<section class="board-result`), 'above the result');
   assert.doesNotMatch(s.board, /board-unknown/, 'a quiet line, not the warning');
@@ -454,7 +453,6 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   for (const code of ['63', '64']) app.engine.assign(club.id, code, mia.id);
   const assigned = await (await get(member, `${path}/board`)).text();
   assert.doesNotMatch(assigned, /board-notices|isn't assigned yet/);
-  assert.match(assigned, new RegExp(`<p class="board-quiet">Or a <a href="${path}/sessions#start-title">qualifying or race</a>\\.</p>`));
 
   // A practice: its clock counts up under "Started 14:32"; Haris sets the first record, then beats it.
   clock.now = 1_000_000_000_000 + 5_100_000;
@@ -538,10 +536,10 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   // Full results on a member's own screen only; Start and Fastest on this track beside the result.
   assert.match(s.board, new RegExp(`<p class="result-when">[\\s\\S]*?</p><a href="${path}/sessions/${session.id}">Full results</a></div>`));
   for (const body of [s.big, s.watch]) assert.doesNotMatch(body, /Full results|<a href="[^"]*\/sessions/);
-  const side = part(s.board, '<aside class="board-next"', '</aside>');
-  assert.match(side, /<h2 class="board-next-title" id="start-title">Start<\/h2>/);
-  assert.match(side, START);
-  assert.match(side, new RegExp(`Or a <a href="${path}/sessions#start-title">qualifying or race</a>\\.`));
+  const panel = part(s.board, '<aside id="board-start"', '</aside>');
+  assert.match(panel, /<h2 id="start-title" class="board-next-title">Start<\/h2>/);
+  assert.match(panel, START);
+  const side = part(s.board, '<section class="board-fastest is-side"', '</section>');
   const fastestOf = (body) => [...part(body, '<ol class="board-ranks', '</ol>').matchAll(/>(Haris|Mia)<\/span>[\s\S]*?(\d+\.\d{3})/g)].map((m) => [m[1], m[2]]);
   assert.match(side, /<h2 class="h3" id="board-fastest-title">Fastest on this track<\/h2>/);
   assert.deepEqual(fastestOf(side), [['Haris', '7.500'], ['Mia', '9.000']]);
@@ -569,7 +567,7 @@ test('the result takes the board with its winner (#121): P1 the card, then the r
   const result = body.slice(body.indexOf('<div class="result is-practice">'), body.indexOf('</section>', body.indexOf('<div class="result is-practice">')));
   assert.deepEqual([...result.matchAll(/>(Abe|Bea|Cid|Dot)<\/span>/g)].map((m) => m[1]), ['Dot', 'Bea', 'Cid', 'Abe']);
   assert.match(result, /<article class="place is-first[^"]*">[\s\S]*?title="Dot"/);
-  const fastest = body.slice(body.indexOf('<section class="board-fastest"'), body.indexOf('</section>', body.indexOf('<section class="board-fastest"')));
+  const fastest = body.slice(body.indexOf('<section class="board-fastest'), body.indexOf('</section>', body.indexOf('<section class="board-fastest')));
   assert.deepEqual([...fastest.matchAll(/>(Abe|Bea|Cid|Dot)<\/span>/g)].map((m) => m[1]), ['Dot', 'Bea', 'Cid', 'Abe']);
 });
 

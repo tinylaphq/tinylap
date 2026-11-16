@@ -7,16 +7,18 @@
 // watchers board is the same without member parts. Every board is headed by
 // the strip (board hub spec §3). While a session runs it is the table and the
 // last laps; while nobody races, the latest result on this track, and beside
-// it the Start panel's place and the fastest here (board hub spec §4).
+// it the fastest here (board hub spec §4). On a member's own board the Start
+// panel (views/start.js) sits beside #board-live, outside it (§5).
 import { clockAt, formatClock, formatLap } from '../../public/format.js';
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { localTime } from '@tinylap/design/html/local-time.js';
 import { html, safe } from './html.js';
 import { layout } from './layout.js';
 import { directionIcon } from './direction.js';
-import { chip as driverChip, idleNotice, marks, marksHead, posHead, startPracticeForm, tableClasses, timeWidths } from './marks.js';
+import { chip as driverChip, marks, marksHead, posHead, tableClasses, timeWidths } from './marks.js';
 import { resultOf, resultView } from './result.js';
 import { shortLength } from './sessions.js';
+import { boardStart } from './start.js';
 
 const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
 
@@ -287,49 +289,20 @@ function latestResult(request, snap, { members, big }) {
 }
 
 /**
- * Where the Start panel goes (board hub spec §5): the line saying a car is on
- * the track, as the reason to press it, over Start practice and the way to a
- * qualifying or race. A club with no drivers gets its first steps here
- * instead, since a session with no drivers times nothing; a car on the track
- * is still said over them.
- */
-function startSlot(request, snap) {
-  const base = request.space.base;
-  if (!snap.drivers.length) {
-    return html`<div class="board-start is-first-steps">
-    ${idleNotice(snap.idle, snap.drivers)}
-    <p>Add your drivers, then connect the decoder.</p>
-    <p class="board-first-links"><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a> <a href="${base}/bridge">Connect the decoder</a></p>
-  </div>`;
-  }
-  return html`<div class="board-start">
-    ${idleNotice(snap.idle, snap.drivers)}
-    ${startPracticeForm(request)}
-    <p class="board-quiet">Or a <a href="${base}/sessions#start-title">qualifying or race</a>.</p>
-  </div>`;
-}
-
-/**
- * The right of the idle board: on a member's own screen the Start panel's
- * place, its title level with the result's, then Fastest on this track; on the
- * watchers' board Fastest on this track alone, under the side's title. The TV
- * has no side (§4.3).
+ * The right of the idle board: on a member's own screen Fastest on this track,
+ * under the Start panel that sits beside #board-live (board hub spec §5); on
+ * the watchers' board Fastest on this track alone, under the side's title. The
+ * TV has no side (§4.3).
  */
 function side(request, snap, { members }) {
   const any = snap.fastest.length > 0;
-  if (members) {
-    return html`<aside class="board-next" aria-labelledby="start-title">
-  <h2 class="board-next-title" id="start-title">Start</h2>
-  <div class="board-next-body">
-    ${startSlot(request, snap)}
-    ${any ? html`<section class="board-fastest" aria-labelledby="board-fastest-title">
-    <h2 class="h3" id="board-fastest-title">Fastest on this track</h2>
-    ${fastestList(snap)}
-  </section>` : null}
-  </div>
-</aside>`;
-  }
   if (!any) return null;
+  if (members) {
+    return html`<section class="board-fastest is-side" aria-labelledby="board-fastest-title">
+  <h2 class="h3" id="board-fastest-title">Fastest on this track</h2>
+  ${fastestList(snap)}
+</section>`;
+  }
   return html`<aside class="board-next" aria-labelledby="board-fastest-title">
   <h2 class="board-next-title" id="board-fastest-title">Fastest on this track</h2>
   <div class="board-next-body">${fastestList(snap)}</div>
@@ -378,7 +351,13 @@ ${feed(snap, big)}
 </div>`;
 }
 
-export function boardPage(request, snap, { watcher = false, big = false, token = null } = {}) {
+/**
+ * The board: #board-live and, on a member's own screen, the Start panel beside
+ * it (board hub spec §5). `start` is a failed start's errors and values, shown
+ * again. Without script the page reloads every ten seconds only while a session
+ * runs, so a reload never takes a half-filled form away.
+ */
+export function boardPage(request, snap, { watcher = false, big = false, token = null, start = {} } = {}) {
   return layout(request, {
     title: watcher ? 'Live board' : 'Board',
     screen: watcher ? null : 'board',
@@ -386,7 +365,7 @@ export function boardPage(request, snap, { watcher = false, big = false, token =
     big,
     scripts: ['board.js', 'elements/board.js', 'elements/countdown.js'],
     modules: ['pkg/design/elements/relative-time.js', 'pkg/design/elements/local-time.js'],
-    head: html`<noscript><meta http-equiv="refresh" content="10"></noscript>\n`,
-    body: html`<tl-board status="live-status" sound="sound-switch" notify="notify-setting">\n${boardLive(request, snap, { watcher, big, token })}\n</tl-board>`,
+    head: snap.session ? html`<noscript><meta http-equiv="refresh" content="10"></noscript>\n` : null,
+    body: html`<tl-board status="live-status" sound="sound-switch" notify="notify-setting">\n${boardLive(request, snap, { watcher, big, token })}\n${watcher || big ? null : boardStart(request, snap, start)}\n</tl-board>`,
   });
 }

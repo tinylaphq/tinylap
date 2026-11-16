@@ -4,8 +4,9 @@
 
 // The Sessions tab's tl-countdown in the browser (spec step two §2.2, §7, C1–C9):
 // one reload by GET at a phase change, and never a loop, a second reload,
-// a reload without storage, a reload of a hidden page, nor a reload of the
-// answer to a POST; and a clock moved in the page keeps its reload.
+// a reload without storage, nor a reload of a hidden page; and a clock moved
+// in the page keeps its reload. (C6, the answer to a POST, went with the
+// tab's start form: sessions start on the board.)
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
@@ -210,33 +211,6 @@ test('C5: hovering the Sessions tab on the Sessions tab fetches nothing ahead, s
   await settle();
   assert.equal(docs.length, 1 + later.length, 'then none');
   assert.deepEqual(errors, []);
-});
-
-test('C6: the answer to a POST never reloads', async (t) => {
-  ticking(t);
-  const { page, errors, loads, requests } = await sessionsTab(t);
-  await page.clock.install({ time: clock.now });
-  await page.goto('/personal/sessions');
-  await page.getByRole('button', { name: 'Start', exact: true }).waitFor();
-  const started = await app.form(member, '/personal/sessions', [['kind', 'race'], ['roster', roster[0]], ['duration', '1'], ['countdown', '2']]);
-  assert.equal(started.status, 303);
-  const session = app.store.runningSession(personal);
-  t.after(() => { app.engine.abort(personal, session.id); });
-  // A failed form while the race runs: the tab comes back with the race's clock, in the answer to the POST.
-  await page.getByRole('checkbox', { name: 'Ana' }).uncheck();
-  const answer = page.waitForResponse((r) => r.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
-  assert.equal((await answer).status(), 422);
-  await page.getByRole('alert').filter({ hasText: 'Pick 1 to 20 drivers.' }).waitFor();
-  assert.equal(await page.locator('tl-countdown').count(), 1);
-  assert.equal(await page.locator('tl-countdown[reload-on-phase]').count(), 0);
-  // The text shows before the 422 page's own load event and its last assets: count from a settled page.
-  await page.waitForLoadState('networkidle');
-  const seen = [loads.length, requests.length];
-  await past(page, session.opensAt + 2000);
-  await settle();
-  assert.deepEqual([loads.length, requests.length], seen, `no reload, no request: ${JSON.stringify(requests.slice(seen[1]))}`);
-  assert.deepEqual(errors.filter((e) => !/status of 422/.test(e)), [], 'nothing but the 422 itself');
 });
 
 test('C7: time running out reloads the Sessions tab once, which then says finishing the last lap', async (t) => {

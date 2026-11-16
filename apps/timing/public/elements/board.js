@@ -10,6 +10,9 @@
 //   unchanged notice; tl-board itself is never replaced. The strip's fastest
 //   lap line, a live region, stays and takes the new line's content, so a
 //   screen reader reads a new fastest lap.
+// - The Start panel (#board-start, beside #board-live) comes in the same
+//   message. It is replaced only when its data-key changes, so a half-filled
+//   form survives the updates; otherwise only its on-the-track line is taken.
 // - Shows the stream's state in the element its `status` attribute names:
 //   Live, Reconnecting… (the browser retries) or Disconnected. Once the
 //   stream gives up, it reloads the page after RELOAD_MS.
@@ -325,6 +328,27 @@ function counterpart(next, focused) {
   const href = focused?.getAttribute('href');
   if (href) return next.querySelector(`[href="${CSS.escape(href)}"]`);
   return focused?.id ? next.querySelector(`#${CSS.escape(focused.id)}`) : null;
+}
+
+/**
+ * The Start panel beside #board-live (board hub spec §5): replaced whole only
+ * when its data-key changes (a session started or ended, the first driver
+ * came), so a half-filled form survives every other update; otherwise only
+ * its line that a car is on the track is taken, when its words changed.
+ * @param {Element | null} current @param {Element | null} next
+ */
+function swapStart(current, next) {
+  if (!current || !next) return;
+  if (current.getAttribute('data-key') !== next.getAttribute('data-key')) {
+    const focused = current.contains(document.activeElement) ? document.activeElement : null;
+    current.replaceWith(next);
+    const target = focused && counterpart(next, focused);
+    if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    return;
+  }
+  const was = current.querySelector('#start-on-track');
+  const now = next.querySelector('#start-on-track');
+  if (was && now && was.textContent !== now.textContent) was.replaceWith(now);
 }
 
 /** Swaps `next` in for `current`, keeping focus and an unchanged live line (so it isn't announced again). */
@@ -664,8 +688,9 @@ class TlBoard extends HTMLElement {
       case 'board': {
         const template = document.createElement('template');
         template.innerHTML = /** @type {MessageEvent} */ (event).data; // rendered and escaped by the server
-        const next = template.content.firstElementChild;
+        const next = template.content.querySelector('#board-live');
         const current = this.querySelector('#board-live');
+        swapStart(this.querySelector('#board-start'), template.content.querySelector('#board-start'));
         // Where the old holder's crown was, for the jump, before the swap takes it away.
         const from = current?.querySelector(HOLDER_CROWN)?.getBoundingClientRect() ?? null;
         if (next && current) {
