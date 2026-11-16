@@ -284,6 +284,25 @@ test('tl-local-time shows the time in the viewer\'s zone, and the UTC text witho
   assert.deepEqual(await read({ timezoneId: 'Europe/Berlin', javaScriptEnabled: false }), ['12:32', '12 Oct', '12 Oct, 12:32', '12 Oct 2026, 12:32']);
 });
 
+test('tl-local-time day names the weekday and month, its year only outside the viewer\'s year', async (t) => {
+  // 12 Oct 2026, 23:30 UTC: already 13 Oct in Berlin.
+  const now = Date.UTC(2026, 9, 12, 23, 30);
+  const times = [Date.UTC(2026, 9, 12, 23, 0), Date.UTC(2025, 9, 12, 12, 32)];
+  const body = `<!doctype html><script type="module" src="/pkg/design/elements/local-time.js"></script><p>${times.map((at) => localTime(at, 'day')).join('|')}</p>`;
+  const read = async (options) => {
+    const { context, page, errors } = await pageAs(browser, app, null, options);
+    t.after(() => context.close());
+    if (options.javaScriptEnabled !== false) await page.clock.setFixedTime(now);
+    await page.route('**/fixture-day', (route) => route.fulfill({ contentType: 'text/html', body }));
+    await page.goto('/fixture-day');
+    if (options.javaScriptEnabled !== false) await page.waitForFunction(() => customElements.get('tl-local-time'));
+    assert.deepEqual(errors, []);
+    return page.locator('time').allInnerTexts();
+  };
+  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin' }), ['Tuesday 13 October', 'Sunday, 12 October 2025']);
+  assert.deepEqual(await read({ timezoneId: 'Europe/Berlin', javaScriptEnabled: false }), ['Monday, 12 October 2026', 'Sunday, 12 October 2025']);
+});
+
 test('tl-local-time datetime-short drops what the viewer\'s today and year make plain, in their zone', async (t) => {
   // 12 Oct 2026, 23:30 UTC: already 13 Oct in Berlin and Auckland.
   const now = Date.UTC(2026, 9, 12, 23, 30);

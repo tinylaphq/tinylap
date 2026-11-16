@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The history and the records in the browser: on a phone the history keeps
-// who was fastest and how fast in view, with the track under the session,
-// and a record's date stays on one line; the history has no crown.
+// who was fastest and how fast in view, each night's head its date and track,
+// and a record's date stays on one line; the history has no crown, and its
+// whole row opens the session.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { canonicalJson } from '@tinylap/track-format';
@@ -76,15 +77,19 @@ const measure = (selector) => {
     fits: scroll.scrollWidth <= scroll.clientWidth,
     widths: [scroll.scrollWidth, scroll.clientWidth],
     cols: [...table.querySelectorAll('thead th')].map((th) => Math.round(th.getBoundingClientRect().width)),
-    shown: [...table.querySelectorAll('thead th')].filter((th) => th.getClientRects().length && th.getBoundingClientRect().right <= box.right + 0.5).map((th) => th.textContent.trim()),
-    rows: [...table.querySelectorAll('tbody tr')].map((tr) => {
-      const track = tr.querySelector('.history-track');
+    shown: [...table.querySelectorAll('thead th')].filter((th) => th.getBoundingClientRect().width > 0 && th.getBoundingClientRect().right <= box.right + 0.5).map((th) => th.textContent.trim()),
+    // How far each row's last cell ends short of the table's edge.
+    short: [...table.querySelectorAll('tr')].map((tr) => Math.round(table.getBoundingClientRect().right - tr.lastElementChild.getBoundingClientRect().right)),
+    heads: [...table.querySelectorAll('.history-night-head th')].map((th) => {
+      const track = th.querySelector('.history-night-track');
+      return { track: track.textContent, inside: track.getBoundingClientRect().right <= th.getBoundingClientRect().right + 0.5 };
+    }),
+    rows: [...table.querySelectorAll('tbody tr:not(.history-night-head)')].map((tr) => {
       const tag = tr.querySelector('.history-session .tag');
       const cell = tag?.closest('td').getBoundingClientRect();
       return {
-        dates: [...tr.querySelectorAll('td:not(.board-driver):not(.num) a')].filter((a) => a.getClientRects().length).map(lines),
-        track: track && track.getClientRects().length ? track.textContent : null,
-        trackLines: track && track.getClientRects().length ? Math.round(track.getBoundingClientRect().height / parseFloat(getComputedStyle(track).lineHeight)) : 0,
+        // A link's visible text: the history's time, without the kind it says only to a screen reader.
+        dates: [...tr.querySelectorAll('td:not(.board-driver):not(.num) a')].filter((a) => a.getClientRects().length).map((a) => lines(a.querySelector('time') ?? a)),
         crowned: Boolean(tr.querySelector('.crown')),
         tagInside: tag ? tag.getBoundingClientRect().right <= cell.right + 0.5 : null,
         best: tr.querySelector('td.num:not(.history-wide)')?.textContent ?? null,
@@ -93,7 +98,7 @@ const measure = (selector) => {
   };
 };
 
-test('a phone\'s history shows Started, Session, Fastest and Best, with the track under the session', async (t) => {
+test('a phone\'s history shows Started, Session, Fastest and Best, each night\'s track in its head', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member, { viewport: PHONE });
   t.after(() => context.close());
   await page.goto('/personal/sessions');
@@ -103,9 +108,14 @@ test('a phone\'s history shows Started, Session, Fastest and Best, with the trac
   assert.ok(m.fits, `the history fits its box: ${m.widths}`);
   assert.ok(m.page.scrollWidth <= m.page.innerWidth, `no sideways page scroll: ${m.page.scrollWidth} in ${m.page.innerWidth}`);
   assert.equal(m.rows.length, 5);
+  assert.ok(m.short.every((px) => px <= 2), `every row reaches the table's edge, under the nights' heads: ${m.short}`);
+  assert.equal(m.heads.length, 5, 'a day apart, each session is a night of its own');
+  for (const head of m.heads) {
+    assert.equal(head.track, 'Garage oval behind the workshop, long version, anticlockwise');
+    assert.ok(head.inside, 'a long track wraps inside its head');
+  }
   for (const row of m.rows) {
-    assert.match(row.track, /^Garage oval behind the workshop, long version, anticlockwise$/);
-    assert.ok(row.trackLines <= 2, `the track takes at most two lines: ${row.trackLines}`);
+    assert.ok(row.dates.every((n) => n === 1), `the start's time on one line: ${row.dates}`);
     assert.equal(row.crowned, false, 'no crown in the history');
   }
   assert.ok(m.rows.slice(1).every((row) => /^\d+\.\d{3}$/.test(row.best)), 'each practice\'s best lap is in view');
@@ -119,11 +129,24 @@ test('on a desktop the history keeps every column, and no crown', async (t) => {
   await page.goto('/personal/sessions');
   await page.evaluate(() => document.fonts.ready);
   const m = await page.evaluate(measure, '.history-table');
-  assert.deepEqual(m.shown, ['Started', 'Session', 'Track', 'Length', 'Drivers', 'Fastest', 'Best', 'Mark']);
+  assert.deepEqual(m.shown, ['Started', 'Session', 'Length', 'Drivers', 'Fastest', 'Best', 'Mark']);
   assert.ok(m.fits, `the history fits its box: ${m.widths}`);
-  for (const row of m.rows) {
-    assert.equal(row.track, null, 'the second line is for a phone');
-    assert.equal(row.crowned, false, 'no crown in the history');
+  for (const row of m.rows) assert.equal(row.crowned, false, 'no crown in the history');
+});
+
+test('the whole row opens its session, and the time is its one link', async (t) => {
+  for (const viewport of [PHONE, DESKTOP]) {
+    const { context, page, errors } = await pageAs(browser, app, member, { viewport });
+    t.after(() => context.close());
+    await page.goto('/personal/sessions');
+    const row = page.locator('.history-row').first();
+    assert.equal(await row.locator('a').count(), 1);
+    const href = await row.locator('a').getAttribute('href');
+    // Where the driver's name is, away from the link's own text: the row's box opens it.
+    const cell = await row.locator('.board-driver').boundingBox();
+    await page.mouse.click(cell.x + cell.width / 2, cell.y + cell.height / 2);
+    await page.waitForURL(`**${href}`);
+    assert.deepEqual(errors, []);
   }
 });
 

@@ -18,6 +18,7 @@ let idle;
 let gone;
 let lapless;
 let lena;
+let nights;
 
 before(async () => {
   app = await startTiming({ clock });
@@ -30,6 +31,7 @@ before(async () => {
   member = await app.login(ana);
   const len = await app.signUp('Lena');
   lapless = app.club(len, 'Lapless');
+  nights = app.club(len, 'Nights');
   lena = await app.login(len);
   base = `/clubs/${office.id}`;
 });
@@ -74,11 +76,8 @@ test('start a race from the form, confirm before replacing it, then abort it aft
   assert.deepEqual([session.kind, session.durationMs, session.roster], ['race', 120_000, [a.id, b.id]]);
 
   const running = await (await get(`${base}/sessions`)).text();
-  assert.match(running, /<h2[^>]*>Race, running<\/h2>/);
-  assert.match(running, new RegExp(`<a[^>]*href="${base}/sessions/${session.id}/abort"`));
-  assert.doesNotMatch(running, /action="[^"]*\/abort"/, 'abort needs the confirmation page first');
-  assert.match(running, /<tl-countdown class="race-clock" reload-on-phase><span class="stat-label" data-clock-label>Remaining<\/span> <time class="race-clock-time" data-clock data-kind="race" data-state="running" data-opens="\d+" data-closes="\d+" data-now="\d+">\d+:\d\d<\/time><\/tl-countdown>/);
-  assert.match(running, /<script type="module" src="\/public\/elements\/countdown.js"><\/script>/);
+  assert.match(running, new RegExp(`<h1>Sessions</h1>\\s*<p class="sessions-running" role="status"><span>A race is running\\.</span> <a href="${base}/board">Go to the board</a></p>`), 'one line under the title, and the board runs it');
+  assert.doesNotMatch(running, /\/abort"|\/end"|tl-countdown|countdown\.js/, 'no running panel: End and Abort are the board\'s');
 
   clock.now += 3 * 60_000;
   const again = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '2'], ['race-countdown', '0']]);
@@ -251,33 +250,6 @@ test('a bad minutes or countdown value says what is allowed and keeps the input'
   assert.equal(app.store.runningSession(office.id), null);
 });
 
-test('a running session names its drivers and length', async () => {
-  const drivers = app.store.drivers(office.id);
-  await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['qualifying-drivers', 'chosen'], ...drivers.map((d) => ['qualifying-roster', d.id]), ['qualifying-minutes', '3']]);
-  const body = await (await get(`${base}/sessions`)).text();
-  assert.match(body, /<h2[^>]*>Qualifying, running<\/h2>/);
-  assert.match(body, /Ana, Ben\. 3 minutes\./);
-  await app.form(member, `${base}/sessions/${app.store.runningSession(office.id).id}/abort`, {});
-});
-
-test('a race without a roster, started through the API, is everyone on the track', async () => {
-  const started = await app.api(member, 'POST', `/workspaces/${office.id}/sessions`, { kind: 'race', durationSeconds: 180, countdownSeconds: 0 });
-  assert.equal(started.status, 201);
-  const body = await (await get(`${base}/sessions`)).text();
-  assert.match(body, /<p>Everyone on the track\. 3 minutes\.<\/p>/);
-  await app.form(member, `${base}/sessions/${app.store.runningSession(office.id).id}/abort`, {});
-});
-
-test('a session of 30 seconds, started through the API, does not read as a minute', async () => {
-  const [a] = app.store.drivers(office.id);
-  const started = await app.api(member, 'POST', `/workspaces/${office.id}/sessions`, { kind: 'qualifying', roster: [a.id], durationSeconds: 30 });
-  assert.equal(started.status, 201);
-  const body = await (await get(`${base}/sessions`)).text();
-  assert.match(body, /\. 30 seconds\./);
-  assert.doesNotMatch(body, /1 minute/);
-  await app.form(member, `${base}/sessions/${app.store.runningSession(office.id).id}/abort`, {});
-});
-
 test('a practice: Start practice, its start time, End after confirming', async () => {
   clock.now = T0 + 3_600_000;
   const started = await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
@@ -286,11 +258,8 @@ test('a practice: Start practice, its start time, End after confirming', async (
   const session = app.store.runningSession(office.id);
   assert.equal(session.kind, 'practice');
   const body = await (await get(`${base}/sessions`)).text();
-  assert.match(body, /<h2[^>]*>Practice, running<\/h2>/);
-  assert.match(body, /Started <tl-local-time format="time"><time datetime="2001-09-09T02:46:40.000Z">02:46<\/time><\/tl-local-time>/);
-  assert.match(body, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
-  assert.match(body, new RegExp(`<a class="btn btn-danger" href="${base}/sessions/${session.id}/end">End</a>`));
-  assert.doesNotMatch(body, /\/abort"/);
+  assert.match(body, /<p class="sessions-running" role="status"><span>A practice is running\.<\/span> <a href="[^"]*\/board">Go to the board<\/a><\/p>/, 'the line names the kind that runs');
+  assert.doesNotMatch(body, /\/end"|\/abort"/);
 
   const ask = await get(`${base}/sessions/${session.id}/end`);
   assert.equal(ask.status, 200);
@@ -348,9 +317,13 @@ test('history: newest first, with kind, length, drivers and the best lap with it
   const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
   assert.equal(rows.length, 20);
   const [newest] = rows;
-  assert.match(newest, new RegExp(`<a href="${hbase}/sessions/${session.id}"><tl-local-time format="datetime"><time datetime="2001-09-09T02:46:40.000Z">9 Sep, 02:46</time></tl-local-time></a>`));
-  assert.match(newest, /<td class="history-session"><span class="history-kind">Practice<\/span><span class="history-track">Office loop, clockwise<\/span><\/td>/, 'the track again, for a phone');
-  assert.match(newest, /<td class="history-wide cut-words">Office loop, clockwise<\/td>/);
+  assert.match(newest, new RegExp(`<td class="history-started"><a href="${hbase}/sessions/${session.id}"><tl-local-time format="time"><time datetime="2001-09-09T02:46:40.000Z">02:46</time></tl-local-time><span class="visually-hidden">, Practice</span></a></td>`), 'the time, the row\'s link; the night\'s head has the date');
+  assert.match(newest, /<td class="history-session"><span class="history-kind">Practice<\/span><\/td>/);
+  assert.doesNotMatch(body, /history-track|<th scope="col"[^>]*>Track<\/th>/, 'the track is the night\'s, in its head');
+  // One night: the minute-apart practices and the one an hour on, under the date of the page's first of them.
+  const heads = [...body.matchAll(/<tr class="history-night-head"><th scope="rowgroup" colspan="7">([\s\S]*?)<\/th><\/tr>/g)].map((m) => m[1]);
+  assert.deepEqual(heads, ['<tl-local-time format="day"><time datetime="2001-09-09T02:07:40.000Z">Sunday, 9 September 2001</time></tl-local-time><span class="history-night-track">Office loop, clockwise</span>']);
+  assert.equal([...body.matchAll(/<tbody class="history-night">/g)].length, 1);
   assert.match(newest, /<td class="num history-wide">18 s<\/td>/, 'from its start to its last passing');
   assert.match(newest, /<td class="num history-wide">2<\/td>/);
   assert.match(newest, /<td class="board-driver"><span [^>]+><span class="driver-name" title="Ana">Ana<\/span><\/span><\/td>/, 'no crown in the history: it would repeat on every session the holder won');
@@ -358,7 +331,8 @@ test('history: newest first, with kind, length, drivers and the best lap with it
   assert.match(body, /<th scope="col" class="num">Best<\/th><th scope="col" class="mark-cell"><span class="visually-hidden">Mark<\/span><\/th>/);
   assert.match(rows[1], /<td class="num history-wide">0 s<\/td>/);
   assert.match(rows[1], /<td class="num history-wide">0<\/td>/);
-  assert.match(body, /<colgroup><col class="col-started"><col class="col-kind"><col class="history-wide"><col class="col-count history-wide"><col class="col-count history-wide"><col><col class="col-time"><col class="col-mark"><\/colgroup>/);
+  assert.match(body, /<colgroup><col class="col-started"><col class="col-kind"><col class="col-count history-wide"><col class="col-count history-wide"><col><col class="col-time"><col class="col-mark"><\/colgroup>/);
+  assert.match(body, /<thead><tr><th scope="col">Started<\/th><th scope="col">Session<\/th><th scope="col" class="num history-wide">Length<\/th><th scope="col" class="num history-wide">Drivers<\/th><th scope="col">Fastest<\/th><th scope="col" class="num">Best<\/th>/);
   assert.doesNotMatch(body, /Newer sessions|Newest sessions/, 'the first page has nothing newer');
   const twentieth = app.store.listSessions(ws, 21)[19];
   const cursor = `${twentieth.createdAt}.${twentieth.id}`;
@@ -369,6 +343,8 @@ test('history: newest first, with kind, length, drivers and the best lap with it
   assert.equal(olderRows.length, 2);
   assert.doesNotMatch(older, /Older sessions/);
   assert.match(older, /<td class="num history-wide">9 s<\/td>[\s\S]*?<td class="num history-wide">3<\/td>/, 'the practice of the test before');
+  // That one ran on the club's first track: a night of its own, though only minutes before the next.
+  assert.deepEqual([...older.matchAll(/<span class="history-night-track">([^<]*)<\/span>/g)].map((m) => m[1]), ['Office loop, clockwise', 'Track, anticlockwise']);
   // One page back reaches the newest: Newer sessions is the first page, and no Newest besides.
   assert.match(older, new RegExp(`<a class="btn btn-outline btn-sm" href="${hbase}/sessions#history">Newer sessions</a>`));
   assert.doesNotMatch(older, /Newest sessions/);
@@ -545,7 +521,7 @@ test('a signed-out request for a session page goes to sign-in', async () => {
   assert.match(res.headers.get('location'), /^\/auth\/login\?returnTo=/);
 });
 
-test('the tab shows the five latest track records, /records all of them, newest first', async () => {
+test('the tab has no Track record section; /records has every record, newest first', async () => {
   const ws = records.id;
   const rbase = `/clubs/${ws}`;
   await driversIn(ws, { Ana: '10' });
@@ -558,11 +534,7 @@ test('the tab shows the five latest track records, /records all of them, newest 
   app.engine.end(ws, session.id);
 
   const tab = await (await get(`${rbase}/sessions`)).text();
-  const section = /<section[^>]*aria-labelledby="records-title"[\s\S]*?<\/section>/.exec(tab)[0];
-  assert.match(section, /Office loop, clockwise/);
-  const shown = [...section.matchAll(/<td class="num">(\d+\.\d{3})/g)].map((m) => m[1]);
-  assert.deepEqual(shown, ['6.500', '7.000', '7.500', '8.000', '9.000']);
-  assert.match(section, new RegExp(`<a href="${rbase}/records">All track records</a>`));
+  assert.doesNotMatch(tab, /Track record<\/h2>|records-title|All track records/, 'Fastest on this track and the records page have them');
 
   const all = await get(`${rbase}/records`);
   assert.equal(all.status, 200);
@@ -585,6 +557,36 @@ test('a car with no session running is a live line on the board\'s Start panel, 
   assert.doesNotMatch(await (await get(`/clubs/${ws}/board`)).text(), /is on the track/);
 });
 
+test('history: a night is a run with no gap over 6 hours, and a new track or direction starts another', async () => {
+  const ws = nights.id;
+  const ring = useTrack(app.store, ws, 'Kitchen Ring', 'cw');
+  const H = 3_600_000;
+  /** A practice from `at` to `to`, server time from T0. */
+  const practice = (at, to = at) => {
+    clock.now = T0 + at;
+    const { session } = app.engine.start(ws, { kind: 'practice' });
+    clock.now = T0 + to;
+    app.engine.end(ws, session.id);
+    return session;
+  };
+  const a = practice(0, 10 * 60_000);
+  const b = practice(10 * 60_000 + 6 * H); // 6 hours after a ended: the same night
+  const c = practice(10 * 60_000 + 12 * H + 1); // a millisecond more than 6 hours on: the next night
+  app.store.setCurrentTrack(ws, ring, 'ccw');
+  const d = practice(10 * 60_000 + 12 * H + 60_000); // a minute on, the other way round
+  const body = await (await get(`/clubs/${ws}/sessions`, lena)).text();
+  const shown = [...body.matchAll(/<tbody class="history-night">([\s\S]*?)<\/tbody>/g)].map(([, night]) => ({
+    head: /<th scope="rowgroup" colspan="7"><tl-local-time format="day"><time datetime="([^"]+)">[^<]*<\/time><\/tl-local-time><span class="history-night-track">([^<]*)<\/span><\/th>/.exec(night)?.slice(1),
+    ids: [...night.matchAll(/<a href="[^"]*\/sessions\/([^"]+)">/g)].map((m) => m[1]),
+  }));
+  const iso = (session) => new Date(session.createdAt).toISOString();
+  assert.deepEqual(shown, [
+    { head: [iso(d), 'Kitchen Ring, anticlockwise'], ids: [d.id] },
+    { head: [iso(c), 'Kitchen Ring, clockwise'], ids: [c.id] },
+    { head: [iso(a), 'Kitchen Ring, clockwise'], ids: [b.id, a.id] },
+  ], 'newest first; a night\'s head has its first session\'s date');
+});
+
 test('history rows and a session page name the track, or "Deleted track" once it is gone', async () => {
   const ws = gone.id;
   const home = app.store.ensureWorkspace(ws).trackId;
@@ -600,11 +602,9 @@ test('history rows and a session page name the track, or "Deleted track" once it
   assert.equal(app.store.deleteTrack(ws, ring), 'deleted');
 
   const body = await (await get(`/clubs/${ws}/sessions`)).text();
-  assert.match(body, /<th scope="col" class="history-wide">Track<\/th>/);
   const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
   assert.equal(rows.length, 2);
-  assert.match(rows[0], /<td class="history-wide cut-words">Track, anticlockwise<\/td>/);
-  assert.match(rows[1], /<td class="history-wide cut-words">Deleted track<\/td>/);
+  assert.deepEqual([...body.matchAll(/<span class="history-night-track">([^<]*)<\/span>/g)].map((m) => m[1]), ['Track, anticlockwise', 'Deleted track']);
   const page = await (await get(`/clubs/${ws}/sessions/${old.id}`)).text();
   assert.match(page, /<div><dt>Track<\/dt><dd class="cut-words">Deleted track<\/dd><\/div>/);
   assert.match(await (await get(`/clubs/${ws}/sessions/${kept.id}`)).text(), /<div><dt>Track<\/dt><dd class="cut-words">Track, anticlockwise<\/dd><\/div>/);
@@ -628,7 +628,7 @@ test('assigning a transponder after its track was deleted brings back no record,
   const body = await (await get(`/clubs/${ws}/sessions`)).text();
   const rows = [...body.matchAll(/<tr class="history-row[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
   assert.equal(rows.length, 3);
-  assert.match(rows[0], /<td class="history-wide cut-words">Deleted track<\/td>/);
+  assert.match(body, /<tbody class="history-night">\s*<tr class="history-night-head"><th[^>]*>[\s\S]*?<span class="history-night-track">Deleted track<\/span>/);
   assert.match(rows[0], />Ana</, 'the laps are Ana\'s now');
   assert.doesNotMatch(rows[0], /class="crown"/);
 });
