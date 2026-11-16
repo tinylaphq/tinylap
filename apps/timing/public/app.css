@@ -538,26 +538,14 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 /* Never driven: one sentence in the result's place, in the record's shadow. */
 .board-none { background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--tl-record); padding: var(--p-space-xl); }
 .board-none p { margin: 0; max-width: 34ch; font: 700 var(--p-text-2xl) / var(--p-leading-tight) var(--p-font); letter-spacing: -0.01em; }
-/* The Start panel's place: palace's box. The line that a car is on the track
- * is the reason to press the button under it; its row is kept, so the button
- * never moves when the line comes or goes. */
-.board-start {
-  display: grid; gap: var(--p-space-md); padding: var(--p-space-md);
-  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text);
-}
-.board-start:has(> .start-practice) { grid-template-rows: minmax(1.5em, auto) auto auto; }
-.board-start > .board-on-track { grid-row: 1; }
-.board-start > .start-practice { grid-row: 2; }
-.board-start > .board-quiet { grid-row: 3; }
-.board-start > * { margin: 0; }
-.board-start .start-practice .btn { width: 100%; min-height: var(--p-control-height-lg); font-size: var(--p-text-lg); }
-.board-first-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm) var(--p-space-lg); }
-.board-first-links a:not(.btn) { font-weight: 600; }
 .board-fastest h2 { margin: 0 0 var(--p-space-sm); }
 /* A car on the track with no session: the live lamp, in the accent, blinking like the stream's. */
 .board-on-track { display: flex; align-items: center; gap: var(--p-space-sm); margin: 0; font-weight: 600; }
 .board-on-track::before { content: ''; flex: none; width: 10px; height: 10px; background: var(--p-accent-1); animation: live-blink 1s steps(2, jump-none) infinite; }
-@media (prefers-reduced-motion: reduce) { .board-on-track::before { animation: none; } }
+/* A car with a driver: one square, the driver's own, blinks in the lamp's place, not a lamp beside it. */
+.board-on-track:has(.driver)::before { display: none; }
+.board-on-track .driver::before { animation: live-blink 1s steps(2, jump-none) infinite; }
+@media (prefers-reduced-motion: reduce) { .board-on-track::before, .board-on-track .driver::before { animation: none; } }
 .board-quiet { margin: 0; font-size: 0.875em; color: var(--p-text-secondary); }
 .board-quiet a { font-weight: 600; }
 .board-ranks { list-style: none; margin: 0; padding: 0; background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text); }
@@ -575,12 +563,105 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
   .board.is-idle { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   .board-next { grid-column: 1; grid-row: 5; grid-template-rows: none; margin-top: var(--p-space-xl); }
   .board-none { padding: var(--p-space-lg); }
-  /* Stacked on a phone no row is kept: the line comes under the button, so the button still never moves. */
-  .board-start:has(> .start-practice) { grid-template-rows: none; }
-  .board-start > :is(.board-on-track, .start-practice, .board-quiet) { grid-row: auto; }
-  .board-start > .board-on-track { order: 1; }
-  .board-start > .board-quiet { order: 2; }
 }
+
+/* ── The idle board with its Start panel (board hub spec §4.1, §5) ──────────
+ * The panel sits beside #board-live, outside it, so the stream's swaps never
+ * touch a half-filled form. tl-board then takes the idle board's grid, and
+ * #board-live gives it its children (display: contents): the strip, the
+ * warnings, the result's head and body on the left; on the right the panel,
+ * its title level with the result's and its box with the result's first
+ * block, then Fastest on this track below it. The result's body spans both
+ * lower rows, so the right column never pushes it down. While a session runs
+ * the panel's slot is hidden and the board is alone; without :has() the panel
+ * follows the board, below it. */
+.board-fastest.is-side { grid-column: 2; grid-row: 3 / span 2; min-width: 0; }
+.board-fastest.is-side h2 { margin: 0 0 var(--p-space-sm); }
+#board-start { max-width: 1400px; margin-inline: auto; padding: 0 var(--p-space-lg) var(--p-space-lg); }
+tl-board:has(> #board-start:not([hidden])) {
+  display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(16rem, 1fr); grid-template-rows: auto auto auto auto auto 1fr;
+  column-gap: var(--p-space-2xl); row-gap: 0; align-items: start;
+  max-width: 1400px; margin-inline: auto; padding: var(--p-space-lg); box-sizing: border-box;
+}
+tl-board:has(> #board-start:not([hidden])) > #board-live { display: contents; }
+tl-board:has(> #board-start:not([hidden])) .board-result > :not(.result-head) { grid-row: 4 / span 2; }
+tl-board:has(> #board-start:not([hidden])) > #board-start { grid-column: 2; grid-row: 3 / span 2; max-width: none; margin: 0; padding: 0; }
+tl-board:has(> #board-start:not([hidden])) .board-fastest.is-side { grid-row: 5; margin-top: var(--p-space-xl); }
+@media (max-width: 720px) {
+  .board-fastest.is-side { grid-column: 1; grid-row: auto; margin-top: var(--p-space-xl); }
+  tl-board:has(> #board-start:not([hidden])) { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; padding: var(--p-space-md); }
+  tl-board:has(> #board-start:not([hidden])) .board-result > :not(.result-head) { grid-row: 4; }
+  tl-board:has(> #board-start:not([hidden])) > #board-start { grid-column: 1; grid-row: 5; grid-template-rows: none; margin-top: var(--p-space-xl); }
+  tl-board:has(> #board-start:not([hidden])) .board-fastest.is-side { grid-row: 6; }
+}
+
+/* Start, one flow: 1. the kind, as one segmented choice (three radios in one
+ * bar, night order); 2. only the settings that kind needs (drivers and length
+ * for qualifying, the countdown too for a race, none for practice); 3. one
+ * Start button that names the kind, its hint under it. A palace box. */
+.start-panel {
+  display: grid; gap: var(--p-space-lg); margin: 0; min-width: 0;
+  background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-text);
+  padding: var(--p-space-md);
+}
+.start-panel fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.start-panel .status { margin: 0; }
+/* 1. The kind: a bar of three. The cells share the bar's borders, as the
+ * strip's do; the chosen one is filled in ink. The radio stays in its label,
+ * invisible but focusable, and focus outlines its cell. */
+.start-panel .start-kind { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: var(--p-border-width) solid var(--p-text); }
+.start-kind-option { position: relative; display: block; margin: 0; cursor: pointer; }
+.start-kind-option + .start-kind-option { border-left: var(--p-border-width) solid var(--p-text); }
+.start-kind-option input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.start-kind-option span {
+  display: grid; place-items: center; min-height: var(--p-control-height); padding-inline: var(--p-space-xs);
+  font: 700 var(--p-text-sm) / 1 var(--p-font); text-transform: uppercase; letter-spacing: 1px;
+}
+/* The narrowest phones: "Qualifying" keeps its cell, a step smaller and untracked. */
+@media (max-width: 380px) { .start-kind-option span { font-size: var(--p-text-xs); letter-spacing: 0; padding-inline: 0; } }
+.start-kind-option:hover span { background: var(--p-hover-bg); }
+.start-kind-option:has(input:checked) span { background: var(--p-text); color: var(--p-text-on-fill); }
+.start-kind-option:has(input:focus-visible) { outline: var(--p-border-width) solid var(--p-accent-2); outline-offset: 2px; z-index: 1; }
+/* 2. The settings: who drives, then the length (and countdown) side by side. */
+.start-settings { display: grid; gap: var(--p-space-md); }
+.start-drivers { display: grid; gap: var(--p-space-sm); }
+.start-drivers legend { margin-bottom: var(--p-space-xs); font-weight: 600; }
+/* A driver choice: the radio, its name, and under the name what it means. */
+.start-option { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--p-space-sm); align-items: start; margin: 0; cursor: pointer; }
+.start-option input { width: 1.25rem; height: 1.25rem; margin: 0; accent-color: var(--p-text); }
+.start-option span { display: grid; gap: var(--p-space-2xs); }
+.start-option strong { font-weight: 600; }
+.start-option small { font-size: var(--p-text-sm); font-weight: 400; color: var(--p-text-secondary); }
+/* The chosen drivers hang under their option, two to a row, on its text's edge. */
+.start-panel .start-roster { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--p-space-md); margin-left: calc(1.25em + var(--p-space-sm)); }
+.start-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--p-space-md); align-items: start; }
+.start-times .field { margin: 0; }
+.input-unit { display: flex; align-items: baseline; gap: var(--p-space-sm); }
+.input-unit input { width: 5.5rem; font-variant-numeric: tabular-nums; }
+.input-unit-word { color: var(--p-text-secondary); font-weight: 600; }
+/* 3. Go: the one button, full width, and what it will do. A car on the
+ * track, the reason to press it, sits just above it. */
+.start-go-row { display: grid; gap: var(--p-space-sm); }
+.start-on-track:empty { display: none; }
+.start-go { width: 100%; min-height: var(--p-control-height-lg); font-size: var(--p-text-lg); }
+.start-hint { margin: 0; font-size: var(--p-text-sm); color: var(--p-text-secondary); }
+.start-first p { margin: 0; }
+/* The server's choice: the parts of the kinds not chosen are data-off (not
+ * `hidden`: palace makes that !important, so CSS could not undo it). Where
+ * :has() works, CSS follows the checked radios instead: the settings, the
+ * hint and the button's word follow the kind, the roster follows Chosen
+ * drivers. Without it the server's choice stays, and still submits right. */
+.start-panel [data-off] { display: none; }
+@supports selector(:has(a)) {
+  .start-panel [data-for], .start-panel .start-roster { display: none; }
+  .start-panel:has([name="kind"][value="practice"]:checked) [data-for="practice"],
+  .start-panel:has([name="kind"][value="qualifying"]:checked) [data-for="qualifying"],
+  .start-panel:has([name="kind"][value="race"]:checked) [data-for="race"] { display: revert; }
+  .start-panel:has([name="kind"][value="qualifying"]:checked) .start-settings[data-for="qualifying"],
+  .start-panel:has([name="kind"][value="race"]:checked) .start-settings[data-for="race"],
+  .start-drivers:has([value="chosen"]:checked) .start-roster { display: grid; }
+}
+
 
 /* The idle TV (board hub spec §4.3, §6.4): the strip and the result, in one
  * column, every size a multiple of the board's font. Three reads: who won (P1

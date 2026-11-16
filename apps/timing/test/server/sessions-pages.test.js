@@ -49,14 +49,12 @@ async function driversIn(ws, codes, who = member) {
   return Object.fromEntries(drivers.map((d) => [d.name, d]));
 }
 
-test('without drivers, the tab starts a practice and points to Setup for a race', async () => {
+test('the tab is the history: no start form, which is the board\'s', async () => {
   const body = await (await get(`${base}/sessions`)).text();
   assert.match(body, /<h1>Sessions<\/h1>/);
   assert.match(body, /<a class="nav-tab" href="[^"]*\/sessions" aria-current="page">Sessions<\/a>/);
   assert.doesNotMatch(body, />Race<\/a>/, 'the tab replaces Race');
-  assert.match(body, new RegExp(`<form method="post" action="${base}/sessions"[^>]*>\\s*<input type="hidden" name="kind" value="practice">\\s*<button type="submit" class="btn btn-primary">Start practice</button>`));
-  assert.match(body, new RegExp(`<a[^>]*href="${base}/setup#drivers"`));
-  assert.doesNotMatch(body, /name="roster"/, 'no race form without drivers');
+  assert.doesNotMatch(body, /action="[^"]*\/sessions"|name="kind"/);
   assert.match(body, /No sessions yet\./);
 });
 
@@ -69,11 +67,7 @@ test('/race goes to the Sessions tab', async () => {
 test('start a race from the form, confirm before replacing it, then abort it after confirming', async () => {
   for (const name of ['Ana', 'Ben']) await app.form(member, `${base}/drivers`, { name });
   const [a, b] = app.store.drivers(office.id);
-  const form = await (await get(`${base}/sessions`)).text();
-  assert.match(form, /<input type="radio" name="kind" value="race"[^>]* checked/);
-  assert.match(form, new RegExp(`<input type="checkbox" name="roster" value="${a.id}"[^>]* checked`));
-  assert.doesNotMatch(form, /tl-countdown|countdown\.js/, 'the start form has no clock');
-  const started = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['roster', b.id], ['duration', '2'], ['countdown', '0']]);
+  const started = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-roster', b.id], ['race-minutes', '2'], ['race-countdown', '0']]);
   assert.equal(started.status, 303);
   assert.equal(started.headers.get('location'), `${base}/board`);
   const session = app.store.runningSession(office.id);
@@ -87,13 +81,13 @@ test('start a race from the form, confirm before replacing it, then abort it aft
   assert.match(running, /<script type="module" src="\/public\/elements\/countdown.js"><\/script>/);
 
   clock.now += 3 * 60_000;
-  const again = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0']]);
+  const again = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '2'], ['race-countdown', '0']]);
   assert.equal(again.status, 200);
   const ask = await again.text();
   assert.match(ask, /A race has been running for 3 min, with 2 drivers\. Starting this race ends it\./);
   assert.doesNotMatch(ask, /tl-countdown/, 'the answer to a POST never reloads');
   const fields = [...ask.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(fields, [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0'], ['replace', session.id]]);
+  assert.deepEqual(fields, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '2'], ['race-countdown', '0'], ['replace', session.id]]);
   assert.match(ask, new RegExp(`<form method="post" action="${base}/sessions"`));
   assert.match(ask, /<form method="post" action="[^"]*" class="button-row confirm-actions">/, 'the danger button is the filled, main one');
   assert.match(ask, /<button type="submit" class="btn btn-danger">Start<\/button>/);
@@ -119,7 +113,7 @@ test('confirming ends the running session and starts the new one', async () => {
   const [a] = app.store.drivers(office.id);
   await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
   const practice = app.store.runningSession(office.id);
-  const started = await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['roster', a.id], ['duration', '5'], ['countdown', '10'], ['replace', practice.id]]);
+  const started = await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['qualifying-drivers', 'chosen'], ['qualifying-roster', a.id], ['qualifying-minutes', '5'], ['replace', practice.id]]);
   assert.equal(started.status, 303);
   assert.equal(app.store.session(practice.id).state, 'done');
   const running = app.store.runningSession(office.id);
@@ -129,7 +123,7 @@ test('confirming ends the running session and starts the new one', async () => {
 
 test('a confirmation ends only the session it named', async () => {
   const [a] = app.store.drivers(office.id);
-  const race = [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0']];
+  const race = [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '2'], ['race-countdown', '0']];
   await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
   const named = app.store.runningSession(office.id);
   // Meanwhile someone else replaced it with a qualifying, a minute ago.
@@ -142,7 +136,7 @@ test('a confirmation ends only the session it named', async () => {
   const ask = await stale.text();
   assert.match(ask, /A qualifying has been running for 1 min, with 1 driver\. Starting this race ends it\./);
   assert.match(ask, new RegExp(`<input type="hidden" name="replace" value="${now.id}">`));
-  assert.match(ask, new RegExp(`<input type="hidden" name="roster" value="${a.id}">`), 'the fields are kept');
+  assert.match(ask, new RegExp(`<input type="hidden" name="race-roster" value="${a.id}">`), 'the fields are kept');
   assert.equal(app.store.runningSession(office.id).id, now.id, 'nothing ended');
 
   // Sent twice: the first ends the qualifying it named, the second finds the race the first started.
@@ -174,7 +168,7 @@ test('Start practice pressed twice starts one practice and lands on the board', 
   assert.equal(again.status, 303);
   assert.equal(again.headers.get('location'), `${base}/board`);
   assert.equal(app.store.runningSession(office.id).id, started.id, 'one practice, the first one');
-  const bad = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['duration', '2']]);
+  const bad = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-minutes', '90']]);
   assert.equal(bad.status, 422, 'a form with a mistake still says so');
   clock.now += 10_000;
   const later = await app.form(member, `${base}/sessions`, [['kind', 'practice']]);
@@ -206,10 +200,10 @@ test('Start practice on the Tap page leads back to the Tap page', async () => {
 
 test('a practice\'s confirmation carries only its kind and the session it ends', async () => {
   const [a] = app.store.drivers(office.id);
-  await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['roster', a.id], ['duration', '5']]);
+  await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['qualifying-drivers', 'chosen'], ['qualifying-roster', a.id], ['qualifying-minutes', '5']]);
   const running = app.store.runningSession(office.id);
   clock.now += 60_000;
-  const res = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['roster', a.id], ['duration', '9']]);
+  const res = await app.form(member, `${base}/sessions`, [['kind', 'practice'], ['race-roster', a.id], ['race-minutes', '9']]);
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.match(body, /Starting this practice ends it\./);
@@ -220,37 +214,37 @@ test('a practice\'s confirmation carries only its kind and the session it ends',
 
 test('a blank countdown means the default', async () => {
   const [a] = app.store.drivers(office.id);
-  const started = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '1'], ['countdown', '']]);
+  const started = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '1'], ['race-countdown', '']]);
   assert.equal(started.status, 303);
   const session = app.store.runningSession(office.id);
   assert.equal(session.state, 'countdown');
   await app.form(member, `${base}/sessions/${app.store.runningSession(office.id).id}/abort`, {});
 });
 
-test('a bad form comes back with one summary and what was chosen', async () => {
+test('a bad form comes back as the board with one summary and what was chosen', async () => {
   const [a] = app.store.drivers(office.id);
-  const none = await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['duration', '5'], ['countdown', '10']]);
+  const none = await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['qualifying-drivers', 'chosen'], ['qualifying-minutes', '5']]);
   assert.equal(none.status, 422);
   const body = await none.text();
-  assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#race-roster">Pick 1 to 20 drivers\.<\/a><\/p>/);
+  assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#qualifying-roster">Pick 1 to 20 drivers\.<\/a><\/p>/);
   assert.equal(body.match(/role="alert"/g).length, 1);
   assert.match(body, /<input type="radio" name="kind" value="qualifying"[^>]* checked/);
-  assert.doesNotMatch(body, new RegExp(`value="${a.id}"[^>]* checked`), 'unticked stays unticked');
-  const long = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '120'], ['countdown', '10']]);
+  assert.doesNotMatch(body, new RegExp(`name="qualifying-roster" value="${a.id}"[^>]* checked`), 'unticked stays unticked');
+  const long = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '120'], ['race-countdown', '10']]);
   assert.equal(long.status, 422);
   const text = await long.text();
-  assert.match(text, /<a href="#race-duration">/);
-  assert.match(text, /id="race-duration"[^>]*value="120"[^>]*aria-invalid="true"/);
+  assert.match(text, /<a href="#race-minutes">/);
+  assert.match(text, /id="race-minutes"[^>]*value="120"[^>]*aria-invalid="true"/);
 });
 
 test('a form wrong in several fields names every error at once, in the form\'s order', async () => {
-  const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['duration', '90'], ['countdown', '45']]);
+  const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-minutes', '90'], ['race-countdown', '45']]);
   assert.equal(res.status, 422);
   const body = await res.text();
   assert.equal(body.match(/role="alert"/g).length, 1);
-  assert.match(body, /<div class="status status-error cut-words" role="alert"><ul class="error-list"><li><a href="#race-roster">Pick 1 to 20 drivers\.<\/a><\/li><li><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/li><li><a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a><\/li><\/ul><\/div>/);
-  assert.match(body, /<fieldset aria-describedby="race-roster-error">/);
-  assert.match(body, /id="race-duration"[^>]*value="90"[^>]*aria-invalid="true"/);
+  assert.match(body, /<div class="status status-error cut-words" role="alert"><ul class="error-list"><li><a href="#race-roster">Pick 1 to 20 drivers\.<\/a><\/li><li><a href="#race-minutes">A session lasts 1 to 60 minutes\.<\/a><\/li><li><a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a><\/li><\/ul><\/div>/);
+  assert.match(body, /<fieldset class="start-drivers" aria-describedby="race-roster-error">/);
+  assert.match(body, /id="race-minutes"[^>]*value="90"[^>]*aria-invalid="true"/);
   assert.match(body, /id="race-countdown"[^>]*value="45"[^>]*aria-invalid="true"/);
   assert.equal(app.store.runningSession(office.id), null);
 });
@@ -258,19 +252,19 @@ test('a form wrong in several fields names every error at once, in the form\'s o
 test('a bad minutes or countdown value says what is allowed and keeps the input', async () => {
   const [a] = app.store.drivers(office.id);
   for (const duration of ['abc', '1e3', '1e1', '0x10', ' 5', '-5', '0.0001']) {
-    const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', duration], ['countdown', '10']]);
+    const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', duration], ['race-countdown', '10']]);
     assert.equal(res.status, 422, duration);
     const body = await res.text();
-    assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#race-duration">A session lasts 1 to 60 minutes\.<\/a><\/p>/, duration);
-    assert.match(body, /id="race-duration"[^>]*aria-invalid="true"/, duration);
-    if (duration !== 'abc') assert.match(body, new RegExp(`id="race-duration"[^>]*value="${duration}"`), duration);
+    assert.match(body, /<p class="status status-error cut-words" role="alert"><a href="#race-minutes">A session lasts 1 to 60 minutes\.<\/a><\/p>/, duration);
+    assert.match(body, /id="race-minutes"[^>]*aria-invalid="true"/, duration);
+    assert.match(body, new RegExp(`id="race-minutes"[^>]*value="${duration}"`), duration);
   }
   for (const countdown of ['1e1', '0x10', ' 5']) {
-    const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '5'], ['countdown', countdown]]);
+    const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '5'], ['race-countdown', countdown]]);
     assert.equal(res.status, 422, countdown);
     assert.match(await res.text(), /<a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a>/, countdown);
   }
-  const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '5'], ['countdown', '2.5']]);
+  const res = await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '5'], ['race-countdown', '2.5']]);
   assert.equal(res.status, 422);
   const body = await res.text();
   assert.match(body, /<a href="#race-countdown">The countdown is 0 to 30 seconds\.<\/a>/);
@@ -280,7 +274,7 @@ test('a bad minutes or countdown value says what is allowed and keeps the input'
 
 test('a running session names its drivers and length', async () => {
   const drivers = app.store.drivers(office.id);
-  await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ...drivers.map((d) => ['roster', d.id]), ['duration', '3']]);
+  await app.form(member, `${base}/sessions`, [['kind', 'qualifying'], ['qualifying-drivers', 'chosen'], ...drivers.map((d) => ['qualifying-roster', d.id]), ['qualifying-minutes', '3']]);
   const body = await (await get(`${base}/sessions`)).text();
   assert.match(body, /<h2[^>]*>Qualifying, running<\/h2>/);
   assert.match(body, /Ana, Ben\. 3 minutes\./);
@@ -341,8 +335,8 @@ test('starting a race while a practice runs names the practice', async () => {
   for (const code of ['10', '20', '30']) pass(ws, 1000, code);
   for (const code of ['10', '20', '30']) pass(ws, 9000, code);
   clock.now = T0 + 12 * 60_000;
-  const roster = app.store.drivers(ws).map((d) => ['roster', d.id]);
-  const res = await app.form(member, `/clubs/${ws}/sessions`, [['kind', 'race'], ...roster, ['duration', '5'], ['countdown', '10']]);
+  const roster = app.store.drivers(ws).map((d) => ['race-roster', d.id]);
+  const res = await app.form(member, `/clubs/${ws}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ...roster, ['race-minutes', '5'], ['race-countdown', '10']]);
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.match(body, /A practice has been running for 12 min, with 3 drivers\. Starting this race ends it\./);
@@ -608,16 +602,16 @@ test('the tab shows the five latest track records, /records all of them, newest 
   assert.match(page, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
 });
 
-test('a car with no session running is a live line on the tab, over its Start practice', async () => {
+test('a car with no session running is a live line on the board\'s Start panel, not the tab', async () => {
   const ws = idle.id;
   await driversIn(ws, { Haris: '21' });
   pass(ws, 5000, '21');
-  const body = await (await get(`/clubs/${ws}/sessions`)).text();
-  assert.match(body, /<p class="board-on-track" role="status"><span><span class="driver" style="--driver: [^"]+"><span class="driver-name" title="Haris">Haris<\/span><\/span> is on the track<\/span><\/p>/, 'the car’s driver, not its code');
-  assert.doesNotMatch(body, /status-warning/);
-  assert.equal(body.match(/>Start practice<\/button>/g).length, 1);
-  app.engine.start(ws, { kind: 'practice' });
+  const board = await (await get(`/clubs/${ws}/board`)).text();
+  assert.match(board, /<p class="board-on-track" role="status"><span><span class="driver" style="--driver: [^"]+"><span class="driver-name" title="Haris">Haris<\/span><\/span> is on the track<\/span><\/p>/, 'the car’s driver, not its code');
+  assert.doesNotMatch(board, /status-warning/);
   assert.doesNotMatch(await (await get(`/clubs/${ws}/sessions`)).text(), /is on the track/);
+  app.engine.start(ws, { kind: 'practice' });
+  assert.doesNotMatch(await (await get(`/clubs/${ws}/board`)).text(), /is on the track/);
 });
 
 test('history rows and a session page name the track, or "Deleted track" once it is gone', async () => {
@@ -671,7 +665,7 @@ test('assigning a transponder after its track was deleted brings back no record,
 test('a confirmation over a practice just started reads "under a minute" and "no drivers yet", not "0 min, 0 drivers"', async () => {
   const [a] = app.store.drivers(office.id);
   const { session } = app.engine.start(office.id, { kind: 'practice' });
-  const ask = await (await app.form(member, `${base}/sessions`, [['kind', 'race'], ['roster', a.id], ['duration', '2'], ['countdown', '0']])).text();
+  const ask = await (await app.form(member, `${base}/sessions`, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '2'], ['race-countdown', '0']])).text();
   assert.match(ask, /A practice has been running for under a minute, with no drivers yet\. Starting this race ends it\./);
   const end = await (await get(`${base}/sessions/${session.id}/end`)).text();
   assert.match(end, /The practice ends at its last lap\. Its laps stay in the history\./);

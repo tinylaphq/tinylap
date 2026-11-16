@@ -3,20 +3,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The Sessions tab (records spec §5.2): the running session with End or
-// Abort, Start practice and the qualifying or race form, the history of
-// sessions, and the latest track records.
+// Abort, the history of sessions, and the latest track records. Sessions
+// start on the board (board hub spec §5).
 import { localTime } from '@tinylap/design/html/local-time.js';
 import { clockAt, formatClock, formatLap, formatLength } from '../../public/format.js';
 import { html, safe } from './html.js';
-import { errorsSummary, textField } from './form-parts.js';
+import { errorsSummary } from './form-parts.js';
 import { layout } from './layout.js';
-import { chip, idleNotice, marks, marksHead, startPracticeForm, timeWidths } from './marks.js';
+import { chip, marks, marksHead, timeWidths } from './marks.js';
 import { recordsTable, trackName } from './records.js';
 
 export const KIND = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race' };
 const STATE = { countdown: 'counting down', running: 'running', finishing: 'finishing the last lap' };
-// The summary links to the first control of the field an error names.
-const FIELD_ID = { kind: 'race-kind', roster: 'race-roster', duration: 'race-duration', countdown: 'race-countdown' };
 
 /** A length short enough for a table cell: "18 s", "12 min"; 59.6 s is "1 min", never "60 s". @param {number} ms */
 export const shortLength = (ms) => {
@@ -26,39 +24,6 @@ export const shortLength = (ms) => {
 
 /** How long an ended session was driven: from its start (after any countdown) to its end. */
 export const drivenMs = (session) => Math.max(0, (session.endedAt ?? session.opensAt ?? 0) - (session.opensAt ?? session.createdAt));
-
-function startForm(request, { drivers, errors, values }) {
-  const base = request.space.base;
-  if (drivers.length === 0) {
-    return html`<div class="card-static space-md"><h3 class="h3">Qualifying or race</h3><p>Add drivers before you start a race.</p><p><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a></p></div>`;
-  }
-  const kind = values?.kind ?? 'race';
-  const roster = values ? new Set(values.roster) : new Set(drivers.map((d) => d.id));
-  const errorOf = (field) => errors.find((e) => e.field === field) ?? null;
-  const rosterError = errorOf('roster')?.message;
-  const kindError = errorOf('kind')?.message;
-  return html`<form method="post" action="${base}/sessions" class="card-static space-md">
-  <h3 class="h3">Qualifying or race</h3>
-  <fieldset${kindError ? html` aria-describedby="race-kind-error"` : null}>
-    <legend>Session</legend>
-    <div class="choices choices-inline">${['race', 'qualifying'].map((k, i) => html`<label class="choice"><input type="radio" name="kind" value="${k}"${i === 0 ? html` id="race-kind"` : null}${k === kind ? html` checked` : null}> ${KIND[k]}</label>`)}</div>
-    ${kindError ? html`<p class="field-error" id="race-kind-error">${kindError}</p>` : null}
-  </fieldset>
-  <fieldset${rosterError ? html` aria-describedby="race-roster-error"` : null}>
-    <legend>Drivers</legend>
-    <div class="choices">${drivers.map((d, i) => html`<label class="choice"><input type="checkbox" name="roster" value="${d.id}"${i === 0 ? html` id="race-roster"` : null}${roster.has(d.id) ? html` checked` : null}> <span class="cut-words" title="${d.name}">${d.name}</span></label>`)}</div>
-    ${rosterError ? html`<p class="field-error" id="race-roster-error">${rosterError}</p>` : null}
-  </fieldset>
-  <fieldset>
-    <legend>Length</legend>
-    <div class="race-times">
-      ${textField({ id: 'race-duration', label: 'Minutes', name: 'duration', type: 'number', inputmode: 'numeric', required: true, min: 1, max: 60, value: values?.duration ?? '5', error: errorOf('duration') })}
-      ${textField({ id: 'race-countdown', label: 'Countdown (seconds)', name: 'countdown', type: 'number', inputmode: 'numeric', min: 0, max: 30, value: values?.countdown ?? '10', hint: 'Races only.', error: errorOf('countdown') })}
-    </div>
-  </fieldset>
-  <div class="button-row"><button type="submit" class="btn btn-primary">Start</button></div>
-</form>`;
-}
 
 /** The panel of a running session. `reload` (only on the 200 GET) lets its clock reload the page once at a phase change. */
 function runningPanel(request, session, drivers, { reload }) {
@@ -138,9 +103,9 @@ function recordsSection(request, { track, direction, rows }, drivers) {
 
 /**
  * @param {any} request
- * @param {{ session: any, drivers: any[], idle?: any, history: any, records: any, errors?: any[], values?: any, reload?: boolean }} model
+ * @param {{ session: any, drivers: any[], history: any, records: any, errors?: any[], reload?: boolean }} model
  */
-export function sessionsPage(request, { session, drivers, idle = null, history, records, errors = [], values = null, reload = false }) {
+export function sessionsPage(request, { session, drivers, history, records, errors = [], reload = false }) {
   return layout(request, {
     title: 'Sessions',
     screen: 'sessions',
@@ -148,20 +113,8 @@ export function sessionsPage(request, { session, drivers, idle = null, history, 
     modules: ['pkg/design/elements/local-time.js'],
     body: html`<div class="container sessions-screen space-xl screen">
   <h1>Sessions</h1>
-  ${errorsSummary(errors, (field) => FIELD_ID[field])}
-  ${idleNotice(idle, drivers)}
+  ${errorsSummary(errors, () => null)}
   ${session ? runningPanel(request, session, drivers, { reload }) : null}
-  <section class="space-md" aria-labelledby="start-title">
-    <h2 id="start-title">Start</h2>
-    <div class="start-grid">
-      <div class="card-static space-md start-practice-card">
-        <h3 class="h3">Practice</h3>
-        <p>Times everyone whose car has a driver, for as long as you like. It ends when you end it, or after an hour without a car.</p>
-        ${startPracticeForm(request)}
-      </div>
-      ${startForm(request, { drivers, errors, values: values?.kind === 'practice' ? null : values })}
-    </div>
-  </section>
   ${historySection(request, history, drivers)}
   ${recordsSection(request, records, drivers)}
 </div>`,

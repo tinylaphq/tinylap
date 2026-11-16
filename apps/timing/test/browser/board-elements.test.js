@@ -316,9 +316,6 @@ test('the unknown-cars warning while a session runs has palace\'s full warning l
   await page.goto(`/clubs/${quiet.id}/board`);
   await page.locator('.board-on-track').waitFor();
   assert.equal(await page.locator('.flag').count(), 0);
-  await page.goto(`/clubs/${quiet.id}/sessions`);
-  await page.locator('.board-on-track').waitFor();
-  assert.equal(await page.locator('.flag').count(), 0);
   app.engine.start(quiet.id, { kind: 'practice' });
   cross(quiet.id, '21', [500]);
   await page.goto(`/clubs/${quiet.id}/board`);

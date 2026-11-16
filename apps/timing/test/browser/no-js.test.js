@@ -123,10 +123,12 @@ test('a typed number of someone else\'s asks in the driver\'s list, and Give it 
 
 test('race, tap and Back and Forward across a POST and its 303 change nothing twice', async (t) => {
   const page = await plainPage(t);
-  await page.goto('/personal/sessions');
-  await page.getByLabel('Minutes').fill('2');
-  await page.getByLabel(/Countdown/).fill('0');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.goto('/personal/board');
+  await page.locator('.start-kind-option', { hasText: 'Race' }).click();
+  const race = page.locator('.start-settings[data-for="race"]');
+  await race.getByLabel('Length').fill('2');
+  await race.getByLabel('Countdown').fill('0');
+  await page.getByRole('button', { name: 'Start race' }).click();
   assert.equal(pathOf(page), '/personal/board');
   await page.getByRole('heading', { name: 'Race' }).waitFor();
   const started = app.engine.snapshot(personal).session?.id;
@@ -134,7 +136,7 @@ test('race, tap and Back and Forward across a POST and its 303 change nothing tw
 
   // Back lands before the POST, Forward on the board again: no resubmit, no second session.
   await page.goBack();
-  assert.equal(pathOf(page), '/personal/sessions');
+  assert.equal(pathOf(page), '/personal/board');
   await page.goForward();
   assert.equal(pathOf(page), '/personal/board');
   assert.equal(app.engine.snapshot(personal).session?.id, started);

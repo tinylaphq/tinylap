@@ -4,12 +4,15 @@
 
 // The board's live stream for pages (spec §3, §6.1): the server renders
 // #board-live and sends it whole, so the board is only ever built in one
-// place. At most one render per THROTTLE_MS; the latest state wins.
+// place. At most one render per THROTTLE_MS; the latest state wins. On a
+// member's own board the Start panel follows it (board hub spec §5), keyed by
+// what it shows, so the page replaces its form only when a session starts or ends.
 import { pageRoute } from './page-access.js';
 import { page } from './respond.js';
 import { spacePath } from './spaces.js';
 import { HEARTBEAT_MS } from './stream.js';
 import { boardLive } from './views/board.js';
+import { boardStart } from './views/start.js';
 import { watchGonePage } from './views/notice.js';
 
 export const THROTTLE_MS = 250;
@@ -35,7 +38,9 @@ function boardStream(request, workspaceId, { watcher, token = null }) {
         if (res.writableEnded) return;
         last = Date.now();
         try {
-          res.write(sse(String(boardLive(request, request.engine.snapshot(workspaceId, { watcher, moments: true }), { watcher, big, token }))));
+          const snap = request.engine.snapshot(workspaceId, { watcher, moments: true });
+          const live = String(boardLive(request, snap, { watcher, big, token }));
+          res.write(sse(watcher || big ? live : `${live}\n${boardStart(request, snap)}`));
         } catch (error) {
           // The page reconnects and gets whatever the server answers now (the board, or a not-found page).
           console.error('board stream: render failed', error);

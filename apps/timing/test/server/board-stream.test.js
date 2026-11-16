@@ -107,7 +107,7 @@ test('a name with carriage returns cannot inject event or id fields', async () =
   app.store.addDriver(office.id, { id: 'crlf', name: 'Eve\revent: ended\rid: 99\r\rdata: x', colour: '#123456' });
   app.engine.assign(office.id, '20', 'crlf');
   app.engine.ingest({ workspaceId: office.id, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings: [{ transponder: '20', t: 30000 }, { transponder: '20', t: 38000 }] } });
-  const text = await rawUntil(await app.api(owner, 'GET', `${base}/board/events`), /<\/div>\s*$/);
+  const text = await rawUntil(await app.api(owner, 'GET', `${base}/board/events`), /<\/aside>\s*$/);
   const lines = text.split(/\r\n|\r|\n/).filter(Boolean);
   const fields = lines.filter((line) => !line.startsWith('data: ') && !line.startsWith(':'));
   assert.deepEqual(fields, ['retry: 2000', 'event: board']);
