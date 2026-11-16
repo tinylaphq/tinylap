@@ -119,7 +119,7 @@ export function runningFor(kind, minutes, drivers, countingDown = false) {
 function askReplace(request, values, running, from = null) {
   const base = request.space.base;
   const minutes = Math.floor(Math.max(0, request.now() - (running.opensAt ?? running.createdAt)) / 60_000);
-  const drivers = running.kind === 'practice' ? request.engine.driverCount(running) : (running.roster ?? []).length;
+  const drivers = running.roster ? running.roster.length : request.engine.driverCount(running);
   const what = values.kind === 'race' || values.kind === 'qualifying' ? values.kind : 'practice';
   const fields = values.kind === 'practice'
     ? [['kind', 'practice']]

@@ -59,6 +59,48 @@ test('qualifying: a window, best lap, complete once everyone crossed after the c
   assert.deepEqual(results.standings.map((s) => [s.driverId, s.bestMs, s.laps]), [['ana', 7500, 4]]);
 });
 
+test('a race without a roster: whoever crossed, over when each finished or at the limit', () => {
+  const { engine, store, clock, events, pass } = rig();
+  store.addDriver(W, { id: 'cy', name: 'Cy', colour: '#ffb82d' });
+  store.assignTransponder(W, '0D', 'cy', 0); // never crosses
+  clock.now = T0 + 1000;
+  const { session } = engine.start(W, { kind: 'race', durationMs: 30_000, countdownMs: 0 });
+  assert.equal(session.roster, null);
+  pass(2000); // ana's start
+  pass(2500, '0B'); // ben's start
+  pass(2700, '0C'); // a car with no driver
+  pass(10_000);
+  pass(10_500, '0B');
+  pass(18_000);
+  clock.now = T0 + 31_000;
+  engine.tick();
+  assert.equal(store.session(session.id).state, 'finishing');
+  pass(33_000); // ana finishes; ben has parked
+  assert.equal(store.session(session.id).state, 'finishing', 'ben has not finished');
+  clock.now = T0 + 31_000 + 60_000 - 1;
+  engine.tick();
+  assert.equal(store.session(session.id).state, 'finishing');
+  clock.now = T0 + 31_000 + 60_000; // the limit: twice the slowest best (8 s) is under a minute
+  engine.tick();
+  assert.equal(store.session(session.id).state, 'done');
+  const results = events.filter((e) => e.type === 'results').at(-1).data;
+  assert.deepEqual(results.standings.map((s) => [s.driverId, s.laps, s.finished]), [['ana', 3, true], ['ben', 1, false]]);
+});
+
+test('a race without a roster ends as soon as each who crossed has finished', () => {
+  const { engine, store, clock, pass } = rig();
+  clock.now = T0 + 1000;
+  const { session } = engine.start(W, { kind: 'race', durationMs: 10_000, countdownMs: 0 });
+  pass(2000);
+  pass(2500, '0B');
+  clock.now = T0 + 11_000;
+  engine.tick();
+  pass(12_000);
+  assert.equal(store.session(session.id).state, 'finishing');
+  pass(12_500, '0B');
+  assert.equal(store.session(session.id).state, 'done');
+});
+
 test('abort ends a race at once', () => {
   const { engine, store, clock } = rig();
   const { session } = engine.start(W, { kind: 'race', roster: ['ana'], durationMs: 60_000, countdownMs: 0 });

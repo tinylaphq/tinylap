@@ -372,14 +372,14 @@ export const TOOLS = [
   {
     name: 'start_session',
     title: 'Start a session',
-    description: 'Starts a practice, a qualifying or a race on the current track. A practice takes no other field. A qualifying or race needs a roster of 1 to 20 driver ids. If a session is running, asks for confirmation first: starting ends it.',
+    description: 'Starts a practice, a qualifying or a race on the current track. A practice takes no other field. A qualifying or race takes a roster of 1 to 20 driver ids; without one, everyone whose car (assigned to a driver) crosses the line counts. If a session is running, asks for confirmation first: starting ends it.',
     action: 'timing.run',
     route: 'POST /workspaces/{workspace}/sessions',
     annotations: DESTRUCTIVE,
     input: z.object({
       space,
       kind: z.enum(['practice', 'qualifying', 'race']),
-      roster: z.array(z.string().min(1).max(200)).min(1).max(20).optional().describe('Driver ids from list_drivers, for a qualifying or race.'),
+      roster: z.array(z.string().min(1).max(200)).min(1).max(20).optional().describe('Driver ids from list_drivers, for a qualifying or race: only their laps count. Leave it out for everyone on the track.'),
       duration_seconds: z.number().int().min(10).max(3600).optional().describe('For a qualifying or race: 10 to 3600 seconds; 300 when left out.'),
       countdown_seconds: z.number().int().min(0).max(30).optional().describe('For a race: the start countdown, 0 to 30 seconds; 10 when left out.'),
       confirmation,

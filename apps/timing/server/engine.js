@@ -453,7 +453,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       if (kind === 'practice') return { session: createSession(workspaceId, { kind, state: 'running', opensAt: t, closesAt: null }) };
       const opensAt = kind === 'race' ? t + countdownMs : t;
       const state = kind === 'race' && countdownMs > 0 ? 'countdown' : 'running';
-      return { session: createSession(workspaceId, { kind, roster, durationMs, state, opensAt, closesAt: opensAt + durationMs }) };
+      // No roster: everyone whose car crosses in it.
+      return { session: createSession(workspaceId, { kind, roster: roster ?? null, durationMs, state, opensAt, closesAt: opensAt + durationMs }) };
     });
   }
 
