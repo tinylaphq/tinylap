@@ -79,7 +79,7 @@ const measure = () => {
     const letters = ink(mark);
     const box = mark.getBoundingClientRect();
     return {
-      where: `${cell ? cell.closest('table, ol').classList[0] : 'board-track'} ${before.textContent.trim()} ${mark.textContent}`,
+      where: `${cell ? cell.closest('table, ol, .place').classList[0] : 'board-track'} ${before.textContent.trim()} ${mark.textContent}`,
       off: (box.top + box.bottom) / 2 - (time.top + time.bottom) / 2,
       padTop: letters.top - box.top,
       padBottom: box.bottom - letters.bottom,
@@ -168,13 +168,14 @@ test('on the session page a mark follows its time and centres on its digits, in 
     await page.goto(`/personal/sessions/${practice.id}`);
     await page.evaluate(() => document.fonts.ready);
     const m = await page.evaluate(measure);
-    check(m, `session page at ${viewport.width}`);
+    // A placed card sets its mark high after its figure, as the result's design does; the tables and lists centre theirs.
+    check({ ...m, marks: m.marks.filter((x) => !x.where.startsWith('place')) }, `session page at ${viewport.width}`);
     // A tag fits its row: a lap with "Not counted" or "Tap" is as tall as one without.
     const rows = await page.evaluate(() => [...document.querySelectorAll('.lap-table tbody tr')].map((tr) => ({ tagged: Boolean(tr.querySelector('.tag')), height: tr.getBoundingClientRect().height })));
     assert.ok(rows.some((r) => r.tagged) && rows.some((r) => !r.tagged), `session page at ${viewport.width}: laps with a tag and without`);
     const heights = rows.map((r) => r.height);
     assert.ok(Math.max(...heights) - Math.min(...heights) <= 0.5, `session page at ${viewport.width}: every lap row is as tall, tag or not: ${heights.map((h) => h.toFixed(1)).join(', ')}`);
-    assert.deepEqual(m.marks.filter((x) => x.where.endsWith('FL')).map((x) => x.where.split(' ')[0]), ['board-table', 'lap-table'], 'FL once in the table, once in the laps');
+    assert.deepEqual(m.marks.filter((x) => x.where.endsWith('FL')).map((x) => x.where.split(' ')[0]), ['place', 'lap-table'], 'FL once on P1\'s card, once in the laps');
     // The fact: the time, then the driver, a gap apart, on one baseline.
     const fact = await page.evaluate(() => {
       const dd = document.querySelector('.session-facts .lap-credit');

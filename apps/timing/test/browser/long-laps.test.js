@@ -113,7 +113,8 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await page.goto(`/personal/sessions/${race.id}`);
     await page.evaluate(() => document.fonts.ready);
     const m = await page.evaluate(measure);
-    assert.ok(m.long >= 15, `long times to measure: ${m.long}`);
+    // Cyrille's fourteen laps in his lap card; both drivers are on placed cards, so the table has no rows.
+    assert.ok(m.long >= 14, `long times to measure: ${m.long}`);
     assert.deepEqual(m.problems, []);
     assert.ok(m.pageFits, 'no sideways page scroll');
     assert.deepEqual(errors, []);
