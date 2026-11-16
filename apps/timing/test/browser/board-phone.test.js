@@ -29,7 +29,7 @@ before(async () => {
   ws = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
   await app.form(member, '/personal/drivers', { name: 'Ana' });
   app.engine.assign(ws, '7', app.store.drivers(ws)[0].id);
-  // A session has run, so the board is the idle one with the record, not the first-run card.
+  // A session has run, so the board is the idle one with its result.
   const { session } = app.engine.start(ws, { kind: 'practice' });
   clock.offset += 60_000;
   app.engine.ingest({ workspaceId: ws, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings: [16_500, 8500, 500].map((ago) => ({ transponder: '7', t: clock.now - ago })) } });
@@ -42,9 +42,9 @@ after(async () => {
 
 /** Where Start practice and the line sit, from the top of the box they share. */
 const place = () => {
-  const go = document.querySelector('.board-hero-go');
+  const go = document.querySelector('.board-start');
   const top = go.getBoundingClientRect().top + parseFloat(getComputedStyle(go).borderTopWidth) + parseFloat(getComputedStyle(go).paddingTop);
-  const button = document.querySelector('.board-hero-go .start-practice').getBoundingClientRect();
+  const button = document.querySelector('.board-start .start-practice').getBoundingClientRect();
   const line = document.querySelector('.board-on-track')?.getBoundingClientRect();
   return { button: Math.round(button.top - top), buttonBottom: Math.round(button.bottom - top), line: line ? { top: Math.round(line.top - top), bottom: Math.round(line.bottom - top) } : null };
 };

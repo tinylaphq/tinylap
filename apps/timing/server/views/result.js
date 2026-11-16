@@ -101,11 +101,15 @@ const num = (value) => html`<span class="num">${value}</span>`;
  * each card closes with "Lap times" and each name in the table links to that
  * driver's lap card (`#driver-<id>`); the board and the TV pass `links: false`,
  * which also leaves the personal bests out (the table's PB marks say who).
+ * `upTo` stops the list after that position, with a line saying how many more
+ * the results page has: the TV fits six (§6.4).
  * @param {Result} result
- * @param {{ drivers: { id: string, name: string, colour?: string }[], links?: boolean, personalBests?: boolean }} options
+ * @param {{ drivers: { id: string, name: string, colour?: string }[], links?: boolean, personalBests?: boolean, upTo?: number }} options
  */
-export function resultView(result, { drivers, links = true, personalBests = links }) {
-  const { kind, rows, holderId, markOf, fell } = result;
+export function resultView(result, { drivers, links = true, personalBests = links, upTo = Infinity }) {
+  const { kind, rows: all, holderId, markOf, fell } = result;
+  const rows = all.slice(0, upTo);
+  const more = all.length - rows.length;
   const race = kind === 'race';
   const practice = kind === 'practice';
   const placed = rows.slice(0, practice ? 1 : 3);
@@ -176,6 +180,7 @@ export function resultView(result, { drivers, links = true, personalBests = link
   ${placed.length ? card(placed[0], 0) : null}
   ${placed.length > 1 ? html`<div class="place-tier is-runners">${placed.slice(1).map((row, i) => card(row, i + 1))}</div>` : null}
   ${table}
+  ${more > 0 ? html`<p class="result-more">${more} more on the results page.</p>` : null}
   ${pbs}
 </div>`;
 }

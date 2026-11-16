@@ -191,8 +191,8 @@ function askAbort(request, match) {
     text: `The ${session.kind === 'race' ? 'race' : 'qualifying'} ends now. Its laps stay in the history.`,
     action: `${base}/sessions/${session.id}/abort`,
     button: 'Abort',
-    back: `${base}/sessions`,
-    screen: 'sessions',
+    back: `${base}/board`,
+    screen: 'board',
   }));
 }
 
@@ -200,7 +200,8 @@ async function abort(request, match) {
   const { error } = await readForm(request);
   if (error) return error;
   const result = ops.abortSession(request, { id: match[2] });
-  return result.error ? renderTab(request, result.error.status, { error: result.error }) : seeOther(`${request.space.base}/sessions`);
+  // Back to the board, where the night is run (board hub spec §4.2).
+  return result.error ? renderTab(request, result.error.status, { error: result.error }) : seeOther(`${request.space.base}/board`);
 }
 
 function askEnd(request, match) {
@@ -212,8 +213,8 @@ function askEnd(request, match) {
     text: 'The practice ends at its last lap. Its laps stay in the history.',
     action: `${base}/sessions/${session.id}/end`,
     button: 'End',
-    back: `${base}/sessions`,
-    screen: 'sessions',
+    back: `${base}/board`,
+    screen: 'board',
   }));
 }
 
@@ -221,7 +222,7 @@ async function end(request, match) {
   const { error } = await readForm(request);
   if (error) return error;
   const result = ops.endSession(request, { id: match[2] });
-  return result.error ? renderTab(request, result.error.status, { error: result.error }) : seeOther(`${request.space.base}/sessions`);
+  return result.error ? renderTab(request, result.error.status, { error: result.error }) : seeOther(`${request.space.base}/board`);
 }
 
 /** A session's page: its final table with marks and crown, and every lap. */
@@ -229,16 +230,9 @@ function showSession(request, match) {
   const { store, workspaceId: ws } = request;
   const detail = request.engine.sessionDetail(ws, match[2]);
   if (!detail) return page(request, 404, notFoundPage(request));
-  const { session, standings, crossings } = detail;
-  const track = session.trackId ? store.track(ws, session.trackId) : null;
-  const record = track ? store.currentRecord(ws, track.id, session.direction) : null;
-  const bests = track ? store.personalBests(ws, track.id, session.direction, standings.map((r) => r.driverId)) : [];
-  // The record that fell here: the fastest one set in this session, and the one standing before the session.
-  const history = track ? store.recordHistory(ws, track.id, session.direction) : [];
-  const here = history.flatMap((r, i) => (r.sessionId === session.id ? [i] : []));
-  const fell = here.length ? { lap: history[here[0]], beat: history[here[here.length - 1] + 1] ?? null } : null;
-  const before = track ? store.bestsBefore(ws, track.id, session.direction, session.createdAt) : new Map();
-  const result = resultOf({ session, standings, crossings, record, bests, fell, before });
+  const input = request.engine.resultInput(ws, detail);
+  const { session, crossings, track } = input;
+  const result = resultOf(input);
   return page(request, 200, sessionPage(request, { session, crossings, drivers: store.drivers(ws), track, result }));
 }
 

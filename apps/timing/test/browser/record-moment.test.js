@@ -174,25 +174,22 @@ test('the big screen plays it too, and a board taken away stops it', async (t) =
   assert.deepEqual(errors, []);
 });
 
-test('the record card, when it carries the record, plays the crown behind its time', async (t) => {
-  // A record falls only during a session; the record card carries it once that session ends within the window.
+test('the idle board, when the record still shows after its session, plays it on the strip\'s record cell', async (t) => {
+  // A record falls only during a session; the strip carries it once that session ends within the window (board hub spec §3).
   const seq = await newRecord('10');
   app.engine.end(ws, app.engine.snapshot(ws).session.id);
   const { context, page, errors, added } = await boardPage();
   t.after(() => context.close());
-  await page.locator(`.board-hero[data-record-new="${seq}"]`).waitFor();
+  await page.locator(`.board.is-idle .board-track[data-record-new="${seq}"]`).waitFor();
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.deepEqual(await added(), [], 'seen on load: nothing plays');
   await page.locator('tl-board').evaluate((board) => /** @type {any} */ (board).playMoment(/** @type {any} */ (board).recordSeq(), null));
-  const fx = page.locator(`.board-hero[data-record-new="${seq}"] .board-hero-record > .hero-fx`);
+  const fx = page.locator(`.board-track[data-record-new="${seq}"] .strip-cell.is-record > .hero-fx`);
   assert.equal(await fx.count(), 1);
   assert.equal(await fx.locator('.fx-ray').count(), 12);
-  const crown = fx.locator('svg.fx-crown');
-  assert.deepEqual(await crown.evaluate((c) => [c.getAttribute('aria-hidden'), c.querySelector('title'), getComputedStyle(c).stroke]), ['true', null, 'none'], 'solid, no outline, for the eye only');
-  // Its peaks inside the card.
-  const [peaks, top] = await Promise.all([crown.evaluate((c) => c.getBoundingClientRect().top), fx.evaluate((e) => e.getBoundingClientRect().top)]);
-  assert.ok(peaks >= top - 1);
-  assert.equal(await page.locator('.board-hero-time').evaluate((e) => e.getAnimations().length), 1, 'the time bounces');
+  assert.equal(await fx.locator('.fx-crown').count(), 0, 'on the shallow strip, the burst alone');
+  assert.equal(await page.locator(`[data-record-new="${seq}"] .strip-cell.is-record .strip-figure`).evaluate((e) => e.getAnimations().length), 1, 'the time bounces');
   await settled(page);
   assert.deepEqual(errors, []);
 });
+
