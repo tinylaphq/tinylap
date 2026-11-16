@@ -197,7 +197,7 @@ test('with nobody racing, the quiet line and the live line are not announced aga
   assert.deepEqual(errors, []);
 });
 
-test('the track strip has no left bar: the record card’s top band while idle, raised alone in a session', async (t) => {
+test('the track strip has no left bar: one box, raised in ink, the same idle and in a session', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   const personal = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
@@ -212,13 +212,19 @@ test('the track strip has no left bar: the record card’s top band while idle, 
     return { left: s.borderLeftWidth, top: s.borderTopWidth, bottom: s.borderBottomWidth, shadow: s.boxShadow };
   });
   await page.goto('/personal/board');
-  await page.locator('.board-hero > .board-track.is-band').waitFor();
-  const band = await look('.board-track');
-  assert.deepEqual([band.left, band.top, band.shadow], ['0px', '0px', 'none'], 'a band of the card: the card has the border and the shadow');
-  assert.equal(band.bottom, '2px');
-  const hero = await look('.board-hero');
-  assert.equal(hero.left, '2px');
-  assert.match(hero.shadow, /4px 4px 0px/);
+  await page.locator('.board-hero').waitFor();
+  const idle = await look('.board-track');
+  assert.deepEqual([idle.left, idle.top, idle.bottom], ['2px', '2px', '2px'], 'palace\'s box: one border all round, no 6px bar');
+  const ink = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--p-text)';
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  });
+  assert.equal(idle.shadow, `${ink} 4px 4px 0px 0px`, 'raised in ink');
+  assert.equal(await page.locator('.board-hero .board-track').count(), 0, 'its own box, not a band of the record card');
   // The link under the live line goes to the transponder's form, back to the board after.
   await page.getByRole('link', { name: 'Assign it' }).click();
   await page.waitForURL(/\/personal\/transponders\/88\?returnTo=/);
@@ -228,8 +234,7 @@ test('the track strip has no left bar: the record card’s top band while idle, 
   await page.goto('/personal/board');
   await page.locator('.board-unknown', { hasText: "Transponder 88 isn't assigned yet, so its laps aren't counted." }).waitFor();
   const strip = await look('.board-track');
-  assert.deepEqual([strip.left, strip.top], ['2px', '2px'], 'one border all round, no 6px bar');
-  assert.equal(strip.shadow, hero.shadow, 'raised like the record card');
+  assert.deepEqual(strip, idle, 'the same box in a session');
   await page.goto('/personal/setup');
   const now = await look('.track-now');
   assert.deepEqual([now.left, now.top], ['2px', '2px'], "Setup's current track: no left bar either");

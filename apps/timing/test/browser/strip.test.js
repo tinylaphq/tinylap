@@ -2,13 +2,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The strip's two times to beat (fastest lap spec §3.1, §4, §7): the track
-// record and the session's fastest lap, each as time, mark, driver, with no
-// words on screen, in columns the two lines share. A new holder never moves a
-// line; a long name is cut. The fastest lap's line is a polite live region
-// that a swap keeps, so a new fastest lap is read out, and a record lap is
-// not read as a fastest lap too. And a time with its driver reads as a value
-// and its credit wherever it shows.
+// The strip (board hub spec §3): one component heading every board. Where you
+// are on the left, on white; the track record as a filled cell, and while a
+// session runs the session's fastest lap as a second; no TR or FL mark, the
+// fills say them. With no record yet the record cell keeps its place,
+// unfilled. The record cell's left edge falls on the right column's (Last
+// laps' while running, the Start practice column's while idle). The fastest
+// lap cell is a polite live region that a swap keeps, so a new fastest lap is
+// read out, and a new holder never moves the strip. On a phone the cells
+// stack. And a time with its driver reads as a value and its credit wherever
+// it shows as one.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming, useTrack } from '../server/helpers.js';
@@ -19,6 +22,7 @@ const LONG = 'Maximilian Konstantinopoulos';
 let app;
 let browser;
 let member;
+let fresh;
 let decoder;
 let ws;
 let session;
@@ -40,6 +44,8 @@ before(async () => {
   app = await startTiming({ clock });
   browser = await openBrowser();
   member = await app.login(await app.signUp('Ana'));
+  // A club that has never driven.
+  fresh = await app.login(await app.signUp('Ben'));
   ws = (await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id;
   for (const name of ['Ana', LONG]) await app.form(member, '/personal/drivers', { name });
   const [ana, max] = app.store.drivers(ws);
@@ -65,117 +71,114 @@ after(async () => {
   await app?.close();
 });
 
-/** The strip's lines as the page lays them out, and as a screen reader reads them. */
+/** The strip as the page lays it out, and as a screen reader reads its cells. */
 const read = () => {
-  const box = (el) => el?.getBoundingClientRect();
-  /** The right edge of an element's text, not its box. */
-  const inkRight = (el) => {
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    return range.getBoundingClientRect().right;
+  const box = (el) => {
+    const r = el?.getBoundingClientRect();
+    return r ? { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height } : null;
   };
+  const colour = (value) => {
+    const probe = document.createElement('span');
+    probe.style.color = value;
+    document.body.append(probe);
+    const c = getComputedStyle(probe).color;
+    probe.remove();
+    return c;
+  };
+  const fills = { record: colour('var(--tl-record)'), fastest: colour('var(--tl-fastest)'), surface: colour('var(--p-surface)') };
   /** The text a screen reader gets: aria-hidden parts left out. */
   const spoken = (el) => {
     let text = '';
     const walk = (node) => {
-      if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
+      if (node.nodeType === Node.TEXT_NODE) text += ` ${node.textContent} `;
       else if (node.nodeType === Node.ELEMENT_NODE && node.getAttribute('aria-hidden') !== 'true') node.childNodes.forEach(walk);
     };
     walk(el);
     return text.replace(/\s+/g, ' ').trim();
   };
-  /** The text on screen: visually hidden parts left out. */
-  const visible = (el) => {
-    let text = '';
-    const walk = (node) => {
-      if (node.nodeType === Node.TEXT_NODE) text += ` ${node.textContent} `;
-      else if (node.nodeType === Node.ELEMENT_NODE && !node.classList.contains('visually-hidden')) node.childNodes.forEach(walk);
-    };
-    walk(el);
-    return text.replace(/\s+/g, ' ').trim();
-  };
   const strip = document.querySelector('.board-track');
-  const lines = [...document.querySelectorAll('.board-track-times > p')].map((p) => {
-    const time = p.querySelector('.board-track-time');
-    const mark = p.querySelector('.mark');
-    const driver = p.querySelector('.driver');
-    const name = p.querySelector('.driver-name');
-    const em = parseFloat(getComputedStyle(p).fontSize);
+  const cells = [...strip.querySelectorAll('.strip-cell')].map((cell) => {
+    const name = cell.querySelector('.strip-by .driver-name');
+    const label = cell.querySelector('.strip-label');
+    const fill = getComputedStyle(cell).backgroundColor;
     return {
-      kind: p.className,
-      top: box(p).top,
-      left: box(p).left,
-      timeRight: box(time).right,
-      timeInk: inkRight(time),
-      markLeft: box(mark).left,
-      markRight: box(mark).right,
-      driverLeft: box(driver)?.left ?? null,
-      // The name's column: from the driver's left edge to the line's right edge, in the line's em.
-      column: driver ? (box(p).right - box(driver).left) / em : null,
+      kind: cell.classList.contains('is-record') ? 'record' : 'fastest',
+      box: box(cell),
+      fill: Object.keys(fills).find((k) => fills[k] === fill) ?? fill,
+      spoken: spoken(cell),
+      role: cell.getAttribute('role'),
+      marks: cell.querySelectorAll('.mark').length,
+      crown: Boolean(cell.querySelector('.strip-crown')),
+      // The label keeps one line.
+      labelLines: Math.round(label.getBoundingClientRect().height / parseFloat(getComputedStyle(label).lineHeight)),
       cut: name ? name.scrollWidth > name.clientWidth + 0.5 : null,
       overflow: name ? getComputedStyle(name).textOverflow : null,
-      visible: visible(p),
-      spoken: spoken(p),
-      title: p.getAttribute('title'),
-      role: p.getAttribute('role'),
-      timeColour: getComputedStyle(time).color,
-      kept: /** @type {any} */ (p).kept === true,
+      kept: /** @type {any} */ (cell).kept === true,
     };
   });
-  const name = box(strip?.querySelector('.board-track-name'));
-  const decoders = box(strip?.querySelector('.board-decoders'));
-  const times = box(strip?.querySelector('.board-track-times'));
-  const probe = document.createElement('span');
-  probe.style.color = 'var(--p-text-muted)';
-  document.body.append(probe);
-  const muted = getComputedStyle(probe).color;
-  probe.remove();
+  const s = getComputedStyle(strip);
   return {
-    lines,
-    muted,
-    record: strip?.classList.contains('is-record') ?? false,
-    strip: box(strip)?.height,
-    left: name && decoders ? { top: name.top, bottom: decoders.bottom, left: name.left } : null,
-    times: times ? { top: times.top, bottom: times.bottom, left: times.left, height: times.height } : null,
+    strip: box(strip),
+    border: [s.borderTopWidth, s.borderRightWidth, s.borderBottomWidth, s.borderLeftWidth],
+    shadow: s.boxShadow,
+    ink: colour('var(--p-text)'),
+    where: box(strip.querySelector('.strip-where')),
+    cellsBox: box(strip.querySelector('.strip-cells')),
+    cells,
+    // The column the record cell lines up with: Last laps while running, Start practice while idle.
+    column: box(document.querySelector('.board-feed, .board-hero-go')),
     pageScroll: document.documentElement.scrollWidth - innerWidth,
   };
 };
 
-/** The checks every layout passes: shared columns, the gaps, no words on screen. */
-function columns(m, label) {
-  assert.equal(m.lines.length, 2, `${label}: two lines`);
-  const [tr, fl] = m.lines;
-  assert.ok(Math.abs(tr.timeRight - fl.timeRight) <= 0.5, `${label}: the times share a right edge`);
-  assert.ok(Math.abs(tr.markLeft - fl.markLeft) <= 0.5, `${label}: the marks share a column`);
-  const markEnd = Math.max(tr.markRight, fl.markRight);
-  for (const line of m.lines) {
-    assert.ok(Math.abs(line.markLeft - line.timeInk - 4) <= 1, `${label}, ${line.kind}: the mark ${(line.markLeft - line.timeInk).toFixed(1)}px after the time`);
-    // The names share a column: it starts --p-space-md after the wider mark (TR is a little wider than FL).
-    if (line.driverLeft !== null) assert.ok(Math.abs(line.driverLeft - markEnd - 16) <= 1, `${label}, ${line.kind}: the driver ${(line.driverLeft - markEnd).toFixed(1)}px after the marks' column`);
+/** The checks every strip passes: palace's box, no marks, labels on one line, no sideways scroll. */
+function box(m, label) {
+  assert.deepEqual(m.border, ['2px', '2px', '2px', '2px'], `${label}: palace's box, no bar`);
+  assert.equal(m.shadow, `${m.ink} 4px 4px 0px 0px`, `${label}: raised in ink`);
+  for (const cell of m.cells) {
+    assert.equal(cell.marks, 0, `${label}, ${cell.kind}: no mark, the fill says it`);
+    assert.equal(cell.labelLines, 1, `${label}, ${cell.kind}: the label on one line`);
   }
   assert.equal(m.pageScroll, 0, `${label}: the page does not scroll sideways`);
 }
 
-test('before any lap counts, the fastest lap line is a muted dash and FL, no driver, and says "No laps yet"', async (t) => {
+test('a club that has never driven: the record cell keeps its place, unfilled, "None yet" and "The first lap sets it."', async (t) => {
+  for (const path of ['/personal/board', '/personal/board?big']) {
+    const { context, page, errors } = await pageAs(browser, app, fresh, { viewport: { width: 1280, height: 800 } });
+    t.after(() => context.close());
+    await page.goto(path);
+    await page.evaluate(() => document.fonts.ready);
+    const m = await page.evaluate(read);
+    box(m, path);
+    assert.equal(m.cells.length, 1, 'the record cell alone');
+    const [record] = m.cells;
+    assert.equal(record.spoken, 'Track record None yet The first lap sets it.');
+    assert.equal(record.fill, 'surface', 'unfilled');
+    assert.equal(record.crown, false, 'no crown: nobody holds it');
+    assert.ok(Math.abs(record.box.right - (m.strip.right - 2)) <= 0.5, 'at the strip\'s right end');
+    assert.deepEqual(errors, []);
+  }
+});
+
+test('before any lap counts: the record from an earlier session, filled, and the fastest lap cell unfilled, a live region', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/board');
   await page.evaluate(() => document.fonts.ready);
   const m = await page.evaluate(read);
-  columns(m, 'empty');
-  const [tr, fl] = m.lines;
-  assert.equal(tr.visible, '8.000 TR Ana', 'the record from an earlier session');
-  assert.equal(tr.spoken, 'Track record 8.000, Ana');
-  assert.equal(fl.visible, '— FL');
-  assert.equal(fl.spoken, 'Fastest lap: no laps yet');
-  assert.equal(fl.title, 'No laps yet');
-  assert.equal(fl.driverLeft, null, 'no driver');
-  assert.equal(fl.timeColour, m.muted, 'the dash is muted');
-  assert.equal(fl.role, 'status', 'a polite live region');
+  box(m, 'empty');
+  const [record, fastest] = m.cells;
+  assert.match(record.spoken, /^Track record 8\.000 Ana \d+ \w{3}$/, 'the label, the time, who and when; the crown for the eye only');
+  assert.equal(record.fill, 'record');
+  assert.ok(record.crown, 'the crown at the cell\'s end');
+  assert.equal(record.role, null);
+  assert.equal(fastest.spoken, 'Fastest lap No laps yet');
+  assert.equal(fastest.fill, 'surface', 'unfilled until a lap counts');
+  assert.equal(fastest.role, 'status', 'a polite live region');
   assert.deepEqual(errors, []);
 });
 
-test('a new fastest lap is read out, and a new holder moves neither line; a long name is cut; a record lap hides the line', async (t) => {
+test('a new fastest lap is read out, and a new holder moves nothing; a long name is cut; a record fills the record cell with "New track record" and "Beat …"', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   await page.goto('/personal/board');
@@ -186,39 +189,41 @@ test('a new fastest lap is read out, and a new holder moves neither line; a long
   await pass('10', 9000);
   await page.locator('.board-fastest-line:not(.is-empty)').waitFor();
   const before = await page.evaluate(read);
-  columns(before, 'Ana');
-  assert.equal(before.lines[1].spoken, 'Fastest lap 9.000, Ana');
-  assert.ok(before.lines[1].kept, 'the live region stays across the swap, so the change is read out');
+  box(before, 'Ana');
+  assert.equal(before.cells[1].spoken, 'Fastest lap 9.000 Ana');
+  assert.equal(before.cells[1].fill, 'fastest');
+  assert.ok(before.cells[1].kept, 'the live region stays across the swap, so the change is read out');
   // The car with the long name takes it: 8.950.
   await pass('20', 8950);
   await page.locator('.board-fastest-line .driver-name', { hasText: LONG }).waitFor();
   const after = await page.evaluate(read);
-  columns(after, LONG);
-  const [, fl] = after.lines;
-  assert.equal(fl.spoken, `Fastest lap 8.950, ${LONG}`);
-  assert.equal(fl.visible, `8.950 FL ${LONG}`);
+  const fl = after.cells[1];
+  assert.equal(fl.spoken, `Fastest lap 8.950 ${LONG}`);
   assert.ok(fl.kept, 'still the same element');
+  assert.equal(fl.role, 'status');
   assert.ok(fl.cut, 'the long name is cut');
   assert.equal(fl.overflow, 'ellipsis');
-  assert.ok(fl.column >= 9 - 0.05 && fl.column <= 12 + 0.05, `the name's column is ${fl.column.toFixed(2)}em`);
-  for (const [i, line] of after.lines.entries()) {
-    for (const key of ['top', 'left', 'timeRight', 'markLeft', 'driverLeft']) {
-      assert.ok(Math.abs(line[key] - before.lines[i][key]) <= 0.5, `${line.kind}: ${key} ${before.lines[i][key].toFixed(1)} → ${line[key].toFixed(1)}`);
-    }
+  for (const [i, cell] of after.cells.entries()) {
+    for (const key of ['top', 'left', 'width', 'height']) assert.ok(Math.abs(cell.box[key] - before.cells[i].box[key]) <= 0.5, `${cell.kind}: ${key} ${before.cells[i].box[key].toFixed(1)} → ${cell.box[key].toFixed(1)}`);
   }
-  assert.ok(Math.abs(after.strip - before.strip) <= 0.5, 'the strip keeps its height');
-  // A track record: the strip shows it, and the fastest lap line goes, so it is not read out as well.
+  assert.ok(Math.abs(after.strip.height - before.strip.height) <= 0.5, 'the strip keeps its height');
+  // A track record: the record cell says so, and the fastest lap cell stays, still the same live region.
   await pass('10', 7900);
-  await page.locator('.board-track.is-record').waitFor();
+  await page.locator('.board-track[data-record-new] .strip-cell.is-new').waitFor();
   const record = await page.evaluate(read);
-  assert.equal(record.lines.length, 0);
-  assert.equal(await page.locator('.board-fastest-line').count(), 0, 'no fastest lap line while the strip shows the record');
+  box(record, 'record');
+  assert.ok(Math.abs(record.strip.height - after.strip.height) <= 0.5, `the strip keeps its height when the record falls: ${after.strip.height.toFixed(1)} → ${record.strip.height.toFixed(1)}`);
+  for (const [i, cell] of record.cells.entries()) assert.ok(Math.abs(cell.box.top - after.cells[i].box.top) <= 0.5, `${cell.kind}: nothing moves`);
+  assert.equal(record.cells[0].spoken, 'New track record 7.900 Ana Beat 8.000 Ana');
+  assert.equal(record.cells[0].fill, 'record');
+  assert.equal(record.cells[1].spoken, 'Fastest lap 7.900 Ana');
+  assert.ok(record.cells[1].kept, 'the fastest lap cell is the same element');
   assert.deepEqual(errors, []);
 });
 
 for (const [label, viewport, path] of [['a laptop', { width: 1280, height: 800 }, '/personal/board'], ['a phone', { width: 390, height: 844 }, '/personal/board'], ['a big screen', { width: 1920, height: 1080 }, '/personal/board?big']]) {
-  test(`on ${label}, the two lines share columns and sit where they belong`, async (t) => {
-    // Past the record state, so the strip shows its two lines again.
+  test(`on ${label}, while a session runs, the record cell starts on Last laps' edge, or the cells stack`, async (t) => {
+    // Past the record state.
     clock.offset += 31_000;
     app.engine.tick();
     const { context, page, errors } = await pageAs(browser, app, member, { viewport });
@@ -226,18 +231,47 @@ for (const [label, viewport, path] of [['a laptop', { width: 1280, height: 800 }
     await page.goto(path);
     await page.evaluate(() => document.fonts.ready);
     const m = await page.evaluate(read);
-    columns(m, label);
-    assert.deepEqual(m.lines.map((line) => line.visible), ['7.900 TR Ana', '7.900 FL Ana']);
+    box(m, label);
+    assert.deepEqual(m.cells.map((c) => [c.kind, c.fill]), [['record', 'record'], ['fastest', 'fastest']]);
+    const [record, fastest] = m.cells;
     if (viewport.width <= 720) {
-      // Stacked: the track, its decoders, then the lines, at the left.
-      assert.ok(m.times.top >= m.left.bottom, 'the lines under the decoders');
-      assert.ok(Math.abs(m.times.left - m.left.left) <= 0.5, 'the lines start where the track name does');
+      // Stacked: the track and its decoders, then each cell at full width.
+      assert.ok(record.box.top >= m.where.bottom - 0.5, 'the record under the track');
+      assert.ok(fastest.box.top >= record.box.bottom - 0.5, 'the fastest lap under the record');
+      for (const cell of m.cells) assert.ok(Math.abs(cell.box.width - (m.strip.width - 4)) <= 0.5, `${cell.kind}: full width`);
     } else {
-      assert.ok(m.times.top < m.left.bottom && m.times.left > m.left.left, 'the lines beside the track, at the right');
-      for (const line of m.lines) assert.ok(line.column >= 9 - 0.05 && line.column <= 12 + 0.05, `${line.kind}: the name's column is ${line.column.toFixed(2)}em`);
+      assert.ok(Math.abs(m.cellsBox.left - m.column.left) <= 0.5, `the record cell's edge ${m.cellsBox.left.toFixed(1)}, Last laps' ${m.column.left.toFixed(1)}`);
+      assert.ok(Math.abs(record.box.top - fastest.box.top) <= 0.5 && fastest.box.left > record.box.left, 'the fastest lap beside the record');
+      assert.ok(Math.abs(m.cellsBox.right - (m.strip.right - 2)) <= 0.5, 'the cells end at the strip\'s end');
     }
-    // The big screen: the two lines are no taller than the track and its decoders beside them, so the strip does not grow.
-    if (path.endsWith('?big')) assert.ok(m.times.height <= m.left.bottom - m.left.top + 0.5, `the lines ${m.times.height.toFixed(1)}px, the left side ${(m.left.bottom - m.left.top).toFixed(1)}px`);
+    assert.deepEqual(errors, []);
+  });
+}
+
+for (const [label, viewport, path] of [['a laptop', { width: 1280, height: 800 }, '/personal/board'], ['a phone', { width: 390, height: 844 }, '/personal/board'], ['a big screen', { width: 1920, height: 1080 }, '/personal/board?big']]) {
+  test(`on ${label}, while nobody races, the record cell alone, on the Start column's edge or at the right`, async (t) => {
+    if (app.store.runningSession(ws)) app.engine.end(ws, session.id);
+    clock.offset += 31_000;
+    app.engine.tick();
+    const { context, page, errors } = await pageAs(browser, app, member, { viewport });
+    t.after(() => context.close());
+    await page.goto(path);
+    await page.locator('.board-hero').waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const m = await page.evaluate(read);
+    box(m, label);
+    assert.equal(m.cells.length, 1, 'no fastest lap cell');
+    const [record] = m.cells;
+    assert.equal(record.fill, 'record');
+    assert.match(record.spoken, /^Track record 7\.900 Ana \d+ \w{3}$/);
+    if (viewport.width <= 720) {
+      assert.ok(record.box.top >= m.where.bottom - 0.5, 'the record under the track');
+      assert.ok(Math.abs(record.box.width - (m.strip.width - 4)) <= 0.5, 'at full width');
+    } else if (path.endsWith('?big')) {
+      assert.ok(Math.abs(record.box.right - (m.strip.right - 2)) <= 0.5, 'at the right: the big screen has no Start column');
+    } else {
+      assert.ok(Math.abs(m.cellsBox.left - m.column.left) <= 0.5, `the record cell's edge ${m.cellsBox.left.toFixed(1)}, the Start column's ${m.column.left.toFixed(1)}`);
+    }
     assert.deepEqual(errors, []);
   });
 }
@@ -277,7 +311,7 @@ const credits = (selector) => {
   });
 };
 
-test('a time and who set it: the strip, the idle board’s record card and lists, and none in a practice’s facts', async (t) => {
+test('a time and who set it: the idle board’s record card and lists, and none in a practice’s facts', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   const check = (list, label, { gap }) => {
@@ -292,11 +326,7 @@ test('a time and who set it: the strip, the idle board’s record card and lists
       if (gap) assert.ok(Math.abs(c.gap - 16) <= 1, `${c.where}: the driver ${c.gap}px after the time`);
     }
   };
-  await page.goto('/personal/board');
-  check(await page.evaluate(credits, '.board-track-times > p:not(.is-empty)'), 'the strip', { gap: false }); // the strip's gaps: columns() above
-  app.engine.end(ws, session.id);
-  clock.offset += 31_000;
-  app.engine.tick();
+  if (app.store.runningSession(ws)) app.engine.end(ws, session.id);
   await page.goto('/personal/board');
   await page.locator('.board-hero').waitFor();
   check(await page.evaluate(credits, '.board-hero-record'), 'the record card', { gap: false });

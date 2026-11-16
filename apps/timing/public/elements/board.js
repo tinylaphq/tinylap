@@ -63,9 +63,12 @@ const JUMP_MS = 1100;
 const BURST = ['var(--p-warning)', 'var(--p-accent-1)', 'var(--p-accent-3)'];
 const still = matchMedia('(prefers-reduced-motion: reduce)');
 
-/** The time on the card that carries data-record-new: the idle record card's, else the strip's. @param {ParentNode} root */
+/** The time on the card that carries data-record-new: the idle record card's, else the strip's record cell's. @param {ParentNode} root */
 const recordTime = (root) => /** @type {HTMLElement | null} */ (root.querySelector('.board-hero[data-record-new] .board-hero-time')
-  ?? root.querySelector('.board-track[data-record-new] .board-track-new .board-track-time'));
+  ?? root.querySelector('.board-track[data-record-new] .strip-cell.is-record .strip-figure'));
+
+/** The record holder's crown, after their name: not the strip's, which stays at its cell's end (board hub spec §3). */
+const HOLDER_CROWN = '.crown:not(.strip-crown)';
 
 /** A copy of the server's crown for the moment, for the eye only. @param {Element} crown @param {string} className */
 function crownCopy(crown, className) {
@@ -86,7 +89,7 @@ function crownCopy(crown, className) {
  * @param {HTMLElement} time @param {Element | null} crown @param {number} elapsed
  */
 function lightCard(time, crown, elapsed) {
-  const card = /** @type {HTMLElement} */ (time.closest('.board-hero-record, .board-track'));
+  const card = /** @type {HTMLElement} */ (time.closest('.board-hero-record, .strip-cell'));
   const box = card.getBoundingClientRect();
   const range = document.createRange();
   range.selectNodeContents(time);
@@ -451,10 +454,10 @@ class TlBoard extends HTMLElement {
   notifyRecord(seq) {
     const clean = (/** @type {string | null | undefined} */ value) => value?.replace(/\s+/g, ' ').trim() ?? '';
     const text = (/** @type {string} */ selector) => clean(this.querySelector(selector)?.textContent);
-    const now = text('.board-track-new .board-track-time');
-    const holder = text('.board-track-new .driver-name');
+    const now = text('.strip-cell.is-new .strip-figure');
+    const holder = text('.strip-cell.is-new .strip-by .driver-name');
     // The board sets the beaten record's time and holder apart by a gap; plain text takes dots.
-    const parts = [...(this.querySelector('.board-track-beat')?.children ?? [])].map((part) => clean(part.textContent)).filter(Boolean);
+    const parts = [...(this.querySelector('.strip-beat')?.children ?? [])].map((part) => clean(part.textContent)).filter(Boolean);
     const beat = parts.length ? `Beat ${parts.join(' · ')}` : '';
     let note;
     try {
@@ -474,7 +477,7 @@ class TlBoard extends HTMLElement {
   playMoment(seq, from) {
     this.stopMoment();
     if (still.matches) return;
-    const crown = /** @type {SVGElement | null} */ (this.querySelector('#board-live .crown'));
+    const crown = /** @type {SVGElement | null} */ (this.querySelector(`#board-live ${HOLDER_CROWN}`));
     const time = recordTime(this);
     /** @type {NonNullable<TlBoard['moment']>} */
     const moment = { seq, start: performance.now(), card: null, flyer: null, jump: null, crown: null, timer: setTimeout(() => this.stopMoment(), MOMENT_MS + 50) };
@@ -521,7 +524,7 @@ class TlBoard extends HTMLElement {
       moment.card.fx.remove();
     }
     const time = recordTime(this);
-    const crown = /** @type {SVGElement | null} */ (this.querySelector('#board-live .crown'));
+    const crown = /** @type {SVGElement | null} */ (this.querySelector(`#board-live ${HOLDER_CROWN}`));
     moment.card = time ? lightCard(time, crown, performance.now() - moment.start) : null;
     if (moment.jump) {
       moment.crown = crown;
@@ -664,7 +667,7 @@ class TlBoard extends HTMLElement {
         const next = template.content.firstElementChild;
         const current = this.querySelector('#board-live');
         // Where the old holder's crown was, for the jump, before the swap takes it away.
-        const from = current?.querySelector('.crown')?.getBoundingClientRect() ?? null;
+        const from = current?.querySelector(HOLDER_CROWN)?.getBoundingClientRect() ?? null;
         if (next && current) {
           swap(current, next);
           this.playRows();
