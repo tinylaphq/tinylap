@@ -249,6 +249,17 @@ body.big .strip-by { gap: 0 0.5em; }
 body.big .board .h3 { font-size: 1.1em; }
 body.big .board .badge, body.big .board .tag { font-size: 0.55em; padding: 0.1em 0.5em; }
 body.big .board-table { --cell-x: calc(var(--board-font) * 0.5); --cell-y: calc(var(--board-font) * 0.6); --mark-gap: calc(var(--board-font) * 0.4); }
+/* The live standings fit eight drivers in 1080 (#140): the type keeps its size, read from across the room, and the rows give up their air. */
+body.big .board:not(.is-idle) .standings-table { --cell-y: calc(var(--board-font) * 0.2); }
+body.big .board:not(.is-idle) .standings-table td { line-height: 1.15; }
+/* A driver who has stopped keeps one line too: "last lap 3 min ago" after the name, in what the name leaves, fading out where the column ends. */
+body.big .board:not(.is-idle) .standings-table td.board-driver { white-space: nowrap; overflow: hidden; }
+body.big .board:not(.is-idle) .standings-table td.board-driver:has(> .board-ago:not([hidden])) {
+  /* The fade, and a full-width layer for the row's rule under it (a mask takes only its alpha). */
+  mask: linear-gradient(var(--p-text) 0 0) bottom / 100% var(--p-border-thin) no-repeat, linear-gradient(to left, transparent var(--cell-x), var(--p-text) calc(var(--cell-x) + 1em));
+}
+body.big .board:not(.is-idle) .standings-table .board-driver .driver { display: inline-flex; max-width: 100%; vertical-align: baseline; }
+body.big .board:not(.is-idle) .standings-table .board-ago { display: inline; margin-left: var(--mark-gap); line-height: inherit; }
 body.big .board-feed { font-size: max(0.7em, var(--p-text-md)); }
 body.big .board-ago { font-size: 0.6em; }
 /* The way out: a dark pill at the top right, always there, big enough to hit by touch. */
