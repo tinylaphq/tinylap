@@ -40,36 +40,37 @@ function fastestRow(standings) {
   return best;
 }
 
-/** The record's crown at the end of its cell, for the eye only: the label says whose record it is. */
-const stripCrown = html`<svg class="crown strip-crown" viewBox="0 0 26 18" aria-hidden="true"><path d="M1.125 16.875V4.5l6.5 5.5L13 1.6l5.375 8.4 6.5-5.5v12.475Z"/></svg>`;
+/** The driver a cell credits, on a white nameplate inset in the fill, so their colour always sits on white. */
+const plate = (snap, id) => html`<span class="strip-who">${chip(snap, id)}</span>`;
 
 /**
- * The strip's record cell (board hub spec §3), the track's headline: filled in
- * the record's colour, its label, the time, who drove it and when, and the
- * crown; no TR mark, the fill says it. With no record yet the cell keeps its
- * place, unfilled. While a record has just fallen it says so: "New track
- * record", the new time and holder, and the record it beat.
+ * The strip's record cell (strip design), the track's headline: filled in the
+ * record's colour, which says what it is, so it carries no mark and no crown.
+ * Three rows in every state: the label, the time, then the holder and one
+ * piece of context (the date). With no record yet the cell keeps its place,
+ * unfilled. While a record has just fallen its words say so: "New track
+ * record", and "Beat 7.070" where the date was.
  */
 function recordCell(snap) {
   const n = snap.recordNew;
   if (n) {
-    return html`<p class="strip-cell is-record is-new board-record-line"><span class="strip-label">New track record</span><span class="num strip-figure">${formatLap(n.lapMs)}</span><span class="strip-by">${chip(snap, n.driverId)}</span>${n.beat ? html`<span class="strip-beat">Beat <span class="num">${formatLap(n.beat.lapMs)}</span> ${chip(snap, n.beat.driverId)}</span>` : null}${stripCrown}</p>`;
+    return html`<p class="strip-cell is-record is-new board-record-line"><span class="strip-label">New track record</span><span class="num strip-figure">${formatLap(n.lapMs)}</span><span class="strip-by">${plate(snap, n.driverId)}${n.beat ? html`<span class="strip-beat">Beat <span class="num">${formatLap(n.beat.lapMs)}</span></span>` : null}</span></p>`;
   }
   const r = snap.record;
-  if (!r) return html`<p class="strip-cell is-record is-empty board-record-line"><span class="strip-label">Track record</span><span class="strip-none">None yet</span><span class="strip-by">The first lap sets it.</span></p>`;
-  return html`<p class="strip-cell is-record board-record-line"><span class="strip-label">Track record</span><span class="num strip-figure">${formatLap(r.lapMs)}</span><span class="strip-by">${chip(snap, r.driverId)} <span class="strip-when">${safe(localTime(r.at, 'date'))}</span></span>${stripCrown}</p>`;
+  if (!r) return html`<p class="strip-cell is-record is-empty board-record-line"><span class="strip-label">Track record</span><span class="strip-none">None yet</span><span class="strip-by"><span class="strip-note">The first lap sets it.</span></span></p>`;
+  return html`<p class="strip-cell is-record board-record-line"><span class="strip-label">Track record</span><span class="num strip-figure">${formatLap(r.lapMs)}</span><span class="strip-by">${plate(snap, r.driverId)}<span class="strip-when">${safe(localTime(r.at, 'date'))}</span></span></p>`;
 }
 
 /**
- * The strip's fastest lap cell while a session runs (§3): the session's
- * fastest lap and its driver, filled in the fastest lap's colour; before any
- * lap counts, unfilled. It is a polite live region, which tl-board keeps
- * across swaps, so a new fastest lap is read out.
+ * The strip's fastest lap cell while a session runs: the session's fastest
+ * lap and its driver, filled in the fastest lap's colour; before any lap
+ * counts, unfilled. The same three rows as the record cell. It is a polite
+ * live region, which tl-board keeps across swaps, so a new fastest lap is read out.
  */
 function fastestCell(snap) {
   const best = fastestRow(snap.standings);
-  if (!best) return html`<p class="strip-cell is-fastest is-empty board-fastest-line" role="status"><span class="strip-label">Fastest lap</span><span class="strip-none">No laps yet</span></p>`;
-  return html`<p class="strip-cell is-fastest board-fastest-line" role="status"><span class="strip-label">Fastest lap</span><span class="num strip-figure">${formatLap(best.bestMs)}</span><span class="strip-by">${chip(snap, best.driverId)}</span></p>`;
+  if (!best) return html`<p class="strip-cell is-fastest is-empty board-fastest-line" role="status"><span class="strip-label">Fastest lap</span><span class="strip-none">No laps yet</span><span class="strip-by"></span></p>`;
+  return html`<p class="strip-cell is-fastest board-fastest-line" role="status"><span class="strip-label">Fastest lap</span><span class="num strip-figure">${formatLap(best.bestMs)}</span><span class="strip-by">${plate(snap, best.driverId)}</span></p>`;
 }
 
 /** One item per decoder heard in the last 30 minutes, beside the track (decoder connections spec §6). */
@@ -82,9 +83,10 @@ function decoderStates(snap) {
 /**
  * The strip (board hub spec §3): one box above every board, the same on each.
  * On the left where you are: the track, its direction as an icon, its
- * decoders. On the right the track record and, while a session runs, the
- * session's fastest lap beside it. While a record has just fallen it carries
- * data-record-new, so tl-board plays the record moment on its record cell.
+ * decoders. On the right the track record, over the board's right column,
+ * and while a session runs the session's fastest lap on its left. While a
+ * record has just fallen it carries data-record-new, so tl-board bounces the
+ * record cell's new time.
  */
 function strip(snap) {
   const n = snap.recordNew;
@@ -94,8 +96,8 @@ function strip(snap) {
     ${decoderStates(snap)}
   </div>
   <div class="strip-cells">
-    ${recordCell(snap)}
     ${snap.session ? fastestCell(snap) : null}
+    ${recordCell(snap)}
   </div>
 </header>`;
 }
