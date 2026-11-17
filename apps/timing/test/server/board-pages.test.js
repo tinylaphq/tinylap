@@ -419,7 +419,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   for (const body of Object.values(s)) {
     assert.match(body, /<div id="board-live" class="board is-idle"[^>]*>\s*<header class="board-track strip">\s*<div class="strip-where">\s*<p class="board-track-name"><strong class="cut-words">Ring<\/strong> <svg class="direction-icon"[^>]* role="img"><title>Clockwise<\/title>/, 'the strip heads every board, the same on each');
     // No record yet: the record cell keeps its place, unfilled (board hub spec §3).
-    assert.match(body, /<div class="strip-cells">\s*<p class="strip-cell is-record is-empty board-record-line"><span class="strip-label">Track record<\/span><span class="strip-none">None yet<\/span><span class="strip-by">The first lap sets it\.<\/span><\/p>\s*<\/div>/);
+    assert.match(body, /<div class="strip-cells">\s*<p class="strip-cell is-record is-empty board-record-line"><span class="strip-label">Track record<\/span><span class="strip-none">None yet<\/span><span class="strip-by"><span class="strip-note">The first lap sets it\.<\/span><\/span><\/p>\s*<\/div>/);
     assert.doesNotMatch(body, /board-fastest-line|is-band/, 'no fastest lap while nobody races');
     assert.doesNotMatch(body, /class="eyebrow"|Last laps|status-warning|board-hero|board-first/);
     assert.match(body, /<\/header>\s*<section class="board-result is-none" aria-labelledby="result-title">\s*<div class="result-head is-board"><h1 class="board-result-title" id="result-title">No sessions yet<\/h1><\/div>\s*<div class="board-none"><p>Start a session and drive\.[^<]*the first one sets the track record on Ring\.<\/p><\/div>/);
@@ -464,9 +464,10 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   for (const body of Object.values(await screens())) {
     assert.match(body, /<header class="board-track strip is-live">/);
     const empty = cells(body);
-    assert.match(empty, /<p class="strip-cell is-record is-empty board-record-line"><span class="strip-label">Track record<\/span><span class="strip-none">None yet<\/span><span class="strip-by">The first lap sets it\.<\/span><\/p>/);
-    assert.match(empty, /<p class="strip-cell is-fastest is-empty board-fastest-line" role="status"><span class="strip-label">Fastest lap<\/span><span class="strip-none">No laps yet<\/span><\/p>/);
-    assert.deepEqual([...empty.matchAll(/<p [^>]*>([\s\S]*?)<\/p>/g)].map((m) => shown(m[1])), ['Track record None yet The first lap sets it.', 'Fastest lap No laps yet']);
+    assert.match(empty, /<p class="strip-cell is-record is-empty board-record-line"><span class="strip-label">Track record<\/span><span class="strip-none">None yet<\/span><span class="strip-by"><span class="strip-note">The first lap sets it\.<\/span><\/span><\/p>/);
+    assert.match(empty, /<p class="strip-cell is-fastest is-empty board-fastest-line" role="status"><span class="strip-label">Fastest lap<\/span><span class="strip-none">No laps yet<\/span><span class="strip-by"><\/span><\/p>/);
+    // The fastest lap on the record's left (strip design).
+    assert.deepEqual([...empty.matchAll(/<p [^>]*>([\s\S]*?)<\/p>/g)].map((m) => shown(m[1])), ['Fastest lap No laps yet', 'Track record None yet The first lap sets it.']);
   }
   passIn(club.id, 5_101_000, '61');
   passIn(club.id, 5_101_500, '62');
@@ -474,11 +475,11 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   passIn(club.id, 5_110_500, '62');
   s = await screens();
   assert.doesNotMatch(s.board, /data-record-new/);
-  // The record cell: its label, the time, who and when, and the crown, no TR mark; the fastest lap cell beside it, a live region, no FL mark.
+  // The record cell: its label, the time, who on a nameplate and when, no crown and no TR mark; the fastest lap cell beside it, a live region, no FL mark.
   for (const body of Object.values(s)) {
     const both = cells(body);
-    assert.match(both, /<p class="strip-cell is-record board-record-line"><span class="strip-label">Track record<\/span><span class="num strip-figure">8\.000<\/span><span class="strip-by"><span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span> <span class="strip-when"><tl-local-time format="date"><time datetime="[^"]+">[^<]+<\/time><\/tl-local-time><\/span><\/span><svg class="crown strip-crown" viewBox="0 0 26 18" aria-hidden="true">/);
-    assert.match(both, /<p class="strip-cell is-fastest board-fastest-line" role="status"><span class="strip-label">Fastest lap<\/span><span class="num strip-figure">8\.000<\/span><span class="strip-by"><span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span><\/p>/);
+    assert.match(both, /<p class="strip-cell is-record board-record-line"><span class="strip-label">Track record<\/span><span class="num strip-figure">8\.000<\/span><span class="strip-by"><span class="strip-who"><span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span><span class="strip-when"><tl-local-time format="date"><time datetime="[^"]+">[^<]+<\/time><\/tl-local-time><\/span><\/span><\/p>/);
+    assert.match(both, /<p class="strip-cell is-fastest board-fastest-line" role="status"><span class="strip-label">Fastest lap<\/span><span class="num strip-figure">8\.000<\/span><span class="strip-by"><span class="strip-who"><span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span><\/span><\/p>/);
     assert.doesNotMatch(both, /class="mark/, 'no TR or FL mark: the fill says it');
     assert.equal(both.match(/role="status"/g).length, 1, 'only the fastest lap is a live region');
   }
@@ -489,15 +490,14 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
   for (const body of Object.values(s)) {
     assert.match(body, new RegExp(`<header class="board-track strip is-live" data-record-new="${recordNew.seq}">`));
     const head = body.slice(body.indexOf('<header class="board-track'), body.indexOf('</header>', body.indexOf('<header class="board-track')));
-    // The record cell says it (board hub spec §3): "New track record", the new time and holder, and "Beat …".
-    assert.match(head, /<p class="strip-cell is-record is-new board-record-line"><span class="strip-label">New track record<\/span><span class="num strip-figure">7\.500<\/span><span class="strip-by"><span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span><span class="strip-beat">Beat <span class="num">8\.000<\/span> <span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span><svg class="crown strip-crown"/);
+    // The record cell's words say it (strip design): "New track record", the new time and holder, and "Beat …" where the date was, one driver only.
+    assert.match(head, /<p class="strip-cell is-record is-new board-record-line"><span class="strip-label">New track record<\/span><span class="num strip-figure">7\.500<\/span><span class="strip-by"><span class="strip-who"><span class="driver" [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span><span class="strip-beat">Beat <span class="num">8\.000<\/span><\/span><\/span><\/p>/);
     assert.doesNotMatch(head, /·/);
     // The fastest lap cell stays, so its live region is not taken away and given back.
     assert.match(head, /<p class="strip-cell is-fastest board-fastest-line" role="status"><span class="strip-label">Fastest lap<\/span><span class="num strip-figure">7\.500<\/span>/);
     assert.doesNotMatch(body, NOTICE);
-    // The crown only after the holder's name (and the strip's own at its record cell's end), TR alone on his best (the fastest lap too), PB on Mia's; no tint.
-    assert.equal(body.match(/class="crown"/g).length, 1);
-    assert.equal(body.match(/class="crown strip-crown"/g).length, 1);
+    // The crown only after the holder's name, none in the strip; TR alone on his best (the fastest lap too), PB on Mia's; no tint.
+    assert.equal(body.match(/class="crown/g).length, 1);
     assert.match(body, /<td class="pos">1<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><svg class="crown" viewBox="0 0 26 18" role="img"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span>/);
     assert.match(body, /7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr"[^>]*>TR<\/abbr><span class="visually-hidden">Track record<\/span><\/td>/);
     assert.match(body, /9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb"/);
@@ -519,7 +519,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.doesNotMatch(body, /data-record-new|is-new|Last laps|board-title|board-unknown|board-hero|board-last|Last session/);
     const head = body.slice(body.indexOf('<header class="board-track'), body.indexOf('</header>', body.indexOf('<header class="board-track')));
     assert.match(head, /<header class="board-track strip">/);
-    assert.match(head, /<p class="strip-cell is-record board-record-line"><span class="strip-label">Track record<\/span><span class="num strip-figure">7\.500<\/span><span class="strip-by"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span> <span class="strip-when"><tl-local-time format="date">/);
+    assert.match(head, /<p class="strip-cell is-record board-record-line"><span class="strip-label">Track record<\/span><span class="num strip-figure">7\.500<\/span><span class="strip-by"><span class="strip-who"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><\/span><\/span><span class="strip-when"><tl-local-time format="date">/);
     assert.doesNotMatch(body, /board-fastest-line/, 'no fastest lap cell on the idle board');
     const result = part(body, '<section class="board-result"');
     assert.match(result, new RegExp(`<h1 class="board-result-title" id="result-title">Practice result</h1><p class="result-when">Ended at <tl-local-time format="time"><time datetime="${escape(new Date(ended).toISOString())}">`));
@@ -530,8 +530,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     assert.deepEqual([...result.matchAll(/<td class="pos">(\d+)<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="(\w+)">/g)].map((m) => [m[1], m[2]]), [['2', 'Mia']]);
     assert.match(result, /9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb"/);
     assert.doesNotMatch(result.slice(result.indexOf('<div class="result is-')), /<a |result-pbs|Lap times/, 'nothing inside the result is a link; the board leaves the personal bests out');
-    assert.equal(body.match(/class="crown"/g).length, 1, 'after the holder in the result');
-    assert.equal(body.match(/class="crown strip-crown"/g).length, 1, 'and the strip\'s, at its record cell\'s end');
+    assert.equal(body.match(/class="crown/g).length, 1, 'after the holder in the result, none in the strip');
   }
   // Full results on a member's own screen only; Start and Fastest on this track beside the result.
   assert.match(s.board, new RegExp(`<p class="result-when">[\\s\\S]*?</p><a href="${path}/sessions/${session.id}">Full results</a></div>`));

@@ -2,11 +2,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The record moment (drivers and transponders spec §4): when a swap brings a
-// new track record, tl-board moves the crown from the old holder to the new
-// one in a jump, and the record card plays a crown and burst behind the new
-// time while the time bounces. Once only, on boards open at that moment,
-// never on load, never with reduced motion; nothing it adds stays.
+// The record moment (drivers and transponders spec §4, strip design): when a
+// swap brings a new track record, tl-board moves the crown from the old holder
+// to the new one in a jump, and the new time in the strip's record cell
+// bounces once, the only motion in the cell, which gets nothing added. Once
+// only, on boards open at that moment, never on load, never with reduced
+// motion; nothing it adds stays.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTiming, useTrack } from '../server/helpers.js';
@@ -88,50 +89,43 @@ const settled = (page) => page.waitForFunction(() => !document.querySelector('.h
   && [...document.querySelectorAll('.crown')].every((c) => getComputedStyle(c).visibility === 'visible')
   && document.getAnimations().filter((a) => !(a instanceof CSSAnimation || a instanceof CSSTransition)).length === 0, null, { timeout: 3000 });
 
-test('a falling record lights the record card and the crown jumps to the new holder, then nothing stays', async (t) => {
+/** The strip's record cell's new time, and the number of script animations on it. */
+const bounces = (page, seq) => page.locator(`[data-record-new="${seq}"] .strip-cell.is-record .strip-figure`).evaluate((e) => e.getAnimations().length);
+/** What the record cell holds: its children's classes, in order. */
+const cellParts = (page) => page.locator('.strip-cell.is-record').evaluate((cell) => [...cell.querySelectorAll('*')].map((e) => e.getAttribute('class') ?? e.localName));
+
+test('a falling record bounces the new time in the record cell, adds nothing to the cell, and the crown jumps to the new holder; then nothing stays', async (t) => {
   const { context, page, errors, added } = await boardPage();
   t.after(() => context.close());
   await page.locator('.board-table .crown').waitFor();
   const seq = await newRecord('20');
-  await page.locator('.hero-fx').waitFor({ state: 'attached' });
-  assert.equal(await page.locator(`[data-record-new="${seq}"] .hero-fx`).count(), 1, 'on the card that says so');
-  // On the strip's record cell, the burst and the bounce: no crown behind its digits, it is too shallow.
-  assert.equal(await page.locator('.hero-fx .fx-ray').count(), 12);
-  assert.equal(await page.locator('.hero-fx .fx-crown').count(), 0);
-  assert.equal(await page.locator(`[data-record-new="${seq}"] .strip-cell.is-record .strip-figure`).evaluate((e) => e.getAnimations().length), 1, 'the time bounces');
+  await page.locator(`[data-record-new="${seq}"]`).waitFor();
+  const parts = await cellParts(page);
+  // The cell's only motion: the new time bounces once.
+  assert.equal(await bounces(page, seq), 1, 'the time bounces');
   // The crown flies on its own; the new holder's waits, hidden, until it lands.
   await page.locator('.crown-flyer').waitFor({ state: 'attached' });
   const crown = page.locator('.board-table tr', { hasText: 'Ben' }).locator('.crown');
   assert.equal(await crown.evaluate((c) => getComputedStyle(c).visibility), 'hidden');
-  // Behind the time, and clipped to the card: it moves nothing.
-  assert.deepEqual(await page.locator('.hero-fx').evaluate((fx) => {
-    const s = getComputedStyle(fx);
-    return [s.position, s.overflow, s.pointerEvents];
-  }), ['absolute', 'hidden', 'none']);
-  const time = page.locator(`[data-record-new="${seq}"] .strip-cell.is-record .strip-figure`);
-  const [front, back] = await time.evaluate((e) => {
-    const fx = /** @type {Element} */ (document.querySelector('.hero-fx'));
-    const layer = [...(fx.parentElement?.children ?? [])].find((child) => child.contains(e));
-    return [getComputedStyle(/** @type {Element} */ (layer)).zIndex, getComputedStyle(fx).zIndex].map(Number);
-  });
-  assert.ok(front > back, 'the time in front');
+  assert.deepEqual(await cellParts(page), parts, 'nothing is added to the cell: no burst, tag or sweep');
+  assert.equal(await page.locator('.strip-cell .crown').count(), 0, 'no crown in the cell');
   await settled(page);
   assert.equal(await crown.evaluate((c) => getComputedStyle(c).visibility), 'visible');
   const was = await added();
-  assert.deepEqual(was.map((a) => a.className).sort(), ['crown crown-flyer', 'hero-fx']);
+  assert.deepEqual(was.map((a) => a.className), ['crown crown-flyer'], 'the crown\'s jump alone');
   assert.ok(was.every((a) => a.hidden === 'true'), 'all of it aria-hidden');
   assert.deepEqual(errors, []);
 });
 
-test('a swap during the moment carries it over to the new card, and it still ends clean', async (t) => {
+test('a swap during the moment carries the bounce over to the new cell, and it still ends clean', async (t) => {
   const { context, page, errors } = await boardPage();
   t.after(() => context.close());
   const seq = await newRecord('10');
-  await page.locator('.hero-fx').waitFor({ state: 'attached' });
+  await page.locator(`[data-record-new="${seq}"]`).waitFor();
   const board = await page.locator('#board-live').elementHandle();
   await pass('20'); // a crossing that is no record: the board is swapped again
   await page.waitForFunction((el) => !el.isConnected, board);
-  assert.equal(await page.locator(`[data-record-new="${seq}"] .hero-fx`).count(), 1, 'still playing, on the new card');
+  assert.equal(await bounces(page, seq), 1, 'still bouncing, on the new cell');
   await settled(page);
   assert.deepEqual(errors, []);
 });
@@ -140,7 +134,7 @@ test('a reload while the record still shows plays nothing', async (t) => {
   const { context, page, errors, added } = await boardPage();
   t.after(() => context.close());
   const seq = await newRecord('20');
-  await page.locator('.hero-fx').waitFor({ state: 'attached' });
+  await page.locator('.crown-flyer').waitFor({ state: 'attached' });
   await page.reload();
   await page.locator(`[data-record-new="${seq}"]`).waitFor();
   await page.locator('#live-status[data-state="live"]').waitFor({ state: 'attached' });
@@ -166,8 +160,9 @@ test('with reduced motion the crown just moves', async (t) => {
 test('the big screen plays it too, and a board taken away stops it', async (t) => {
   const { context, page, errors } = await boardPage('/personal/board?big', { viewport: { width: 1920, height: 1080 } });
   t.after(() => context.close());
-  await newRecord('20');
-  await page.locator('.hero-fx').waitFor({ state: 'attached' });
+  const seq = await newRecord('20');
+  await page.locator(`[data-record-new="${seq}"]`).waitFor();
+  assert.equal(await bounces(page, seq), 1, 'the time bounces');
   await page.locator('tl-board').evaluate((board) => board.remove());
   assert.equal(await page.evaluate(() => document.querySelectorAll('.hero-fx, .crown-flyer').length
     + document.getAnimations().filter((a) => !(a instanceof CSSAnimation || a instanceof CSSTransition)).length), 0, 'no element and no script animation left');
@@ -184,11 +179,8 @@ test('the idle board, when the record still shows after its session, plays it on
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.deepEqual(await added(), [], 'seen on load: nothing plays');
   await page.locator('tl-board').evaluate((board) => /** @type {any} */ (board).playMoment(/** @type {any} */ (board).recordSeq(), null));
-  const fx = page.locator(`.board-track[data-record-new="${seq}"] .strip-cell.is-record > .hero-fx`);
-  assert.equal(await fx.count(), 1);
-  assert.equal(await fx.locator('.fx-ray').count(), 12);
-  assert.equal(await fx.locator('.fx-crown').count(), 0, 'on the shallow strip, the burst alone');
-  assert.equal(await page.locator(`[data-record-new="${seq}"] .strip-cell.is-record .strip-figure`).evaluate((e) => e.getAnimations().length), 1, 'the time bounces');
+  assert.equal(await bounces(page, seq), 1, 'the time bounces');
+  assert.equal(await page.locator('.strip-cell.is-record > .hero-fx').count(), 0, 'and nothing else');
   await settled(page);
   assert.deepEqual(errors, []);
 });

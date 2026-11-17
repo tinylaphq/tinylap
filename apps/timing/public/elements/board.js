@@ -36,11 +36,10 @@
 // - The record moment (drivers and transponders spec §4): the same swap, unless
 //   motion is reduced, jumps a copy of the crown from the old holder's row to
 //   the new holder's (whose own crown waits, hidden, until it lands), and
-//   plays a crown and a burst behind the new time on the card that carries
-//   data-record-new (on the shallow strip, the burst alone), then bounces
-//   the time. All of it aria-hidden, absolute and clipped to the card;
-//   nothing stays. A swap during it carries it over to the new card; a new
-//   record or disconnecting stops it.
+//   bounces the new time once in the strip's record cell, which carries
+//   data-record-new: the only motion in the cell, which gets nothing added.
+//   The jump is aria-hidden; nothing stays. A swap during it carries it over
+//   to the new cell; a new record or disconnecting stops it.
 // - A row's moment (fastest lap spec §4): a swap that brings a standings row
 //   whose data-moment this page has not seen lights that row in its mark's
 //   colour (TR, FL or PB), behind its text; never on the first render. A
@@ -62,16 +61,14 @@ const GESTURES = ['click', 'touchend', 'keydown'];
 /** The record moment's length, and the crown's jump. */
 const MOMENT_MS = 2400;
 const JUMP_MS = 1100;
-/** The burst's colours, in turn: palace's. */
-const BURST = ['var(--p-warning)', 'var(--p-accent-1)', 'var(--p-accent-3)'];
 const still = matchMedia('(prefers-reduced-motion: reduce)');
 
 /** The time on the card that carries data-record-new: the idle record card's, else the strip's record cell's. @param {ParentNode} root */
 const recordTime = (root) => /** @type {HTMLElement | null} */ (root.querySelector('.board-hero[data-record-new] .board-hero-time')
   ?? root.querySelector('.board-track[data-record-new] .strip-cell.is-record .strip-figure'));
 
-/** The record holder's crown, after their name: not the strip's, which stays at its cell's end (board hub spec §3). */
-const HOLDER_CROWN = '.crown:not(.strip-crown)';
+/** The record holder's crown, after their name (the strip's cells wear none). */
+const HOLDER_CROWN = '.crown';
 
 /** A copy of the server's crown for the moment, for the eye only. @param {Element} crown @param {string} className */
 function crownCopy(crown, className) {
@@ -84,68 +81,19 @@ function crownCopy(crown, className) {
 }
 
 /**
- * The record card's part (the mockup's heroFall): behind the time a crown
- * pops up (on the idle record card; the strip is too shallow), a little
- * wider than the digits, its base on their baseline, its peaks inside the
- * card, and grows slowly while it fades; a burst of twelve bars shoots out
- * with it, gone within the first second; then the time bounces. Starts `elapsed` ms in, when a swap carries it over.
- * @param {HTMLElement} time @param {Element | null} crown @param {number} elapsed
+ * The record cell's part: the new time bounces once as it lands (scale 1,
+ * 1.2, 0.95, 1.06, 1, about 0.9 s from 0.8 s in), about its digits' middle;
+ * the only motion in the cell (strip design). Nothing is added to the cell.
+ * Starts `elapsed` ms in, when a swap carries it over.
+ * @param {HTMLElement} time @param {number} elapsed
  */
-function lightCard(time, crown, elapsed) {
-  const card = /** @type {HTMLElement} */ (time.closest('.board-hero-record, .strip-cell'));
-  const box = card.getBoundingClientRect();
+function bounceTime(time, elapsed) {
   const range = document.createRange();
   range.selectNodeContents(time);
   const digits = range.getBoundingClientRect();
-  const base = digits.top + digits.height * 0.84;
-  const ch = Math.max(0, Math.min(digits.width * 1.15 * 18 / 26, base - box.top - Math.min(12, (base - box.top) * 0.15)));
-  const w = ch * 26 / 18;
-  const fx = document.createElement('div');
-  fx.className = 'hero-fx';
-  fx.setAttribute('aria-hidden', 'true');
-  const at = document.createElement('div');
-  at.className = 'fx-at';
-  Object.assign(at.style, { left: `${digits.left + digits.width / 2 - box.left}px`, top: `${base - ch / 2 - box.top}px` });
-  const rays = BURST.flatMap(() => [0, 1, 2, 3]).map((_, i) => {
-    const ray = document.createElement('span');
-    ray.className = 'fx-ray';
-    Object.assign(ray.style, { width: `${w * 0.08}px`, height: `${w * 0.3}px`, background: BURST[i % 3] });
-    return ray;
-  });
-  at.append(...rays);
-  // The strip is too shallow for a crown behind its digits: there, only the burst and the bounce.
-  const big = crown && card.matches('.board-hero-record') ? crownCopy(crown, 'fx-crown') : null;
-  if (big) {
-    Object.assign(big.style, { width: `${w}px`, height: `${ch}px` });
-    at.append(big);
-  }
-  fx.append(at);
-  card.prepend(fx);
-  const timing = { duration: MOMENT_MS, fill: /** @type {const} */ ('forwards') };
-  const animations = [];
-  if (big) {
-    animations.push(big.animate([
-      { transform: 'scale(0.2) rotate(-24deg)', opacity: 0 },
-      { transform: 'scale(1.08) rotate(3deg)', opacity: 1, offset: 0.14, easing: 'cubic-bezier(.2,.9,.3,1.2)' },
-      { transform: 'scale(1) rotate(0)', opacity: 1, offset: 0.22, easing: 'linear' },
-      { transform: 'scale(1.08) rotate(0)', opacity: 1, offset: 0.66, easing: 'cubic-bezier(.5,0,.8,.3)' },
-      { transform: 'scale(1.3) rotate(0)', opacity: 0 },
-    ], timing));
-  }
-  rays.forEach((ray, i) => {
-    const turn = `rotate(${i * 30}deg)`, gap = ch * 0.5;
-    animations.push(ray.animate([
-      { transform: `${turn} translateY(${-gap}px) scaleY(0)`, opacity: 1 },
-      { transform: `${turn} translateY(${-gap}px) scaleY(0)`, opacity: 1, offset: 0.06 },
-      { transform: `${turn} translateY(${-gap * 1.3}px) scaleY(1)`, opacity: 1, offset: 0.18, easing: 'cubic-bezier(.2,.8,.3,1)' },
-      { transform: `${turn} translateY(${-gap * 2}px) scaleY(0)`, opacity: 1, offset: 0.34 },
-      { transform: `${turn} translateY(${-gap * 2}px) scaleY(0)`, opacity: 0 },
-    ], timing));
-  });
-  // The finale: the time bounces in front, about its digits' middle, wherever the card aligns them.
   const tr = time.getBoundingClientRect();
   const transformOrigin = `${digits.left + digits.width / 2 - tr.left}px ${digits.top + digits.height / 2 - tr.top}px`;
-  animations.push(time.animate([
+  const animations = [time.animate([
     { transform: 'scale(1)', transformOrigin },
     { transform: 'scale(1)', transformOrigin, offset: 0.34 },
     { transform: 'scale(1.2)', transformOrigin, offset: 0.46, easing: 'cubic-bezier(.3,0,.4,1)' },
@@ -153,9 +101,9 @@ function lightCard(time, crown, elapsed) {
     { transform: 'scale(1.06)', transformOrigin, offset: 0.64 },
     { transform: 'scale(1)', transformOrigin, offset: 0.72 },
     { transform: 'scale(1)', transformOrigin },
-  ], { duration: MOMENT_MS }));
+  ], { duration: MOMENT_MS })];
   for (const a of animations) a.currentTime = elapsed;
-  return { fx, animations };
+  return { animations };
 }
 
 /**
@@ -391,7 +339,7 @@ class TlBoard extends HTMLElement {
   /**
    * The record moment while it plays: when it began, the card's part, the
    * crown's jump and the crown that waits for it.
-   * @type {{ seq: string, start: number, card: { fx: HTMLElement, animations: Animation[] } | null, flyer: Element | null, jump: Animation | null, crown: SVGElement | null, timer: ReturnType<typeof setTimeout> } | null}
+   * @type {{ seq: string, start: number, card: { animations: Animation[] } | null, flyer: Element | null, jump: Animation | null, crown: SVGElement | null, timer: ReturnType<typeof setTimeout> } | null}
    */
   moment = null;
   /** The row moments' seqs this page has shown or skipped. @type {Set<string>} */
@@ -480,9 +428,9 @@ class TlBoard extends HTMLElement {
     const text = (/** @type {string} */ selector) => clean(this.querySelector(selector)?.textContent);
     const now = text('.strip-cell.is-new .strip-figure');
     const holder = text('.strip-cell.is-new .strip-by .driver-name');
-    // The board sets the beaten record's time and holder apart by a gap; plain text takes dots.
-    const parts = [...(this.querySelector('.strip-beat')?.children ?? [])].map((part) => clean(part.textContent)).filter(Boolean);
-    const beat = parts.length ? `Beat ${parts.join(' · ')}` : '';
+    // The time the record beat, as the cell says it.
+    const beaten = text('.strip-cell.is-new .strip-beat .num');
+    const beat = beaten ? `Beat ${beaten}` : '';
     let note;
     try {
       note = new Notification('New track record', { body: `${now} · ${holder}${beat ? `\n${beat}` : ''}`, tag: `tinylap-record-${seq}` });
@@ -506,7 +454,7 @@ class TlBoard extends HTMLElement {
     /** @type {NonNullable<TlBoard['moment']>} */
     const moment = { seq, start: performance.now(), card: null, flyer: null, jump: null, crown: null, timer: setTimeout(() => this.stopMoment(), MOMENT_MS + 50) };
     this.moment = moment;
-    if (time) moment.card = lightCard(time, crown, 0);
+    if (time) moment.card = bounceTime(time, 0);
     if (!crown || !from || !from.width) return;
     // The mockup's play: up, over in an arc, and down onto the new holder's name with a squash.
     const to = crown.getBoundingClientRect();
@@ -545,11 +493,10 @@ class TlBoard extends HTMLElement {
     }
     if (moment.card) {
       for (const a of moment.card.animations) a.cancel();
-      moment.card.fx.remove();
     }
     const time = recordTime(this);
     const crown = /** @type {SVGElement | null} */ (this.querySelector(`#board-live ${HOLDER_CROWN}`));
-    moment.card = time ? lightCard(time, crown, performance.now() - moment.start) : null;
+    moment.card = time ? bounceTime(time, performance.now() - moment.start) : null;
     if (moment.jump) {
       moment.crown = crown;
       crown?.style.setProperty('visibility', 'hidden');
@@ -566,7 +513,6 @@ class TlBoard extends HTMLElement {
     this.land(moment);
     if (moment.card) {
       for (const a of moment.card.animations) a.cancel();
-      moment.card.fx.remove();
     }
   }
 
