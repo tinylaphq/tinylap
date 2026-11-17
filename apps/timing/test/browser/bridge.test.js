@@ -258,6 +258,32 @@ test('a refusal after pairing says the decoder is paired', async (t) => {
   assert.equal(await page.getByLabel('Decoder name').isEditable(), true);
 });
 
+test('a refusal before the connect has finished stays on the page', async (t) => {
+  // The connect finishes once the serial port's 1.5 s open delay is over, and a pairing can fail before that. Here
+  // the delay is 4 s, so the refusal always comes first; window.__delayOver is set once the delay is over.
+  const STRETCH = () => {
+    const original = window.setTimeout;
+    Object.assign(window, { __delayOver: false });
+    window.setTimeout = /** @type {any} */ ((fn, ms, ...rest) => (ms === 1500
+      ? original(() => { /** @type {any} */ (window).__delayOver = true; fn(...rest); }, 4000)
+      : original(fn, ms, ...rest)));
+  };
+  const { context, page } = await pageAs(browser, app, wren);
+  t.after(() => context.close());
+  await page.addInitScript(STRETCH);
+  await page.addInitScript(RECORD, commands.wifi('Office', 'pass'));
+  simulating(t, 'tinylap,fast');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
+  await pairWith(page, { name: 'Early', ssid: 'Office', password: 'secret12' });
+  const alert = page.getByRole('alert').filter({ hasText: 'The decoder is paired, but it refused the Wi-Fi settings: Wi-Fi password length.' });
+  await alert.waitFor();
+  await page.waitForFunction(() => /** @type {any} */ (window).__delayOver);
+  await page.getByText('Forwarding from Early', { exact: true }).first().waitFor();
+  assert.equal(await alert.isVisible(), true);
+});
+
 test('a board that does not answer the server address says its firmware is too old, and gets no Wi-Fi settings', async (t) => {
   // The decoder swallows %TLSERVER, as firmware without the command does.
   const DROP_SERVER = () => {
