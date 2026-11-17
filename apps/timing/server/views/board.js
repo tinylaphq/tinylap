@@ -73,11 +73,17 @@ function fastestCell(snap) {
   return html`<p class="strip-cell is-fastest board-fastest-line" role="status"><span class="strip-label">Fastest lap</span><span class="num strip-figure">${formatLap(best.bestMs)}</span><span class="strip-by">${plate(snap, best.driverId)}</span></p>`;
 }
 
-/** One item per decoder heard in the last 30 minutes, beside the track (decoder connections spec §6). */
-function decoderStates(snap) {
+/**
+ * One item per decoder heard in the last 30 minutes, beside the track (decoder connections spec §6). On the TV a
+ * Wi-Fi decoder that has gone quiet says the warning here, on a warning plate, instead of in a banner of its own (#143).
+ */
+function decoderStates(snap, big) {
   const words = { reporting: 'reporting', idle: 'idle', offline: 'not reporting' };
   if (!snap.decoders?.length) return null;
-  return html`<ul class="board-decoders" role="list" aria-label="Decoders">${snap.decoders.map((d) => html`<li class="board-decoder is-${d.state}">${d.name}: ${words[d.state]}</li>`)}</ul>`;
+  const quiet = new Set(big ? (snap.offline ?? []).map((d) => d.id) : []);
+  return html`<ul class="board-decoders" role="list" aria-label="Decoders">${snap.decoders.map((d) => quiet.has(d.id)
+    ? html`<li class="board-decoder is-${d.state} is-warning" role="status">${offlineWords(d)}</li>`
+    : html`<li class="board-decoder is-${d.state}">${d.name}: ${words[d.state]}</li>`)}</ul>`;
 }
 
 /**
@@ -88,12 +94,12 @@ function decoderStates(snap) {
  * record has just fallen it carries data-record-new, so tl-board bounces the
  * record cell's new time.
  */
-function strip(snap) {
+function strip(snap, big) {
   const n = snap.recordNew;
   return html`<header class="board-track strip${snap.session ? ' is-live' : ''}"${n ? html` data-record-new="${n.seq}"` : null}>
   <div class="strip-where">
     <p class="board-track-name"><strong class="cut-words">${snap.track.name}</strong> ${directionIcon(snap.direction)}</p>
-    ${decoderStates(snap)}
+    ${decoderStates(snap, big)}
   </div>
   <div class="strip-cells">
     ${snap.session ? fastestCell(snap) : null}
@@ -318,18 +324,22 @@ function side(request, snap, { members }) {
  */
 function idleBoard(request, snap, { watcher, big, events }) {
   const members = !watcher && !big;
-  const notices = [...offlineBanners(snap), members ? unassigned(request, snap) : null].filter(Boolean);
+  const notices = [...offlineBanners(snap, big), members ? unassigned(request, snap) : null].filter(Boolean);
   return html`<div id="board-live" class="board is-idle" data-events="${events}">
-${strip(snap)}
+${strip(snap, big)}
 ${notices.length ? html`<div class="board-notices">${notices}</div>` : null}
 ${latestResult(request, snap, { members, big })}
 ${big ? null : side(request, snap, { members })}
 </div>`;
 }
 
-/** One warning per Wi-Fi decoder that has gone quiet (decoder Wi-Fi spec §6); its laps arrive once it is back. */
-function offlineBanners(snap) {
-  return (snap.offline ?? []).map((decoder) => html`<p class="status status-warning flag board-offline" role="status">${decoder.name} isn't reporting. Laps will appear once it's back.</p>`);
+/** What a Wi-Fi decoder that has gone quiet says: its laps arrive once it is back. */
+const offlineWords = (decoder) => html`${decoder.name} isn't reporting. Laps will appear once it's back.`;
+
+/** One warning per Wi-Fi decoder that has gone quiet (decoder Wi-Fi spec §6); on the TV the strip says it. */
+function offlineBanners(snap, big) {
+  if (big) return [];
+  return (snap.offline ?? []).map((decoder) => html`<p class="status status-warning flag board-offline" role="status">${offlineWords(decoder)}</p>`);
 }
 
 /** Everything on the board that changes, in one element the stream replaces. */
@@ -344,8 +354,8 @@ export function boardLive(request, snap, { watcher = false, big = false, token =
       : html`Transponders ${andList(codes)} aren't assigned yet, so their laps aren't counted.`} <a href="${assignHref(request.space.base, codes)}">${codes.length === 1 ? 'Assign it' : 'Assign them'}</a></p>`
     : null;
   return html`<div id="board-live" class="board" data-events="${events}">
-${strip(snap)}
-${offlineBanners(snap)}
+${strip(snap, big)}
+${offlineBanners(snap, big)}
 ${header(request, snap, { members: !watcher && !big })}
 ${unknown}
 <div class="board-main">${standingsTable(snap)}</div>
