@@ -33,17 +33,25 @@ const until = async (fn, ms = 4000) => {
 /**
  * A serial port whose other end is `model` (m25). `writes` records each host write as
  * { text, at, boot } (the session's boot at that moment); `drop(text)` swallows a write.
+ * `at` is when the bridge called the transport's write, not when the model received it: the fake port's tick and
+ * a loaded machine delay each write by a different amount, which would skew any gap measured between two writes.
  */
 function modelPort(model, { drop = () => false } = {}) {
   const writes = [];
   let bridge = null;
+  const sentAt = [];
   const spy = { ...model, write(bytes, now) {
     const text = new TextDecoder().decode(bytes);
-    writes.push({ text, at: performance.now(), boot: bridge?.boot ?? null });
+    writes.push({ text, at: sentAt.shift() ?? performance.now(), boot: bridge?.boot ?? null });
     return drop(text) ? [] : model.write(bytes, now);
   } };
   const port = fakeSerialPort(spy, { tickMs: 10 });
-  return { port, writes, say: (line) => port.send(new TextEncoder().encode(line)), watch: (b) => { bridge = b; return b; } };
+  return { port, writes, say: (line) => port.send(new TextEncoder().encode(line)), watch: (b) => {
+    bridge = b;
+    const write = b.transport.write.bind(b.transport);
+    b.transport.write = (bytes) => { sentAt.push(performance.now()); return write(bytes); };
+    return b;
+  } };
 }
 const silent = () => ({ transport: 'serial', info: {}, start: () => [], tick: () => [], write: () => [] });
 const plain = (options = {}) => zroundModel({ cars: 0, bootMs: 0, ackMs: 5, acks: 3, ...options });
