@@ -172,3 +172,67 @@ test('at 1920×1080 a qualifying with eight drivers ends inside the screen, and 
   await fitsWhileARecordFalls('qualifying', 7300);
   app.engine.abort(ws, qualifying.id);
 });
+
+/**
+ * Lets the decoder go quiet past OFFLINE_AFTER_MS, opens the big board, and checks it with the decoder not reporting
+ * (#143): the warning shows once, in the strip, in the strip's type and on one line, and the board still ends inside 1080.
+ */
+async function fitsWhileQuiet(what, { live }) {
+  clock.offset += 26_000;
+  app.engine.tick();
+  const { context, page, errors } = await pageAs(browser, app, member, { viewport: TV });
+  await page.goto('/personal/board?big');
+  await page.locator('.board-track .board-decoder.is-offline').first().waitFor();
+  if (live) await page.locator('.board-feed .board-laps li').first().waitFor();
+  else await page.locator('.board-result .result').waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  const read = await page.evaluate(() => {
+    const visible = (el) => el.getBoundingClientRect().height > 0;
+    const warning = [...document.querySelectorAll('.board-track .board-decoder.is-offline')].find((li) => li.textContent.startsWith('Start line'));
+    const where = document.querySelector('.strip-where').getBoundingClientRect();
+    const cells = document.querySelector('.strip-cells').getBoundingClientRect();
+    const last = [...document.querySelectorAll('#board-live > *')].filter(visible).at(-1);
+    const style = getComputedStyle(warning);
+    return {
+      banners: [...document.querySelectorAll('.board-offline')].filter(visible).length,
+      text: warning.textContent,
+      px: parseFloat(style.fontSize),
+      lines: Math.round(warning.getBoundingClientRect().height / parseFloat(style.lineHeight)),
+      whereHeight: where.height,
+      cellsHeight: cells.height,
+      height: document.documentElement.scrollHeight,
+      bottom: last.getBoundingClientRect().bottom,
+    };
+  });
+  assert.equal(read.banners, 0, `${what}: no banner of its own: the strip says it`);
+  assert.match(read.text, /Start line isn't reporting\. Laps will appear once it's back\./, what);
+  assert.ok(read.px >= 22, `${what}: the warning reads across a room: ${read.px}px`);
+  assert.equal(read.lines, 1, `${what}: the warning is one line`);
+  assert.ok(read.whereHeight <= read.cellsHeight + 0.5, `${what}: the warning doesn't make the strip taller: ${read.whereHeight.toFixed(1)} over ${read.cellsHeight.toFixed(1)}`);
+  assert.ok(read.height <= 1080, `${what}: the board is ${read.height}px tall`);
+  assert.ok(read.bottom <= 1080, `${what}: the board ends at ${read.bottom}px`);
+  assert.deepEqual(errors, []);
+  await context.close();
+}
+
+test('at 1920×1080 the idle board with eight drivers ends inside the screen with a decoder that isn\'t reporting, which the strip says at TV size', async () => {
+  // The practice above ended: its eight drivers are the result.
+  await fitsWhileQuiet('idle', { live: false });
+});
+
+test('at 1920×1080 a practice with eight drivers ends inside the screen with a decoder that isn\'t reporting', async () => {
+  clock.offset += 60_000;
+  const session = await drive('practice');
+  await fitsWhileQuiet('live', { live: true });
+  app.engine.end(ws, session.id);
+});
+
+test('at 1920×1080 a practice still fits with two decoders that aren\'t reporting: the strip keeps one line', async () => {
+  clock.offset += 60_000;
+  const session = await drive('practice');
+  const second = await (await app.api(member, 'POST', `/workspaces/${ws}/decoders`, { name: 'Back straight by the pit wall' })).json();
+  // It reports once, with nothing to send, then goes quiet with the start line.
+  app.engine.ingest({ workspaceId: ws, decoder: second.id, via: 'net', batch: { boot: 'b00tb00t', passings: [] } });
+  await fitsWhileQuiet('two quiet', { live: true });
+  app.engine.end(ws, session.id);
+});

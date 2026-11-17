@@ -585,13 +585,25 @@ test('a decoder that is not reporting shows on every live board, and goes when i
   for (const res of await Promise.all(pages())) assert.doesNotMatch(await res.text(), /board-offline/, 'reporting');
   clock.now += 25_000;
   app.engine.tick();
-  for (const res of await Promise.all(pages())) {
+  // On the TV the strip's line for the decoder is the warning, and there is no banner (#143).
+  const strip = /<li class="board-decoder is-offline is-warning" role="status">&lt;b&gt;Start&lt;\/b&gt; isn't reporting\. Laps will appear once it's back\.<\/li>/;
+  const says = async (res, big, what) => {
     const body = await res.text();
-    assert.match(body, sentence, 'idle');
-    assert.ok(body.indexOf('board-track') < body.indexOf('board-offline'), 'right after the track header');
+    if (big) {
+      assert.match(body, strip, `${what}: the TV's strip`);
+      assert.doesNotMatch(body, /board-offline/, `${what}: no banner on the TV`);
+    } else {
+      assert.match(body, sentence, what);
+      assert.doesNotMatch(body, /is-warning/, `${what}: the strip only says not reporting`);
+    }
+    return body;
+  };
+  for (const [i, res] of (await Promise.all(pages())).entries()) {
+    const body = await says(res, i === 1, 'idle');
+    if (i !== 1) assert.ok(body.indexOf('board-track') < body.indexOf('board-offline'), 'right after the track header');
   }
   app.engine.start(quietClub.id, { kind: 'practice', replace: true });
-  for (const res of await Promise.all(pages())) assert.match(await res.text(), sentence, 'session');
+  for (const [i, res] of (await Promise.all(pages())).entries()) await says(res, i === 1, 'session');
   beat(30_000);
   app.engine.tick();
   for (const res of await Promise.all(pages())) assert.doesNotMatch(await res.text(), /board-offline/, 'back');
@@ -618,13 +630,13 @@ test('every live board says whether each decoder is reporting, idle or not repor
   clock.now += 25_000;
   app.engine.tick();
   for (const body of await Promise.all(await pages())) {
-    assert.match(body, /<li class="board-decoder is-offline">Start &lt;b&gt;: not reporting<\/li>/);
+    assert.match(body, /<li class="board-decoder is-offline[^"]*"[^>]*>Start &lt;b&gt;(: not reporting| isn't reporting\.)/);
     assert.match(body, /<li class="board-decoder is-idle">Pit: idle<\/li>/, 'its last batch said quiet');
-    assert.ok(body.indexOf('Pit: idle') < body.indexOf('Start &lt;b&gt;: not reporting'), 'sorted by name');
+    assert.ok(body.indexOf('Pit: idle') < body.indexOf('Start &lt;b&gt;'), 'sorted by name');
     assert.match(body, /<ul class="board-decoders" role="list" aria-label="Decoders">/);
   }
   app.engine.start(club.id, { kind: 'practice', replace: true });
-  for (const body of await Promise.all(await pages())) assert.match(body, /Start &lt;b&gt;: not reporting/, 'during a session');
+  for (const body of await Promise.all(await pages())) assert.match(body, /Start &lt;b&gt;(: not reporting| isn't reporting)/, 'during a session');
 });
 
 test('several transponders not assigned yet in a session: one warning, by number, linking to collect; none for watchers', async () => {

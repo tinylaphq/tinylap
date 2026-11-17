@@ -1023,6 +1023,17 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .board-decoder.is-offline { color: var(--p-error-text); }
 .board-decoder.is-offline::before { background: var(--p-error); }
 .board-decoder.is-idle { color: var(--p-text-secondary); }
+/* On the TV a quiet Wi-Fi decoder's item is the warning (#143): palace's warning, as a plate inset in the strip like the
+ * nameplate, in the strip's type, so it reads across the room and takes no row of the board's own. */
+.board-decoder.is-warning {
+  flex: 0 1 auto; padding: 0 var(--p-space-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal;
+  background: var(--p-warning); color: var(--p-text); border: var(--p-border-thin) solid var(--p-text); box-shadow: var(--p-shadow-xs) var(--p-text);
+}
+/* The plate is the mark: no square before it. */
+.board-decoder.is-warning::before { content: none; }
+/* On the TV the decoders keep one line, so the strip keeps its height; a second warning or a long name is cut, its start kept. */
+body.big .board-track .board-decoders { flex-wrap: nowrap; min-width: 0; }
+body.big .board-decoder.is-warning { display: block; padding: 0 0.35em; min-block-size: calc(1.5em + 2 * var(--p-border-thin)); }
 
 /* An avatar (drivers and transponders spec §3): the driver's initials on their colour. Square, as every palace box. */
 .avatar { display: inline-grid; place-items: center; flex: none; width: 2.75rem; height: 2.75rem; background: var(--c); color: var(--p-text); border: var(--p-border-width) solid var(--p-text); font: 700 var(--p-text-lg)/1 var(--p-font); overflow: hidden; }
