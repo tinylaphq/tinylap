@@ -268,12 +268,12 @@ async function pick(which) {
  *   stream: { url: string, source: EventSource, retry?: ReturnType<typeof setTimeout> } | null, retryMs: number,
  *   last: { port: any, device: string, decoder: string | null, refused?: boolean } | null,
  *   gone: { decoder: string, kind: string, serial: boolean, back: boolean, before: any[], port: any } | null,
- *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null }} Run
+ *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null, failures: number }} Run
  * `last` is the serial port this tab last had (and its decoder once known; `refused` once it wouldn't open, so the
  * button goes to the picker); `gone` the decoder this tab had when its cable was pulled, until a decoder is on the
  * cable again: `back` when its chip has reconnected without the picker before, `before` the ports there already.
  * `stream` is the one stream the page holds (cable presence spec §2), with the timer that opens it again after the
- * server refused it; `retryMs` that timer's next wait.
+ * server refused it; `retryMs` that timer's next wait. `failures` counts the messages fail() has shown.
  */
 
 class TlBridge extends HTMLElement {
@@ -290,7 +290,7 @@ class TlBridge extends HTMLElement {
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
-      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, retryMs: STREAM_RETRY_MS };
+      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, retryMs: STREAM_RETRY_MS, failures: 0 };
     this.run = run;
     // Without Web Serial or WebHID only the live cards are on: no cable, no connect flow, the server's notice stays.
     if (!supported) {
@@ -423,7 +423,9 @@ class TlBridge extends HTMLElement {
         // The card of the decoder this tab last had (or the one Connect decoder of an empty list) tries its port first; after a reload, with no port had, the one permitted port.
         const card = /** @type {HTMLElement | null} */ (button.closest('[data-decoder]'));
         if (which === 'serial' && (!run.last || (!run.last.refused && (!card || card.dataset.decoder === run.last.decoder)))) which = 'again';
-        this.connect(run, which).then(() => { if (run === this.run) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
+        // A message shown since the click (a pairing that failed while the port was still opening, say) stays.
+        const failures = run.failures;
+        this.connect(run, which).then(() => { if (run === this.run && run.failures === failures) this.ok(run); }, (caught) => { if (run === this.run) this.fail(run, caught); });
       }
     } else if (event.type === 'submit') {
       const form = event.target;
@@ -469,6 +471,7 @@ class TlBridge extends HTMLElement {
 
   /** @param {Run} run */
   fail(run, caught) {
+    run.failures += 1;
     const error = this.$(run, '[data-bridge-error]');
     error.textContent = caught.message;
     error.hidden = false;
