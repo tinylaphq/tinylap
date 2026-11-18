@@ -81,7 +81,7 @@ function decoderCard(request, d, mayPair) {
     ? html`<p class="decoder-row-help">${mayPair ? 'Connect the cable to see and change its Wi-Fi.' : 'Connect the cable to see its Wi-Fi.'}</p>`
     : null;
   const change = mayPair ? html`<button type="button" class="btn btn-sm btn-outline" data-bridge-wifi hidden>Change Wi-Fi</button>` : null;
-  return html`<section class="card-static decoder-card" data-decoder="${d.id}">
+  return html`<section id="decoder-${d.id}" class="card-static decoder-card" data-decoder="${d.id}">
       <h2 class="h3 cut-words" data-slot="name">${d.name}</h2>
       ${status}
       <ul class="decoder-rows">
@@ -99,7 +99,9 @@ function decoderCard(request, d, mayPair) {
  * data-cards-stream otherwise; both with ?page= and #bridge's data-page,
  * this render's own id), and overlays what this tab's cable says.
  * Its hooks:
- * - section[data-decoder="<id>"]: one card; [data-slot="name"] its name,
+ * - section#decoder-<id>[data-decoder="<id>"]: one card (the empty list's
+ *   one card is #decoder-none, without data-decoder); a message replaces
+ *   only the cards that changed. [data-slot="name"] its name,
  *   [data-slot="status"] the status line (.status-success or .status-warning,
  *   one <p> per sentence).
  * - li[data-row="cable" | "wifi"]: a connection. Its .lamp carries data-state
@@ -127,7 +129,7 @@ export function decoderCards(request, rows, { mayPair = false } = {}) {
   return html`<div id="bridge-decoders">
     ${sorted.length > 0
     ? sorted.map((d) => decoderCard(request, d, mayPair))
-    : html`<section class="card-static decoder-empty">
+    : html`<section id="decoder-none" class="card-static decoder-empty">
       <p>No decoder yet. Plug one in by USB, then connect it to pair it.</p>
       <p><button type="button" class="btn btn-primary" data-bridge-connect="serial">Connect decoder</button></p>
     </section>`}

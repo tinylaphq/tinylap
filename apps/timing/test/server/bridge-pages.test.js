@@ -117,6 +117,10 @@ test('the decoder cards: every decoder of the club by name, above the connect fl
   assert.equal(sent.status, 200);
   const body = await (await app.api(cara, 'GET', `/clubs/${club.id}/bridge`, undefined, { accept: 'text/html' })).text();
   assert.deepEqual([...body.matchAll(/data-decoder="([^"]+)"/g)].map((m) => m[1]), [gate.id, zed.id], 'by name');
+  // Each card has an id, so a stream's message can replace one card at a time.
+  for (const d of [gate, zed]) assert.match(body, new RegExp(`<section id="decoder-${d.id}" class="card-static decoder-card" data-decoder="${d.id}">`));
+  const none = await (await app.api(await app.login(await app.signUp('Nell')), 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  assert.match(none, /<section id="decoder-none" class="card-static decoder-empty">/, 'and the empty card');
   const cards = body.indexOf('<div id="bridge-decoders">');
   assert.ok(cards > body.indexOf('data-bridge-error') && cards < body.indexOf('data-bridge-state="connect"'), 'under the error, above the flow');
   assert.match(body, /Laps get through over Wi-Fi\./);

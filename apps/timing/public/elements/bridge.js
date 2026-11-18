@@ -836,8 +836,8 @@ class TlBridge extends HTMLElement {
   }
 
   /**
-   * The decoder on the cable first, then the server's order (connections spec §2). Moves cards only when the order is
-   * off, keeping focus where it was. @param {Run} run @param {Element} list @param {string | null} cabled
+   * The decoder on the cable first, then the server's order (connections spec §2). Moves only the cards out of place,
+   * keeping focus where it was. @param {Run} run @param {Element} list @param {string | null} cabled
    */
   arrange(run, list, cabled) {
     const cards = /** @type {HTMLElement[]} */ ([...list.querySelectorAll(':scope > [data-decoder]')]);
@@ -846,8 +846,9 @@ class TlBridge extends HTMLElement {
     const wanted = [...cards].sort((a, b) => place(a) - place(b));
     if (wanted.every((card, i) => card === cards[i])) return;
     const focus = this.focusOf(list);
-    list.append(...wanted);
-    this.refocus(run, focus);
+    // Only the cards out of place move, so a focused card in its place keeps focus.
+    wanted.forEach((card, i) => { if (list.children[i] !== card) list.insertBefore(card, list.children[i]); });
+    if (!list.contains(document.activeElement)) this.refocus(run, focus);
   }
 
   /** The cable left this card: back to the server's copy; without one, the stream's next message brings it. @param {Run} run @param {HTMLElement} card */
@@ -940,7 +941,10 @@ class TlBridge extends HTMLElement {
 
   /**
    * Swaps in the server's #bridge-decoders from the stream (rendered and escaped by the server), keeps its cards, and
-   * paints the cable over them again. The dialog sits outside it and stays. Anything else keeps the cards as they are.
+   * paints the cable over them again. Only the cards that changed since the server's last copy are replaced (by id),
+   * so focus, and what a screen reader reads, stays on the others; focus goes back to a replaced card's same button.
+   * When the cards don't line up (no decoder, or a card without its id), the whole list is replaced. The dialog sits
+   * outside it and stays. Anything else keeps the cards as they are.
    * @param {Run} run @param {string} html
    */
   swap(run, html) {
@@ -949,12 +953,52 @@ class TlBridge extends HTMLElement {
     const fresh = template.content.firstElementChild;
     const current = this.$(run, '#bridge-decoders');
     if (!fresh || fresh.id !== 'bridge-decoders' || !current) return;
-    const next = document.importNode(fresh, true);
+    const next = /** @type {HTMLElement} */ (document.importNode(fresh, true));
+    const before = this.served;
     this.keep(run, next);
     const focus = this.focusOf(current);
-    current.replaceWith(next);
+    const replaced = this.swapCards(current, next, before);
+    if (!replaced) current.replaceWith(next);
     this.paint(run);
-    this.refocus(run, focus);
+    if (!replaced || (focus?.id && replaced.has(focus.id))) this.refocus(run, focus);
+  }
+
+  /**
+   * Replaces in `current` the cards of `next` that differ from their server's copy in `before`, adds the new ones and
+   * removes the gone ones; arrange() puts them in order. The ids of the cards replaced or added, or null (nothing
+   * changed) when the lists don't line up. @param {Element} current @param {Element} next @param {Map<string, Node>} before
+   */
+  swapCards(current, next, before) {
+    /** Each card by decoder id, or null unless every child is a card with its id. @param {Element} list */
+    const cardsOf = (list) => {
+      const cards = new Map();
+      for (const card of /** @type {HTMLElement[]} */ ([...list.children])) {
+        const id = card.dataset.decoder;
+        if (!id || card.id !== `decoder-${id}` || cards.has(id)) return null;
+        cards.set(id, card);
+      }
+      return cards;
+    };
+    const had = cardsOf(current);
+    const fresh = cardsOf(next);
+    if (!had || !fresh || had.size === 0 || fresh.size === 0) return null;
+    /** A card as the server rendered it, with its times' words left out ("2 min ago" isn't a change). @param {Node} card */
+    const canonical = (card) => {
+      const copy = /** @type {Element} */ (card.cloneNode(true));
+      for (const time of copy.querySelectorAll('time[data-when]')) time.textContent = '';
+      return copy.outerHTML;
+    };
+    const replaced = new Set();
+    for (const [id, card] of fresh) {
+      const old = had.get(id);
+      const served = before.get(id);
+      if (old && served && canonical(served) === canonical(card)) continue;
+      if (old) old.replaceWith(card);
+      else current.append(card);
+      replaced.add(id);
+    }
+    for (const [id, card] of had) if (!fresh.has(id)) card.remove();
+    return replaced;
   }
 
   /** Change Wi-Fi on the card of the decoder on this tab's cable. @param {Run} run @param {HTMLElement} button */
