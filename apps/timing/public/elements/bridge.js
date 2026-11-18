@@ -520,7 +520,7 @@ class TlBridge extends HTMLElement {
     this.announce(run, statusLine.textContent);
     if (!run.names.has(bridge.decoder) && !run.asked.has(bridge.decoder)) void this.learnName(run, bridge.decoder);
     const refused = this.$(run, '[data-bridge-refused]');
-    const told = bridge.online ? [bridge.lastError ? refusedText(bridge.dropped, bridge.lastError.message) : '', bridge.blocked ? blockedText(bridge.blocked) : ''].filter(Boolean).join(' ') : '';
+    const told = bridge.online ? [bridge.refusal ? refusedText(bridge.dropped, bridge.refusal.message) : '', bridge.blocked ? blockedText(bridge.blocked) : ''].filter(Boolean).join(' ') : '';
     refused.hidden = told === '';
     // Rewritten only when it changes, so the alert isn't announced again with every passing.
     if (refused.textContent !== told) refused.textContent = told;

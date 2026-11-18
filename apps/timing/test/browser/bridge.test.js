@@ -339,6 +339,16 @@ test('passings for another decoder removed on the server are dropped, and the re
   assert.match(await refused.innerText(), new RegExp(`^(1 passing was|\\d+ passings were) refused and (is|are) no longer waiting to send: ${escaped(GONE)}$`));
   await page.locator('[data-bridge-outbox]', { hasText: /^0$/ }).waitFor();
   assert.equal(await page.locator('[data-bridge-status]').innerText(), 'Forwarding from Here');
+  // This decoder's next passing waits, then goes, and the notice stays: what was refused is still lost.
+  await page.evaluate(() => new Promise((resolve) => {
+    const box = /** @type {HTMLElement} */ (document.querySelector('[data-bridge-outbox]'));
+    let waited = false;
+    new MutationObserver((_, observer) => {
+      if (box.textContent !== '0') waited = true;
+      else if (waited) { observer.disconnect(); resolve(null); }
+    }).observe(box, { childList: true, characterData: true, subtree: true });
+  }));
+  assert.equal(await refused.isVisible(), true);
 });
 
 test('signed out while forwarding, passings wait here and the page says to sign in again', async (t) => {
