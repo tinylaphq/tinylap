@@ -265,6 +265,23 @@ test('a drop after an outage is an answer: the bridge is online again and says t
   await bridge.close();
 });
 
+test('a refusal stays told when a later flush sends its passings', async () => {
+  const outbox = memoryOutbox();
+  await outbox.add(p(1000, 'gone'));
+  const bridge = new Bridge({ port: fakePort(null).port, outbox, retryMs: 10_000, post: async (decoder, batch) => {
+    if (decoder === 'gone') throw failing(404, 'gone');
+    return { through: batch.passings.at(-1).t };
+  } });
+  await bridge.flush();
+  await outbox.add(p(2000));
+  await bridge.flush();
+  assert.equal(await outbox.count(), 0);
+  assert.equal(bridge.online, true);
+  assert.equal(bridge.refusal?.message, 'gone');
+  assert.equal(bridge.dropped, 1);
+  await bridge.close();
+});
+
 test('a decoder that reboots with the port open is asked again who it is', async () => {
   const sim = createSimulator({ cars: [], decoder: 'dec_1' });
   const { port, send } = fakePort(sim);

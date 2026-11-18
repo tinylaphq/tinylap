@@ -159,7 +159,9 @@ export class Bridge extends EventTarget {
     this.boot = null;
     this.online = true;
     this.lastError = null;
-    /** How many passings the last refusal (lastError) dropped from the outbox. */
+    /** The last answer that refused passings for good. It stays when later passings go, so the page can still tell it. */
+    this.refusal = null;
+    /** How many passings that refusal dropped from the outbox. */
     this.dropped = 0;
     /** How many passings the last flush held back: for a club this sign-in has no access to (a 403). */
     this.blocked = 0;
@@ -761,7 +763,7 @@ export class Bridge extends EventTarget {
         }, { lines, alone });
         this.#forgetLines(sentLines);
         this.blocked = blocked;
-        if (refusal) Object.assign(this, { lastError: refusal, dropped });
+        if (refusal) Object.assign(this, { lastError: refusal, refusal, dropped });
         this.#checkKnown(missing);
       } catch (error) {
         this.#forgetLines(/** @type {any} */ (error)?.sentLines ?? []);
