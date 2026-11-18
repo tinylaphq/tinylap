@@ -1486,6 +1486,74 @@ test('signed out while forwarding: one sign-in message at a time', async (t) => 
   assert.deepEqual(errors.filter((e) => !/EventSource|401/i.test(e)), []);
 });
 
+// A reload: the page that leaves says so in a cookie its reload's request carries, so the new page counts the old
+// page's cable as its own from the first render on (#84).
+
+/** What `id`'s Cable row says, every 20 ms from the page's first parse on, as window.__said (an init script). */
+const SAMPLE_CABLE = (id) => {
+  window.__said = new Set();
+  const sample = () => window.__said.add(document.querySelector(`[data-decoder="${id}"] [data-row="cable"] [data-slot="state"]`)?.textContent);
+  document.addEventListener('DOMContentLoaded', () => {
+    sample();
+    setInterval(sample, 20);
+  });
+};
+
+/** A cabled page, with the old page's cable stream still counted (as behind a proxy) during and after its reload. */
+async function reloading(t, { init = [] } = {}) {
+  const made = await cabledPage(t, { init });
+  const { page, who, board } = made;
+  const pageId = await page.locator('#bridge').getAttribute('data-page');
+  const stale = events(await app.api(who, 'GET', `/personal/decoders/${board.id}/cable?page=${pageId}`, undefined, { accept: 'text/event-stream' }), { raw: true });
+  await next(stale, 'bridge');
+  t.after(() => stale.return());
+  await page.addInitScript(SAMPLE_CABLE, board.id);
+  return { ...made, pageId };
+}
+
+test('after a reload, this tab\'s decoder never reads Connected on another laptop', async (t) => {
+  const { page, errors, board, row, pageId } = await reloading(t);
+  // Forwarding, so the page asks before it goes.
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.reload();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Not connected$/ }).waitFor({ timeout: 5000 });
+  assert.equal(await page.locator('#bridge').getAttribute('data-after'), pageId);
+  await page.waitForTimeout(1500);
+  const said = await page.evaluate(() => [...window.__said]);
+  assert.ok(!said.includes('Connected on another laptop'), JSON.stringify(said));
+  assert.equal(await page.evaluate(() => document.cookie.includes('tl-bridge-leaving')), false, 'read once, and cleared');
+  assert.deepEqual(errors, []);
+});
+
+test('after a reload without the leaving page\'s cookie, its stale hold still reads as another laptop', async (t) => {
+  // The cookie never gets written: that is what tells the two pages apart.
+  const NO_LEAVING = () => {
+    const real = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+    Object.defineProperty(document, 'cookie', { configurable: true, get: () => real.get.call(document), set: (v) => { if (!String(v).startsWith('tl-bridge-leaving=')) real.set.call(document, v); } });
+  };
+  const { page, errors, board, row } = await reloading(t, { init: [NO_LEAVING] });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.reload();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected on another laptop$/ }).waitFor({ timeout: 5000 });
+  assert.equal(await page.locator('#bridge').getAttribute('data-after'), null);
+  assert.deepEqual(errors, []);
+});
+
+test('a reload the member cancels leaves the cookie to the next render only', async (t) => {
+  const { page, errors, board, row, pageId } = await reloading(t);
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await page.reload({ timeout: 2000 }).catch(() => {});
+  // Still the same page, still forwarding.
+  assert.equal(await page.locator('#bridge').getAttribute('data-page'), pageId);
+  assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Connected');
+  // The next render in this browser reads it and clears it; the one after counts this page as another.
+  const render = () => page.evaluate(async () => (await fetch(location.pathname, { headers: { accept: 'text/html' } })).text());
+  assert.doesNotMatch(await render(), /Connected on another laptop/, 'the leftover: that render takes this page for its own');
+  assert.equal(await page.evaluate(() => document.cookie.includes('tl-bridge-leaving')), false, 'cleared by the render that read it');
+  assert.match(await render(), /Connected on another laptop/);
+  assert.deepEqual(errors, []);
+});
+
 // What the page says to screen readers is the server's (#84): the server renders one hidden line per state.
 
 /** Every text [data-bridge-live] has, from the page's start on, as window.__said. */

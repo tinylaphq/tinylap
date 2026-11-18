@@ -441,6 +441,19 @@ test('holders are pages: one page\'s dead connection and its reconnect count onc
   assert.equal(count(), 2);
 });
 
+test('a reloaded page is two pages, the one leaving and the new one: both leave out their holds, a third page\'s counts', () => {
+  const { engine } = withDecoder();
+  const old = engine.holdCable(W, 'd1', 'p1');
+  const fresh = engine.holdCable(W, 'd1', 'p2');
+  assert.equal(engine.connectionsOf(W, { pages: ['p1', 'p2'] })[0].cable.state, 'none');
+  assert.equal(engine.connectionsOf(W, { pages: ['p2'] })[0].cable.state, 'other', 'the old page\'s hold, for the new page alone');
+  const third = engine.holdCable(W, 'd1', 'p3');
+  assert.equal(engine.connectionsOf(W, { pages: ['p1', 'p2'] })[0].cable.state, 'other', 'another tab\'s');
+  third();
+  old();
+  fresh();
+});
+
 test('a quiet from before the cable session doesn\'t make an unplugged decoder idle; one sent during it does', () => {
   const { engine, clock } = withDecoder();
   beat(engine, 'net', { quiet: true });

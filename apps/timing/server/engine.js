@@ -289,16 +289,17 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
 
   /**
    * A decoder's connections as the Bridge page and the bridge see them (connections spec §3): cable `other` while it has a
-   * holding page other than `page`, the asking Bridge page, which paints its own cable (cable presence spec §2).
-   * @param {string} workspaceId @param {{ page?: string | null }} [options]
+   * holding page other than the asking Bridge page (`page`), which paints its own cable (cable presence spec §2); `pages`
+   * names more than one, for a reload: the page that is leaving, and the new one.
+   * @param {string} workspaceId @param {{ page?: string | null, pages?: string[] }} [options]
    */
-  function connectionsOf(workspaceId, { page = null } = {}) {
+  function connectionsOf(workspaceId, { page = null, pages: mine = page === null ? [] : [page] } = {}) {
     const t = now();
     const offline = new Set(offlineOf(workspaceId, t).map((d) => d.id));
     return store.decoders(workspaceId).map((d) => {
       const h = heard.get(d.id);
       const pages = cableHolders.get(d.id);
-      const others = (pages?.size ?? 0) - (page !== null && pages?.has(page) ? 1 : 0);
+      const others = [...(pages?.keys() ?? [])].filter((p) => !mine.includes(p)).length;
       const netAt = h?.netAt ?? null;
       const state = netAt !== null && t - netAt < OFFLINE_AFTER_MS ? 'reporting' : h?.quiet ? 'idle' : offline.has(d.id) ? 'offline' : 'unknown';
       return {
