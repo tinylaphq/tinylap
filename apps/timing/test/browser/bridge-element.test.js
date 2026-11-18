@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { startTiming } from '../server/helpers.js';
 import { events, next } from '../server/sse.js';
 import { openBrowser, pageAs, postPassings } from './browser.js';
+import { SILENT_SERIAL } from './decoders-helpers.js';
 
 let app;
 let browser;
@@ -1208,6 +1209,77 @@ test('a cable stream the server refuses (a restart) is opened again, and the dec
   assert.deepEqual(errors.filter((e) => !/503|Service Unavailable|EventSource/i.test(e)), []);
 });
 
+/** When each request for a path that `match` takes was made, in ms, from now on. @param {(path: string) => boolean} match */
+function requestTimes(page, match) {
+  const times = [];
+  page.on('request', (r) => { if (match(new URL(r.url()).pathname)) times.push(Date.now()); });
+  return times;
+}
+
+/** Waits up to `ms` for `check()`. */
+async function waitUntil(check, ms, why) {
+  for (const end = Date.now() + ms; !check();) {
+    assert.ok(Date.now() < end, why);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+test('a refused stream isn\'t reopened before its wait, by a paint', async (t) => {
+  const { page, errors, board, row } = await cabledPage(t);
+  // After %TLNET came: nothing on the page paints again by itself from here.
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Not set up' }).waitFor();
+  const cable = `/personal/decoders/${board.id}/cable`;
+  const asked = requestTimes(page, (path) => path === cable);
+  await page.route((url) => url.pathname === cable, (route) => route.fulfill({ status: 503, contentType: 'text/html', body: '<p>Restarting</p>' }));
+  // The stream is refused, as EventSource sees a refusal: closed, with an error.
+  const refused = Date.now();
+  await page.evaluate(() => {
+    const { source } = document.querySelector('tl-bridge').run.stream;
+    source.close();
+    source.dispatchEvent(new Event('error'));
+  });
+  // A paint meanwhile (the decoder's %TLNET, say) leaves it waiting.
+  await page.evaluate(() => document.querySelector('tl-bridge').run.bridge.dispatchEvent(new Event('net')));
+  await page.waitForTimeout(500);
+  assert.deepEqual(asked, [], 'not reopened by the paint');
+  await waitUntil(() => asked.length >= 1, 3000, 'reopened after its wait');
+  assert.ok(asked[0] - refused >= 900, `after ${asked[0] - refused} ms`);
+  // Refused again: the next wait is longer, whatever paints.
+  await page.evaluate(() => document.querySelector('tl-bridge').run.bridge.dispatchEvent(new Event('net')));
+  await waitUntil(() => asked.length >= 2, 5000, 'reopened again');
+  assert.ok(asked[1] - asked[0] >= 1500, `then after ${asked[1] - asked[0]} ms`);
+  assert.deepEqual(errors.filter((e) => !/503|Service Unavailable|EventSource/i.test(e)), []);
+});
+
+test('a refused cards stream\'s wait doesn\'t carry over to the cable stream', async (t) => {
+  const { page, errors, board, card, row, ws } = await cabledPage(t, { connect: false });
+  // The cards stream is refused every time (from the page's load on), so its wait is up to 8 s.
+  const cards = requestTimes(page, (path) => path === '/personal/bridge/events');
+  await page.route((url) => url.pathname === '/personal/bridge/events', (route) => route.fulfill({ status: 503, contentType: 'text/html', body: '<p>Restarting</p>' }));
+  await page.evaluate(() => {
+    const tl = document.querySelector('tl-bridge');
+    tl.unfollow(tl.run);
+    tl.follow(tl.run);
+  });
+  await waitUntil(() => cards.length >= 3, 10_000, 'the cards stream refused three times');
+  // The cable stream is refused once, and opened again after its own first wait.
+  const cable = `/personal/decoders/${board.id}/cable`;
+  const asked = requestTimes(page, (path) => path === cable);
+  let refused = 0;
+  await page.route((url) => url.pathname === cable, (route) => {
+    if (refused > 0) return route.continue();
+    refused += 1;
+    return route.fulfill({ status: 503, contentType: 'text/html', body: '<p>Restarting</p>' });
+  });
+  await card(board).getByRole('button', { name: 'Connect decoder' }).click();
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  await waitUntil(() => asked.length >= 2, 7000, 'the cable stream opened again');
+  // After its own first wait (1 s), not the cards stream's 8 s, and not at once by a paint.
+  assert.ok(asked[1] - asked[0] >= 900 && asked[1] - asked[0] < 5000, `after ${asked[1] - asked[0]} ms`);
+  await waitUntil(() => app.engine.connectionsOf(ws)[0].cable.state === 'other', 5000, 'the hold comes back');
+  assert.deepEqual(errors.filter((e) => !/503|Service Unavailable|EventSource/i.test(e)), []);
+});
+
 test('this tab\'s own card never reads Connected on another laptop after an unplug, even with its old stream still counted', async (t) => {
   const { page, errors, board, row, who, ws } = await cabledPage(t);
   const onCable = () => app.engine.connectionsOf(ws)[0].cable.state;
@@ -1302,4 +1374,34 @@ test('without Web Serial or WebHID, the cards update live over the stream, and t
   assert.equal(await bare.page.getByText(/needs Chrome or Edge/).isVisible(), true);
   assert.deepEqual(errors, []);
   assert.deepEqual(bare.errors, []);
+});
+
+// What the page says to screen readers is the server's (#84): the server renders one hidden line per state.
+
+/** Every text [data-bridge-live] has, from the page's start on, as window.__said. */
+const RECORD_LIVE = () => {
+  window.__said = [];
+  new MutationObserver(() => {
+    const text = document.querySelector('[data-bridge-live]')?.textContent;
+    if (text && window.__said.at(-1) !== text) window.__said.push(text);
+  }).observe(document, { subtree: true, childList: true, characterData: true });
+};
+
+test('every state is announced in the server\'s words', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(SILENT_SERIAL);
+  await page.addInitScript(RECORD_LIVE);
+  // The server's words, changed on the way: only the page can have them.
+  await page.route((url) => url.pathname === '/personal/bridge', async (route) => {
+    const res = await route.fetch();
+    const body = (await res.text()).replace(/(data-bridge-say="(connect|connecting|listening)">)[^<]*/g, (_, start, state) => `${start}Server says ${state}.`);
+    await route.fulfill({ response: res, body });
+  });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.getByText('Connected, but nothing has come from this device yet.').waitFor({ timeout: 20_000 });
+  const said = await page.evaluate(() => window.__said);
+  for (const state of ['connect', 'connecting', 'listening']) assert.ok(said.includes(`Server says ${state}.`), `${state}: ${JSON.stringify(said)}`);
+  assert.deepEqual(errors, []);
 });

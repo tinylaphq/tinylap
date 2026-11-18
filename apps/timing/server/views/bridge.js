@@ -4,7 +4,9 @@
 
 // The bridge (spec §6.5): the server renders every state, for both pickers;
 // tl-bridge shows the one that applies. Without JavaScript, or without Web
-// Serial and WebHID, the page says what the bridge needs.
+// Serial and WebHID, the page says what the bridge needs. What tl-bridge
+// announces for a state (in [data-bridge-live]) is that state's hidden
+// [data-bridge-say="<state>"] line, and for an unplug "disconnected"'s.
 import { createHash, randomBytes } from 'node:crypto';
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { formatWhen } from '../../public/format.js';
@@ -243,6 +245,11 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
   <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}">
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
+    <p hidden data-bridge-say="connect">Ready to connect.</p>
+    <p hidden data-bridge-say="connecting">Talking to the decoder.</p>
+    <p hidden data-bridge-say="listening">Connected. Nothing from the device yet.</p>
+    <p hidden data-bridge-say="unpaired">The decoder is not paired yet.</p>
+    <p hidden data-bridge-say="choose">Choose which decoder this is.</p>
     <p hidden data-bridge-say="disconnected">Decoder disconnected.</p>
     <p class="status status-warning" data-bridge-earlier hidden></p>
     <template data-bridge-sign-in><a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}">Sign in again</a> to send them.</template>
