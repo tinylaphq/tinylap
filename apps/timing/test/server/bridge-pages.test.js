@@ -36,6 +36,10 @@ test('the bridge page: every state rendered, the explanation shown, the import m
     choose: 'Choose which decoder this is.',
   };
   for (const [state, words] of Object.entries(said)) assert.match(body, new RegExp(`<p hidden data-bridge-say="${state}">${exact(words)}</p>`), state);
+  // Signed out, the cards stop updating: the page's notice, hidden until then. Its link opens a new tab, so the port stays open.
+  const signIn = '<a href="/auth/login?returnTo=%2Fpersonal%2Fbridge" target="_blank" rel="noopener">Sign in again</a>';
+  assert.match(body, new RegExp(exact(`<p class="status status-warning" data-bridge-signed-out hidden>You're signed out, so the decoders here no longer update. ${signIn}.</p>`)));
+  assert.match(body, new RegExp(exact(`<template data-bridge-sign-in>${signIn} to send them.</template>`)));
   for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
   assert.doesNotMatch(body, /not-tinylap/);
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
@@ -224,9 +228,16 @@ test('the cable stream: another club\'s decoder or an unknown one is not found; 
   const stranger = await app.login(await app.signUp('Finn'));
   assert.equal((await app.api(stranger, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE)).status, 404);
   assert.equal((await app.api(stranger, 'GET', `${base}/bridge/events`, undefined, SSE)).status, 404);
-  const out = await app.api(null, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, SSE);
-  assert.equal(out.status, 303);
-  assert.match(out.headers.get('location'), /^\/auth\/login\?/);
+  // Signed out, a stream is told so, in the stream (EventSource can't see a redirect), and ends; a page load still goes to sign in.
+  for (const path of [`${base}/decoders/${gate.id}/cable`, `${base}/bridge/events`]) {
+    const out = await app.api(null, 'GET', path, undefined, SSE);
+    assert.equal(out.status, 200, path);
+    assert.match(out.headers.get('content-type'), /^text\/event-stream/);
+    assert.equal(await out.text(), 'retry: 3600000\n\nevent: signed-out\ndata:\n\n', 'one event, with an empty data line, then the end');
+    const load = await app.api(null, 'GET', path, undefined, { accept: 'text/html' });
+    assert.equal(load.status, 303, path);
+    assert.match(load.headers.get('location'), /^\/auth\/login\?/);
+  }
   assert.equal(cableOf(), 'none', 'none of them counts');
   const get = await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { accept: 'text/html' });
   assert.equal(get.status, 303);

@@ -7,6 +7,8 @@
 // Serial and WebHID, the page says what the bridge needs. What tl-bridge
 // announces for a state (in [data-bridge-live]) is that state's hidden
 // [data-bridge-say="<state>"] line, and for an unplug "disconnected"'s.
+// [data-bridge-signed-out] (hidden) is shown once a stream says the page is
+// signed out, except while the ready panel says so itself.
 import { createHash, randomBytes } from 'node:crypto';
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { formatWhen } from '../../public/format.js';
@@ -236,6 +238,8 @@ export function wifiDialog() {
 export function bridgePage(request, importMap, decoders = [], known = decoders.map((d) => d.id), { connections = [], mayPair = false } = {}) {
   const base = request.space.base;
   const where = request.space.kind === 'personal' ? 'your personal space' : 'this club';
+  // In a new tab: leaving this one would close the decoder's port while it forwards.
+  const signIn = html`<a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}" target="_blank" rel="noopener">Sign in again</a>`;
   return layout(request, {
     title: 'Bridge',
     screen: 'bridge',
@@ -254,7 +258,8 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     <p hidden data-bridge-say="choose">Choose which decoder this is.</p>
     <p hidden data-bridge-say="disconnected">Decoder disconnected.</p>
     <p class="status status-warning" data-bridge-earlier hidden></p>
-    <template data-bridge-sign-in><a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}">Sign in again</a> to send them.</template>
+    <p class="status status-warning" data-bridge-signed-out hidden>You're signed out, so the decoders here no longer update. ${signIn}.</p>
+    <template data-bridge-sign-in>${signIn} to send them.</template>
     <section data-bridge-state="unsupported" class="card-static space-md">
       <p>The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID.</p>
       <p>Timing still works without it: the decoder can send its passings over Wi-Fi (<a href="${base}/setup">Pair over Wi-Fi only</a> on Setup).</p>

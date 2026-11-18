@@ -1426,6 +1426,66 @@ test('a change to the focused card replaces it, and focus goes to its new copy',
   assert.deepEqual(errors, []);
 });
 
+// Signed out, a Bridge page's stream is told so by the server and stops (#84), and the page says to sign in again.
+
+/** Signs `who` out through the app, as Sign out does elsewhere: that ends the session's open streams. */
+async function signOut(who) {
+  const res = await app.form(who, '/auth/logout', {});
+  assert.ok(res.status < 400, `signed out: ${res.status}`);
+}
+
+test('signed out, the cards stream stops and the page says to sign in again', async (t) => {
+  const { page, errors, who, context } = await cabledPage(t, { connect: false });
+  const asked = requestTimes(page, (path) => path === '/personal/bridge/events');
+  await signOut(who);
+  const notice = page.locator('[data-bridge-signed-out]');
+  await notice.waitFor({ timeout: 10_000 });
+  assert.equal(await notice.innerText(), "You're signed out, so the decoders here no longer update. Sign in again.");
+  const link = notice.getByRole('link', { name: 'Sign in again' });
+  assert.equal(await link.getAttribute('href'), '/auth/login?returnTo=%2Fpersonal%2Fbridge');
+  assert.equal(await link.getAttribute('target'), '_blank', 'signing in leaves this tab, and its port, as they are');
+  assert.equal(await page.locator('[data-bridge-live]').textContent(), await notice.textContent(), 'and it is said');
+  // No more tries while the page stays as it is.
+  const seen = asked.length;
+  await page.waitForTimeout(5000);
+  assert.equal(asked.length, seen, 'no stream request since');
+  // Back to the page, still signed out: one try, and the server says so again.
+  await page.evaluate(() => dispatchEvent(new Event('focus')));
+  await waitUntil(() => asked.length === seen + 1, 3000, 'one try on the way back');
+  await page.waitForTimeout(1500);
+  assert.equal(asked.length, seen + 1, 'only one');
+  assert.equal(await notice.isVisible(), true);
+  // Signed in again (in another tab): back to the page, the cards come again and the notice goes.
+  const again = await app.login(who.user);
+  await context.addCookies([...again.jar.cookies].map(([name, value]) => ({ name, value, domain: new URL(app.base).hostname, path: '/', secure: true, httpOnly: true, sameSite: 'Lax' })));
+  await page.evaluate(() => dispatchEvent(new Event('focus')));
+  await notice.waitFor({ state: 'hidden', timeout: 5000 });
+  assert.deepEqual(errors.filter((e) => !/EventSource/i.test(e)), []);
+});
+
+test('signed out while forwarding: one sign-in message at a time', async (t) => {
+  const { page, errors, who, board, row, context } = await cabledPage(t);
+  await signOut(who);
+  // The decoder's next lap is refused: the ready panel says to sign in again, so the cards' notice stays hidden.
+  await page.locator('[data-bridge-status]', { hasText: "You're signed out." }).waitFor({ timeout: 20_000 });
+  await page.waitForFunction(() => document.querySelector('tl-bridge').run.signedOut === true, null, { timeout: 10_000 });
+  assert.equal(await page.locator('[data-bridge-signed-out]').isVisible(), false);
+  assert.equal(await page.locator('[data-bridge-status] a').getAttribute('target'), '_blank');
+  // Signed in again in another tab, without coming back to this one: the laps get through, and so does the stream.
+  const again = await app.login(who.user);
+  await context.addCookies([...again.jar.cookies].map(([name, value]) => ({ name, value, domain: new URL(app.base).hostname, path: '/', secure: true, httpOnly: true, sameSite: 'Lax' })));
+  await page.locator('[data-bridge-status]', { hasText: /^Forwarding from/ }).waitFor({ timeout: 20_000 });
+  await page.waitForFunction(() => document.querySelector('tl-bridge').run.stopped === false && document.querySelector('tl-bridge').run.stream !== null, null, { timeout: 5000 });
+  assert.equal(await page.locator('[data-bridge-signed-out]').isVisible(), false, 'no wrong "signed out"');
+  // Signed out again, and unplugged: the ready panel goes, and the cards' notice shows.
+  await signOut(again);
+  await page.locator('[data-bridge-status]', { hasText: "You're signed out." }).waitFor({ timeout: 20_000 });
+  await page.evaluate(() => window.__port.unplug());
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^(Not connected|Connected on another laptop)$/ }).waitFor({ timeout: 8000 });
+  await page.locator('[data-bridge-signed-out]').waitFor({ timeout: 5000 });
+  assert.deepEqual(errors.filter((e) => !/EventSource|401/i.test(e)), []);
+});
+
 // What the page says to screen readers is the server's (#84): the server renders one hidden line per state.
 
 /** Every text [data-bridge-live] has, from the page's start on, as window.__said. */

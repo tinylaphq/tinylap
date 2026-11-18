@@ -260,12 +260,15 @@ async function pick(which) {
  *   stream: { url: string, source: EventSource, wait: number, retry?: ReturnType<typeof setTimeout> } | null,
  *   last: { port: any, device: string, decoder: string | null, refused?: boolean } | null,
  *   gone: { decoder: string, kind: string, serial: boolean, back: boolean, before: any[], port: any } | null,
- *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null, failures: number }} Run
+ *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null, failures: number,
+ *   signedOut?: boolean, stopped?: boolean }} Run
  * `last` is the serial port this tab last had (and its decoder once known; `refused` once it wouldn't open, so the
  * button goes to the picker); `gone` the decoder this tab had when its cable was pulled, until a decoder is on the
  * cable again: `back` when its chip has reconnected without the picker before, `before` the ports there already.
  * `stream` is the one stream the page holds (cable presence spec §2), with the timer that opens it again after the
  * server refused it, and `wait`, that timer's next wait. `failures` counts the messages fail() has shown.
+ * `signedOut` once a stream said this page is signed out, until a stream's message comes; `stopped` while no stream
+ * is opened because of it, until the page is shown or focused again (then it tries once).
  */
 
 class TlBridge extends HTMLElement {
@@ -287,8 +290,7 @@ class TlBridge extends HTMLElement {
     // Without Web Serial or WebHID only the live cards are on: no cable, no connect flow, the server's notice stays.
     if (!supported) {
       this.keep(run);
-      addEventListener('pagehide', this);
-      addEventListener('pageshow', this);
+      this.listenForReturn();
       this.follow(run);
       return;
     }
@@ -316,8 +318,7 @@ class TlBridge extends HTMLElement {
     this.addEventListener('submit', this);
     this.addEventListener('input', this);
     addEventListener('beforeunload', this);
-    addEventListener('pagehide', this);
-    addEventListener('pageshow', this);
+    this.listenForReturn();
     run.onPort = (event) => { if (run === this.run) void this.portBack(run, event); };
     /** @type {any} */ (navigator).serial?.addEventListener?.('connect', run.onPort);
     void this.sendEarlier(run).catch(() => {});
@@ -333,12 +334,39 @@ class TlBridge extends HTMLElement {
     removeEventListener('beforeunload', this);
     removeEventListener('pagehide', this);
     removeEventListener('pageshow', this);
+    removeEventListener('focus', this);
+    document.removeEventListener('visibilitychange', this);
     if (run.onPort) /** @type {any} */ (navigator).serial?.removeEventListener?.('connect', run.onPort);
     this.unfollow(run);
     run.wizard?.stop();
     const bridge = run.bridge;
     run.bridge = null;
     void bridge?.close();
+  }
+
+  /** The page going and coming back: the stream closes, and opens again (after a sign-out, once). */
+  listenForReturn() {
+    addEventListener('pagehide', this);
+    addEventListener('pageshow', this);
+    addEventListener('focus', this);
+    document.addEventListener('visibilitychange', this);
+  }
+
+  /**
+   * The cards' "You're signed out" notice, shown once a stream said so, and said; hidden while the ready panel or the
+   * note about earlier passings says to sign in again itself, so there is one sign-in message at a time. @param {Run} run
+   */
+  signedOutNotice(run) {
+    const notice = this.$(run, '[data-bridge-signed-out]');
+    if (!notice) return;
+    const bridge = run.bridge;
+    const panel = bridge?.state === 'ready' && !bridge.online && needsSignIn(bridge.lastError);
+    // The note about passings from earlier says to sign in again itself, with its link.
+    const earlier = /** @type {HTMLElement | null} */ (this.$(run, '[data-bridge-earlier]'));
+    const hidden = !run.signedOut || panel || Boolean(earlier && !earlier.hidden && earlier.querySelector('a'));
+    if (notice.hidden === hidden) return;
+    notice.hidden = hidden;
+    if (!hidden) this.announce(run, notice.textContent);
   }
 
   /** Puts back what an earlier run wrote, as the server rendered it; a first start changes nothing. @param {Run} run */
@@ -386,9 +414,21 @@ class TlBridge extends HTMLElement {
       if (this.run) this.unfollow(this.run);
       return;
     }
-    // Back from the back/forward cache: the stream it needs again.
+    // Back from the back/forward cache: the stream it needs again, and the server says again if it is signed out.
     if (event.type === 'pageshow') {
-      if (this.run && /** @type {PageTransitionEvent} */ (event).persisted) this.follow(this.run);
+      if (this.run && /** @type {PageTransitionEvent} */ (event).persisted) {
+        Object.assign(this.run, { signedOut: false, stopped: false });
+        this.signedOutNotice(this.run);
+        this.follow(this.run);
+      }
+      return;
+    }
+    // Back on the page after a sign-out (signing in, say, in the tab its link opened): one try.
+    if (event.type === 'focus' || event.type === 'visibilitychange') {
+      if (this.run?.stopped && document.visibilityState === 'visible') {
+        this.run.stopped = false;
+        this.follow(this.run);
+      }
       return;
     }
     const run = this.run;
@@ -484,6 +524,7 @@ class TlBridge extends HTMLElement {
     else this.announce(run, this.$(run, `[data-bridge-say="${CSS.escape(state)}"]`)?.textContent ?? '');
     // After the state's own text, so unreadable data is what screen readers hear.
     if (state === 'listening') this.unreadable(run);
+    this.signedOutNotice(run);
   }
 
   /** In listening: say so, and announce it, when data comes but fails its checksum (R8, spec §4.2). @param {Run} run */
@@ -509,6 +550,7 @@ class TlBridge extends HTMLElement {
       statusLine.textContent = bridge.online ? `Forwarding from ${this.nameOf(run, bridge.decoder)}` : `Offline: passings wait here. ${bridge.lastError?.message ?? ''}`.trim();
     }
     this.announce(run, statusLine.textContent);
+    this.signedOutNotice(run);
     if (!run.names.has(bridge.decoder) && !run.asked.has(bridge.decoder)) void this.learnName(run, bridge.decoder);
     const refused = this.$(run, '[data-bridge-refused]');
     const told = bridge.online ? [bridge.refusal ? refusedText(bridge.dropped, bridge.refusal.message) : '', bridge.blocked ? blockedText(bridge.blocked) : ''].filter(Boolean).join(' ') : '';
@@ -704,6 +746,12 @@ class TlBridge extends HTMLElement {
       if (run.bridge === next && next.state === 'listening') this.unreadable(run);
     });
     for (const type of ['outbox', 'online']) next.addEventListener(type, () => { if (run.bridge === next) this.update(run); });
+    // Its passings got through again after a sign-out (signed in in another tab, say): the cards' stream, once.
+    next.addEventListener('online', () => {
+      if (run !== this.run || run.bridge !== next || !next.online || !run.stopped) return;
+      run.stopped = false;
+      this.follow(run);
+    });
     next.addEventListener('net', () => { if (run.bridge === next) this.paint(run); });
     next.addEventListener('passing', (event) => {
       run.preview.unshift(/** @type {CustomEvent} */ (event).detail);
@@ -895,13 +943,15 @@ class TlBridge extends HTMLElement {
    * server should count it on a cable; otherwise the cards stream. Both carry this render's page id (#bridge's
    * data-page), so the server leaves this page's own cable out of its cards. A dropped stream reconnects by itself
    * (EventSource); one the server refused, which EventSource gives up on, is opened again after STREAM_RETRY_MS,
-   * doubling to STREAM_RETRY_MAX_MS until a message comes, and not before, whatever paints meanwhile. The wait is the
+   * doubling to STREAM_RETRY_MAX_MS until a message comes, and not before, whatever paints meanwhile. Signed out, the
+   * server sends signed-out instead: the stream closes, and none opens until the page is shown or focused again. The wait is the
    * stream's: a reopen of the same address keeps it; another address starts again from STREAM_RETRY_MS. The
    * addresses are #bridge's.
    * @param {Run} run
    */
   follow(run) {
-    if (!('EventSource' in window)) return;
+    // Signed out, the server said: nothing more until the page comes back.
+    if (!('EventSource' in window) || run.stopped) return;
     const bridge = run.bridge;
     const id = bridge?.decoder && bridge.state === 'ready' ? bridge.decoder : null;
     const address = id ? run.root.dataset.cableStream?.replace('{id}', encodeURIComponent(id)) : run.root.dataset.cardsStream;
@@ -919,7 +969,17 @@ class TlBridge extends HTMLElement {
     source.addEventListener('bridge', (event) => {
       if (run !== this.run || run.stream !== stream) return;
       stream.wait = STREAM_RETRY_MS;
+      // Signed in again.
+      run.signedOut = false;
+      this.signedOutNotice(run);
       this.swap(run, /** @type {MessageEvent} */ (event).data);
+    });
+    // Signed out (the server's answer, which a redirect can't give EventSource): it stops, and the page says so.
+    source.addEventListener('signed-out', () => {
+      if (run !== this.run || run.stream !== stream) return;
+      this.unfollow(run);
+      Object.assign(run, { signedOut: true, stopped: true });
+      this.signedOutNotice(run);
     });
     source.addEventListener('error', () => {
       if (run !== this.run || run.stream !== stream || source.readyState !== EventSource.CLOSED || stream.retry) return;
@@ -1024,6 +1084,7 @@ class TlBridge extends HTMLElement {
       note.replaceChildren(...this.spaced([...waiting, ...more]));
       note.hidden = note.textContent === '';
       if (!note.hidden) this.announce(run, note.textContent);
+      this.signedOutNotice(run);
     };
     let count = await outbox.count();
     if (count === 0) return;
