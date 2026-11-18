@@ -43,6 +43,9 @@ test('connect, pair and forward with the simulated decoder', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
   simulating(t, 'tinylap,fast');
+  // A preview row comes as a passing is stored here, before its post: the server has it once a post of passings is answered.
+  const sent = page.waitForResponse((res) => res.request().method() === 'POST' && new URL(res.url()).pathname.endsWith('/passings')
+    && res.ok() && res.request().postDataJSON().passings.length > 0, { timeout: 20_000 });
   await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
@@ -50,6 +53,7 @@ test('connect, pair and forward with the simulated decoder', async (t) => {
   await page.getByRole('button', { name: 'Pair' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   await page.locator('[data-bridge-preview] li').first().waitFor({ timeout: 20_000 });
+  await sent;
   assert.equal(app.store.decoders(personal)[0].name, 'Gate');
   assert.ok(app.engine.snapshot(personal).crossings.length > 0);
   // The decoder's own lines reach the server's log: a pass line with each passing, and a stat line every 10 s.
