@@ -359,7 +359,7 @@ test('signed out while forwarding, passings wait here and the page says to sign 
   const cookies = await context.cookies();
   await context.clearCookies();
   const status = page.locator('[data-bridge-status]');
-  await status.filter({ hasText: "Passings wait here. You're signed out. Sign in again to send them." }).waitFor({ timeout: 20_000 });
+  await status.filter({ hasText: "Passings wait here. You're signed out. Sign in again (opens a new tab) to send them." }).waitFor({ timeout: 20_000 });
   assert.equal(await status.getByRole('link', { name: 'Sign in again' }).getAttribute('href'), '/auth/login?returnTo=%2Fpersonal%2Fbridge');
   assert.equal(await page.locator('[data-bridge-refused]').isVisible(), false, 'nothing was refused for good');
   await page.locator('[data-bridge-outbox]', { hasText: /^[1-9]\d*$/ }).waitFor({ timeout: 20_000 });
@@ -402,7 +402,7 @@ test('earlier passings, signed out: they wait, and the note says to sign in agai
   await page.route('**/decoders/*/passings', (route) => route.fulfill({ status: 401, contentType: 'application/problem+json', body: JSON.stringify({ status: 401, detail: 'You are not signed in. Sign in to forward passings.' }) }));
   await page.reload();
   const note = page.locator('[data-bridge-earlier]');
-  await note.filter({ hasText: "1 passing from earlier is waiting in this browser, from any club or personal space. You're signed out. Sign in again to send them." }).waitFor();
+  await note.filter({ hasText: "1 passing from earlier is waiting in this browser, from any club or personal space. You're signed out. Sign in again (opens a new tab) to send them." }).waitFor();
   assert.equal(await note.getByRole('link', { name: 'Sign in again' }).getAttribute('href'), '/auth/login?returnTo=%2Fpersonal%2Fbridge');
   assert.equal(await page.evaluate(async () => (await (await import('/public/outbox.js')).openOutbox()).count()), 1);
 });

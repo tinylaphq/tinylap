@@ -242,7 +242,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
   const base = request.space.base;
   const where = request.space.kind === 'personal' ? 'your personal space' : 'this club';
   // In a new tab: leaving this one would close the decoder's port while it forwards.
-  const signIn = html`<a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}" target="_blank" rel="noopener">Sign in again</a>`;
+  const signIn = html`<a href="/auth/login?${new URLSearchParams({ returnTo: `${base}/bridge` })}" target="_blank" rel="noopener">Sign in again<span class="visually-hidden"> (opens a new tab)</span></a>`;
   return layout(request, {
     title: 'Bridge',
     screen: 'bridge',

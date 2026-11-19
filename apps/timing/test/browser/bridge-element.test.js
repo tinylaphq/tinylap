@@ -1440,8 +1440,8 @@ test('signed out, the cards stream stops and the page says to sign in again', as
   await signOut(who);
   const notice = page.locator('[data-bridge-signed-out]');
   await notice.waitFor({ timeout: 10_000 });
-  assert.equal(await notice.innerText(), "You're signed out, so the decoders here no longer update. Sign in again.");
-  const link = notice.getByRole('link', { name: 'Sign in again' });
+  assert.equal(await notice.textContent(), "You're signed out, so the decoders here no longer update. Sign in again (opens a new tab).");
+  const link = notice.getByRole('link', { name: 'Sign in again (opens a new tab)', exact: true });
   assert.equal(await link.getAttribute('href'), '/auth/login?returnTo=%2Fpersonal%2Fbridge');
   assert.equal(await link.getAttribute('target'), '_blank', 'signing in leaves this tab, and its port, as they are');
   assert.equal(await page.locator('[data-bridge-live]').textContent(), await notice.textContent(), 'and it is said');

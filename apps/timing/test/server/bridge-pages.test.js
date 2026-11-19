@@ -37,7 +37,7 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   };
   for (const [state, words] of Object.entries(said)) assert.match(body, new RegExp(`<p hidden data-bridge-say="${state}">${exact(words)}</p>`), state);
   // Signed out, the cards stop updating: the page's notice, hidden until then. Its link opens a new tab, so the port stays open.
-  const signIn = '<a href="/auth/login?returnTo=%2Fpersonal%2Fbridge" target="_blank" rel="noopener">Sign in again</a>';
+  const signIn = '<a href="/auth/login?returnTo=%2Fpersonal%2Fbridge" target="_blank" rel="noopener">Sign in again<span class="visually-hidden"> (opens a new tab)</span></a>';
   assert.match(body, new RegExp(exact(`<p class="status status-warning" data-bridge-signed-out hidden>You're signed out, so the decoders here no longer update. ${signIn}.</p>`)));
   assert.match(body, new RegExp(exact(`<template data-bridge-sign-in>${signIn} to send them.</template>`)));
   for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
