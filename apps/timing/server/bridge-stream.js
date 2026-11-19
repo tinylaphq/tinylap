@@ -10,7 +10,9 @@
 // nothing. Both send #bridge-decoders, rendered by the server, whenever it
 // changes, plus a keep-alive. Each Bridge render has its own page id
 // (#bridge's data-page), sent as ?page= on both: the server counts holders by
-// page, and renders a page's cards without its own. Signed out, either stream
+// page, and renders a page's cards without its own. A page loaded by a reload
+// also sends the page it replaced as ?after= (#bridge's data-after): that
+// page's cable is its own too. Signed out, either stream
 // is one signed-out event, and the page stops asking.
 import { randomBytes } from 'node:crypto';
 import { can } from '@tinylap/auth';
@@ -22,11 +24,16 @@ import { THROTTLE_MS } from './board-stream.js';
 import { decoderCards } from './views/bridge.js';
 import { forbiddenPage, notFoundPage } from './views/notice.js';
 
-const PAGE_ID = /^[A-Za-z0-9_-]{16,64}$/;
+export const PAGE_ID = /^[A-Za-z0-9_-]{16,64}$/;
 /** The asking page's id, or a fresh one for a client that sent none: then the stream is its own page. @param {any} request */
 const pageOf = (request) => {
   const page = request.url.searchParams.get('page');
   return page && PAGE_ID.test(page) ? page : randomBytes(12).toString('base64url');
+};
+/** The page a reloaded page came from (#bridge's data-after), whose cable is the asking page's too; null without one. @param {any} request */
+const afterOf = (request) => {
+  const after = request.url.searchParams.get('after');
+  return after && PAGE_ID.test(after) ? after : null;
 };
 
 const SSE = { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' };
@@ -40,6 +47,8 @@ const sse = (text) => `event: bridge\n${text.split(/\r\n|\r|\n/).map((line) => `
 function bridgeStream(request, decoder) {
   const workspaceId = request.workspaceId;
   const page = pageOf(request);
+  const after = afterOf(request);
+  const pages = after ? [page, after] : [page];
   // Fixed for the stream: losing timing.setup ends it (below), and the page reconnects to cards without Change Wi-Fi.
   const mayPair = can(request.session.claims, workspaceId, 'timing.setup');
   return {
@@ -55,7 +64,7 @@ function bridgeStream(request, decoder) {
         if (res.writableEnded) return;
         last = Date.now();
         try {
-          const cards = String(decoderCards(request, request.engine.connectionsOf(workspaceId, { page }), { mayPair }));
+          const cards = String(decoderCards(request, request.engine.connectionsOf(workspaceId, { pages }), { mayPair }));
           // Only a change goes: most of the club's events (a lap, say) leave the cards as they are.
           if (cards === sent) return;
           sent = cards;

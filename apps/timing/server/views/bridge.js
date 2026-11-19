@@ -72,7 +72,7 @@ function decoderCard(request, d, mayPair) {
   const status = viaCable || viaWifi
     ? html`<div class="status status-success" data-slot="status"><p>Laps get through over ${viaCable && viaWifi ? 'the cable and Wi-Fi' : viaCable ? 'the cable' : 'Wi-Fi'}.</p></div>`
     : html`<div class="status status-warning" data-slot="status"><p>If it's on, its laps wait on it. Connect the cable to see why.</p><p>${d.lastSeenAt ? html`Last heard ${when(request, d.lastSeenAt)}.` : 'Never heard.'}</p></div>`;
-  // Every card can connect: "another laptop" may be this one a moment ago (a reload, another tab).
+  // Every card can connect: "another laptop" may be this browser's other tab (a reload counts as this page).
   const action = html`<button type="button" class="btn btn-sm ${viaCable || viaWifi ? 'btn-outline' : 'btn-primary'}" data-bridge-connect="serial">Connect decoder</button>`;
   const cable = viaCable
     ? { state: 'ok', words: 'Connected on another laptop', detail: null, action }
@@ -99,7 +99,9 @@ function decoderCard(request, d, mayPair) {
  * swaps in each #bridge-decoders its stream sends (#bridge's
  * data-cable-stream, with {id}, while a decoder is on this tab's cable;
  * data-cards-stream otherwise; both with ?page= and #bridge's data-page,
- * this render's own id), and overlays what this tab's cable says.
+ * this render's own id, and after a reload ?after= and its data-after, the
+ * id of the page it replaced, whose cable is this tab's too), and overlays
+ * what this tab's cable says.
  * Its hooks:
  * - section#decoder-<id>[data-decoder="<id>"]: one card (the empty list's
  *   one card is #decoder-none, without data-decoder); a message replaces
@@ -233,9 +235,10 @@ export function wifiDialog() {
 /**
  * @param {any} request @param {{ tag: unknown }} importMap @param {{ id: string, name: string }[]} [decoders] the decoders a device may be chosen as
  * @param {string[]} [known] every decoder's id, choosable or not, so tl-bridge can tell when one was made since this render
- * @param {{ connections?: any[], mayPair?: boolean }} [cards] every decoder's connections (engine.connectionsOf), and whether the member may pair
+ * @param {{ connections?: any[], mayPair?: boolean, after?: string | null }} [cards] every decoder's connections (engine.connectionsOf), whether the member may pair,
+ *   and the page this render replaces (a reload), whose cable is this page's
  */
-export function bridgePage(request, importMap, decoders = [], known = decoders.map((d) => d.id), { connections = [], mayPair = false } = {}) {
+export function bridgePage(request, importMap, decoders = [], known = decoders.map((d) => d.id), { connections = [], mayPair = false, after = null } = {}) {
   const base = request.space.base;
   const where = request.space.kind === 'personal' ? 'your personal space' : 'this club';
   // In a new tab: leaving this one would close the decoder's port while it forwards.
@@ -248,7 +251,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     body: html`<div class="container space-lg screen">
   <h1>Bridge</h1>
   <tl-bridge>
-  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}">
+  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}"${after ? html` data-after="${after}"` : null}>
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
     <p hidden data-bridge-say="connect">Ready to connect.</p>

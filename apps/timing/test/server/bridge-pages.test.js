@@ -267,6 +267,34 @@ test('holders are pages: a page\'s cards leave out its own, and its dead connect
   await theirs.return();
 });
 
+test('a reload: the page that is leaving is this page', async () => {
+  const { who, gate, base } = await clubWithGate('Rita');
+  const OLD = 'pageOLDOLDOLDOLDOLDO';
+  const NEW = 'pageNEWNEWNEWNEWNEWN';
+  // The old page's cable stream, still held while the reload's request is answered.
+  const held = events(await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable?page=${OLD}`, undefined, SSE), { raw: true });
+  await next(held, 'bridge');
+  const load = (leaving) => app.api(who, 'GET', `${base}/bridge`, undefined, { accept: 'text/html', cookie: [who.jar.header(), ...(leaving ? [`tl-bridge-leaving=${leaving}`] : [])].join('; ') });
+  const reload = await load(OLD);
+  const body = await reload.text();
+  assert.doesNotMatch(body, /Connected on another laptop/, 'the leaving page\'s cable is this page\'s');
+  assert.match(body, new RegExp(`<div id="bridge" [^>]*data-after="${OLD}"`), 'and the new page says so on its streams');
+  assert.ok([].concat(reload.headers.getSetCookie()).some((c) => /^tl-bridge-leaving=;.*Max-Age=0/i.test(c)), 'read once: the cookie is cleared');
+  const fresh = await (await load(null)).text();
+  assert.match(fresh, /Connected on another laptop/, 'without the cookie, it is another page\'s');
+  assert.doesNotMatch(fresh, /data-after=/);
+  const odd = await (await load('not a page id')).text();
+  assert.match(odd, /Connected on another laptop/, 'a cookie that isn\'t a page id is ignored');
+  assert.doesNotMatch(odd, /data-after=/);
+  const mine = events(await app.api(who, 'GET', `${base}/bridge/events?page=${NEW}&after=${OLD}`, undefined, SSE), { raw: true });
+  assert.doesNotMatch((await next(mine, 'bridge')).data, /Connected on another laptop/, 'the new page\'s cards stream leaves the old page out');
+  const theirs = events(await app.api(who, 'GET', `${base}/bridge/events?page=${NEW}`, undefined, SSE), { raw: true });
+  assert.match((await next(theirs, 'bridge')).data, /Connected on another laptop/);
+  await mine.return();
+  await theirs.return();
+  await held.return();
+});
+
 test('a member who may pair holds a stream that ends when pairing is no longer theirs', async () => {
   const watched = [];
   const rig = await startTiming({ streams: { watch: (_request, _ws, action, _watcher, end) => { watched.push({ action, end }); return () => {}; } } });

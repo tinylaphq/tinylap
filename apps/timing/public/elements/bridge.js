@@ -31,6 +31,9 @@
 //   holds nothing. Each message is the server's #bridge-decoders, swapped in,
 //   with the cable painted over it again. The port closing, the bridge being
 //   replaced, the page going and the element leaving all close the stream.
+//   On its way out (beforeunload) the page writes its id in a cookie for 60 s,
+//   so a reload's request carries it: the server renders the new page with
+//   the old page's cable as its own (data-after, sent as ?after=).
 // - The cable has one place, its card (connections spec §2): after an
 //   unplug the card shows the server's notes for a decoder this tab had, and
 //   when the serial port this tab last had comes back (navigator.serial's
@@ -344,6 +347,17 @@ class TlBridge extends HTMLElement {
     void bridge?.close();
   }
 
+  /**
+   * Says, for `seconds` (0 takes it back), that this page is leaving: tl-bridge-leaving holds its page id (#bridge's
+   * data-page), for this Bridge page's path only, which the server reads once. It is Secure, so on plain http other
+   * than localhost the browser drops it and a reload reads as before. @param {Run} run @param {number} seconds
+   */
+  leaving(run, seconds) {
+    const page = run.root.dataset.page;
+    if (!page) return;
+    document.cookie = `tl-bridge-leaving=${seconds > 0 ? page : ''}; Path=${location.pathname}; Max-Age=${seconds}; Secure; SameSite=Strict`;
+  }
+
   /** The page going and coming back: the stream closes, and opens again (after a sign-out, once). */
   listenForReturn() {
     addEventListener('pagehide', this);
@@ -406,7 +420,11 @@ class TlBridge extends HTMLElement {
   /** @param {Event} event @returns {void} */
   handleEvent(event) {
     if (event.type === 'beforeunload') {
-      if (this.run?.bridge?.state === 'ready') event.preventDefault();
+      if (!this.run) return;
+      // A reload's request carries it: the new page counts this page's cable, held until its answer comes, as its own.
+      // Long enough for the leave prompt, which comes after this: the server clears it on its first read anyway.
+      this.leaving(this.run, 60);
+      if (this.run.bridge?.state === 'ready') event.preventDefault();
       return;
     }
     // Leaving the page closes the port, and the stream: a page in the back/forward cache forwards nothing either.
@@ -417,6 +435,7 @@ class TlBridge extends HTMLElement {
     // Back from the back/forward cache: the stream it needs again, and the server says again if it is signed out.
     if (event.type === 'pageshow') {
       if (this.run && /** @type {PageTransitionEvent} */ (event).persisted) {
+        this.leaving(this.run, 0);
         Object.assign(this.run, { signedOut: false, stopped: false });
         this.signedOutNotice(this.run);
         this.follow(this.run);
@@ -956,8 +975,8 @@ class TlBridge extends HTMLElement {
     const id = bridge?.decoder && bridge.state === 'ready' ? bridge.decoder : null;
     const address = id ? run.root.dataset.cableStream?.replace('{id}', encodeURIComponent(id)) : run.root.dataset.cardsStream;
     if (!address) return;
-    const page = run.root.dataset.page;
-    const url = page ? `${address}?${new URLSearchParams({ page })}` : address;
+    const { page, after } = run.root.dataset;
+    const url = page ? `${address}?${new URLSearchParams({ page, ...(after ? { after } : {}) })}` : address;
     // Open, or refused and waiting to open again.
     if (run.stream?.url === url && (run.stream.retry || run.stream.source.readyState !== EventSource.CLOSED)) return;
     const wait = run.stream?.url === url ? run.stream.wait : STREAM_RETRY_MS;
