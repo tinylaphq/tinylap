@@ -152,7 +152,7 @@ ${sections.join('\n')}
     <p id="confirm-text"></p>
     <div class="accounts-actions">
       <button type="submit" value="cancel" class="btn btn-outline" id="confirm-cancel">Cancel</button>
-      <button type="submit" value="ok" class="btn btn-danger" id="confirm-ok">Confirm</button>
+      <button type="submit" value="ok" class="btn btn-danger-fill" id="confirm-ok">Confirm</button>
     </div>
   </form>
 </dialog>`,
