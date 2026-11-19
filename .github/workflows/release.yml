@@ -20,7 +20,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write    # dispatch ci on the release pull request's branch
   id-token: write   # npm trusted publishing and provenance, no stored token
 
 jobs:
@@ -28,29 +27,21 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
+      # release-please acts as the release GitHub App, not with this run's
+      # token: GitHub starts no workflows for a pull request that token opens
+      # or updates, so the release pull request would never get its required
+      # checks. The app's pull request runs ci like anyone's.
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - id: rp
         uses: googleapis/release-please-action@v4
         with:
+          token: ${{ steps.app.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-      # GitHub starts no workflows for a pull request that release-please's
-      # token opens or updates, so the release pull request would never get
-      # its required checks. Running ci on its branch by dispatch (which that
-      # token may do) reports them on the pull request's head commit.
-      # A push that leaves the release pull request as it was gives no pull
-      # request here (its last ci run still stands), so the branch is read in
-      # the shell, where an empty value skips the dispatch instead of failing.
-      - if: steps.rp.outputs.prs_created == 'true'
-        run: |
-          branch=$(jq -r '.headBranchName // empty' <<< "$PR")
-          if [ -z "$branch" ]; then
-            echo "The release pull request did not change; no ci to dispatch."
-            exit 0
-          fi
-          gh workflow run ci --repo "$GITHUB_REPOSITORY" --ref "$branch"
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ steps.rp.outputs.pr }}
       - if: steps.rp.outputs.releases_created == 'true'
         uses: actions/checkout@v4
       - if: steps.rp.outputs.releases_created == 'true'

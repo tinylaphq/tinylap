@@ -153,11 +153,9 @@ jobs:
       - uses: fsfe/reuse-action@v5
 
   commit-title:
-    # Also on a dispatch to a pull request's branch (the release pull request,
-    # see release.yml), never on a run by hand on main, which has no title.
-    # On a pull request it also checks that no commit, the title or the
-    # description carries AI attribution (AGENTS.md).
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')
+    # Also checks that no commit, the title or the description carries AI
+    # attribution (AGENTS.md).
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -172,18 +170,11 @@ jobs:
           node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # On a dispatch, the title of the open pull request for this branch.
-      - if: github.event_name == 'workflow_dispatch'
-        id: pr
-        run: echo "title=$(gh pr view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json title --jq .title)" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ github.token }}
       # Squash merges make the pull request title the commit message.
       - run: echo "$TITLE" | pnpm commitlint
         env:
-          TITLE: ${{ github.event.pull_request.title || steps.pr.outputs.title }}
-      - if: github.event_name == 'pull_request'
-        run: node tools/no-ai-attribution.js "$BASE" "$HEAD"
+          TITLE: ${{ github.event.pull_request.title }}
+      - run: node tools/no-ai-attribution.js "$BASE" "$HEAD"
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
