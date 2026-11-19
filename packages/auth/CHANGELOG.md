@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/tinylaphq/tinylap/compare/auth-v0.3.0...auth-v0.4.0) (2026-11-19)
+
+
+### Features
+
+* **timing:** remove the Tap page ([#136](https://github.com/tinylaphq/tinylap/issues/136)) ([6c81da7](https://github.com/tinylaphq/tinylap/commit/6c81da71e193f40919a46e57d41f9fc538966bbc))
+
 ## [0.3.0](https://github.com/tinylaphq/tinylap/compare/auth-v0.2.0...auth-v0.3.0) (2026-11-09)
 
 
