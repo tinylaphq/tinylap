@@ -10,7 +10,8 @@
 // nothing. Both send #bridge-decoders, rendered by the server, whenever it
 // changes, plus a keep-alive. Each Bridge render has its own page id
 // (#bridge's data-page), sent as ?page= on both: the server counts holders by
-// page, and renders a page's cards without its own.
+// page, and renders a page's cards without its own. Signed out, either stream
+// is one signed-out event, and the page stops asking.
 import { randomBytes } from 'node:crypto';
 import { can } from '@tinylap/auth';
 import { pageRoute } from './page-access.js';
@@ -136,7 +137,14 @@ function cableStream(request, match) {
   return bridgeStream(request, decoder.id);
 }
 
+/**
+ * Signed out, a stream is told so in the stream, and ends: EventSource can't see a redirect's status, so it would
+ * retry a sign-in page forever. The event has an empty data line (SSE drops an event without one), and the long
+ * retry holds the browser's own reconnect back; the page closes the stream on the event. The words are the page's.
+ */
+const signedOut = (request) => (wantsStream(request) ? { status: 200, credentials: true, headers: SSE, body: 'retry: 3600000\n\nevent: signed-out\ndata:\n\n' } : null);
+
 export const bridgeStreamRoutes = [
-  { pattern: spacePath('bridge/events'), credentials: true, methods: { GET: pageRoute('timing.run', (request) => bridgeStream(request, null)) } },
-  { pattern: spacePath('decoders/([^/]+)/cable'), credentials: true, methods: { GET: pageRoute('timing.run', cableStream) } },
+  { pattern: spacePath('bridge/events'), credentials: true, methods: { GET: pageRoute('timing.run', (request) => bridgeStream(request, null), { signedOut }) } },
+  { pattern: spacePath('decoders/([^/]+)/cable'), credentials: true, methods: { GET: pageRoute('timing.run', cableStream, { signedOut }) } },
 ];

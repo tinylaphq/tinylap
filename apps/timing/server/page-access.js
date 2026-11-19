@@ -41,9 +41,10 @@ function rememberSpace(response, space) {
 /**
  * @param {import('@tinylap/auth').Action} action
  * @param {(request: any, match: RegExpExecArray) => any} handler
- * @param {{ write?: boolean }} [options]
+ * @param {{ write?: boolean, signedOut?: (request: any) => any }} [options] `signedOut`: the answer without a session,
+ *   or null for the usual way to sign in (a stream, say, which can't follow a redirect to a page)
  */
-export function pageRoute(action, handler, { write = false } = {}) {
+export function pageRoute(action, handler, { write = false, signedOut = () => null } = {}) {
   return withSession(async (request, match) => {
     const { req, url } = request;
     const refuse = (response) => {
@@ -51,7 +52,7 @@ export function pageRoute(action, handler, { write = false } = {}) {
       return response;
     };
     if (!request.session) {
-      return refuse(seeOther(`/auth/login?${new URLSearchParams({ returnTo: req.method === 'GET' ? url.pathname + url.search : '/' })}`));
+      return refuse(signedOut(request) ?? seeOther(`/auth/login?${new URLSearchParams({ returnTo: req.method === 'GET' ? url.pathname + url.search : '/' })}`));
     }
     await withAccount(request);
     const space = spaceFor(request.spaces, match[1]);
