@@ -89,7 +89,7 @@ test('start a race from the form, confirm before replacing it, then abort it aft
   assert.deepEqual(fields, [['kind', 'race'], ['race-drivers', 'chosen'], ['race-roster', a.id], ['race-minutes', '2'], ['race-countdown', '0'], ['replace', session.id]]);
   assert.match(ask, new RegExp(`<form method="post" action="${base}/sessions"`));
   assert.match(ask, /<form method="post" action="[^"]*" class="button-row confirm-actions">/, 'the danger button is the filled, main one');
-  assert.match(ask, /<button type="submit" class="btn btn-danger">Start<\/button>/);
+  assert.match(ask, /<button type="submit" class="btn btn-danger-fill">Start<\/button>/);
   assert.equal(app.store.runningSession(office.id).id, session.id, 'asking ends nothing');
 
   const confirm = await (await get(`${base}/sessions/${session.id}/abort`)).text();

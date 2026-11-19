@@ -19,7 +19,7 @@ export function confirmPage(request, { title, text, action, button, back, screen
     <p>${text}</p>
     <form method="post" action="${action}" class="button-row confirm-actions">
       ${fields.map(([name, value]) => html`<input type="hidden" name="${name}" value="${value}">`)}
-      <button type="submit" class="btn btn-danger">${button}</button>
+      <button type="submit" class="btn btn-danger-fill">${button}</button>
       <a class="btn btn-outline" href="${back}">Cancel</a>
     </form>
   </div>

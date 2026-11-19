@@ -901,8 +901,8 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 .history-kind { font-weight: 700; }
 .history-session { white-space: nowrap; }
 .history-session .tag { margin-left: var(--p-space-xs); vertical-align: 0.1em; }
-/* An aborted session's tag in its heading: palace's tag, not the heading's gradient capitals. */
-.sessions-screen h1 .tag { -webkit-text-fill-color: currentColor; color: var(--p-text); text-transform: none; letter-spacing: normal; line-height: normal; vertical-align: middle; }
+/* An aborted session's tag in its heading sits on the heading's middle. */
+.sessions-screen h1 .tag { vertical-align: middle; }
 .session-facts { display: flex; flex-wrap: wrap; gap: var(--p-space-xs) var(--p-space-xl); margin: 0; }
 .session-facts dt { font-size: var(--p-text-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--p-text-muted); }
 .session-facts > div { min-width: 0; }
@@ -918,11 +918,6 @@ form:has(input[value="qualifying"]:checked) .race-times .field:has(#race-countdo
 /* A lap card is headed by the driver's name as it is written, not upper-cased. */
 .session-laps .h3 { text-transform: none; letter-spacing: 0; color: var(--p-text); }
 .session-laps-note { margin: 0 0 var(--p-space-sm); font-size: var(--p-text-sm); color: var(--p-text-muted); }
-/* A confirmation's action is the destructive one, so it is the filled, main
- * button beside Cancel: palace's danger colours, filled as its error status is.
- * A filled danger button belongs upstream in palace-ui. */
-.confirm-actions .btn-danger { background: var(--p-error); color: var(--p-text); border-color: var(--p-text); }
-.confirm-actions .btn-danger:hover { background: var(--p-dark); color: var(--p-error); border-color: var(--p-dark); transform: var(--p-lift-sm); box-shadow: var(--p-shadow-md) var(--p-error); }
 /* A driver's laps: fixed columns, so a tag never moves the time, and every card's columns line up. */
 .lap-table { --cell-x: var(--p-space-sm); --mark-gap: var(--p-space-sm); table-layout: fixed; font-size: var(--p-text-sm); }
 .lap-table td, .lap-table th { padding: var(--p-space-xs) var(--cell-x); }
