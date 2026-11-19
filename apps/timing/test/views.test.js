@@ -160,7 +160,7 @@ test('a short length rounds to whole seconds first, so 59.6 s reads "1 min", nev
 const T = Date.UTC(2026, 10, 10, 14, 31);
 const bridgeRequest = { now: () => T };
 const row = (id, name, cable, wifi, at = null, lastSeenAt = null) => ({ id, name, createdAt: 1, lastSeenAt, cable: { state: cable }, wifi: { state: wifi, at } });
-const cardOf = (out, id) => new RegExp(`<section class="card-static decoder-card" data-decoder="${id}">([\\s\\S]*?)</section>`).exec(out)?.[1];
+const cardOf = (out, id) => new RegExp(`<section id="decoder-${id}" class="card-static decoder-card" data-decoder="${id}">([\\s\\S]*?)</section>`).exec(out)?.[1];
 const rowOf = (card, which) => new RegExp(`<li class="decoder-row" data-row="${which}">([\\s\\S]*?)</li>`).exec(card)?.[1];
 const slot = (part, name) => new RegExp(`data-slot="${name}">([\\s\\S]*?)</${name === 'status' || name === 'action' ? 'div' : 'p'}>`).exec(part)?.[1];
 const lamp = (part) => /<span class="lamp" data-state="([a-z]+)"/.exec(part)?.[1];
@@ -243,7 +243,7 @@ test('decoder cards: by name; Change Wi-Fi only for members who may pair; an emp
   assert.doesNotMatch(run, /see and change/);
   assert.match(slot(rowOf(cardOf(run, 'b'), 'wifi'), 'action'), /^<p class="decoder-row-help">Connect the cable to see its Wi-Fi\.<\/p>$/);
   const empty = String(decoderCards(bridgeRequest, [], { mayPair: true }));
-  assert.match(empty, /<div id="bridge-decoders">\s*<section class="card-static decoder-empty">\s*<p>No decoder yet\. Plug one in by USB, then connect it to pair it\.<\/p>\s*<p><button type="button" class="btn btn-primary" data-bridge-connect="serial">Connect decoder<\/button><\/p>/);
+  assert.match(empty, /<div id="bridge-decoders">\s*<section id="decoder-none" class="card-static decoder-empty">\s*<p>No decoder yet\. Plug one in by USB, then connect it to pair it\.<\/p>\s*<p><button type="button" class="btn btn-primary" data-bridge-connect="serial">Connect decoder<\/button><\/p>/);
   assert.doesNotMatch(empty, /data-decoder=/);
 });
 

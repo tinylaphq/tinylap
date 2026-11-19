@@ -737,10 +737,12 @@ test('card swap keeps the dialog and the cable rows', async (t) => {
   const copies = [];
   page.on('request', (r) => { if (r.resourceType() === 'fetch' && new URL(r.url()).pathname === '/personal/bridge') copies.push(r.url()); });
   assert.equal(await row(other, 'wifi').locator('[data-slot="state"]').innerText(), '');
-  const before = await page.evaluate(() => document.querySelector('#bridge-decoders'));
+  const before = await page.evaluateHandle((id) => document.querySelector(`[data-decoder="${id}"]`), other.id);
+  const kept = await page.evaluateHandle((id) => [document.querySelector('#bridge-decoders'), document.querySelector(`[data-decoder="${id}"]`)], board.id);
   await postPassings(app, other, [{ transponder: '0A', t: 1000 }]);
   await row(other, 'wifi').locator('[data-slot="state"]', { hasText: /^Reporting$/ }).waitFor({ timeout: 5000 });
-  assert.equal(await page.evaluate((old) => document.querySelector('#bridge-decoders') !== old, before), true, 'swapped');
+  assert.equal(await page.evaluate(([old, id]) => document.querySelector(`[data-decoder="${id}"]`) !== old, [before, other.id]), true, 'its card swapped');
+  assert.equal(await page.evaluate(([[list, cabled], id]) => document.querySelector('#bridge-decoders') === list && document.querySelector(`[data-decoder="${id}"]`) === cabled, [kept, board.id]), true, 'the list and the cabled card stay');
   assert.deepEqual(copies, [], 'no refresh');
   assert.match(await row(other, 'wifi').locator('time[data-when]').innerText(), /^\d\d:\d\d$/, 'its time in the browser\'s zone');
   assert.equal(await page.locator('#wifi-dialog').evaluate((x) => x.open), true, 'the dialog stays open');
@@ -1374,6 +1376,54 @@ test('without Web Serial or WebHID, the cards update live over the stream, and t
   assert.equal(await bare.page.getByText(/needs Chrome or Edge/).isVisible(), true);
   assert.deepEqual(errors, []);
   assert.deepEqual(bare.errors, []);
+});
+
+// A stream's message replaces only the cards that changed (#84), so a screen reader doesn't read the focused button again.
+
+/** Focuses `d`'s Connect decoder, tags its card and button, and counts focusin in the cards from now on. */
+async function focusAndTag(page, d) {
+  await page.locator(`[data-decoder="${d.id}"] [data-bridge-connect]`).focus();
+  await page.evaluate((id) => {
+    const card = document.querySelector(`[data-decoder="${id}"]`);
+    card.__tag = true;
+    card.querySelector('[data-bridge-connect]').__tag = true;
+    window.__focusins = 0;
+    document.querySelector('#bridge-decoders').addEventListener('focusin', () => { window.__focusins += 1; });
+  }, d.id);
+}
+
+test('a change to one card leaves the others, and focus, alone', async (t) => {
+  const { page, errors, decoders, row, who, ws } = await cabledPage(t, { names: ['A gate', 'B gate'], connect: false });
+  const [a, b] = decoders;
+  await focusAndTag(page, a);
+  // Only B changes: it reports over Wi-Fi.
+  await postPassings(app, b, [{ transponder: '0A', t: 1000 }]);
+  await row(b, 'wifi').locator('[data-slot="state"]', { hasText: /^Reporting$/ }).waitFor({ timeout: 5000 });
+  const kept = await page.evaluate((id) => {
+    const card = document.querySelector(`[data-decoder="${id}"]`);
+    return { card: card.__tag === true, focus: document.activeElement?.__tag === true, focusins: window.__focusins };
+  }, a.id);
+  assert.deepEqual(kept, { card: true, focus: true, focusins: 0 });
+  // A new decoder, named to come first: it goes in before A, which stays where it is, focused.
+  const first = await (await app.api(who, 'POST', `/workspaces/${ws}/decoders`, { name: '0 gate' })).json();
+  await postPassings(app, first, [{ transponder: '0A', t: 1000 }]);
+  await page.locator(`#bridge-decoders > [data-decoder="${first.id}"]:first-child`).waitFor({ timeout: 5000 });
+  assert.deepEqual(await page.evaluate((id) => ({ focus: document.activeElement?.__tag === true, focusins: window.__focusins, card: document.querySelector(`[data-decoder="${id}"]`).__tag === true }), a.id), { focus: true, focusins: 0, card: true });
+  assert.deepEqual(errors, []);
+});
+
+test('a change to the focused card replaces it, and focus goes to its new copy', async (t) => {
+  const { page, errors, decoders, row } = await cabledPage(t, { names: ['A gate', 'B gate'], connect: false });
+  const [a] = decoders;
+  await focusAndTag(page, a);
+  await postPassings(app, a, [{ transponder: '0A', t: 1000 }]);
+  await row(a, 'wifi').locator('[data-slot="state"]', { hasText: /^Reporting$/ }).waitFor({ timeout: 5000 });
+  const now = await page.evaluate((id) => {
+    const card = document.querySelector(`[data-decoder="${id}"]`);
+    return { card: card.__tag === true, focus: document.activeElement === card.querySelector('[data-bridge-connect]') };
+  }, a.id);
+  assert.deepEqual(now, { card: false, focus: true });
+  assert.deepEqual(errors, []);
 });
 
 // What the page says to screen readers is the server's (#84): the server renders one hidden line per state.
