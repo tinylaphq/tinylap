@@ -3,6 +3,8 @@
 TinyLap is a suite of small, framework-free web tools for Kyosho Mini-Z RC
 racing, built as plain ES modules on a shared design layer.
 
+![TinyLap Timing on a laptop: a new driver gets the transponder that just crossed the line, a race starts, laps come in, Mia sets a personal best and Ana takes the track record.](docs/walkthrough.gif)
+
 - **TinyLap Planner** (`apps/track-planner`): design Kyosho Mini-Z Grand Prix Circuit 30 tracks and
   cost them against the pieces you own.
 - **TinyLap Timing** (`apps/timing`): lap timing for a club's track, live on every screen, from a decoder on USB or Wi-Fi. Decoders: [docs/timing.md](docs/timing.md).
