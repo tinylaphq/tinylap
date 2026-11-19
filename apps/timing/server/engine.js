@@ -530,6 +530,9 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       // Laps of earlier sessions may be a driver's now: the running session reads its earlier bests again.
       if (tracks.size > 0) earlierBests.clear();
     });
+    // The car on the track now says whose it is.
+    const idle = idles.get(workspaceId);
+    if (idle?.transponder === code && idle.driverId !== driverId) noteIdle(workspaceId, { ...idle, driverId });
     publishUnknown(workspaceId);
   }
 
@@ -562,6 +565,8 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       standings: rows,
       // Each driver's moment, of their latest counted lap, by driver id: the board's only.
       ...(withMoments ? { moments: session ? momentsOf(session, recordNew) : {} } : {}),
+      // Who had a best here before the running session: a personal best beats one, so only they can set one in it.
+      ...(withMoments ? { hadBest: session ? [...earlierBestsOf(session).keys()] : [] } : {}),
       // The idle board's result, what resultOf makes it from: the board's views only (board hub spec §4.1).
       ...(withMoments ? { latest: session ? null : latestResult(workspaceId, ws) } : {}),
       crossings: watcher ? recent.map(watcherCrossing).filter(Boolean) : recent.map(memberCrossing),

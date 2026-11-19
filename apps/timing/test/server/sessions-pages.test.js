@@ -387,7 +387,7 @@ test('a session page: the result with marks and crown, then every lap', async ()
   assert.equal(rows.length, 1, 'the table starts at 2');
   assert.match(table, /<thead><tr><th scope="col"><span class="visually-hidden">Position<\/span><\/th>/);
   assert.match(rows[0][0], /<td class="pos">2<\/td>/);
-  assert.match(rows[0][0], /<td class="num">7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb" title="Personal best" aria-hidden="true">PB<\/abbr><span class="visually-hidden">Personal best<\/span><\/td>/);
+  assert.match(rows[0][0], /<td class="num">7\.500<\/td>\s*<td class="mark-cell"><\/td>/, 'no PB: the first time on this track beats nothing');
   assert.doesNotMatch(rows[0][0], /crown/);
   const laps = /<section[^>]*aria-labelledby="laps-title"[\s\S]*?<\/section>/.exec(body)[0];
   const times = [...laps.matchAll(/<td class="num">(\d+\.\d{3})/g)].map((m) => m[1]);

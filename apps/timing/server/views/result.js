@@ -17,7 +17,7 @@ import { chip, marks, marksHead, posHead, tableClasses, timeWidths } from './mar
  * @typedef {{ driverId: string, lapMs: number, seq: number }} RecordLap
  * @typedef {{ driverId: string, position: number, laps: number, bestMs: number | null, elapsedMs: number | null,
  *   best: Lap | null, setOnLap: number | null, gap: string | null, onLeadLap: boolean }} Row
- * @typedef {{ driverId: string, lap: Lap, beforeMs: number | null }} PersonalBest
+ * @typedef {{ driverId: string, lap: Lap, beforeMs: number }} PersonalBest
  * @typedef {{ kind: string, rows: Row[], laps: Map<string, Lap[]>, order: string[], fastest: Lap | null,
  *   holderId: string | null, recordSeq: number | null, fell: { lap: RecordLap, beat: RecordLap | null } | null, personalBests: PersonalBest[],
  *   markOf: (lap: Lap | null | undefined, options?: { list?: boolean }) => import('./html.js').Html }} Result
@@ -32,7 +32,7 @@ const lapsBehind = (n) => `+${n} lap${n === 1 ? '' : 's'}`;
  * lead lap, which lap each best was set on, the session's fastest lap, the
  * record that fell in it and the personal bests it set.
  * @param {{ session: { kind: string }, standings: any[], crossings: Lap[],
- *   record: { driverId: string, seq: number } | null, bests: { seq: number }[],
+ *   record: { driverId: string, seq: number } | null, bests: { driverId: string, seq: number }[],
  *   fell?: { lap: RecordLap, beat: RecordLap | null } | null, before?: Map<string, number> }} input
  *   `record` and `bests` are the track's record and personal bests now (the marks
  *   are present tense); `fell` the fastest record set in this session and the one
@@ -40,7 +40,8 @@ const lapsBehind = (n) => `+${n} lap${n === 1 ? '' : 's'}`;
  * @returns {Result}
  */
 export function resultOf({ session, standings, crossings, record, bests, fell = null, before = new Map() }) {
-  const pbSeq = new Set(bests.map((b) => b.seq));
+  // A personal best beats an earlier one: a driver's first time on the track sets none.
+  const pbSeq = new Set(bests.filter((b) => before.has(b.driverId)).map((b) => b.seq));
   /** @type {Map<string, Lap[]>} */
   const laps = new Map();
   for (const c of crossings) {
@@ -85,8 +86,8 @@ export function resultOf({ session, standings, crossings, record, bests, fell = 
   for (const row of rows) {
     let lap = null;
     for (const c of laps.get(row.driverId) ?? []) if (c.counts && c.via !== 'tap' && (!lap || /** @type {number} */ (c.lapMs) < /** @type {number} */ (lap.lapMs))) lap = c;
-    const beforeMs = before.get(row.driverId) ?? null;
-    if (lap && (beforeMs === null || /** @type {number} */ (lap.lapMs) < beforeMs)) personalBests.push({ driverId: row.driverId, lap, beforeMs });
+    const beforeMs = before.get(row.driverId);
+    if (lap && beforeMs !== undefined && /** @type {number} */ (lap.lapMs) < beforeMs) personalBests.push({ driverId: row.driverId, lap, beforeMs });
   }
   return { kind: session.kind, rows, laps, order, fastest, holderId: record?.driverId ?? null, recordSeq: record?.seq ?? null, fell, personalBests, markOf };
 }
@@ -171,8 +172,7 @@ export function resultView(result, { drivers, links = true, personalBests = link
   <div class="place-tier">${shownBests.map((pb) => html`<article class="place is-pb">
   <h3 class="place-name">${chip(drivers, pb.driverId)}</h3>
   <p class="place-figure">${num(formatLap(pb.lap.lapMs))}${marks({ lapMs: pb.lap.lapMs, isRecord: pb.lap.seq === result.recordSeq, isPb: true }, { list: true })}</p>
-  <div class="place-foot"><dl class="place-facts">${pb.beforeMs === null ? fact('Before', html`<span class="fact-word">First time on this track</span>`)
-    : [fact('Before', num(formatLap(pb.beforeMs))), fact('Faster by', num(formatLap(pb.beforeMs - /** @type {number} */ (pb.lap.lapMs))))]}</dl></div>
+  <div class="place-foot"><dl class="place-facts">${fact('Before', num(formatLap(pb.beforeMs)))}${fact('Faster by', num(formatLap(pb.beforeMs - /** @type {number} */ (pb.lap.lapMs))))}</dl></div>
 </article>`)}</div>
 </section>` : null;
 
