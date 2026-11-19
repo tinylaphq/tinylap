@@ -93,7 +93,7 @@ How it is drawn:
 
 When it plays:
 - **FL:** every time the session's fastest lap improves, except the session's first counted lap (nothing was beaten).
-- **PB:** when the lap improves the driver's best on this track and direction and the driver already had a best there from an earlier session (any session kind, aborted ones included, as personal bests count today). Every improvement after that plays too. A driver's first laps on a track show PB with no moment, so the start of a session does not light every row. The best as it stood when the session started is kept with the session (call: recorded at session start).
+- **PB:** when the lap improves the driver's best on this track and direction and the driver already had a best there from an earlier session (any session kind, aborted ones included, as personal bests count today). Every improvement after that plays too. A driver's first laps on a track show no PB mark and play no moment: a personal best beats an earlier one (see `2026-11-19-personal-best-marks-design.md`). The best as it stood when the session started is kept with the session (call: recorded at session start).
 - **TR:** exactly when the strip's record moment plays (a record existed and the lap is fresh, as `noteLap` in `apps/timing/server/engine.js` decides), so the row, the strip and the bell always agree.
 - **Late laps play nothing:** a lap older than the record's freshness window (`RECORD_FRESH_MS`) when it arrives, such as a quiet Wi-Fi decoder catching up, plays no moment of any kind.
 - One lap plays one moment: the widest of its marks that plays. A lap that is FL but the session's first counted lap, and also beats an earlier session's best, plays PB; a track's very first lap plays nothing (call).

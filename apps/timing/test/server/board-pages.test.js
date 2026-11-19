@@ -496,11 +496,11 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     // The fastest lap cell stays, so its live region is not taken away and given back.
     assert.match(head, /<p class="strip-cell is-fastest board-fastest-line" role="status"><span class="strip-label">Fastest lap<\/span><span class="num strip-figure">7\.500<\/span>/);
     assert.doesNotMatch(body, NOTICE);
-    // The crown only after the holder's name, none in the strip; TR alone on his best (the fastest lap too), PB on Mia's; no tint.
+    // The crown only after the holder's name, none in the strip; TR alone on his best (the fastest lap too), no PB on Mia's: her first time on the track beats nothing; no tint.
     assert.equal(body.match(/class="crown/g).length, 1);
     assert.match(body, /<td class="pos">1<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="Haris">Haris<\/span><svg class="crown" viewBox="0 0 26 18" role="img"><title>Track record holder<\/title><path d="[^"]+"\/><\/svg><\/span>/);
     assert.match(body, /7\.500<\/td>\s*<td class="mark-cell"><abbr class="mark mark-tr"[^>]*>TR<\/abbr><span class="visually-hidden">Track record<\/span><\/td>/);
-    assert.match(body, /9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb"/);
+    assert.match(body, /9\.000<\/td>\s*<td class="mark-cell"><\/td>/);
     assert.doesNotMatch(body, /mark-fl|is-best/, 'the record lap is the fastest lap: TR, not FL');
     assert.match(body, new RegExp(`<span class="stat-label board-clock-label">Started <tl-local-time format="time"><time datetime="${escape(new Date(session.opensAt).toISOString())}">`));
     assert.match(body, /<script type="module" src="\/pkg\/design\/elements\/local-time.js"><\/script>/);
@@ -528,7 +528,7 @@ test('the track header, the idle board, the notice, marks, the crown and the rec
     // The first record on this track fell here, twice: the card says it is the first.
     assert.match(result, /<dt>Track record<\/dt><dd><span class="fact-word">First on this track<\/span><\/dd>/);
     assert.deepEqual([...result.matchAll(/<td class="pos">(\d+)<\/td>\s*<td class="board-driver"><span [^>]+><span class="driver-name" title="(\w+)">/g)].map((m) => [m[1], m[2]]), [['2', 'Mia']]);
-    assert.match(result, /9\.000<\/td>\s*<td class="mark-cell"><abbr class="mark mark-pb"/);
+    assert.match(result, /9\.000<\/td>\s*<td class="mark-cell"><\/td>/, 'no PB on a first time on the track');
     assert.doesNotMatch(result.slice(result.indexOf('<div class="result is-')), /<a |result-pbs|Lap times/, 'nothing inside the result is a link; the board leaves the personal bests out');
     assert.equal(body.match(/class="crown/g).length, 1, 'after the holder in the result, none in the strip');
   }

@@ -116,7 +116,7 @@ Three reads, every size a multiple of `--board-font`: who won (P1 at 2.3em; its 
 
 ### 6.5 Practice
 
-One list, like a race: P1 (the fastest lap) as the card, then the table from 2. On the session page the personal bests set in the session follow the table, as cards three to a row: name, new time with PB, then Before (the old best, or "First time on this track") and Faster by. The board leaves the personal-best cards out (the table's PB marks say who).
+One list, like a race: P1 (the fastest lap) as the card, then the table from 2. On the session page the personal bests set in the session follow the table, as cards three to a row: name, new time with PB, then Before (the old best) and Faster by. A driver here for the first time set no personal best and gets no card. The board leaves the personal-best cards out (the table's PB marks say who).
 
 ### 6.6 A record that fell
 
@@ -155,4 +155,4 @@ A race or qualifying started with **Everyone on the track** has no roster. This 
 
 ## 11. Words
 
-Track record; None yet; The first lap sets it.; New track record; Beat 7.104; Fastest lap; Race result, Qualifying result, Practice result; Ended at 20:26; Full results; Start; Practice, Qualifying, Race; Drivers; Everyone on the track, Whoever's car crosses the line.; Chosen drivers, Only their laps count., The race waits for each of them.; Length, min; Countdown, s; Start practice, Start qualifying, Start race; the hints in §5; Fastest on this track; No sessions yet; End, Abort; 4 drivers, 10 min; Every car with a driver; Everyone on the track, 10 min; Laps, Best lap, Time, Gap, Set on lap, Before, Faster by, First time on this track; Lap times; All laps; Back to Sessions; Sessions; A race is running.; Go to the board; N more on the results page.
+Track record; None yet; The first lap sets it.; New track record; Beat 7.104; Fastest lap; Race result, Qualifying result, Practice result; Ended at 20:26; Full results; Start; Practice, Qualifying, Race; Drivers; Everyone on the track, Whoever's car crosses the line.; Chosen drivers, Only their laps count., The race waits for each of them.; Length, min; Countdown, s; Start practice, Start qualifying, Start race; the hints in §5; Fastest on this track; No sessions yet; End, Abort; 4 drivers, 10 min; Every car with a driver; Everyone on the track, 10 min; Laps, Best lap, Time, Gap, Set on lap, Before, Faster by; Lap times; All laps; Back to Sessions; Sessions; A race is running.; Go to the board; N more on the results page.

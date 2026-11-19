@@ -111,9 +111,10 @@ test('a practice that beat the record: one card from inside says it, the table f
   assert.match(rows[0], /<td class="pos">2<\/td>/);
   // The personal bests set here; Ana's is the card above, which says what it beat.
   assert.ok(bests.every((c) => /^<article class="place is-pb">/.test(c)));
-  assert.deepEqual(bests.map(nameOf), ['Ben Okafor', 'Cyrille Featherstonehaugh', 'Jo', 'Mia Schulz'], 'Dara drove slower than before');
+  assert.deepEqual(bests.map(nameOf), ['Ben Okafor', 'Jo', 'Mia Schulz'], 'Dara drove slower than before; Cyrille, here the first time, beat nothing');
   assert.deepEqual(facts(bests[0]), { Before: '7.250', 'Faster by': '0.096' });
-  assert.deepEqual(facts(bests[1]), { Before: 'First time on this track' });
+  assert.deepEqual(facts(bests[1]), { Before: '7.444', 'Faster by': '0.041' });
+  assert.doesNotMatch(body, /First time on this track/);
   assert.match(figure(bests[0]), /^7\.154 PB/);
   assert.match(body, /<section class="result-pbs" aria-label="Personal bests">/);
 });
@@ -132,8 +133,8 @@ test('a practice that set the first record on a track says so on its P1 card, an
     session: { kind: 'practice' },
     standings: [{ driverId: 'a', position: 1, laps: 1, bestMs: 7000, elapsedMs: null }, { driverId: 'b', position: 2, laps: 1, bestMs: 7500, elapsedMs: null }],
     crossings: [lap, { seq: 2, driverId: 'b', lapMs: 7500, counts: true, via: 'net', at: 2 }],
-    record: { driverId: 'a', seq: 1 }, bests: [{ seq: 1 }, { seq: 2 }],
-    fell: { lap: { driverId: 'a', lapMs: 7000, seq: 1 }, beat: null },
+    record: { driverId: 'a', seq: 1 }, bests: [{ driverId: 'a', seq: 1 }, { driverId: 'b', seq: 2 }],
+    fell: { lap: { driverId: 'a', lapMs: 7000, seq: 1 }, beat: null }, before: new Map([['a', 7200], ['b', 7600]]),
   });
   const markup = String(resultView(result, { drivers: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] }));
   const p1 = /<article class="place is-first">[\s\S]*?<\/article>/.exec(markup)[0];

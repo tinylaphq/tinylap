@@ -145,7 +145,8 @@ function header(request, snap, { members }) {
 /**
  * The marks of a leaderboard (records spec §4.2, fastest lap spec §2), from
  * what the snapshot already holds: a row's best lap is the record or the
- * driver's best when it is the same lap (time, driver, when it was driven).
+ * driver's best when it is the same lap (time, driver, when it was driven)
+ * and they had a best here before the session.
  * The record and personal bests only on the track and direction they belong
  * to. FL on the session's fastest lap, in every kind of session: in a table
  * sorted by best lap it is row 1's.
@@ -153,7 +154,9 @@ function header(request, snap, { members }) {
 function markers(snap, session, standings) {
   const here = session.trackId === snap.track.id && session.direction === snap.direction;
   const record = here ? snap.record : null;
-  const pbs = new Map(here ? snap.bests.map((b) => [b.driverId, b]) : []);
+  // A personal best beats an earlier one: a driver's first time on the track sets none.
+  const hadBest = new Set(snap.hadBest ?? []);
+  const pbs = new Map(here ? snap.bests.filter((b) => hadBest.has(b.driverId)).map((b) => [b.driverId, b]) : []);
   const same = (lap, row) => lap !== null && lap !== undefined && row.bestMs !== null && lap.lapMs === row.bestMs && lap.at === row.bestAt;
   // The session's fastest lap: one row only, the earlier lap on a tie.
   const best = fastestRow(standings);
