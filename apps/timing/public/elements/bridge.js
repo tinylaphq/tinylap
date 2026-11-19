@@ -207,14 +207,6 @@ const reconnects = {
   },
 };
 
-const STATE_TEXT = {
-  connect: 'Ready to connect.',
-  connecting: 'Talking to the decoder.',
-  listening: 'Connected. Nothing from the device yet.',
-  unpaired: 'The decoder is not paired yet.',
-  choose: 'Choose which decoder this is.',
-};
-
 /**
  * Holds a Web Lock on an HID device for the life of a bridge: WebHID, unlike Web Serial, lets a second tab
  * open a device, so the lock keeps two tabs from forwarding one EasyLap. Resolves with the function that
@@ -265,7 +257,7 @@ async function pick(which) {
  * @typedef {{ root: HTMLElement, workspaceId: string, bridge: Bridge | null, preview: any[], names: Map<string, string>, asked: Set<string>, made: any,
  *   transport: 'serial' | 'hid' | null, list: { decoders: { id: string, name: string, lastSeenAt: number | null }[], serverNow: number | null } | null,
  *   remembered: string | null, devices: any, connecting: boolean, wizard: WifiWizard | null, silent: Bridge | null,
- *   stream: { url: string, source: EventSource, retry?: ReturnType<typeof setTimeout> } | null, retryMs: number,
+ *   stream: { url: string, source: EventSource, wait: number, retry?: ReturnType<typeof setTimeout> } | null,
  *   last: { port: any, device: string, decoder: string | null, refused?: boolean } | null,
  *   gone: { decoder: string, kind: string, serial: boolean, back: boolean, before: any[], port: any } | null,
  *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null, failures: number }} Run
@@ -273,7 +265,7 @@ async function pick(which) {
  * button goes to the picker); `gone` the decoder this tab had when its cable was pulled, until a decoder is on the
  * cable again: `back` when its chip has reconnected without the picker before, `before` the ports there already.
  * `stream` is the one stream the page holds (cable presence spec §2), with the timer that opens it again after the
- * server refused it; `retryMs` that timer's next wait. `failures` counts the messages fail() has shown.
+ * server refused it, and `wait`, that timer's next wait. `failures` counts the messages fail() has shown.
  */
 
 class TlBridge extends HTMLElement {
@@ -290,7 +282,7 @@ class TlBridge extends HTMLElement {
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
-      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, retryMs: STREAM_RETRY_MS, failures: 0 };
+      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, failures: 0 };
     this.run = run;
     // Without Web Serial or WebHID only the live cards are on: no cable, no connect flow, the server's notice stays.
     if (!supported) {
@@ -488,9 +480,8 @@ class TlBridge extends HTMLElement {
     if (state === 'ready') this.update(run);
     // The unknown pairing's warning is said by the live region only, in the server's words.
     else if (state === 'unknown') this.announce(run, this.$(run, '[data-bridge-unknown]').textContent);
-    // The unplug, in the server's words.
-    else if (state === 'disconnected') this.announce(run, this.$(run, '[data-bridge-say="disconnected"]')?.textContent ?? '');
-    else this.announce(run, STATE_TEXT[state] ?? '');
+    // Every other state, and the unplug, in the server's words.
+    else this.announce(run, this.$(run, `[data-bridge-say="${CSS.escape(state)}"]`)?.textContent ?? '');
     // After the state's own text, so unreadable data is what screen readers hear.
     if (state === 'listening') this.unreadable(run);
   }
@@ -903,7 +894,9 @@ class TlBridge extends HTMLElement {
    * server should count it on a cable; otherwise the cards stream. Both carry this render's page id (#bridge's
    * data-page), so the server leaves this page's own cable out of its cards. A dropped stream reconnects by itself
    * (EventSource); one the server refused, which EventSource gives up on, is opened again after STREAM_RETRY_MS,
-   * doubling to STREAM_RETRY_MAX_MS until a message comes. The addresses are #bridge's.
+   * doubling to STREAM_RETRY_MAX_MS until a message comes, and not before, whatever paints meanwhile. The wait is the
+   * stream's: a reopen of the same address keeps it; another address starts again from STREAM_RETRY_MS. The
+   * addresses are #bridge's.
    * @param {Run} run
    */
   follow(run) {
@@ -914,21 +907,26 @@ class TlBridge extends HTMLElement {
     if (!address) return;
     const page = run.root.dataset.page;
     const url = page ? `${address}?${new URLSearchParams({ page })}` : address;
-    if (run.stream?.url === url && run.stream.source.readyState !== EventSource.CLOSED) return;
+    // Open, or refused and waiting to open again.
+    if (run.stream?.url === url && (run.stream.retry || run.stream.source.readyState !== EventSource.CLOSED)) return;
+    const wait = run.stream?.url === url ? run.stream.wait : STREAM_RETRY_MS;
     // One at a time: the old one closes first.
     this.unfollow(run);
     const source = new EventSource(url);
     /** @type {NonNullable<Run['stream']>} */
-    const stream = { url, source };
+    const stream = { url, source, wait };
     source.addEventListener('bridge', (event) => {
       if (run !== this.run || run.stream !== stream) return;
-      run.retryMs = STREAM_RETRY_MS;
+      stream.wait = STREAM_RETRY_MS;
       this.swap(run, /** @type {MessageEvent} */ (event).data);
     });
     source.addEventListener('error', () => {
       if (run !== this.run || run.stream !== stream || source.readyState !== EventSource.CLOSED || stream.retry) return;
-      stream.retry = setTimeout(() => { if (run === this.run && run.stream === stream) this.follow(run); }, run.retryMs);
-      run.retryMs = Math.min(run.retryMs * 2, STREAM_RETRY_MAX_MS);
+      stream.retry = setTimeout(() => {
+        stream.retry = undefined;
+        if (run === this.run && run.stream === stream) this.follow(run);
+      }, stream.wait);
+      stream.wait = Math.min(stream.wait * 2, STREAM_RETRY_MAX_MS);
     });
     run.stream = stream;
   }

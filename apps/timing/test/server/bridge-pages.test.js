@@ -27,6 +27,15 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const again = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
   assert.notEqual(/data-page="([^"]+)"/.exec(again)[1], /data-page="([^"]+)"/.exec(body)[1], 'one id per render');
   assert.match(body, /<p hidden data-bridge-say="disconnected">Decoder disconnected\.<\/p>/, 'the words the page announces on an unplug');
+  // The words the page announces for each state, in the server's words (#84).
+  const said = {
+    connect: 'Ready to connect.',
+    connecting: 'Talking to the decoder.',
+    listening: 'Connected. Nothing from the device yet.',
+    unpaired: 'The decoder is not paired yet.',
+    choose: 'Choose which decoder this is.',
+  };
+  for (const [state, words] of Object.entries(said)) assert.match(body, new RegExp(`<p hidden data-bridge-say="${state}">${exact(words)}</p>`), state);
   for (const state of ['unsupported', 'connect', 'connecting', 'listening', 'unpaired', 'choose', 'ready']) assert.match(body, new RegExp(`data-bridge-state="${state}"`));
   assert.doesNotMatch(body, /not-tinylap/);
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
