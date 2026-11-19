@@ -227,7 +227,9 @@ used.
 
 **Releases.** release-please, manifest mode, one component per published
 package. It opens a release pull request with version bumps and changelogs from
-the conventional commits. **Nothing is published until that pull request is
+the conventional commits, as the release GitHub App (`RELEASE_APP_ID`,
+`RELEASE_APP_PRIVATE_KEY`), so the pull request runs ci like any other.
+**Nothing is published until that pull request is
 merged**, by a person. On merge, CI publishes `@tinylap/track-format` and
 `@tinylap/design` to npm with **trusted publishing** (OIDC, no long-lived
 token) and provenance. Apps are `"private": true` and are never published.
