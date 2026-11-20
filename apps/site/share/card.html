@@ -8,30 +8,70 @@
 <style>
 /*
   The link preview (og:image), laid out at 400 x 210, the size previews show
-  it, and rendered at 3x to 1200 x 630: the race board behind, and the
-  name and headline on a slab in the middle, which a square crop keeps whole.
-  Rendered to share.png by render.js, inside a built site.
+  it, and rendered at 3x to 1200 x 630 by render.js, inside a built site.
+  Black edge to edge, so no app's crop can look off-centre; the headline in
+  the middle; last laps along the bottom, running off both edges. A new card
+  needs a new ?v= on og:image in index.html, because previews cache by URL.
 */
 html, body { margin: 0; width: 400px; height: 210px; overflow: hidden; }
-body { position: relative; background: var(--p-bg) url('media/walkthrough-poster.png') no-repeat; background-size: 400px 250px; background-position: 0 -19.33px; }
-/* Hides the recording's pointer dot on the last-laps list of this poster;
-   check it again when the poster is recorded anew. */
-.patch { position: absolute; left: 316.67px; top: 170.67px; width: 16.67px; height: 15.33px; background: linear-gradient(#fff 0 7.33px, #f3f3f3 7.33px 8px, #fff 8px); }
-.slab { position: absolute; left: 50%; top: 47.33px; transform: translateX(-50%); width: max-content; box-sizing: border-box;
-  padding: 12.67px 14.67px 14.67px; background: var(--p-dark); border: var(--p-border-width) solid var(--p-dark);
-  box-shadow: var(--p-shadow-lg) var(--p-accent-2);
-  display: flex; flex-direction: column; align-items: center; gap: 9.33px; text-align: center; }
-.lockup { display: flex; align-items: center; gap: 5.33px; }
-.lockup img { width: 18.67px; height: 18.67px; display: block; outline: var(--p-border-thin) solid var(--p-text-on-fill); }
-.lockup span { font-size: 13.33px; font-weight: 700; letter-spacing: 1.33px; text-transform: uppercase; color: var(--p-text-on-fill); line-height: 1; }
-.slab h1 { white-space: nowrap; font-size: 31.33px; line-height: 0.98; letter-spacing: 0.33px; margin: 0; }
+body {
+  --strip: 30px;
+  position: relative; background: var(--p-dark); color: var(--p-text-on-fill);
+  font-family: var(--p-font);
+}
+
+/* The headline block: centred over the space above the strip, and narrow
+ * enough to stay inside the middle 470 × 470 output px (157 CSS px) of any crop. */
+.hero {
+  position: absolute; left: 0; right: 0; top: 0; bottom: var(--strip);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center;
+}
+.hero img { width: 27px; height: 27px; display: block; outline: var(--p-border-thin) solid var(--p-border-dark); }
+.hero h1 { margin: 0; font-size: 32px; line-height: 0.94; letter-spacing: 0.5px; white-space: nowrap; }
+
+/* Last laps, as the board's feed: palace's light surface, a name with its
+ * colour square, the time in mono, a TR mark; one row running off both edges. */
+.laps {
+  position: absolute; left: -38px; bottom: 0; height: var(--strip);
+  display: flex; align-items: stretch; margin: 0; padding: 0; list-style: none;
+  background: var(--p-surface); color: var(--p-text);
+  border-top: var(--p-border-width) solid var(--p-surface);
+  box-sizing: border-box; white-space: nowrap; font-size: 9px;
+}
+.laps li {
+  display: flex; align-items: center; gap: 6px; padding: 0 9px;
+  border-right: var(--p-border-thin) solid var(--p-border);
+}
+.laps .driver { font-weight: 600; display: flex; align-items: center; }
+.laps .driver::before {
+  content: ''; width: 7px; height: 7px; margin-right: 3px;
+  background: var(--driver); border: var(--p-border-thin) solid var(--p-text);
+}
+.laps .num { font-family: var(--p-font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.laps .mark {
+  font: 700 7px/1 var(--p-font); letter-spacing: 0.04em; padding: 2px 3px;
+  border: var(--p-border-thin) solid var(--p-text);
+  background: var(--tl-record); color: var(--tl-record-ink);
+}
 </style>
 </head>
-<body role="img" aria-label="TinyLap: live lap timing for Mini-Z, over the race board of a race with a new track record">
-<div class="patch"></div>
-<div class="slab">
-  <div class="lockup"><img src="mark.svg" alt=""><span>TinyLap</span></div>
-  <h1 class="h1-hero">Live lap<br>timing<br>for Mini-Z</h1>
+<body role="img" aria-label="TinyLap: lap timing for Mini-Z racing, over a strip of last laps with a new track record">
+<div class="hero">
+  <img src="mark.svg" alt="">
+  <h1 class="h1-hero">Lap timing<br>for Mini-Z<br>racing</h1>
 </div>
+<ul class="laps" aria-hidden="true">
+  <li><span class="driver" style="--driver: #2dff9b">Mia Schulz</span><span class="num">7.402</span></li>
+  <li><span class="driver" style="--driver: var(--p-accent-1)">Ana</span><span class="num">7.050</span><span class="mark">TR</span></li>
+  <li><span class="driver" style="--driver: #b82dff">Jo</span><span class="num">7.950</span></li>
+  <li><span class="driver" style="--driver: #ffb82d">Dara</span><span class="num">7.310</span></li>
+  <li><span class="driver" style="--driver: #2d9bff">Ben Okafor</span><span class="num">7.330</span></li>
+  <li><span class="driver" style="--driver: #2dff9b">Mia Schulz</span><span class="num">7.588</span></li>
+  <li><span class="driver" style="--driver: #b82dff">Jo</span><span class="num">7.900</span></li>
+  <li><span class="driver" style="--driver: #2dff9b">Mia Schulz</span><span class="num">7.700</span></li>
+  <li><span class="driver" style="--driver: #ffb82d">Dara</span><span class="num">7.302</span></li>
+  <li><span class="driver" style="--driver: #2d9bff">Ben Okafor</span><span class="num">7.344</span></li>
+</ul>
 </body>
 </html>

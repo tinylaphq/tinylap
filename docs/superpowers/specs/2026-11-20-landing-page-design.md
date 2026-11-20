@@ -43,8 +43,10 @@ phone, with a 16 px gutter and no horizontal scroll.
 1. **Header:** the TinyLap mark and name; a GitHub button
    (https://github.com/tinylaphq/tinylap).
 2. **Hero, split:**
-   - Left, columns 1–5: the headline "Live lap timing for Mini-Z" in palace's
-     pink-to-cyan display treatment; "Every lap shows up on the laptop, the
+   - Left, columns 1–5: the headline "Lap timing for Mini-Z racing" in three
+     lines (Lap timing / for Mini-Z / racing), in palace's pink-to-cyan display
+     treatment, as big as palace's display size allows and never wider than its
+     column; "Every lap shows up on the laptop, the
      phones in the pits and the TV on the wall, with personal bests and track
      records as they happen."; "On a track at home, or as your club's timing
      system."; a primary "Set up Timing" button.
