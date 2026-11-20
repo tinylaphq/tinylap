@@ -743,6 +743,18 @@ test('on the cable without Wi-Fi, leaving asks and the cable row says why; with 
   assert.deepEqual(errors, []);
 });
 
+test('staying at the leave prompt hands this tab\'s cable to no other tab: a second Bridge tab sees it connected elsewhere', async (t) => {
+  const { page, context, errors, board, row } = await cabledPage(t);
+  // The leave prompt came and the member stayed: beforeunload ran, and the page is still here.
+  assert.equal(await blocksLeaving(page), true);
+  await page.waitForTimeout(1500);
+  const other = await context.newPage();
+  await other.goto('/personal/bridge');
+  await other.locator(`[data-decoder="${board.id}"] [data-row="cable"] [data-slot="state"]`, { hasText: 'Connected on another laptop' }).waitFor({ timeout: 5000 });
+  assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Connected', 'the first tab still has it');
+  assert.deepEqual(errors, []);
+});
+
 test('joining the right password ends joined', async (t) => {
   const { page, errors, board, card, row } = await cabledPage(t);
   const dialog = await openWifi(page, card(board));
@@ -1646,18 +1658,17 @@ test('after a reload without the leaving page\'s cookie, its stale hold still re
   assert.deepEqual(errors, []);
 });
 
-test('a reload the member cancels leaves the cookie to the next render only', async (t) => {
+test('a reload the member cancels leaves no cookie behind once the prompt closes', async (t) => {
   const { page, errors, board, row, pageId } = await reloading(t);
   page.once('dialog', (dialog) => dialog.dismiss());
   await page.reload({ timeout: 2000 }).catch(() => {});
   // Still the same page, still forwarding.
   assert.equal(await page.locator('#bridge').getAttribute('data-page'), pageId);
   assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Connected');
-  // The next render in this browser reads it and clears it; the one after counts this page as another.
+  // Stayed: a second after the prompt the page takes its cookie back, so no other render (another tab's, say) takes its cable.
+  await page.waitForFunction(() => !document.cookie.includes('tl-bridge-leaving'), null, { timeout: 3000 });
   const render = () => page.evaluate(async () => (await fetch(location.pathname, { headers: { accept: 'text/html' } })).text());
-  assert.doesNotMatch(await render(), /Connected on another laptop/, 'the leftover: that render takes this page for its own');
-  assert.equal(await page.evaluate(() => document.cookie.includes('tl-bridge-leaving')), false, 'cleared by the render that read it');
-  assert.match(await render(), /Connected on another laptop/);
+  assert.match(await render(), /Connected on another laptop/, 'the next render counts this page as another');
   assert.deepEqual(errors, []);
 });
 

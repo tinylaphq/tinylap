@@ -434,6 +434,10 @@ class TlBridge extends HTMLElement {
       // A reload's request carries it: the new page counts this page's cable, held until its answer comes, as its own.
       // Long enough for the leave prompt, which comes after this: the server clears it on its first read anyway.
       this.leaving(this.run, 60);
+      // Stayed at the leave prompt (this runs only once it closes), or a reload whose request has long gone with the cookie:
+      // either way no later page may take this page's cable, another tab's least of all.
+      const run = this.run;
+      setTimeout(() => { if (run === this.run) this.leaving(run, 0); }, 1000);
       if (onlyThisTab(this.run.bridge)) event.preventDefault();
       return;
     }
