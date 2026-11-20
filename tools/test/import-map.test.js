@@ -15,9 +15,10 @@ import { stripComments } from '../js-source.js';
 
 const APPS = fileURLToPath(new URL('../../apps/', import.meta.url));
 // Only apps with a browser page have an import map; apps/accounts renders
-// every page on the server.
+// every page on the server, and apps/site is a static page with no
+// dependencies to map, served by GitHub Pages rather than the versioned deploy.
 const apps = readdirSync(APPS, { withFileTypes: true })
-  .filter((d) => d.isDirectory())
+  .filter((d) => d.isDirectory() && d.name !== 'site')
   .map((d) => join(APPS, d.name))
   .filter((app) => existsSync(join(app, 'index.html')));
 

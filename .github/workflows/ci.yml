@@ -5,7 +5,8 @@ name: ci
 # changed since the last successful run on main, so a change whose own run
 # failed still ships with the next green one (accounts and timing also only
 # once their DEPLOY_ENABLED variable is set). Run the workflow by hand on main
-# ("Run workflow") to check and deploy all three.
+# ("Run workflow") to check and deploy all three. The landing page (apps/site)
+# goes to GitHub Pages after every green check on main.
 on:
   push:
     branches: [main]
@@ -181,6 +182,36 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
+
+  # The landing page (apps/site) on GitHub Pages, rebuilt on every green push
+  # to main. Pages' source is "GitHub Actions".
+  pages:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @tinylap/site build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/site/dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
 
   deploy:
     needs: [check, smoke]
