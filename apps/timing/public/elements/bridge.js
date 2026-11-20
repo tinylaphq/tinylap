@@ -95,10 +95,12 @@ function netRow(net, mayChange, silent = false) {
 
 /**
  * Whether leaving this page stops the decoder's laps: it is ready on this tab's cable, and has no Wi-Fi of its own (a
- * plain ZRound decoder or an EasyLap never has; a TinyLap decoder whose last %TLNET isn't connected hasn't now).
- * @param {any} bridge
+ * plain ZRound decoder or an EasyLap never has; a TinyLap decoder whose last %TLNET isn't connected hasn't now), or
+ * the server says its Wi-Fi posts don't get through (its card's Wi-Fi row has data-fault).
+ * @param {any} bridge @param {Element | null} card the card of the decoder on this tab's cable
  */
-const onlyThisTab = (bridge) => bridge?.state === 'ready' && !(bridge.kind === 'tinylap' && bridge.net?.state === 'connected');
+const onlyThisTab = (bridge, card) => bridge?.state === 'ready'
+  && (!(bridge.kind === 'tinylap' && bridge.net?.state === 'connected') || card?.querySelector('[data-row="wifi"][data-fault]') != null);
 
 let warned = false;
 /**
@@ -269,6 +271,8 @@ async function pick(which) {
  *   remembered: string | null, devices: any, connecting: boolean, wizard: WifiWizard | null, silent: Bridge | null,
  *   stream: { url: string, source: EventSource, wait: number, retry?: ReturnType<typeof setTimeout> } | null,
  *   unknownCable: string | null,
+ *   submitted: number | null,
+ *   lastCards: string | null,
  *   last: { port: any, device: string, decoder: string | null, refused?: boolean } | null,
  *   gone: { decoder: string, kind: string, serial: boolean, back: boolean, before: any[], port: any } | null,
  *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null, failures: number,
@@ -296,7 +300,7 @@ class TlBridge extends HTMLElement {
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
-      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, unknownCable: null, failures: 0 };
+      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, unknownCable: null, submitted: null, lastCards: null, failures: 0 };
     this.run = run;
     // Without Web Serial or WebHID only the live cards are on: no cable, no connect flow, the server's notice stays.
     if (!supported) {
@@ -328,6 +332,8 @@ class TlBridge extends HTMLElement {
     this.addEventListener('click', this);
     this.addEventListener('submit', this);
     this.addEventListener('input', this);
+    // An Unpair dialog closing lets the cards it held back be swapped (close doesn't bubble).
+    this.addEventListener('close', this, true);
     addEventListener('beforeunload', this);
     this.listenForReturn();
     run.onPort = (event) => { if (run === this.run) void this.portBack(run, event); };
@@ -342,6 +348,7 @@ class TlBridge extends HTMLElement {
     this.removeEventListener('click', this);
     this.removeEventListener('submit', this);
     this.removeEventListener('input', this);
+    this.removeEventListener('close', this, true);
     removeEventListener('beforeunload', this);
     removeEventListener('pagehide', this);
     removeEventListener('pageshow', this);
@@ -438,7 +445,13 @@ class TlBridge extends HTMLElement {
       // either way no later page may take this page's cable, another tab's least of all.
       const run = this.run;
       setTimeout(() => { if (run === this.run) this.leaving(run, 0); }, 1000);
-      if (onlyThisTab(this.run.bridge)) event.preventDefault();
+      // The page's own form (Unpair) is no leaving: its answer is this page again.
+      const submitting = this.run.submitted !== null && performance.now() - this.run.submitted < 1000;
+      if (!submitting && onlyThisTab(this.run.bridge, this.cabledCard(this.run))) event.preventDefault();
+      return;
+    }
+    if (event.type === 'close') {
+      if (this.run && event.target instanceof HTMLDialogElement && event.target.matches('.confirm-dialog') && this.run.lastCards) this.swap(this.run, this.run.lastCards);
       return;
     }
     // Leaving the page closes the port, and the stream: a page in the back/forward cache forwards nothing either.
@@ -482,6 +495,8 @@ class TlBridge extends HTMLElement {
     } else if (event.type === 'click') {
       const wifi = event.target instanceof Element ? event.target.closest('[data-bridge-wifi]') : null;
       if (wifi instanceof HTMLElement && this.contains(wifi)) return this.openWifi(run, wifi);
+      const again = event.target instanceof Element ? event.target.closest('[data-bridge-pair-again]') : null;
+      if (again instanceof HTMLButtonElement && this.contains(again)) return void this.pairAgain(run, again);
       const button = event.target instanceof Element ? event.target.closest('[data-bridge-connect]') : null;
       if (button && this.contains(button)) {
         let which = /** @type {any} */ (button).dataset.bridgeConnect || 'serial';
@@ -501,6 +516,8 @@ class TlBridge extends HTMLElement {
       } else if (form instanceof HTMLFormElement && form.matches('[data-bridge-choose]') && this.contains(form)) {
         event.preventDefault();
         void this.choose(run, form);
+      } else if (form instanceof HTMLFormElement && form.closest('.confirm-dialog') && this.contains(form)) {
+        run.submitted = performance.now();
       }
     }
   }
@@ -912,14 +929,23 @@ class TlBridge extends HTMLElement {
     const cableRow = card.querySelector('[data-row="cable"]');
     fill(cableRow, { state: 'ok', words: 'Connected', detail: '' });
     for (const b of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-bridge-connect]') ?? [])) b.hidden = true;
-    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = note.dataset.cableNote !== (bridge.kind === 'tinylap' ? 'only' : 'only-cable') || !onlyThisTab(bridge);
+    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = true;
     const wifiRow = /** @type {HTMLElement | null} */ (card.querySelector('[data-row="wifi"]'));
     const tinylap = bridge.kind === 'tinylap';
     if (wifiRow) wifiRow.hidden = !tinylap;
-    const change = /** @type {HTMLButtonElement | null} */ (wifiRow?.querySelector('[data-bridge-wifi]') ?? null);
-    if (wifiRow && tinylap) {
+    // Change Wi-Fi is in the Wi-Fi row, or in the foot when a fault's fix has the row (the server's call).
+    const change = /** @type {HTMLButtonElement | null} */ (card.querySelector('[data-bridge-wifi]') ?? null);
+    const fault = wifiRow?.hasAttribute('data-fault') ?? false;
+    // Pair again renews a TinyLap decoder's pairing over this cable: in the faulted row, or in the foot.
+    for (const again of /** @type {NodeListOf<HTMLElement>} */ (card.querySelectorAll('[data-bridge-pair-again]'))) again.hidden = !(tinylap && bridge.state === 'ready');
+    if (wifiRow && tinylap && fault) {
+      // The server's words stay: they say why the laps don't get through, and what fixes it here.
+      for (const help of /** @type {NodeListOf<HTMLElement>} */ (wifiRow.querySelectorAll('[data-fault-help]'))) help.hidden = help.dataset.faultHelp !== 'here';
+    } else if (wifiRow && tinylap) {
       fill(wifiRow, netRow(bridge.net, change !== null, silent));
       for (const hint of /** @type {NodeListOf<HTMLElement>} */ (wifiRow.querySelectorAll('[data-slot="action"] > .decoder-row-help'))) hint.hidden = true;
+    }
+    if (tinylap) {
       if (change) {
         change.hidden = !bridge.net;
         const label = bridge.net?.state === 'off' ? 'Set up Wi-Fi' : 'Change Wi-Fi';
@@ -937,6 +963,11 @@ class TlBridge extends HTMLElement {
       if (first && first.textContent !== text) first.textContent = text;
       for (const p of rest) p.remove();
     }
+    // When only this tab gets its laps through, the server's sentence says so instead (bridge decoder home spec, Design 3).
+    const alone = onlyThisTab(bridge, card);
+    const only = /** @type {HTMLElement | null} */ (card.querySelector('[data-status-only]'));
+    if (only && only.hidden === alone) only.hidden = !alone;
+    if (status && status.hidden !== (alone && only !== null)) status.hidden = alone && only !== null;
   }
 
   /**
@@ -959,8 +990,8 @@ class TlBridge extends HTMLElement {
   uncable(run, card) {
     const served = this.served.get(card.dataset.decoder ?? '');
     if (!served) {
-      // Change Wi-Fi needs the cable, so it goes now.
-      for (const b of /** @type {NodeListOf<HTMLElement>} */ (card.querySelectorAll('[data-bridge-wifi]'))) b.hidden = true;
+      // Change Wi-Fi and Pair again need the cable, so they go now, and so does what only this tab's cable made true.
+      for (const b of /** @type {NodeListOf<HTMLElement>} */ (card.querySelectorAll('[data-bridge-wifi], [data-bridge-pair-again], [data-status-only]'))) b.hidden = true;
       return;
     }
     const focus = this.focusOf(card.parentElement);
@@ -973,7 +1004,7 @@ class TlBridge extends HTMLElement {
     const active = document.activeElement;
     if (!list || !(active instanceof HTMLElement) || !list.contains(active)) return null;
     const card = /** @type {HTMLElement | null} */ (active.closest('[data-decoder]'));
-    const which = active.matches('[data-bridge-wifi]') ? '[data-bridge-wifi]' : active.matches('[data-bridge-connect]') ? '[data-bridge-connect]' : null;
+    const which = ['[data-bridge-wifi]', '[data-bridge-connect]', '[data-bridge-pair-again]'].find((hook) => active.matches(hook)) ?? null;
     return { id: card?.dataset.decoder ?? null, which };
   }
 
@@ -1082,10 +1113,12 @@ class TlBridge extends HTMLElement {
     if (!fresh || fresh.id !== 'bridge-decoders' || !current) return;
     const next = /** @type {HTMLElement} */ (document.importNode(fresh, true));
     const before = this.served;
+    // An open Unpair dialog holds its card back; it closing swaps in the cards that came meanwhile.
+    run.lastCards = html;
     this.keep(run, next);
     const focus = this.focusOf(current);
     const replaced = this.swapCards(current, next, before);
-    if (!replaced) current.replaceWith(next);
+    if (!replaced && !current.querySelector('dialog[open]')) current.replaceWith(next);
     this.paint(run);
     if (!replaced || (focus?.id && replaced.has(focus.id))) this.refocus(run, focus);
   }
@@ -1120,6 +1153,7 @@ class TlBridge extends HTMLElement {
       const old = had.get(id);
       const served = before.get(id);
       if (old && served && canonical(served) === canonical(card)) continue;
+      if (old?.querySelector('dialog[open]')) continue;
       if (old) old.replaceWith(card);
       else current.append(card);
       replaced.add(id);
@@ -1278,6 +1312,43 @@ class TlBridge extends HTMLElement {
       return { field: 'password', text: `A Wi-Fi password is 8 to 63 bytes, or 64 hex digits. ${why}` };
     }
     return null;
+  }
+
+  /** The card of the decoder on this tab's cable, as painted. @param {Run} run @returns {HTMLElement | null} */
+  cabledCard(run) {
+    return this.$(run, '#bridge-decoders [data-cabled]');
+  }
+
+  /**
+   * Pair again (bridge decoder home spec, Design 1): a new token for the decoder on this cable, its token and this
+   * server's address sent over it (its Wi-Fi stays), and the server told it took the token, so only that one works.
+   * @param {Run} run @param {HTMLButtonElement} button
+   */
+  async pairAgain(run, button) {
+    const decoder = /** @type {HTMLElement | null} */ (button.closest('[data-decoder]'))?.dataset.decoder;
+    const bridge = run.bridge;
+    if (!decoder || !bridge || bridge.decoder !== decoder) return this.fail(run, new Error('The decoder is disconnected. Connect it again.'));
+    button.disabled = true;
+    const path = `/workspaces/${encodeURIComponent(run.workspaceId)}/decoders/${encodeURIComponent(decoder)}/token`;
+    try {
+      const { token } = await api('POST', path, {});
+      if (run !== this.run) return;
+      if (run.bridge !== bridge) throw new Error('The decoder is disconnected. Connect it again.');
+      try {
+        await bridge.pair(decoder, token, null, run.root.dataset.server ?? '');
+      } catch (caught) {
+        // The token is stored; only the address didn't take, as at a first pairing.
+        if (!(caught instanceof ServerUnconfirmedError)) throw caught;
+        await api('POST', `${path}/taken`, { token });
+        throw new Error('The decoder is paired, but its firmware is too old for Wi-Fi. Update it, then pair again. Its passings still reach TinyLap over this cable.', { cause: caught });
+      }
+      await api('POST', `${path}/taken`, { token });
+      if (run === this.run) this.ok(run);
+    } catch (caught) {
+      if (run === this.run) this.fail(run, caught);
+    } finally {
+      button.disabled = false;
+    }
   }
 
   /** @param {Run} run @param {HTMLFormElement} pairForm */
