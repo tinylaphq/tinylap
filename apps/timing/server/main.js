@@ -100,7 +100,8 @@ const handler = createHandler({
   noticeToken: env.TINYLAP_NOTICE_TOKEN || undefined,
 });
 
-const host = dev ? '127.0.0.1' : '0.0.0.0';
+// Dev stays on this machine, unless a decoder must reach it over the network (TINYLAP_DECODER_URL).
+const host = dev && !env.TINYLAP_DECODER_URL ? '127.0.0.1' : '0.0.0.0';
 const server = createServer(handler).listen(port, host, () => {
   console.log(`timing on http://${host}:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}${dev ? ' (dev, no-store)' : ''}, sign-in through ${env.TINYLAP_ISSUER}`);
 });
