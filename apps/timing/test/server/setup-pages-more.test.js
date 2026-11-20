@@ -74,12 +74,13 @@ test('unpairing asks first and needs an admin', async () => {
   assert.equal((await get(member, `${base}/decoders/${decoder.id}/unpair`)).status, 403);
   const ask = await (await get(owner, `${base}/decoders/${decoder.id}/unpair`)).text();
   assert.match(ask, /<h1 class="cut-words" title="Unpair Start line\?">Unpair Start line\?<\/h1>/);
+  assert.match(ask, new RegExp(`<a class="btn btn-outline" href="${base}/bridge">Cancel</a>`), 'the way back is the Bridge, where decoders live');
   const done = await app.form(owner, `${base}/decoders/${decoder.id}/unpair`, {});
   assert.equal(done.status, 303);
+  assert.equal(done.headers.get('location'), `${base}/bridge`);
   assert.deepEqual(app.store.decoders(office.id), []);
   const again = await app.form(owner, `${base}/decoders/${decoder.id}/unpair`, {});
   assert.equal(again.status, 404);
-  assert.equal(((await again.text()).match(/role="alert"/g) ?? []).length, 1);
   assert.equal((await get(owner, `${base}/decoders/${decoder.id}/unpair`)).status, 404);
 });
 

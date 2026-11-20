@@ -24,7 +24,7 @@ function showBridge(request) {
   const ws = request.workspaceId;
   const raw = LEAVING.exec(String(request.req.headers.cookie ?? ''))?.[1];
   const after = raw && PAGE_ID.test(raw) ? raw : null;
-  const cards = { connections: request.engine.connectionsOf(ws, { pages: after ? [after] : [] }), mayPair: can(request.session.claims, ws, 'timing.setup'), after };
+  const cards = { connections: request.engine.connectionsOf(ws, { pages: after ? [after] : [] }), mayPair: can(request.session.claims, ws, 'timing.setup'), mayDelete: can(request.session.claims, ws, 'timing.delete'), after };
   const headers = raw === undefined ? {} : { 'Set-Cookie': `tl-bridge-leaving=; Path=${request.space.base}/bridge; Max-Age=0; Secure; SameSite=Strict` };
   return page(request, 200, bridgePage(request, map, request.store.choosableDecoders(ws), request.store.decoders(ws).map((d) => d.id), cards), { scriptHashes: [map.hash], headers });
 }

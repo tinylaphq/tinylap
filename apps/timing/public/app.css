@@ -368,6 +368,21 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 .decoder-row-action > .decoder-row-help[hidden] + .btn { margin-top: var(--p-space-sm); }
 .decoder-empty > p { margin: 0; }
 .decoder-empty > p + p { margin-top: var(--p-space-md); }
+.decoder-card > [data-status-only] p { margin: 0; }
+/* The card's own actions, rarely needed (bridge decoder home spec, Design 5): under the rows after a divider,
+   Pair again on the left, Unpair quiet on the right. A foot whose buttons are all hidden takes no room. */
+.decoder-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm); padding-top: var(--p-space-lg); border-top: var(--p-border-thin) solid var(--p-border); }
+.decoder-foot:not(:has(> :not([hidden]))) { display: none; }
+/* Unpair is quiet: a link's look, palace's button look undone, 44 px to tap, as a driver's Remove. */
+.decoder-unpair {
+  margin-left: auto; min-height: var(--p-control-height); padding: 0 var(--p-space-xs); border: 0; border-radius: 0;
+  background: none; box-shadow: none; transform: none; font: inherit; font-size: var(--p-text-md); font-weight: 400; text-transform: none; letter-spacing: normal;
+  color: var(--p-text-secondary); text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer;
+}
+.decoder-unpair:hover { color: var(--p-text); background: none; box-shadow: none; transform: none; }
+/* Unpair's question: the confirmation page's words and buttons, in a dialog. */
+.confirm-dialog:modal { max-width: min(var(--p-container-narrow), calc(100vw - 2 * var(--p-space-md))); }
+.confirm-dialog > h2 { margin-top: 0; }
 .bridge-more p { margin-bottom: 0; }
 
 /* The lamp: always a 44px square. Each state shows in colour, icon shape and

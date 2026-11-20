@@ -141,7 +141,6 @@ export const PAIRED_COOKIE = '__Host-tl-paired';
 const PAIRED_TTL_SECONDS = 300;
 const PAIRED = new RegExp(`(?:^|;\\s*)${PAIRED_COOKIE}=([^;]+)`);
 const clearPaired = `${PAIRED_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
-const NO_SUCH_DECODER = { failed: { error: { message: 'There is no such decoder here.' } } };
 
 /** GET setup: the page, and once after pairing, the new decoder's token. */
 function showSetup(request) {
@@ -239,18 +238,21 @@ const pairDecoder = withForm((request, form) => {
 
 function askUnpair(request, match) {
   const decoder = request.store.decoder(match[2]);
-  if (!decoder || decoder.workspaceId !== request.workspaceId) return renderSetup(request, 404, NO_SUCH_DECODER);
+  if (!decoder || decoder.workspaceId !== request.workspaceId) return page(request, 404, notFoundPage(request));
   const base = request.space.base;
   return page(request, 200, confirmPage(request, {
     title: `Unpair ${decoder.name}?`,
     text: 'Its token stops working at once. Its passings stay.',
     action: `${base}/decoders/${decoder.id}/unpair`,
     button: 'Unpair',
-    back: `${base}/setup#decoders`,
+    back: `${base}/bridge`,
   }));
 }
 
-const unpair = withForm((request, _form, match) => afterForm(request, ops.unpairDecoder(request, { id: match[2] }), { key: 'pair', values: {}, section: 'decoders' }));
+// Decoders live on the Bridge (bridge decoder home spec, Design 6): it comes back there, the decoder gone.
+const unpair = withForm((request, _form, match) => (ops.unpairDecoder(request, { id: match[2] }).error
+  ? page(request, 404, notFoundPage(request))
+  : seeOther(`${request.space.base}/bridge`)));
 
 const makeWatchLink = withForm((request) => afterForm(request, ops.rotateWatchLink(request), { key: 'watchers', values: {}, section: 'watchers' }));
 

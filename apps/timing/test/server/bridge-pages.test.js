@@ -48,7 +48,8 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   assert.match(body, /<section data-bridge-state="unsupported"[^>]*>[\s\S]*Chrome or Edge/);
   assert.match(body, /The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID\./);
   assert.match(body, /<section data-bridge-state="connect" hidden/);
-  assert.match(body, /Pair over Wi-Fi only/);
+  assert.doesNotMatch(body, /Pair over Wi-Fi only/);
+  assert.match(body, /A TinyLap decoder needs it once, to pair; after that it can time over Wi-Fi without it\./);
   assert.match(body, /token for your personal space/);
   assert.doesNotMatch(body, /this space/);
   const map = /<script type="importmap">([\s\S]*?)<\/script>/.exec(body)[1];
@@ -133,8 +134,9 @@ test('the decoder cards: every decoder of the club by name, above the connect fl
   assert.match(body, /Laps get through over Wi-Fi\./);
   assert.match(body, /If it's on, its laps wait on it\. Connect the cable to see why\./);
   assert.equal(body.match(/data-bridge-wifi hidden>Change Wi-Fi</g).length, 2, 'a member who may pair has it, hidden until the cable is in');
-  assert.equal(body.match(/<p class="decoder-row-help" data-cable-note="only" hidden>Laps reach TinyLap only through this tab\. Leaving this page stops them; set up Wi-Fi to time without it\.<\/p>/g).length, 2, 'each card says, once its cable is here and it has no Wi-Fi, what leaving does');
-  assert.equal(body.match(/<p class="decoder-row-help" data-cable-note="only-cable" hidden>Laps reach TinyLap only through this tab\. Leaving this page stops them\.<\/p>/g).length, 2, 'and for a decoder that has no Wi-Fi at all, without suggesting it');
+  assert.equal(body.match(/<div class="status status-warning" data-status-only hidden><p>Laps get through only while this page is open and the decoder is plugged in\.<\/p><\/div>/g).length, 2, 'each card says, once only this tab gets its laps through, what leaving does');
+  assert.equal(body.match(/command="show-modal">Unpair</g).length, 2, 'an owner may unpair each');
+  assert.doesNotMatch(body, /data-cable-note="only/);
   assert.match(body, /<dialog id="wifi-dialog"/);
   assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="ready"'), 'outside the cards, so a swap keeps it');
 });
