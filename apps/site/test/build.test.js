@@ -69,6 +69,12 @@ test('github appears once', () => {
   assert.equal(values('href').filter((h) => h.startsWith('https://github.com/') && !h.startsWith(BLOB)).length, 1);
 });
 
+test('the hero film is described as the README describes it', () => {
+  const readme = readFileSync(new URL('README.md', REPO), 'utf8');
+  const alt = readme.match(/!\[([^\]]+)\]\(docs\/walkthrough\.gif\)/)?.[1];
+  assert.equal(html.match(/<tl-autoplay>\s*<video[^>]*aria-label="([^"]*)"/)?.[1], alt);
+});
+
 test('the hero video can play without script', () => {
   const hero = html.match(/<tl-autoplay>\s*<video([^>]*)>/)?.[1] ?? '';
   for (const attr of [' controls', ' muted', ' loop', ' playsinline']) assert.ok(hero.includes(attr), attr);
