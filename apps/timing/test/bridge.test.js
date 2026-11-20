@@ -172,6 +172,13 @@ test('only a 404 or a 422 drops the passings: they will never be taken', async (
   }
 });
 
+test('a 404 for a logs-only batch says the server doesn\'t know the decoder too', async () => {
+  const lines = [{ decoder: 'd1', boot: 'b1', line: '%TLNET x' }];
+  const result = await sendOutbox(memoryOutbox(), async () => { throw failing(404); }, () => {}, { lines, alone: true });
+  assert.deepEqual([...result.missing], ['d1']);
+  assert.deepEqual(result.sentLines, lines, 'its lines are dropped');
+});
+
 test('signed out, too large, rate limited, a 5xx or the network: the passings wait for a retry', async () => {
   const outbox = memoryOutbox();
   for (const failure of [new Error('offline'), failing(401), failing(413), failing(415), failing(429), failing(500), failing(503)]) {

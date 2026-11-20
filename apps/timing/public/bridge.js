@@ -937,6 +937,7 @@ export async function sendOutbox(outbox, post, onSent = () => {}, { lines = [], 
         break;
       }
       if (status === 403) skipped.add(decoder);
+      if (status === 404) missing.add(decoder);
     }
     finish(carried);
   }
