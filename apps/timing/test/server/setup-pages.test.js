@@ -46,7 +46,7 @@ test('the setup page has a section per thing to set up', async () => {
   assert.equal(res.status, 200);
   const body = await res.text();
   for (const id of ['track', 'drivers', 'transponders', 'watchers']) assert.match(body, new RegExp(`<tl-frame id="${id}"[^>]*><section`), id);
-  assert.match(body, /<section[^>]* id="decoders"/);
+  assert.doesNotMatch(body, /id="decoders"|Pair over Wi-Fi only|Decoders</, 'Setup is race setup: decoders live on the Bridge');
   assert.match(body, new RegExp(`<form method="post" action="${base}/drivers"`));
   assert.match(body, /<label for="add-driver-name">New driver<\/label>/);
   assert.doesNotMatch(body, /workspace/i);
@@ -425,7 +425,7 @@ test('track forms from another site change nothing', async () => {
 
 test('the setup page’s headings: the page, a plain h2 per section, an h3 within', async () => {
   const body = await (await get(owner, `${base}/setup`)).text();
-  for (const id of ['track', 'drivers', 'transponders', 'decoders', 'watchers']) assert.match(body, new RegExp(`<h2 id="${id}-title">`), id);
+  for (const id of ['track', 'drivers', 'transponders', 'watchers']) assert.match(body, new RegExp(`<h2 id="${id}-title">`), id);
   assert.doesNotMatch(body, /<h2 class="h3"/);
   assert.match(body, /<h3 class="track-subhead">Add a track<\/h3>/);
 });

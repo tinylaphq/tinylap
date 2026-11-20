@@ -336,6 +336,9 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
    between rows, sm inside a row. */
 #bridge-decoders { margin-bottom: var(--p-space-lg); }
 #bridge > [data-bridge-state="unsupported"] { margin-bottom: var(--p-space-lg); }
+/* With script on, the notice waits for tl-bridge to say it is needed (Web Serial and WebHID missing): until the
+   element is defined it would flash on every visit, hiding the cards' Connect decoder with it. Without script it shows. */
+@media (scripting: enabled) { tl-bridge:not(:defined) [data-bridge-state="unsupported"] { display: none; } }
 /* One gap (lg) between heading, status box and rows, and each side of a row divider; the status box's hard shadow
    (4px, the xs step) is added under it so the gap to the first row is lg past the shadow too. */
 .decoder-card { display: grid; gap: var(--p-space-lg); }
@@ -361,13 +364,31 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 /* Where the browser can't reach USB decoders (or tl-bridge can't run), no Connect decoder: it couldn't work.
    This rule owns only that; tl-bridge (TlBridge.paint) disables every card's Connect decoder while a connection
    is in progress or a decoder is on the cable, and hides the one on the cabled card. */
-#bridge:has([data-bridge-missing="serial"]:not([hidden]), [data-bridge-state="unsupported"]:not([hidden])) #bridge-decoders [data-bridge-connect] { display: none; }
+#bridge:has([data-bridge-missing="serial"]:not([hidden])) #bridge-decoders [data-bridge-connect],
+tl-bridge:defined #bridge:has([data-bridge-state="unsupported"]:not([hidden])) #bridge-decoders [data-bridge-connect] { display: none; }
+/* Without script, or while it loads, the notice's state is not known yet: without script it shows, and no button could work. */
+@media (scripting: none) { #bridge-decoders [data-bridge-connect] { display: none; } }
 /* A plain ZRound decoder or EasyLap on the cable: no Wi-Fi row, and the Cable row ends the card. */
 .decoder-row[hidden] { display: none; }
 .decoder-row:has(+ .decoder-row[hidden]) { padding-bottom: 0; }
 .decoder-row-action > .decoder-row-help[hidden] + .btn { margin-top: var(--p-space-sm); }
 .decoder-empty > p { margin: 0; }
 .decoder-empty > p + p { margin-top: var(--p-space-md); }
+.decoder-card > [data-status-only] p { margin: 0; }
+/* The card's own actions, rarely needed (bridge decoder home spec, Design 5): under the rows after a divider,
+   Pair again on the left, Unpair quiet on the right. A foot whose buttons are all hidden takes no room. */
+.decoder-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-sm); padding-top: var(--p-space-lg); border-top: var(--p-border-thin) solid var(--p-border); }
+.decoder-foot:not(:has(> :not([hidden]))) { display: none; }
+/* Unpair is quiet: a link's look, palace's button look undone, 44 px to tap, as a driver's Remove. */
+.decoder-unpair {
+  margin-left: auto; min-height: var(--p-control-height); padding: 0 var(--p-space-xs); border: 0; border-radius: 0;
+  background: none; box-shadow: none; transform: none; font: inherit; font-size: var(--p-text-md); font-weight: 400; text-transform: none; letter-spacing: normal;
+  color: var(--p-text-secondary); text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer;
+}
+.decoder-unpair:hover { color: var(--p-text); background: none; box-shadow: none; transform: none; }
+/* Unpair's question: the confirmation page's words and buttons, in a dialog. */
+.confirm-dialog:modal { max-width: min(var(--p-container-narrow), calc(100vw - 2 * var(--p-space-md))); }
+.confirm-dialog > h2 { margin-top: 0; }
 .bridge-more p { margin-bottom: 0; }
 
 /* The lamp: always a 44px square. Each state shows in colour, icon shape and
@@ -771,21 +792,16 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; } /* between palace's s
 .setup-row .btn, .track-row .btn, .roster-head .btn, .tp-rows .btn, .track-edit-form .btn { height: var(--p-control-height-sm); display: inline-flex; align-items: center; justify-content: center; margin: 0; }
 .track-edit-form .btn { height: var(--p-control-height); }
 .setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
-.token { display: block; word-break: break-all; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
-/* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
-.token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
 /* Every status line here is prose, not a label. */
 /* A failed form's summary is a sentence; its link keeps the box's colour. */
 .status-error { font-weight: 600; }
 .status-error a { color: inherit; border-bottom-color: currentColor; }
 .status-info p { font-weight: 400; margin: 0; }
 .status-info p + p { margin-top: var(--p-space-xs); }
-.status .token { margin: 0; }
 /* A value and its Copy button (tl-copy): the button stays beside what it
    copies, even on a phone, where a long token wraps instead; one-line values
    and the button share palace's control height. The hint takes its own line. */
 .copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-sm); align-items: start; }
-.copy > .token { min-height: var(--p-control-height); }
 .copy > .copy-hint { grid-column: 1 / -1; margin: 0; }
 /* A line that introduces a copyable value sits with it; the next line keeps its distance. */
 .status > p + .copy { margin-top: var(--p-space-xs); }

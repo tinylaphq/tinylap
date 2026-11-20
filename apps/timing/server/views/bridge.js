@@ -48,7 +48,7 @@ const when = (request, at) => html`<time datetime="${new Date(at).toISOString()}
 const clock = (request, at) => html`<time datetime="${new Date(at).toISOString()}" data-when>${formatWhen(at, request.now())}</time>`;
 
 /** One connection: lamp, name, state, one line of help, at most one action. */
-const connectionRow = ({ which, name, state, icon, words, detail, action, notes = null }) => html`<li class="decoder-row" data-row="${which}">
+const connectionRow = ({ which, name, state, icon, words, detail, action, notes = null, fault = null }) => html`<li class="decoder-row" data-row="${which}"${fault ? html` data-fault="${fault}"` : null}>
           ${lamp(state, icon)}
           <div class="decoder-row-text"><p class="decoder-row-name">${name}</p><p class="decoder-row-state" data-slot="state">${words}</p><p class="decoder-row-help" data-slot="detail">${detail}</p>${notes}</div>
           <div class="decoder-row-action" data-slot="action">${action}</div>
@@ -62,12 +62,29 @@ const WIFI_ROW = {
   unknown: { state: 'unknown', words: () => null, detail: () => 'Connect the cable to see its Wi-Fi.' },
 };
 
-// What the Cable row says after this tab's cable to the decoder was pulled, and (only, only-cable: a TinyLap decoder, or one with no
-// Wi-Fi at all) while this tab is its only way; tl-bridge shows them (connections spec §2).
-const CABLE_NOTES = html`<p class="decoder-row-help" data-cable-note="back" hidden>It reconnects when you plug it back in.</p><p class="decoder-row-help" data-cable-note="gap" hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p><p class="decoder-row-help" data-cable-note="only" hidden>Laps reach TinyLap only through this tab. Leaving this page stops them; set up Wi-Fi to time without it.</p><p class="decoder-row-help" data-cable-note="only-cable" hidden>Laps reach TinyLap only through this tab. Leaving this page stops them.</p>`;
+// What the Cable row says after this tab's cable to the decoder was pulled; tl-bridge shows them (connections spec §2).
+const CABLE_NOTES = html`<p class="decoder-row-help" data-cable-note="back" hidden>It reconnects when you plug it back in.</p><p class="decoder-row-help" data-cable-note="gap" hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p>`;
 
-/** A decoder's card, as the server knows it: no cable on this tab (connections spec §3). @param {any} request @param {boolean} mayPair */
-function decoderCard(request, d, mayPair) {
+// A decoder whose Wi-Fi posts fail or are refused (bridge decoder home spec, Design 2): the words, and what fixes it
+// here (on this tab's cable, with Pair again) or elsewhere; tl-bridge shows the one that applies.
+const FAULTS = {
+  unreachable: { words: "Its laps don't get through", why: "It can't reach TinyLap at the address it has.", here: 'Pair it again to give it this one.' },
+  refused: { words: 'Its laps are turned away', why: 'TinyLap no longer accepts its pairing.', here: 'Pair it again to fix it.' },
+};
+const ELSEWHERE = 'Plug it into this laptop, then pair it again.';
+
+/** Unpair's question, opened by the card's Unpair without script (invoker commands); it posts, and the Bridge comes back. */
+const unpairDialog = (request, d) => html`<dialog id="unpair-${d.id}" class="confirm-dialog" aria-labelledby="unpair-${d.id}-title">
+        <h2 id="unpair-${d.id}-title" class="h3 cut-words">Unpair ${d.name}?</h2>
+        <p>Its token stops working at once. Its passings stay.</p>
+        <form method="post" action="${request.space.base}/decoders/${d.id}/unpair" class="button-row confirm-actions">
+          <button type="submit" class="btn btn-danger-fill">Unpair</button>
+          <button type="button" class="btn btn-outline" commandfor="unpair-${d.id}" command="close">Keep it</button>
+        </form>
+      </dialog>`;
+
+/** A decoder's card, as the server knows it: no cable on this tab (connections spec §3). @param {any} request @param {boolean} mayPair @param {boolean} mayDelete */
+function decoderCard(request, d, mayPair, mayDelete) {
   const viaCable = d.cable.state === 'other';
   const viaWifi = d.wifi.state === 'reporting' || d.wifi.state === 'idle';
   const status = viaCable || viaWifi
@@ -84,13 +101,25 @@ function decoderCard(request, d, mayPair) {
     ? html`<p class="decoder-row-help">${mayPair ? 'Connect the cable to see and change its Wi-Fi.' : 'Connect the cable to see its Wi-Fi.'}</p>`
     : null;
   const change = mayPair ? html`<button type="button" class="btn btn-sm btn-outline" data-bridge-wifi hidden>Change Wi-Fi</button>` : null;
+  const repair = (style) => (mayPair ? html`<button type="button" class="btn btn-sm ${style}" data-bridge-pair-again hidden>Pair again</button>` : null);
+  const fault = FAULTS[d.wifi.fault] ?? null;
+  // A fault's row has one action, the fix: Change Wi-Fi and Pair again's quiet place give way to it.
+  const wifiRow = fault
+    ? connectionRow({ which: 'wifi', name: 'Wi-Fi', icon: WIFI_ICON, state: 'fail', words: fault.words, detail: null, fault: d.wifi.fault,
+      action: html`<p class="decoder-row-help" data-fault-help="here" hidden>${fault.why} ${fault.here}</p><p class="decoder-row-help" data-fault-help="elsewhere">${fault.why} ${ELSEWHERE}</p>${repair('btn-primary')}` })
+    : connectionRow({ which: 'wifi', name: 'Wi-Fi', icon: WIFI_ICON, state: wifi.state, words: wifi.words(request, d.wifi.at), detail: wifi.detail(request, d.wifi.at), action: html`${hint}${change}` });
+  const unpair = mayDelete ? html`<button type="button" class="decoder-unpair" commandfor="unpair-${d.id}" command="show-modal">Unpair<span class="visually-hidden"> ${d.name}</span></button>` : null;
+  const foot = mayPair || mayDelete ? html`<div class="decoder-foot">${fault ? change : repair('btn-outline')}${unpair}</div>` : null;
   return html`<section id="decoder-${d.id}" class="card-static decoder-card" data-decoder="${d.id}">
       <h2 class="h3 cut-words" data-slot="name">${d.name}</h2>
       ${status}
+      <div class="status status-warning" data-status-only hidden><p>Laps get through only while this page is open and the decoder is plugged in.</p></div>
       <ul class="decoder-rows">
         ${connectionRow({ which: 'cable', name: 'Cable', icon: PLUG_ICON, ...cable, notes: CABLE_NOTES })}
-        ${connectionRow({ which: 'wifi', name: 'Wi-Fi', icon: WIFI_ICON, state: wifi.state, words: wifi.words(request, d.wifi.at), detail: wifi.detail(request, d.wifi.at), action: html`${hint}${change}` })}
+        ${wifiRow}
       </ul>
+      ${foot}
+      ${mayDelete ? unpairDialog(request, d) : null}
     </section>`;
 }
 
@@ -128,12 +157,12 @@ function decoderCard(request, d, mayPair) {
  * A plain ZRound decoder or EasyLap has no Wi-Fi: remove its Wi-Fi row once
  * the cable shows what it is.
  */
-/** @param {any} request @param {any[]} rows engine.connectionsOf's @param {{ mayPair?: boolean }} [options] */
-export function decoderCards(request, rows, { mayPair = false } = {}) {
+/** @param {any} request @param {any[]} rows engine.connectionsOf's @param {{ mayPair?: boolean, mayDelete?: boolean }} [options] */
+export function decoderCards(request, rows, { mayPair = false, mayDelete = false } = {}) {
   const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
   return html`<div id="bridge-decoders">
     ${sorted.length > 0
-    ? sorted.map((d) => decoderCard(request, d, mayPair))
+    ? sorted.map((d) => decoderCard(request, d, mayPair, mayDelete))
     : html`<section id="decoder-none" class="card-static decoder-empty">
       <p>No decoder yet. Plug one in by USB, then connect it to pair it.</p>
       <p><button type="button" class="btn btn-primary" data-bridge-connect="serial">Connect decoder</button></p>
@@ -236,10 +265,10 @@ export function wifiDialog() {
 /**
  * @param {any} request @param {{ tag: unknown }} importMap @param {{ id: string, name: string }[]} [decoders] the decoders a device may be chosen as
  * @param {string[]} [known] every decoder's id, choosable or not, so tl-bridge can tell when one was made since this render
- * @param {{ connections?: any[], mayPair?: boolean, after?: string | null }} [cards] every decoder's connections (engine.connectionsOf), whether the member may pair,
+ * @param {{ connections?: any[], mayPair?: boolean, mayDelete?: boolean, after?: string | null }} [cards] every decoder's connections (engine.connectionsOf), whether the member may pair and unpair,
  *   and the page this render replaces (a reload), whose cable is this page's
  */
-export function bridgePage(request, importMap, decoders = [], known = decoders.map((d) => d.id), { connections = [], mayPair = false, after = null } = {}) {
+export function bridgePage(request, importMap, decoders = [], known = decoders.map((d) => d.id), { connections = [], mayPair = false, mayDelete = false, after = null } = {}) {
   const base = request.space.base;
   const where = request.space.kind === 'personal' ? 'your personal space' : 'this club';
   // In a new tab: leaving this one would close the decoder's port while it forwards.
@@ -268,9 +297,9 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     <template data-bridge-sign-in>${signIn} to send them.</template>
     <section data-bridge-state="unsupported" class="card-static space-md">
       <p>The bridge needs Chrome or Edge on a laptop, with JavaScript on: it reads the decoder over USB with Web Serial, or an EasyLap with WebHID.</p>
-      <p>Timing still works without it: the decoder can send its passings over Wi-Fi (<a href="${base}/setup">Pair over Wi-Fi only</a> on Setup).</p>
+      <p>A TinyLap decoder needs it once, to pair; after that it can time over Wi-Fi without it.</p>
     </section>
-    ${decoderCards(request, connections, { mayPair })}
+    ${decoderCards(request, connections, { mayPair, mayDelete })}
     <section data-bridge-state="connect" hidden class="bridge-more space-sm">
       <p>An EasyLap? Use Connect EasyLap: it doesn't show up in the decoder list.</p>
       <p><button type="button" class="btn btn-outline" data-bridge-connect="hid">Connect EasyLap</button></p>

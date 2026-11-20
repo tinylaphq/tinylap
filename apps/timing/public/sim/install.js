@@ -9,17 +9,30 @@
 // closed picker. tl-bridge calls the real APIs, unaware of it. A picked serial port stays permitted
 // (getPorts) while it is plugged in: its unplug() takes it out of the list. Its replug() plugs the device
 // back in as Chrome shows it: a new port with the same USB ids, permitted, and navigator.serial's connect
-// event with that port as its target. plugIn() does the same without the event.
+// event with that port as its target. plugIn() does the same without the event. As Chrome does, the ports
+// still plugged in stay permitted after a page load: their count is kept in `storage`.
 import { simulatedDevice, simulation } from './models.js';
 
-/** @param {any} nav the page's navigator, or a stand-in @param {string | null | undefined} value `<model>[,fast]` */
-export function install(nav, value) {
+const PORTS_KEY = 'tinylap-sim-ports';
+
+/**
+ * @param {any} nav the page's navigator, or a stand-in @param {string | null | undefined} value `<model>[,fast]`
+ * @param {{ getItem(key: string): string | null, setItem(key: string, value: string): void } | null} [storage] where the permitted ports are counted
+ */
+export function install(nav, value, storage = globalThis.localStorage ?? null) {
   const sim = simulation(value);
   if (!sim) return;
   const serial = nav.serial ?? new EventTarget();
   const hid = nav.hid ?? new EventTarget();
   /** @type {Set<any>} */
   const permitted = new Set();
+  const keep = () => {
+    try {
+      storage?.setItem(PORTS_KEY, String(permitted.size));
+    } catch {
+      // Without storage a load forgets them, as a new browser profile does.
+    }
+  };
   /** A fresh simulated port, permitted, that can be unplugged and plugged back in. */
   const grant = () => {
     const port = simulatedDevice(sim);
@@ -27,6 +40,7 @@ export function install(nav, value) {
     Object.assign(port, {
       unplug() {
         permitted.delete(port);
+        keep();
         unplug();
       },
       plugIn: () => grant(),
@@ -40,8 +54,16 @@ export function install(nav, value) {
       },
     });
     permitted.add(port);
+    keep();
     return port;
   };
+  let kept = 0;
+  try {
+    kept = Number(storage?.getItem(PORTS_KEY)) || 0;
+  } catch {
+    // None kept.
+  }
+  if (sim.transport === 'serial') for (let i = 0; i < kept; i += 1) grant();
   Object.assign(serial, {
     requestPort: async () => {
       if (sim.transport !== 'serial') throw new DOMException('No port selected by the user.', 'NotFoundError');

@@ -17,6 +17,8 @@ import { runningFor } from '../sessions-pages.js';
 export const LEFT_OUT = new Set([
   // Pairing hands the token to the decoder over its cable; over MCP it would only reach the assistant.
   'POST /workspaces/{workspace}/decoders',
+  'POST /workspaces/{workspace}/decoders/{decoder}/token',
+  'POST /workspaces/{workspace}/decoders/{decoder}/token/taken',
   // The live stream; get_live answers the board as it is now.
   'GET /workspaces/{workspace}/live',
 ]);

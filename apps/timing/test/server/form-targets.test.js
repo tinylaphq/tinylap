@@ -24,7 +24,7 @@ after(() => app.close());
 const TARGETS = [
   ['drivers', 'setup#drivers'],
   ['track', 'setup#track'],
-  ['decoders', 'setup#decoders'],
+  ['decoders', 'bridge'],
   ['watch-link', 'setup#watchers'],
 ];
 

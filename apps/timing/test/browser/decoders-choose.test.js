@@ -19,10 +19,11 @@ test('D1: a plain ZRound decoder is chosen as a new decoder and forwards; the br
   await page.getByRole('button', { name: 'Use this decoder' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   // No Wi-Fi on a plain ZRound decoder: this tab is always its only way, and its card says what leaving does.
-  const note = page.locator('[data-decoder] [data-cable-note="only-cable"]');
+  const note = page.locator('[data-decoder] [data-status-only]');
   await note.waitFor();
-  assert.equal(await note.innerText(), 'Laps reach TinyLap only through this tab. Leaving this page stops them.', 'no Wi-Fi to suggest');
-  assert.equal(await page.locator('[data-decoder] [data-cable-note="only"]').isVisible(), false);
+  assert.equal(await note.innerText(), 'Laps get through only while this page is open and the decoder is plugged in.');
+  assert.equal(await page.locator('[data-decoder] [data-slot="status"]').isVisible(), false, 'the one status box says it');
+  assert.equal(await page.locator('[data-decoder] [data-bridge-pair-again]').filter({ visible: true }).count(), 0, 'a plain ZRound decoder has no pairing to renew');
   assert.equal(await page.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); dispatchEvent(e); return e.defaultPrevented; }), true);
   await page.locator('[data-bridge-preview] li').first().waitFor({ timeout: 30_000 });
   assert.deepEqual(app.store.decoders(space).map((d) => d.name), ['Gate']);

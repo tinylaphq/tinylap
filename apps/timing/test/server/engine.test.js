@@ -527,3 +527,46 @@ test('a decoder held on a cable publishes decoders when its Wi-Fi state changes,
   assert.equal(count(), held + 2, 'reporting runs out by time');
   assert.notEqual(connection(engine).wifi.state, 'reporting');
 });
+
+// Delivery faults (bridge decoder home spec, Design 2).
+test("a stat's post=err marks the decoder unreachable for 30 s, and a fault 30 s old is gone", () => {
+  const { engine, clock } = withDecoder();
+  engine.noteDelivery('d1', 'err');
+  assert.equal(connection(engine).wifi.fault, 'unreachable');
+  clock.now = T0 + 29_999;
+  assert.equal(connection(engine).wifi.fault, 'unreachable');
+  clock.now = T0 + 30_000;
+  assert.equal(connection(engine).wifi.fault, undefined);
+});
+
+test('post=401 marks it refused; another code changes nothing', () => {
+  const { engine } = withDecoder();
+  engine.noteDelivery('d1', '401');
+  assert.equal(connection(engine).wifi.fault, 'refused');
+  engine.noteDelivery('d1', '500');
+  assert.equal(connection(engine).wifi.fault, 'refused');
+});
+
+test('post=200, a Wi-Fi batch or clearFault clears it', () => {
+  const { engine } = withDecoder();
+  engine.noteDelivery('d1', 'err');
+  engine.noteDelivery('d1', '200');
+  assert.equal(connection(engine).wifi.fault, undefined);
+  engine.noteDelivery('d1', '401');
+  beat(engine);
+  assert.equal(connection(engine).wifi.fault, undefined);
+  engine.noteDelivery('d1', '401');
+  engine.clearFault('d1');
+  assert.equal(connection(engine).wifi.fault, undefined);
+});
+
+test('a fault coming and going tells the Bridge pages', () => {
+  const { engine, clock, events } = withDecoder();
+  const count = () => offlineEvents(events).length;
+  const before = count();
+  engine.noteDelivery('d1', 'err');
+  assert.equal(count(), before + 1);
+  clock.now = T0 + 30_000;
+  engine.tick();
+  assert.equal(count(), before + 2);
+});

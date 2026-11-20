@@ -51,6 +51,8 @@ function bridgeStream(request, decoder) {
   const pages = after ? [page, after] : [page];
   // Fixed for the stream: losing timing.setup ends it (below), and the page reconnects to cards without Change Wi-Fi.
   const mayPair = can(request.session.claims, workspaceId, 'timing.setup');
+  // Fixed for the stream too: an Unpair that is no longer theirs shows until it reconnects, and its POST is refused.
+  const mayDelete = can(request.session.claims, workspaceId, 'timing.delete');
   return {
     status: 200,
     credentials: true,
@@ -64,7 +66,7 @@ function bridgeStream(request, decoder) {
         if (res.writableEnded) return;
         last = Date.now();
         try {
-          const cards = String(decoderCards(request, request.engine.connectionsOf(workspaceId, { pages }), { mayPair }));
+          const cards = String(decoderCards(request, request.engine.connectionsOf(workspaceId, { pages }), { mayPair, mayDelete }));
           // Only a change goes: most of the club's events (a lap, say) leave the cards as they are.
           if (cards === sent) return;
           sent = cards;

@@ -153,20 +153,22 @@ test('a race and Back and Forward across a POST and its 303 change nothing twice
   assert.equal(pathOf(page), '/personal/board');
 });
 
-test('the bridge page offers its links without JavaScript', async (t) => {
+test('unpairing on the Bridge asks and works without JavaScript', async (t) => {
+  await app.api(member, 'POST', `/workspaces/${(await (await app.api(member, 'GET', '/auth/me')).json()).workspaces[0].id}/decoders`, { name: 'No-JS gate' });
   const page = await plainPage(t);
-  await page.getByRole('link', { name: 'Pair over Wi-Fi only' }).click();
-  assert.equal(pathOf(page), '/personal/setup');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Unpair No-JS gate' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Unpair No-JS gate?' });
+  await dialog.getByRole('button', { name: 'Unpair' }).click();
+  await page.waitForURL('**/personal/bridge');
+  assert.equal(await page.getByRole('button', { name: 'Unpair No-JS gate' }).count(), 0);
 });
 
-test('without JavaScript the watchers link and a pairing token show no Copy button or hint', async (t) => {
+test('without JavaScript the watchers link shows no Copy button or hint', async (t) => {
   await app.form(member, '/personal/watch-link', {});
   const page = await plainPage(t);
   await page.goto('/personal/setup');
-  await page.locator('#pair-name').fill('No-JS gate');
-  await page.getByRole('button', { name: 'Pair over Wi-Fi only' }).click();
-  await page.locator('code.token').first().waitFor();
-  assert.ok(await page.locator('tl-copy').count() >= 3, 'the token, the decoder id and the link are copyable');
+  assert.ok(await page.locator('tl-copy').count() >= 1, 'the link is copyable');
   assert.equal(await page.getByRole('button', { name: 'Copy' }).filter({ visible: true }).count(), 0);
   assert.equal(await page.getByText('Select it and copy it yourself.').filter({ visible: true }).count(), 0);
 });

@@ -208,3 +208,28 @@ test('the answer says watched while a board stream is open', async () => {
   const after = await (await asDecoder(gate.id, gate.token, { boot: 'b00tb00t', passings: [], logs: ['boot'] })).json();
   assert.equal(after.watched, false);
 });
+
+// Delivery faults (bridge decoder home spec, Design 2).
+const faultOf = (id) => app.engine.connectionsOf(office.id).find((d) => d.id === id)?.wifi.fault;
+
+test('a wrong token for a known decoder marks it refused', async () => {
+  const d = await pairDecoder('Refused');
+  assert.equal((await asDecoder(d.id, 'x'.repeat(43))).status, 401);
+  assert.equal(faultOf(d.id), 'refused');
+});
+
+test('a wrong token for an unknown id marks nothing and still answers 401', async () => {
+  const faulted = () => app.engine.connectionsOf(office.id).filter((d) => d.wifi.fault).length;
+  const before = faulted();
+  assert.equal((await asDecoder('nope', 'x'.repeat(43))).status, 401);
+  assert.equal(faulted(), before);
+});
+
+test('a forwarded stat line with post=err marks it unreachable, and post=200 clears it', async () => {
+  const d = await pairDecoder('Unreachable');
+  const forward = (post) => app.api(member, 'POST', `/decoders/${d.id}/passings`, { boot: 'b00tb00t', passings: [], logs: [`stat up=1 net=connected post=${post}`] });
+  assert.equal((await forward('err')).status, 200);
+  assert.equal(faultOf(d.id), 'unreachable');
+  assert.equal((await forward('200')).status, 200);
+  assert.equal(faultOf(d.id), undefined);
+});

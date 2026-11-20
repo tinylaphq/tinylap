@@ -36,7 +36,7 @@ before(async () => {
   const track = app.store.tracks(ws, { archived: false }).find((t) => t.name === TRACK);
   // The long track is the current one; the first stays as an other track, so both kinds of row show it.
   await app.form(member, '/personal/track', { id: track.id, direction: 'ccw' });
-  await app.form(member, '/personal/decoders', { name: DECODER });
+  await app.api(member, 'POST', `/workspaces/${ws}/decoders`, { name: DECODER });
   // The long name sets the record in a practice.
   session = app.engine.start(ws, { kind: 'practice' }).session;
   clock.offset += 60_000;
@@ -91,6 +91,7 @@ const PAGES = [
   ['the records', () => '/personal/records'],
   ['the track', () => `/personal/tracks/${ids.track}`],
   ['Delete a driver', () => `/personal/drivers/${ids.driver}/delete`],
+  ['the Bridge', () => '/personal/bridge'],
   ['Unpair a decoder', () => `/personal/decoders/${ids.decoder}/unpair`],
   // The current track can't be deleted: Setup comes back with an error that names it.
   ['Delete the current track', () => `/personal/tracks/${ids.track}/delete`],

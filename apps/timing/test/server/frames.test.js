@@ -23,12 +23,10 @@ after(() => app.close());
 
 const setup = async () => (await app.api(owner, 'GET', `${base}/setup`, undefined, { accept: 'text/html' })).text();
 
-test('four cards are frames; drivers refreshes transponders; decoders is not a frame', async () => {
+test('four cards are frames; drivers refreshes transponders', async () => {
   const body = await setup();
   for (const id of ['track', 'transponders', 'watchers']) assert.match(body, new RegExp(`<tl-frame id="${id}">\\s*<section`), id);
   assert.match(body, /<tl-frame id="drivers" refreshes="transponders">\s*<section/);
-  assert.match(body, /<section[^>]* id="decoders"/);
-  assert.match(body, new RegExp(`<form method="post" action="${base}/decoders" class="space-sm" data-frame="off">`));
 });
 
 test('the status slots are always there, the summary fills the first on a 422', async () => {

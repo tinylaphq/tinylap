@@ -2,13 +2,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The setup page (spec §6.4): the tracks, drivers, transponders, decoders
-// and the watchers link, each its own card-static section and forms.
+// The setup page (spec §6.4): race setup, so the tracks, drivers,
+// transponders and the watchers link, each its own card-static section and
+// forms. Decoders live on the Bridge page.
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { localTime } from '@tinylap/design/html/local-time.js';
 import { avatar } from './driver.js';
 import { html, safe } from './html.js';
-import { controlRow, copyable, errorSummary, textField } from './form-parts.js';
+import { controlRow, errorSummary, textField } from './form-parts.js';
 import { layout } from './layout.js';
 import { crossingSlot, liveSrc } from './transponder.js';
 
@@ -221,33 +222,6 @@ function transpondersSection(request, m) {
 </section></tl-frame>`;
 }
 
-function decodersSection(request, m) {
-  const base = request.space.base;
-  const error = m.errors.pair ?? null;
-  return html`<section class="card-static space-md" id="decoders" aria-labelledby="decoders-title">
-  <h2 id="decoders-title">Decoders</h2>
-  ${m.paired ? html`<div class="status status-info">
-    <p class="cut-words">${m.paired.name} is paired. Its token is shown only this once:</p>
-    ${copyable(html`<code class="token">${m.paired.token}</code>`)}
-    <p>Decoder id:</p>
-    ${copyable(html`<code class="token token-id">${m.paired.id}</code>`)}
-    <p>Put both on the decoder now.</p>
-  </div>` : null}
-  ${m.decoders.length ? html`<ul class="setup-list">${m.decoders.map((d) => html`<li class="setup-row">
-    <div class="decoder-info">
-      <span class="cut-words" title="${d.name}">${d.name}</span>
-      <span class="meta">${d.lastSeenAt ? html`seen <time datetime="${new Date(d.lastSeenAt).toISOString()}">${formatAgo(d.lastSeenAt, request.now())}</time>` : 'never seen'}</span>
-    </div>
-    ${m.mayDelete ? html`<a class="btn btn-sm btn-danger" href="${base}/decoders/${d.id}/unpair">Unpair</a>` : null}
-  </li>`)}</ul>` : null}
-  <p>Pair a decoder by USB on the <a href="${base}/bridge">Bridge</a> page, or here if it only uses Wi-Fi:</p>
-  <form method="post" action="${base}/decoders" class="space-sm" data-frame="off">
-    ${controlRow([{ id: 'pair-name', label: 'Decoder name', name: 'name', maxlength: 60, value: m.values.pair?.name ?? '', placeholder: 'Start line', error }],
-      html`<button type="submit" class="btn btn-outline">Pair over Wi-Fi only</button>`)}
-  </form>
-</section>`;
-}
-
 function watchersSection(request, m) {
   const base = request.space.base;
   const link = m.watchToken ? `${request.origin}/watch/${m.watchToken}` : null;
@@ -262,7 +236,7 @@ function watchersSection(request, m) {
 }
 
 export function setupPage(request, model) {
-  const m = { errors: {}, values: {}, paired: null, failed: null, ...model };
+  const m = { errors: {}, values: {}, failed: null, ...model };
   return layout(request, {
     title: 'Setup',
     screen: 'setup',
@@ -276,7 +250,6 @@ export function setupPage(request, model) {
   ${driversSection(request, m)}
   </tl-crossing-now>
   ${transpondersSection(request, m)}
-  ${decodersSection(request, m)}
   ${watchersSection(request, m)}
 </div>`,
   });

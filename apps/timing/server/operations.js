@@ -334,6 +334,27 @@ export function unpairDecoder(request, { id }) {
   return { value: true };
 }
 
+/** Pair again: a new token for the same decoder, pending until it is used or reported taken. */
+export function newDecoderToken(request, { id }) {
+  const decoder = request.store.decoder(id);
+  if (!decoder || decoder.workspaceId !== request.workspaceId) return missing('decoder');
+  const wait = request.limiters.pair.take(request.userId);
+  if (wait) return limited(`You paired a lot of decoders just now. Try again in ${wait} seconds.`, wait);
+  const token = randomBytes(32).toString('base64url');
+  request.store.setNextToken(request.workspaceId, id, tokenHash(token));
+  request.engine.clearFault?.(id);
+  return { value: { id, token } };
+}
+
+/** The page saw the decoder take its new token: only that one works from now on. */
+export function confirmDecoderToken(request, { id, token }) {
+  const decoder = request.store.decoder(id);
+  if (!decoder || decoder.workspaceId !== request.workspaceId) return missing('decoder');
+  if (typeof token !== 'string' || !request.store.promoteNextToken(id, tokenHash(token))) return invalid("That is not the decoder's new token.", 'token');
+  request.engine.clearFault?.(id);
+  return { value: true };
+}
+
 export function rotateWatchLink(request) {
   const old = request.store.workspace(request.workspaceId).watchToken;
   const token = randomBytes(16).toString('base64url');

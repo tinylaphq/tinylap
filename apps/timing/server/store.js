@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS decoder (
   created_at INTEGER NOT NULL, last_seen_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS decoder_workspace ON decoder (workspace_id);
+CREATE TABLE IF NOT EXISTS decoder_next_token (
+  decoder_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE
+);
 CREATE TABLE IF NOT EXISTS passing (
   decoder_id TEXT NOT NULL, boot TEXT NOT NULL, transponder TEXT NOT NULL, t INTEGER NOT NULL,
   received_at INTEGER NOT NULL, via TEXT NOT NULL, workspace_id TEXT NOT NULL,
@@ -284,6 +287,13 @@ export function openStore(path) {
     netDecoders: q("SELECT DISTINCT decoder_id FROM passing WHERE workspace_id = ? AND via = 'net'"),
     decoder: q('SELECT id, workspace_id, name FROM decoder WHERE id = ?'),
     decoderByHash: q('SELECT id, workspace_id FROM decoder WHERE token_hash = ?'),
+    decoderByNextHash: q('SELECT decoder_id AS id, workspace_id FROM decoder_next_token WHERE token_hash = ?'),
+    setNextToken: q(`INSERT INTO decoder_next_token (decoder_id, workspace_id, token_hash) VALUES (?, ?, ?)
+      ON CONFLICT (decoder_id) DO UPDATE SET token_hash = excluded.token_hash`),
+    nextToken: q('SELECT token_hash FROM decoder_next_token WHERE decoder_id = ?'),
+    useNextToken: q('UPDATE decoder SET token_hash = ? WHERE id = ?'),
+    dropNextToken: q('DELETE FROM decoder_next_token WHERE decoder_id = ?'),
+    deleteNextToken: q('DELETE FROM decoder_next_token WHERE workspace_id = ? AND decoder_id = ?'),
     addDecoder: q('INSERT INTO decoder (id, workspace_id, name, token_hash, created_at) VALUES (?, ?, ?, ?, ?)'),
     deleteDecoder: q('DELETE FROM decoder WHERE workspace_id = ? AND id = ?'),
     touchDecoder: q('UPDATE decoder SET last_seen_at = ? WHERE id = ?'),
@@ -352,7 +362,7 @@ export function openStore(path) {
     upsertCursor: q('INSERT INTO feed_cursor (feed, seq) VALUES (?, ?) ON CONFLICT (feed) DO UPDATE SET seq = excluded.seq'),
   };
   const purge = ['workspace WHERE id', 'track WHERE workspace_id', 'track_layout WHERE workspace_id', 'driver WHERE workspace_id', 'transponder WHERE workspace_id',
-    'decoder WHERE workspace_id', 'passing WHERE workspace_id', 'session WHERE workspace_id', 'crossing WHERE workspace_id',
+    'decoder WHERE workspace_id', 'decoder_next_token WHERE workspace_id', 'passing WHERE workspace_id', 'session WHERE workspace_id', 'crossing WHERE workspace_id',
     'track_record WHERE workspace_id', 'personal_best WHERE workspace_id']
     .map((t) => q(`DELETE FROM ${t} = ?`));
 
@@ -573,14 +583,35 @@ export function openStore(path) {
       const r = s.decoder.get(id);
       return r ? { id: String(r.id), workspaceId: String(r.workspace_id), name: String(r.name) } : null;
     },
+    /** The decoder a token's hash belongs to; `next` when it is the pending one of Pair again. */
     decoderByTokenHash(hash) {
       const r = s.decoderByHash.get(hash);
-      return r ? { id: String(r.id), workspaceId: String(r.workspace_id) } : null;
+      if (r) return { id: String(r.id), workspaceId: String(r.workspace_id) };
+      const n = s.decoderByNextHash.get(hash);
+      return n ? { id: String(n.id), workspaceId: String(n.workspace_id), next: true } : null;
+    },
+    /** Pair again's token: pending until promoted; a later one replaces it. */
+    setNextToken(ws, id, hash) {
+      s.setNextToken.run(id, ws, hash);
+    },
+    /** Makes the pending token the decoder's only one; true too when it already is (the decoder used it first), false otherwise. */
+    promoteNextToken(id, hash) {
+      return transaction(() => {
+        const pending = s.nextToken.get(id)?.token_hash;
+        // Already promoted by the decoder's own post: no pending one left, and it is the decoder's token.
+        if (pending !== hash) return pending === undefined && s.decoderByHash.get(hash)?.id === id;
+        s.dropNextToken.run(id);
+        s.useNextToken.run(hash, id);
+        return true;
+      });
     },
     addDecoder(ws, { id, name, tokenHash, createdAt }) {
       s.addDecoder.run(id, ws, name, tokenHash, createdAt);
     },
-    deleteDecoder: (ws, id) => s.deleteDecoder.run(ws, id).changes === 1,
+    deleteDecoder: (ws, id) => transaction(() => {
+      s.deleteNextToken.run(ws, id);
+      return s.deleteDecoder.run(ws, id).changes === 1;
+    }),
     touchDecoder(id, at) {
       s.touchDecoder.run(at, id);
     },

@@ -57,6 +57,18 @@ function deleteDecoder(request, match) {
   return r.error ? opProblem(request, r.error) : { status: 204, headers: NO_STORE };
 }
 
+function newToken(request, match) {
+  const r = ops.newDecoderToken(request, { id: match[2] });
+  return r.error ? opProblem(request, r.error) : json(201, r.value, NO_STORE);
+}
+
+async function tokenTaken(request, match) {
+  const { body, error } = await readJson(request);
+  if (error) return error;
+  const r = ops.confirmDecoderToken(request, { id: match[2], token: body.token });
+  return r.error ? opProblem(request, r.error) : { status: 204, headers: NO_STORE };
+}
+
 const listTracks = (request) => json(200, { tracks: ops.listTracks(request, { archived: request.url.searchParams.get('archived') === '1' }).value }, NO_STORE);
 
 const byOf = async (request) => ({ userId: request.userId, name: await displayName(request) });
@@ -133,6 +145,8 @@ export const setupRoutes = [
   { pattern: path('transponders'), credentials: true, methods: { GET: workspaceRoute('timing.run', listTransponders) } },
   { pattern: path('transponders/([^/]+)'), credentials: true, methods: { PUT: workspaceRoute('timing.setup', putTransponder, write) } },
   { pattern: path('decoders'), credentials: true, methods: { GET: workspaceRoute('timing.run', listDecoders), POST: workspaceRoute('timing.setup', addDecoder, write) } },
+  { pattern: path('decoders/([^/]+)/token'), credentials: true, methods: { POST: workspaceRoute('timing.setup', newToken, write) } },
+  { pattern: path('decoders/([^/]+)/token/taken'), credentials: true, methods: { POST: workspaceRoute('timing.setup', tokenTaken, write) } },
   { pattern: path('decoders/([^/]+)'), credentials: true, methods: { DELETE: workspaceRoute('timing.delete', deleteDecoder, write) } },
   { pattern: path('tracks'), credentials: true, methods: { GET: workspaceRoute('timing.run', listTracks), POST: workspaceRoute('timing.setup', addTrack, write) } },
   { pattern: path('tracks/([^/]+)'), credentials: true, methods: { PATCH: workspaceRoute('timing.setup', updateTrack, write), DELETE: workspaceRoute('timing.delete', deleteTrack, write) } },

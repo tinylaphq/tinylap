@@ -247,6 +247,62 @@ test('decoder cards: by name; Change Wi-Fi only for members who may pair; an emp
   assert.doesNotMatch(empty, /data-decoder=/);
 });
 
+// Pair again, Unpair and delivery faults (bridge decoder home spec, Design 2, 3, 5, 6).
+const homeRequest = { now: () => T, space: { base: '/clubs/c1' } };
+const faulty = (id, name, fault) => ({ ...row(id, name, 'none', 'unknown'), wifi: { state: 'unknown', at: null, fault } });
+const wifiRowOf = (card) => /<li class="decoder-row" data-row="wifi"( data-fault="[a-z]+")?>([\s\S]*?)<\/li>/.exec(card);
+
+test("a refused decoder's Wi-Fi row says its laps are turned away, with both helps and a hidden Pair again", () => {
+  const card = cardOf(String(decoderCards(homeRequest, [faulty('r', 'Gate', 'refused')], { mayPair: true })), 'r');
+  const [, attr, wifi] = wifiRowOf(card);
+  assert.equal(attr, ' data-fault="refused"');
+  assert.equal(lamp(wifi), 'fail');
+  assert.equal(slot(wifi, 'state'), 'Its laps are turned away');
+  assert.equal(slot(wifi, 'detail'), '');
+  assert.match(wifi, /<p class="decoder-row-help" data-fault-help="here" hidden>TinyLap no longer accepts its pairing\. Pair it again to fix it\.<\/p><p class="decoder-row-help" data-fault-help="elsewhere">TinyLap no longer accepts its pairing\. Plug it into this laptop, then pair it again\.<\/p><button type="button" class="btn btn-sm btn-primary" data-bridge-pair-again hidden>Pair again<\/button>/);
+  assert.doesNotMatch(wifi, /Change Wi-Fi/, 'the row has one action: the fix');
+});
+
+test("an unreachable decoder's Wi-Fi row says its laps don't get through", () => {
+  const card = cardOf(String(decoderCards(homeRequest, [faulty('u', 'Gate', 'unreachable')], { mayPair: true })), 'u');
+  const [, attr, wifi] = wifiRowOf(card);
+  assert.equal(attr, ' data-fault="unreachable"');
+  assert.equal(slot(wifi, 'state'), 'Its laps don&#39;t get through');
+  assert.match(wifi, /data-fault-help="here" hidden>It can&#39;t reach TinyLap at the address it has\. Pair it again to give it this one\.<\/p>/);
+  assert.match(wifi, /data-fault-help="elsewhere">It can&#39;t reach TinyLap at the address it has\. Plug it into this laptop, then pair it again\.<\/p>/);
+});
+
+test('no fault, no fault row; a member who may only see has no Pair again', () => {
+  const ok = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], { mayPair: true })), 'a');
+  assert.doesNotMatch(ok, /data-fault/);
+  const seeOnly = cardOf(String(decoderCards(homeRequest, [faulty('r', 'Gate', 'refused')], { mayPair: false })), 'r');
+  assert.doesNotMatch(seeOnly, /data-bridge-pair-again/);
+});
+
+test('the foot: Pair again for members who may pair, Unpair for those who may delete, none for neither', () => {
+  const both = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], { mayPair: true, mayDelete: true })), 'a');
+  assert.match(both, /<div class="decoder-foot"><button type="button" class="btn btn-sm btn-outline" data-bridge-pair-again hidden>Pair again<\/button><button type="button" class="decoder-unpair" commandfor="unpair-a" command="show-modal">Unpair<span class="visually-hidden"> Gate<\/span><\/button><\/div>/);
+  const pairOnly = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], { mayPair: true })), 'a');
+  assert.doesNotMatch(pairOnly, /Unpair|<dialog/);
+  const neither = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], {})), 'a');
+  assert.doesNotMatch(neither, /decoder-foot/);
+  const faulted = cardOf(String(decoderCards(homeRequest, [faulty('r', 'Gate', 'refused')], { mayPair: true, mayDelete: true })), 'r');
+  const foot = /<div class="decoder-foot">([\s\S]*?)<\/div>/.exec(faulted)[1];
+  assert.doesNotMatch(foot, /data-bridge-pair-again/, 'Pair again is in the row');
+  assert.match(foot, /<button type="button" class="btn btn-sm btn-outline" data-bridge-wifi hidden>Change Wi-Fi<\/button>/, 'Change Wi-Fi gives the row up to the fix');
+});
+
+test('the unpair dialog posts to the decoder\'s unpair address', () => {
+  const card = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate <1>', 'none', 'reporting', T, T)], { mayDelete: true })), 'a');
+  assert.match(card, /<dialog id="unpair-a" class="confirm-dialog" aria-labelledby="unpair-a-title">\s*<h2 id="unpair-a-title" class="h3 cut-words">Unpair Gate &lt;1&gt;\?<\/h2>\s*<p>Its token stops working at once\. Its passings stay\.<\/p>\s*<form method="post" action="\/clubs\/c1\/decoders\/a\/unpair" class="button-row confirm-actions">\s*<button type="submit" class="btn btn-danger-fill">Unpair<\/button>\s*<button type="button" class="btn btn-outline" commandfor="unpair-a" command="close">Keep it<\/button>/);
+});
+
+test('every card has the only-this-page status, hidden, and no only/only-cable notes', () => {
+  const card = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], {})), 'a');
+  assert.match(card, /<div class="status status-warning" data-status-only hidden><p>Laps get through only while this page is open and the decoder is plugged in\.<\/p><\/div>/);
+  assert.doesNotMatch(card, /data-cable-note="only/);
+});
+
 test('the Change Wi-Fi dialog: closed, one hidden step each, in the spec\'s words (connections spec §5)', () => {
   const out = String(wifiDialog());
   assert.match(out, /^<dialog id="wifi-dialog" class="wifi-dialog" aria-labelledby="wifi-title-looking">/);
