@@ -180,6 +180,23 @@ test('a club with no drivers sees its first steps in the panel\'s place', async 
   assert.match(panel, new RegExp(`<a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>\\s*<a class="btn btn-outline" href="${base}/bridge">Connect the decoder</a>`));
 });
 
+test('a decoder that reports leaves only Add drivers; once it stops reporting, Connect the decoder is back', async () => {
+  const { ws, base } = await clubWith('Reporting');
+  const gate = await (await app.api(member, 'POST', `/workspaces/${ws}/decoders`, { name: 'Gate' })).json();
+  app.engine.ingest({ workspaceId: ws, decoder: gate.id, via: 'net', batch: { boot: 'b1', passings: [] } });
+  assert.deepEqual(app.engine.headerOf(ws).map((d) => d.state), ['reporting']);
+  let panel = panelOf(await (await get(`${base}/board`)).text());
+  assert.match(panel, new RegExp(`<a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>`));
+  assert.doesNotMatch(panel, /Connect the decoder/, 'its laps already get through');
+  // The board swaps the region only when its key changes: the button coming or going must change it.
+  assert.match(panel, /data-key="first heard"/);
+  clock.now += 60_000;
+  assert.deepEqual(app.engine.headerOf(ws).map((d) => d.state), ['offline']);
+  panel = panelOf(await (await get(`${base}/board`)).text());
+  assert.match(panel, /Connect the decoder/, 'silent now: connecting it is the next step again');
+  assert.match(panel, /data-key="first"/);
+});
+
 test('a car on the track is the reason to press Start: its line sits in the panel above the button', async () => {
   const { ws, base } = await clubWith('Track', ['Ana']);
   app.engine.ingest({ workspaceId: ws, decoder: 'd1', via: 'net', batch: { boot: 'b00tb00t', passings: [{ transponder: '20', t: clock.now }] } });

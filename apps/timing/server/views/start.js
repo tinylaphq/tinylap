@@ -78,7 +78,10 @@ function settings(kind, chosen, values, drivers, errors) {
  * The panel's state, for tl-board: the running session's id, the first
  * steps, or the form. @param {any} snap
  */
-const keyOf = (snap) => (snap.session ? `run ${snap.session.id}` : snap.drivers.length ? 'idle' : 'first');
+/** Whether a decoder of this space reports (the board header's decoders, on a cable or over Wi-Fi). */
+const heard = (snap) => Boolean(snap.decoders?.some((d) => d.state === 'reporting' || d.state === 'idle'));
+// The first steps' key says whether Connect the decoder is among them, so the board swaps them when that changes.
+const keyOf = (snap) => (snap.session ? `run ${snap.session.id}` : snap.drivers.length ? 'idle' : heard(snap) ? 'first heard' : 'first');
 
 /**
  * The form, under the server's defaults (startDefaults), with a failed form's
@@ -107,14 +110,17 @@ function form(request, snap, { errors = [], values = null } = {}) {
   </form>`;
 }
 
-/** With no drivers a session times nothing: the first steps take the panel's place, under a car already crossing. */
+/**
+ * With no drivers a session times nothing: the first steps take the panel's place, under a car already crossing.
+ * Connecting the decoder is a step only while none reports.
+ */
 function firstSteps(request, snap) {
   const base = request.space.base;
   return html`<div class="start-panel start-first">
     <div class="start-on-track" id="start-on-track">${idleNotice(snap.idle, snap.drivers)}</div>
     <p>A session times the cars that have a driver.</p>
-    <p class="button-row"><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>
-    <a class="btn btn-outline" href="${base}/bridge">Connect the decoder</a></p>
+    <p class="button-row"><a class="btn btn-primary" href="${base}/setup#drivers">Add drivers</a>${heard(snap) ? null : html`
+    <a class="btn btn-outline" href="${base}/bridge">Connect the decoder</a>`}</p>
   </div>`;
 }
 
