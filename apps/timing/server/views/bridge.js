@@ -252,7 +252,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     body: html`<div class="container space-lg screen">
   <h1>Bridge</h1>
   <tl-bridge>
-  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}"${after ? html` data-after="${after}"` : null}>
+  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.decoderUrl ?? request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}"${after ? html` data-after="${after}"` : null}>
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
     <p class="status status-error" role="alert" data-bridge-busy hidden>The decoder is open somewhere else: another tab, another browser or another app. Close it there, then connect again.</p>

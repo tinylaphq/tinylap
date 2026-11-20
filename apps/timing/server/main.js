@@ -92,6 +92,7 @@ const handler = createHandler({
   root: dev ? undefined : env.TINYLAP_ROOT ?? '/srv',
   appDir: resolve(fileURLToPath(new URL('..', import.meta.url))),
   publicUrl,
+  decoderUrl: env.TINYLAP_DECODER_URL || undefined,
   plannerUrl: env.TINYLAP_PLANNER_URL,
   clientIpHeader: env.TINYLAP_CLIENT_IP_HEADER,
   build: env.TINYLAP_BUILD,

@@ -347,3 +347,16 @@ test('a cable stream whose setup throws ends, logs once, and counts nothing', as
     await rig.close();
   }
 });
+
+test('the address the decoder is paired to post to: the public URL, or the decoder URL when one is set', async () => {
+  const own = await startTiming({ decoderUrl: 'http://192.168.1.20:8100/' });
+  try {
+    const who = await own.login(await own.signUp('Dev'));
+    const body = await (await own.api(who, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+    assert.match(body, /data-server="http:\/\/192\.168\.1\.20:8100"/, 'a laptop on localhost pairs a decoder that must reach it over the network');
+  } finally {
+    await own.close();
+  }
+  const body = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  assert.match(body, /data-server="http:\/\/(127\.0\.0\.1|localhost):\d+"/, 'without one, the public URL');
+});
