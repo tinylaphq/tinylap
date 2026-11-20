@@ -216,13 +216,19 @@ test('the cable stream sends new cards when only the decoder\'s Wi-Fi state chan
   await cable.return();
 });
 
-test('the cable stream: another club\'s decoder or an unknown one is not found; another site or a stranger are refused; a page load goes to the Bridge page', async () => {
+test('the cable stream: another club\'s decoder or an unknown one is told unknown, once; another site or a stranger are refused; a page load goes to the Bridge page', async () => {
   const { user, gate, base, who, cableOf } = await clubWithGate('Eve');
   const theirs = app.club(user, 'Theirs');
   const eve = await app.login(user);
   const other = await (await app.api(eve, 'POST', `/workspaces/${theirs.id}/decoders`, { name: 'Theirs' })).json();
-  assert.equal((await app.api(eve, 'GET', `${base}/decoders/${other.id}/cable`, undefined, SSE)).status, 404);
-  assert.equal((await app.api(eve, 'GET', `${base}/decoders/nope/cable`, undefined, SSE)).status, 404);
+  // EventSource can't see a 404: the page learns in the stream that this space doesn't know the decoder, and the long retry holds it back.
+  for (const id of [other.id, 'nope']) {
+    const res = await app.api(eve, 'GET', `${base}/decoders/${id}/cable`, undefined, SSE);
+    assert.equal(res.status, 200, id);
+    assert.match(res.headers.get('content-type'), /^text\/event-stream/);
+    assert.equal(await res.text(), 'retry: 3600000\n\nevent: unknown\ndata:\n\n', id);
+  }
+  assert.equal((await app.api(eve, 'GET', `${base}/decoders/nope/cable`, undefined, { accept: 'text/html' })).status, 303, 'a page load still goes to the Bridge page');
   assert.equal((await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { ...SSE, origin: 'https://elsewhere.example' })).status, 403);
   assert.equal((await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { ...SSE, 'sec-fetch-site': 'cross-site' })).status, 403);
   const stranger = await app.login(await app.signUp('Finn'));

@@ -1000,6 +1000,13 @@ class TlBridge extends HTMLElement {
       Object.assign(run, { signedOut: true, stopped: true });
       this.signedOutNotice(run);
     });
+    // The server doesn't know the decoder on this cable (deleted, or paired with another server): offer to pair it again.
+    source.addEventListener('unknown', () => {
+      if (run !== this.run || run.stream !== stream) return;
+      const bridge = run.bridge;
+      this.unfollow(run);
+      bridge?.notKnown();
+    });
     source.addEventListener('error', () => {
       if (run !== this.run || run.stream !== stream || source.readyState !== EventSource.CLOSED || stream.retry) return;
       stream.retry = setTimeout(() => {

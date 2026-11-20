@@ -571,6 +571,11 @@ export class Bridge extends EventTarget {
     this.#set('unknown');
   }
 
+  /** The server said it doesn't know this TinyLap decoder (its cable stream's unknown event): as a 404 for its own id. */
+  notKnown() {
+    if (this.decoder) this.#checkKnown(new Set([this.decoder]));
+  }
+
   /** @param {LogEntry[]} sent */
   #forgetLines(sent) {
     const done = new Set(sent);

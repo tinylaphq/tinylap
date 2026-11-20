@@ -22,7 +22,7 @@ import { spacePath } from './spaces.js';
 import { HEARTBEAT_MS } from './stream.js';
 import { THROTTLE_MS } from './board-stream.js';
 import { decoderCards } from './views/bridge.js';
-import { forbiddenPage, notFoundPage } from './views/notice.js';
+import { forbiddenPage } from './views/notice.js';
 
 export const PAGE_ID = /^[A-Za-z0-9_-]{16,64}$/;
 /** The asking page's id, or a fresh one for a client that sent none: then the stream is its own page. @param {any} request */
@@ -142,7 +142,8 @@ function cableStream(request, match) {
   // Holding it says this decoder is on a cable, a fact only the club's own Bridge page may state.
   if (!request.auth.bff.requireSameOrigin(request.req)) return page(request, 403, forbiddenPage(request, 'Connect decoders from the Bridge page.'));
   const decoder = request.store.decoder(match[2]);
-  if (!decoder || decoder.workspaceId !== request.workspaceId) return page(request, 404, notFoundPage(request));
+  // EventSource can't see a 404: the page is told in the stream that this space doesn't know the decoder, and stops asking.
+  if (!decoder || decoder.workspaceId !== request.workspaceId) return { status: 200, credentials: true, headers: SSE, body: 'retry: 3600000\n\nevent: unknown\ndata:\n\n' };
   return bridgeStream(request, decoder.id);
 }
 
