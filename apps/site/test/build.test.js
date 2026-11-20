@@ -75,6 +75,24 @@ test('the hero film is described as the README describes it', () => {
   assert.equal(html.match(/<tl-autoplay>\s*<video[^>]*aria-label="([^"]*)"/)?.[1], alt);
 });
 
+test('link previews get a title, a description and the share card', () => {
+  /** @param {string} key */
+  const meta = (key) => html.match(new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)">`))?.[1];
+  assert.equal(meta('og:title'), 'TinyLap: live lap timing for Mini-Z');
+  assert.equal(meta('og:description'), meta('description'));
+  assert.equal(meta('og:url'), 'https://tinylaphq.github.io/tinylap/');
+  assert.equal(meta('og:type'), 'website');
+  assert.equal(meta('og:image'), 'https://tinylaphq.github.io/tinylap/share.png');
+  assert.equal(meta('og:image:width'), '1200');
+  assert.equal(meta('og:image:height'), '630');
+  assert.ok(meta('og:image:alt'));
+  assert.equal(meta('twitter:card'), 'summary_large_image');
+  const png = readFileSync(join(out, 'share.png'));
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1200, 630]);
+  // WhatsApp leaves out a preview image much over 300 KB.
+  assert.ok(png.length < 300_000, `${png.length} bytes`);
+});
+
 test('the hero video can play without script', () => {
   const hero = html.match(/<tl-autoplay>\s*<video([^>]*)>/)?.[1] ?? '';
   for (const attr of [' controls', ' muted', ' loop', ' playsinline']) assert.ok(hero.includes(attr), attr);

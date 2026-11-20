@@ -1,1 +1,1 @@
-{ "extends": "../../tsconfig.base.json", "compilerOptions": { "strict": true }, "include": ["build.js", "elements/*.js", "test/**/*.js"] }
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "strict": true }, "include": ["build.js", "elements/*.js", "share/*.js", "test/**/*.js"] }

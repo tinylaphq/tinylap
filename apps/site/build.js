@@ -4,9 +4,9 @@
 
 // Builds the landing page into one folder GitHub Pages serves as it is: the
 // page and its element, palace with its fonts, the design tokens and mark,
-// and the walkthrough films with their posters from docs/.
+// the walkthrough films with their posters from docs/, and the link preview.
 // Run: node build.js (writes dist/)
-import { cpSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,6 +27,8 @@ export async function build(/** @type {string} */ outDir) {
   cpSync(resolved('@tinylap/design/design.css'), join(outDir, 'design.css'));
   cpSync(here('../../packages/design/mark.svg'), join(outDir, 'mark.svg'));
   for (const name of MEDIA) cpSync(here(`../../docs/${name}`), join(outDir, 'media', name));
+  // share/render.js makes share.png inside a build, so the first render has none yet.
+  if (existsSync(here('share.png'))) cpSync(here('share.png'), join(outDir, 'share.png'));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await build(here('dist'));
