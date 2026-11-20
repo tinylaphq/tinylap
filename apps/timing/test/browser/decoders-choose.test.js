@@ -45,6 +45,31 @@ test('D1: a plain ZRound decoder is chosen as a new decoder and forwards; the br
   assert.deepEqual(errors, []);
 });
 
+test('D1c: a chosen decoder the server says it doesn\'t know: the page holds the cards stream, and asks for that cable no more', async (t) => {
+  const { page, errors } = await fresh(t);
+  // The decoder goes between Choose and its cable stream: the server answers that stream with its unknown event.
+  const cable = [];
+  await page.route(/\/decoders\/[^/]+\/cable\?/, (route) => {
+    cable.push(route.request().url());
+    return route.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body: 'retry: 3600000\n\nevent: unknown\ndata:\n\n' });
+  });
+  const cards = [];
+  page.on('request', (r) => { if (/\/bridge\/events\?/.test(r.url())) cards.push(r.url()); });
+  await openZround(t, page);
+  await toChoose(page);
+  await page.getByLabel('Name for the new decoder').fill('Gate');
+  const before = cards.length;
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  for (const end = Date.now() + 5000; cable.length === 0 && Date.now() < end;) await page.waitForTimeout(50);
+  // Laps every 2 s repaint the page: none of them may ask for the unknown cable again.
+  await page.waitForTimeout(5000);
+  assert.equal(cable.length, 1, 'asked once');
+  assert.ok(cards.length > before, 'the cards stream instead, so the cards stay live');
+  assert.equal(await page.evaluate(() => document.querySelector('tl-bridge').run.stream !== null), true);
+  assert.deepEqual(errors, []);
+});
+
 test('D1b: a store that fails every call blocks neither the connect nor the choice', async (t) => {
   const { page, errors, space } = await fresh(t);
   const warnings = [];

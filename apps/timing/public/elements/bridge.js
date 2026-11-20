@@ -268,6 +268,7 @@ async function pick(which) {
  *   transport: 'serial' | 'hid' | null, list: { decoders: { id: string, name: string, lastSeenAt: number | null }[], serverNow: number | null } | null,
  *   remembered: string | null, devices: any, connecting: boolean, wizard: WifiWizard | null, silent: Bridge | null,
  *   stream: { url: string, source: EventSource, wait: number, retry?: ReturnType<typeof setTimeout> } | null,
+ *   unknownCable: string | null,
  *   last: { port: any, device: string, decoder: string | null, refused?: boolean } | null,
  *   gone: { decoder: string, kind: string, serial: boolean, back: boolean, before: any[], port: any } | null,
  *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null, failures: number,
@@ -295,7 +296,7 @@ class TlBridge extends HTMLElement {
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
-      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, failures: 0 };
+      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, unknownCable: null, failures: 0 };
     this.run = run;
     // Without Web Serial or WebHID only the live cards are on: no cable, no connect flow, the server's notice stays.
     if (!supported) {
@@ -708,6 +709,7 @@ class TlBridge extends HTMLElement {
     const cameBack = Boolean(port && run.gone?.serial && port !== run.gone.port && chipOf(port) !== null && sameDevice(port, run.gone.port));
     if (run.made && run.made.device !== transport.device) this.forget(run);
     this.$(run, '[data-bridge-taken]').hidden = true;
+    run.unknownCable = null;
     await run.bridge?.close();
     // From here the replaced bridge's late events find no bridge, and leaving the page isn't guarded; its stream goes.
     run.bridge = null;
@@ -1003,7 +1005,8 @@ class TlBridge extends HTMLElement {
     // Signed out, the server said: nothing more until the page comes back.
     if (!('EventSource' in window) || run.stopped) return;
     const bridge = run.bridge;
-    const id = bridge?.decoder && bridge.state === 'ready' ? bridge.decoder : null;
+    // A cable the server said it doesn't know (a chosen decoder removed since) is never asked for again: the cards stream instead.
+    const id = bridge?.decoder && bridge.state === 'ready' && bridge.decoder !== run.unknownCable ? bridge.decoder : null;
     const address = id ? run.root.dataset.cableStream?.replace('{id}', encodeURIComponent(id)) : run.root.dataset.cardsStream;
     if (!address) return;
     const { page, after } = run.root.dataset;
@@ -1035,8 +1038,11 @@ class TlBridge extends HTMLElement {
     source.addEventListener('unknown', () => {
       if (run !== this.run || run.stream !== stream) return;
       const bridge = run.bridge;
+      run.unknownCable = bridge?.decoder ?? null;
       this.unfollow(run);
+      // A TinyLap decoder goes to unknown, and offers Pair again; a chosen one keeps its state, so hold the cards stream.
       bridge?.notKnown();
+      this.follow(run);
     });
     source.addEventListener('error', () => {
       if (run !== this.run || run.stream !== stream || source.readyState !== EventSource.CLOSED || stream.retry) return;
