@@ -256,6 +256,7 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
     <p class="status status-error" role="alert" data-bridge-busy hidden>The decoder is open somewhere else: another tab, another browser or another app. Close it there, then connect again.</p>
+    <p class="status status-error" role="alert" data-bridge-gone hidden>The decoder was unplugged while it connected. Plug it in again, then connect.</p>
     <p hidden data-bridge-say="connect">Ready to connect.</p>
     <p hidden data-bridge-say="connecting">Talking to the decoder.</p>
     <p hidden data-bridge-say="listening">Connected. Nothing from the device yet.</p>

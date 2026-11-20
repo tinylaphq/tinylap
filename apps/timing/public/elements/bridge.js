@@ -396,6 +396,7 @@ class TlBridge extends HTMLElement {
     error.hidden = true;
     error.textContent = '';
     this.$(run, '[data-bridge-busy]').hidden = true;
+    this.$(run, '[data-bridge-gone]').hidden = true;
     this.$(run, '[data-bridge-earlier]').hidden = true;
     this.$(run, '[data-bridge-live]').textContent = '';
     for (const form of /** @type {NodeListOf<HTMLFormElement>} */ (run.root.querySelectorAll('[data-bridge-pair], [data-bridge-repair]'))) {
@@ -531,18 +532,22 @@ class TlBridge extends HTMLElement {
   /** @param {Run} run */
   fail(run, caught) {
     run.failures += 1;
-    // Chrome's words for a port held elsewhere (another tab, browser or app) say nothing useful: the server's do.
-    const busy = caught?.name === 'NetworkError' || caught?.name === 'InvalidStateError';
+    // Chrome's words for a serial port held elsewhere (another tab, browser or app) say nothing useful: the server's do.
+    // An EasyLap's errors keep their own words: WebHID uses these names for other things.
+    const gone = Boolean(caught?.unplugged);
+    const busy = !gone && run.transport === 'serial' && (caught?.name === 'NetworkError' || caught?.name === 'InvalidStateError');
     const error = this.$(run, '[data-bridge-error]');
-    if (!busy) error.textContent = caught.message;
-    error.hidden = busy;
+    if (!busy && !gone) error.textContent = caught.message;
+    error.hidden = busy || gone;
     this.$(run, '[data-bridge-busy]').hidden = !busy;
+    this.$(run, '[data-bridge-gone]').hidden = !gone;
   }
 
   /** @param {Run} run */
   ok(run) {
     this.$(run, '[data-bridge-error]').hidden = true;
     this.$(run, '[data-bridge-busy]').hidden = true;
+    this.$(run, '[data-bridge-gone]').hidden = true;
   }
 
   /** @param {Run} run */
@@ -659,6 +664,11 @@ class TlBridge extends HTMLElement {
         return this.connect(run, 'serial').catch((error) => { if (error?.name !== 'SecurityError') throw error; });
       }
       if (which === 'auto') return undefined;
+      // Chrome says the same for a serial port held elsewhere and one pulled out while it opened: a pulled one is gone from getPorts().
+      if (run.transport === 'serial' && caught?.name === 'NetworkError' && run.last?.port) {
+        const ports = await /** @type {any} */ (navigator).serial?.getPorts?.().catch(() => null);
+        if (Array.isArray(ports) && !ports.includes(run.last.port)) Object.assign(caught, { unplugged: true });
+      }
       throw caught;
     }
     return undefined;

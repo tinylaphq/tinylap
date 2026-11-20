@@ -127,11 +127,15 @@ async function toPairing(t, { viewport, init = [] } = {}) {
   return who;
 }
 
-/** navigator.serial whose one port won't open, rejecting with a DOMException named `name`. @param {string} name */
-const REFUSED_SERIAL = (name) => {
+/**
+ * navigator.serial whose one port won't open, rejecting with a DOMException named `name`; `unplugged`, it is gone from
+ * getPorts() too, as a port pulled out while it opens. @param {{ name: string, unplugged?: boolean }} options
+ */
+const REFUSED_SERIAL = ({ name, unplugged = false }) => {
+  const port = { readable: null, writable: null, open: async () => { throw new DOMException(name === 'SecurityError' ? 'Not allowed here.' : 'Failed to open serial port.', name); }, close: async () => {}, getInfo: () => ({ usbVendorId: 0x10c4, usbProductId: 0xea60 }) };
   Object.defineProperty(navigator, 'serial', {
     configurable: true,
-    value: { requestPort: async () => ({ readable: null, writable: null, open: async () => { throw new DOMException(name === 'SecurityError' ? 'Not allowed here.' : 'Failed to open serial port.', name); }, close: async () => {}, getInfo: () => ({ usbVendorId: 0x10c4, usbProductId: 0xea60 }) }), getPorts: async () => [] },
+    value: Object.assign(new EventTarget(), { requestPort: async () => port, getPorts: async () => (unplugged ? [] : [port]) }),
   });
 };
 
@@ -139,7 +143,7 @@ test('a port open somewhere else says so, and Connect decoder works again', asyn
   for (const name of ['NetworkError', 'InvalidStateError']) {
     const { context, page, errors } = await pageAs(browser, app, member);
     t.after(() => context.close());
-    await page.addInitScript(REFUSED_SERIAL, name);
+    await page.addInitScript(REFUSED_SERIAL, { name });
     await page.goto('/personal/bridge');
     const connect = page.getByRole('button', { name: 'Connect decoder' }).first();
     await connect.click();
@@ -155,7 +159,7 @@ test('a port open somewhere else says so, and Connect decoder works again', asyn
 test('a move after a busy port starts fresh: the busy message goes', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member);
   t.after(() => context.close());
-  await page.addInitScript(REFUSED_SERIAL, 'NetworkError');
+  await page.addInitScript(REFUSED_SERIAL, { name: 'NetworkError' });
   await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.locator('[data-bridge-busy]').waitFor();
@@ -164,10 +168,23 @@ test('a move after a busy port starts fresh: the busy message goes', async (t) =
   assert.deepEqual(errors, []);
 });
 
+test('a port pulled out while it opens says so, not that it is open somewhere else', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(REFUSED_SERIAL, { name: 'NetworkError', unplugged: true });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-gone]').filter({ hasText: 'The decoder was unplugged while it connected. Plug it in again, then connect.' }).waitFor();
+  assert.equal(await page.locator('[data-bridge-busy]').isVisible(), false);
+  assert.equal(await page.locator('[data-bridge-error]').isVisible(), false);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isEnabled(), true);
+  assert.deepEqual(errors, []);
+});
+
 test('a port refused for another reason keeps its own message', async (t) => {
   const { context, page } = await pageAs(browser, app, member);
   t.after(() => context.close());
-  await page.addInitScript(REFUSED_SERIAL, 'SecurityError');
+  await page.addInitScript(REFUSED_SERIAL, { name: 'SecurityError', unplugged: true });
   await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.locator('[data-bridge-error]').filter({ hasText: 'Not allowed here.' }).waitFor();

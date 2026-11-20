@@ -74,6 +74,25 @@ test('D12: an EasyLap that can\'t be opened shows the error as an alert, and Con
   assert.equal(await page.getByRole('button', { name: 'Connect EasyLap' }).isVisible(), true);
 });
 
+test('D12b: an EasyLap that went away while opening keeps its own message: "open somewhere else" is the serial port\'s', async (t) => {
+  const { page } = await fresh(t);
+  await page.addInitScript(HID, {});
+  // The device the picker gives goes away while it opens (Chrome's InvalidStateError).
+  await page.addInitScript(() => {
+    const hid = /** @type {any} */ (navigator).hid;
+    const pick = hid.requestDevice;
+    hid.requestDevice = async (...options) => {
+      const picked = await pick(...options);
+      for (const device of picked) device.open = async () => { throw new DOMException('The device went away.', 'InvalidStateError'); };
+      return picked;
+    };
+  });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.locator('[data-bridge-error]').filter({ hasText: 'The device went away.' }).waitFor();
+  assert.equal(await page.locator('[data-bridge-busy]').isVisible(), false);
+});
+
 test('D13: an EasyLap whose frames all fail the checksum says its data can\'t be read', async (t) => {
   const { page } = await fresh(t);
   await page.addInitScript(HID, { corrupt: true });

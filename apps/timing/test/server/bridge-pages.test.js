@@ -29,6 +29,7 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   assert.match(body, /<p hidden data-bridge-say="disconnected">Decoder disconnected\.<\/p>/, 'the words the page announces on an unplug');
   assert.doesNotMatch(body, /Keep this tab open while racing/, 'the cable row says it, only where it is true');
   assert.match(body, /<p class="status status-error" role="alert" data-bridge-busy hidden>The decoder is open somewhere else: another tab, another browser or another app\. Close it there, then connect again\.<\/p>/, 'a port that won\'t open says why, in the server\'s words');
+  assert.match(body, /<p class="status status-error" role="alert" data-bridge-gone hidden>The decoder was unplugged while it connected\. Plug it in again, then connect\.<\/p>/);
   // The words the page announces for each state, in the server's words (#84).
   const said = {
     connect: 'Ready to connect.',
