@@ -101,7 +101,7 @@ function decoderCard(request, d, mayPair, mayDelete) {
     ? html`<p class="decoder-row-help">${mayPair ? 'Connect the cable to see and change its Wi-Fi.' : 'Connect the cable to see its Wi-Fi.'}</p>`
     : null;
   const change = mayPair ? html`<button type="button" class="btn btn-sm btn-outline" data-bridge-wifi hidden>Change Wi-Fi</button>` : null;
-  const repair = (style) => (mayPair ? html`<button type="button" class="btn btn-sm ${style}" data-bridge-repair hidden>Pair again</button>` : null);
+  const repair = (style) => (mayPair ? html`<button type="button" class="btn btn-sm ${style}" data-bridge-pair-again hidden>Pair again</button>` : null);
   const fault = FAULTS[d.wifi.fault] ?? null;
   // A fault's row has one action, the fix: Change Wi-Fi and Pair again's quiet place give way to it.
   const wifiRow = fault

@@ -259,7 +259,7 @@ test("a refused decoder's Wi-Fi row says its laps are turned away, with both hel
   assert.equal(lamp(wifi), 'fail');
   assert.equal(slot(wifi, 'state'), 'Its laps are turned away');
   assert.equal(slot(wifi, 'detail'), '');
-  assert.match(wifi, /<p class="decoder-row-help" data-fault-help="here" hidden>TinyLap no longer accepts its pairing\. Pair it again to fix it\.<\/p><p class="decoder-row-help" data-fault-help="elsewhere">TinyLap no longer accepts its pairing\. Plug it into this laptop, then pair it again\.<\/p><button type="button" class="btn btn-sm btn-primary" data-bridge-repair hidden>Pair again<\/button>/);
+  assert.match(wifi, /<p class="decoder-row-help" data-fault-help="here" hidden>TinyLap no longer accepts its pairing\. Pair it again to fix it\.<\/p><p class="decoder-row-help" data-fault-help="elsewhere">TinyLap no longer accepts its pairing\. Plug it into this laptop, then pair it again\.<\/p><button type="button" class="btn btn-sm btn-primary" data-bridge-pair-again hidden>Pair again<\/button>/);
   assert.doesNotMatch(wifi, /Change Wi-Fi/, 'the row has one action: the fix');
 });
 
@@ -276,19 +276,19 @@ test('no fault, no fault row; a member who may only see has no Pair again', () =
   const ok = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], { mayPair: true })), 'a');
   assert.doesNotMatch(ok, /data-fault/);
   const seeOnly = cardOf(String(decoderCards(homeRequest, [faulty('r', 'Gate', 'refused')], { mayPair: false })), 'r');
-  assert.doesNotMatch(seeOnly, /data-bridge-repair/);
+  assert.doesNotMatch(seeOnly, /data-bridge-pair-again/);
 });
 
 test('the foot: Pair again for members who may pair, Unpair for those who may delete, none for neither', () => {
   const both = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], { mayPair: true, mayDelete: true })), 'a');
-  assert.match(both, /<div class="decoder-foot"><button type="button" class="btn btn-sm btn-outline" data-bridge-repair hidden>Pair again<\/button><button type="button" class="decoder-unpair" commandfor="unpair-a" command="show-modal">Unpair<span class="visually-hidden"> Gate<\/span><\/button><\/div>/);
+  assert.match(both, /<div class="decoder-foot"><button type="button" class="btn btn-sm btn-outline" data-bridge-pair-again hidden>Pair again<\/button><button type="button" class="decoder-unpair" commandfor="unpair-a" command="show-modal">Unpair<span class="visually-hidden"> Gate<\/span><\/button><\/div>/);
   const pairOnly = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], { mayPair: true })), 'a');
   assert.doesNotMatch(pairOnly, /Unpair|<dialog/);
   const neither = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], {})), 'a');
   assert.doesNotMatch(neither, /decoder-foot/);
   const faulted = cardOf(String(decoderCards(homeRequest, [faulty('r', 'Gate', 'refused')], { mayPair: true, mayDelete: true })), 'r');
   const foot = /<div class="decoder-foot">([\s\S]*?)<\/div>/.exec(faulted)[1];
-  assert.doesNotMatch(foot, /data-bridge-repair/, 'Pair again is in the row');
+  assert.doesNotMatch(foot, /data-bridge-pair-again/, 'Pair again is in the row');
   assert.match(foot, /<button type="button" class="btn btn-sm btn-outline" data-bridge-wifi hidden>Change Wi-Fi<\/button>/, 'Change Wi-Fi gives the row up to the fix');
 });
 
