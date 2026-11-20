@@ -231,7 +231,7 @@ test('a TinyLap decoder that disconnects keeps the gap note hidden', async (t) =
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor({ timeout: 20_000 });
   await page.getByLabel('Decoder name').fill('Gate');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   await page.evaluate(() => /** @type {any} */ (window).__unplug());
   await page.locator('[data-bridge-live]', { hasText: 'Decoder disconnected.' }).waitFor({ state: 'attached' });

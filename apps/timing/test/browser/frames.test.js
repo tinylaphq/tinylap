@@ -21,12 +21,9 @@ before(async () => {
   browser = await openBrowser();
   owner = await app.login(await app.signUp('Ana'));
   await app.form(owner, '/personal/drivers', { name: 'Ana' });
-  // A transponder row: pair a decoder, read its token off the page once, cross the line.
-  const paired = await app.form(owner, '/personal/decoders', { name: 'Gate' });
-  const cookie = paired.headers.getSetCookie().find((c) => c.startsWith('__Host-tl-paired=')).split(';')[0];
-  const page = await (await app.api(owner, 'GET', paired.headers.get('location'), undefined, { accept: 'text/html', cookie: `${owner.jar.header()}; ${cookie}` })).text();
-  const token = /<code class="token">([A-Za-z0-9_-]{43})<\/code>/.exec(page)[1];
-  const id = /<code class="token token-id">([^<]+)<\/code>/.exec(page)[1];
+  // A transponder row: pair a decoder, cross the line.
+  const me = await (await app.api(owner, 'GET', '/auth/me')).json();
+  const { id, token } = await (await app.api(owner, 'POST', `/workspaces/${me.workspaces[0].id}/decoders`, { name: 'Gate' })).json();
   assert.equal((await postPassings(app, { id, token }, [{ transponder: '0A', t: 1000 }])).status, 200);
 });
 after(async () => {
@@ -157,28 +154,6 @@ test('a layout form loads a page, since a new layout may answer with its confirm
   assert.equal(loads(), 1);
 });
 
-test('pairing loads the page; a later swap keeps the one-time token; Copy copies it', async (t) => {
-  const { page, context, posts, loads } = await openSetup(t);
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.locator('#pair-name').fill('Finish');
-  // The token shows before the load event fires; wait for the load itself.
-  const loaded = page.waitForEvent('load');
-  await page.getByRole('button', { name: 'Pair over Wi-Fi only' }).click();
-  await loaded;
-  await page.locator('code.token').first().waitFor();
-  assert.equal(loads(), 1, 'pairing is a normal page load');
-  const token = await page.locator('code.token').first().innerText();
-  await page.locator('#add-driver-name').fill('Eve');
-  await page.getByRole('button', { name: 'Add driver' }).click();
-  await saved(page, 'Drivers saved');
-  assert.equal(await page.locator('code.token').first().innerText(), token, 'the token is still on screen');
-  const copy = page.locator('tl-copy', { has: page.locator('code.token:not(.token-id)') });
-  await copy.getByRole('button', { name: 'Copy' }).click();
-  await copy.getByRole('status').filter({ hasText: 'Copied' }).waitFor({ state: 'attached' });
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), token);
-  assert.deepEqual(posts, ['/personal/decoders', '/personal/drivers']);
-});
-
 test('a watchers link made in place copies too: tl-copy works after a swap', async (t) => {
   const { page, context, loads } = await openSetup(t);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -246,19 +221,6 @@ for (const [what, reply] of [
     assert.deepEqual(posts, ['/personal/drivers']);
   });
 }
-
-test('a save after pairing drops ?paired from the URL and keeps the section', async (t) => {
-  const { page } = await openSetup(t);
-  await page.locator('#pair-name').fill('Lap line');
-  await page.getByRole('button', { name: 'Pair over Wi-Fi only' }).click();
-  await page.locator('code.token').first().waitFor();
-  assert.match(page.url(), /\?paired=.+#decoders$/);
-  await page.locator('#add-driver-name').fill('Kim');
-  await page.getByRole('button', { name: 'Add driver' }).click();
-  await saved(page, 'Drivers saved');
-  const url = new URL(page.url());
-  assert.equal(url.pathname + url.search + url.hash, '/personal/setup#decoders');
-});
 
 test('a page shown again from the back/forward cache drops a lock left by a load that never finished', async (t) => {
   const { page } = await openSetup(t);

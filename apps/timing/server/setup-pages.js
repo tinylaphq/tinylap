@@ -5,7 +5,7 @@
 // Setup's pages and forms (spec §3, §6.4). Every form posts to a resource
 // URL and answers 303 to the setup section it changed; a failure renders the
 // page again with the error and what was typed.
-import { can, open, seal } from '@tinylap/auth';
+import { can } from '@tinylap/auth';
 import { transponderCode } from '@tinylap/timing';
 import { displayName } from './auth.js';
 import * as ops from './operations.js';
@@ -23,7 +23,7 @@ import { trackPage } from './views/track.js';
 /**
  * The setup page from the store, with any errors and kept values.
  * @param {any} request @param {number} status
- * @param {{ headers?: Record<string, any>, failed?: { error: any, fieldId?: string | null }, errors?: Record<string, any>, values?: Record<string, any>, paired?: { id: string, name: string, token: string } | null }} [extras]
+ * @param {{ headers?: Record<string, any>, failed?: { error: any, fieldId?: string | null }, errors?: Record<string, any>, values?: Record<string, any>}} [extras]
  */
 export function renderSetup(request, status, { headers = {}, ...extras } = {}) {
   const ws = request.workspaceId;
@@ -31,7 +31,6 @@ export function renderSetup(request, status, { headers = {}, ...extras } = {}) {
   return page(request, status, setupPage(request, {
     drivers: request.store.drivers(ws),
     transponders: request.store.transponders(ws),
-    decoders: request.store.decoders(ws),
     track: request.store.track(ws, workspace.trackId),
     tracks: request.store.tracks(ws, { archived: false }),
     archived: request.store.tracks(ws, { archived: true }),
@@ -137,27 +136,8 @@ function askForgetTransponder(request, match) {
 
 const forgetTransponder = withForm((request, _form, match) => afterForm(request, ops.forgetTransponder(request, { code: match[2] }), { key: 'forget', values: {}, section: 'transponders' }));
 
-export const PAIRED_COOKIE = '__Host-tl-paired';
-const PAIRED_TTL_SECONDS = 300;
-const PAIRED = new RegExp(`(?:^|;\\s*)${PAIRED_COOKIE}=([^;]+)`);
-const clearPaired = `${PAIRED_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
-
-/** GET setup: the page, and once after pairing, the new decoder's token. */
-function showSetup(request) {
-  const id = request.url.searchParams.get('paired');
-  const raw = PAIRED.exec(String(request.req.headers.cookie ?? ''))?.[1];
-  if (!id || !raw || !request.keys) return renderSetup(request, 200);
-  let paired = null;
-  try {
-    const value = JSON.parse(open(request.keys, decodeURIComponent(raw), 'paired'));
-    const decoder = request.store.decoder(value.id);
-    const fresh = Number.isFinite(value.exp) && value.exp > request.now() && value.sub === request.userId;
-    if (fresh && value.id === id && decoder?.workspaceId === request.workspaceId) paired = { id: value.id, name: decoder.name, token: value.token };
-  } catch {
-    // A tampered or stale cookie shows nothing.
-  }
-  return renderSetup(request, 200, { paired, headers: { 'Set-Cookie': [clearPaired] } });
-}
+/** GET setup: the page. */
+const showSetup = (request) => renderSetup(request, 200);
 
 // The track list (named tracks spec §3.3–3.5). A name in use is a mistake in
 // the form, so it answers 422 like any other bad input, not the API's 409.
@@ -225,17 +205,6 @@ function askDeleteTrack(request, match) {
 
 const deleteTrack = withForm((request, _form, match) => trackForm(request, ops.deleteTrack(request, { id: match[2] }), `track-delete:${match[2]}`, {}));
 
-const pairDecoder = withForm((request, form) => {
-  const values = { name: form.get('name') ?? '' };
-  const result = ops.pairDecoder(request, { name: values.name || undefined });
-  if (result.error) return afterForm(request, result, { key: 'pair', values, section: 'decoders', fieldId: 'pair-name' });
-  const { id, token } = result.value;
-  const sealed = encodeURIComponent(seal(request.keys, JSON.stringify({ id, token, sub: request.userId, exp: request.now() + PAIRED_TTL_SECONDS * 1000 }), 'paired'));
-  return seeOther(`${request.space.base}/setup?paired=${id}#decoders`, {
-    'Set-Cookie': [`${PAIRED_COOKIE}=${sealed}; Path=/; Max-Age=${PAIRED_TTL_SECONDS}; HttpOnly; Secure; SameSite=Strict`],
-  });
-});
-
 function askUnpair(request, match) {
   const decoder = request.store.decoder(match[2]);
   if (!decoder || decoder.workspaceId !== request.workspaceId) return page(request, 404, notFoundPage(request));
@@ -300,7 +269,8 @@ export const setupPageRoutes = [
   { pattern: spacePath('tracks/([^/]+)/archive'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', archiveTrack, write) } },
   { pattern: spacePath('tracks/([^/]+)/restore'), credentials: true, methods: { GET: toPage('setup#track'), POST: pageRoute('timing.setup', restoreTrack, write) } },
   { pattern: spacePath('tracks/([^/]+)/delete'), credentials: true, methods: { GET: pageRoute('timing.delete', askDeleteTrack), POST: pageRoute('timing.delete', deleteTrack, write) } },
-  { pattern: spacePath('decoders'), credentials: true, methods: { GET: toPage('setup#decoders'), POST: pageRoute('timing.setup', pairDecoder, write) } },
+  // Decoders live on the Bridge (bridge decoder home spec, Design 7); the bridge pairs them with the JSON API.
+  { pattern: spacePath('decoders'), credentials: true, methods: { GET: toPage('bridge') } },
   { pattern: spacePath('transponders/([0-9A-Fa-f]{1,16})/forget'), credentials: true, methods: { GET: pageRoute('timing.delete', askForgetTransponder), POST: pageRoute('timing.delete', forgetTransponder, write) } },
   { pattern: spacePath('decoders/([^/]+)/unpair'), credentials: true, methods: { GET: pageRoute('timing.delete', askUnpair), POST: pageRoute('timing.delete', unpair, write) } },
   { pattern: spacePath('watch-link'), credentials: true, methods: { GET: toPage('setup#watchers'), POST: pageRoute('timing.setup', makeWatchLink, write) } },

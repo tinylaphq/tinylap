@@ -786,21 +786,16 @@ body.big .navbar-right .btn-icon { padding-inline: 12px; } /* between palace's s
 .setup-row .btn, .track-row .btn, .roster-head .btn, .tp-rows .btn, .track-edit-form .btn { height: var(--p-control-height-sm); display: inline-flex; align-items: center; justify-content: center; margin: 0; }
 .track-edit-form .btn { height: var(--p-control-height); }
 .setup-row + .setup-row { border-top: var(--p-border-thin) solid var(--p-border-light); padding-top: var(--p-space-sm); }
-.token { display: block; word-break: break-all; font-family: var(--p-font-mono); font-size: 1.05em; padding: var(--p-space-sm); background: var(--p-surface); border: var(--p-border-width) solid var(--p-text); user-select: all; }
-/* palace's .status upper-cases and tracks its text; a token is case-sensitive and must read exactly. */
-.token, .token-id { text-transform: none; letter-spacing: 0; font-weight: 400; font-variant-ligatures: none; font-family: var(--p-font-mono); }
 /* Every status line here is prose, not a label. */
 /* A failed form's summary is a sentence; its link keeps the box's colour. */
 .status-error { font-weight: 600; }
 .status-error a { color: inherit; border-bottom-color: currentColor; }
 .status-info p { font-weight: 400; margin: 0; }
 .status-info p + p { margin-top: var(--p-space-xs); }
-.status .token { margin: 0; }
 /* A value and its Copy button (tl-copy): the button stays beside what it
    copies, even on a phone, where a long token wraps instead; one-line values
    and the button share palace's control height. The hint takes its own line. */
 .copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--p-space-sm); align-items: start; }
-.copy > .token { min-height: var(--p-control-height); }
 .copy > .copy-hint { grid-column: 1 / -1; margin: 0; }
 /* A line that introduces a copyable value sits with it; the next line keeps its distance. */
 .status > p + .copy { margin-top: var(--p-space-xs); }

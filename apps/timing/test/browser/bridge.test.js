@@ -50,7 +50,7 @@ test('connect, pair and forward with the simulated decoder', async (t) => {
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   await page.getByLabel('Decoder name').fill('  Gate  ');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   await page.locator('[data-bridge-preview] li').first().waitFor({ timeout: 20_000 });
   await sent;
@@ -71,7 +71,7 @@ test('without JavaScript, the page says what the bridge needs', async (t) => {
   await page.goto('/personal/bridge');
   await page.getByText(/needs Chrome or Edge/).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), false);
-  assert.equal(await page.getByRole('link', { name: 'Pair over Wi-Fi only' }).isVisible(), true);
+  assert.equal(await page.getByText('A TinyLap decoder needs it once, to pair; after that it can time over Wi-Fi without it.').isVisible(), true);
 });
 
 test('without Web Serial or WebHID, the notice stays and no button is offered', async (t) => {
@@ -100,7 +100,7 @@ async function toPairing(t, { viewport, init, arg, as = member } = {}) {
 test('the ready panel: name, aligned preview with headings, one live region', async (t) => {
   const { page, errors } = await toPairing(t);
   await page.getByLabel('Decoder name').fill('Gate');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   await page.locator('[data-bridge-preview] li').first().waitFor({ timeout: 20_000 });
   const edges = await page.evaluate(() => {
@@ -141,11 +141,11 @@ test('a failed write to the cable keeps the decoder: pairing again reuses it', a
     },
   });
   await page.getByLabel('Decoder name').fill('Pit');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: /didn't answer/ }).waitFor({ timeout: 10_000 });
   assert.equal(await page.getByLabel('Decoder name').isEditable(), false);
   assert.equal(app.store.decoders(personal).length, before + 1);
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Pit', { exact: true }).first().waitFor();
   assert.equal(app.store.decoders(personal).length, before + 1);
 });
@@ -154,10 +154,10 @@ test('a bad name shows the server error as an alert and a blank name is refused 
   const before = app.store.decoders(personal).length;
   const { page } = await toPairing(t);
   await page.getByLabel('Decoder name').fill('   ');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'A decoder name is 1 to 60 characters.' }).waitFor();
   await page.getByLabel('Decoder name').fill('Gate\u0001');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: /1 to 60 characters|control/ }).waitFor();
   assert.equal(await page.getByLabel('Decoder name').isEditable(), true);
   assert.equal(app.store.decoders(personal).length, before);
@@ -195,7 +195,7 @@ async function pairWith(page, { name, ssid = '', password = '' }) {
   await page.getByLabel('Decoder name').fill(name);
   await page.getByLabel('Wi-Fi name (optional)').fill(ssid);
   await page.getByLabel('Wi-Fi password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
 }
 
 test('a Wi-Fi name of 17 é is reported in bytes, before anything is created or sent', async (t) => {
@@ -203,7 +203,7 @@ test('a Wi-Fi name of 17 é is reported in bytes, before anything is created or 
   const { page, errors } = await toPairing(t, { init: RECORD, as: wren });
   await pairWith(page, { name: 'Accents', ssid: 'é'.repeat(17), password: 'secret12' });
   await message(page, 'Wi-Fi name (optional)', NAME_BYTES(34));
-  assert.equal(await page.getByRole('button', { name: 'Pair' }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Pair', exact: true }).isEnabled(), true);
   await page.waitForTimeout(300);
   assert.equal(app.store.decoders(wrens).length, before);
   assert.ok(!(await sent(page)).some((line) => line.startsWith('%TLPAIR')));
@@ -222,7 +222,7 @@ test('a 7-character password and 64 characters not all hex are reported', async 
   await pairWith(page, { name: 'Short', ssid: 'Office', password: 'abcdefg' });
   await message(page, 'Wi-Fi password', `${PASSWORD} This one is 7 bytes.`);
   await page.getByLabel('Wi-Fi password', { exact: true }).fill(`${'a'.repeat(63)}g`);
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await message(page, 'Wi-Fi password', `${PASSWORD} This one is 64 characters, but not all hex digits.`);
 });
 
@@ -249,7 +249,7 @@ test('clearing the Wi-Fi name clears the password\'s message', async (t) => {
   await message(page, 'Wi-Fi password', `${PASSWORD} This one is 7 bytes.`);
   await page.getByLabel('Wi-Fi name (optional)').fill('');
   await message(page, 'Wi-Fi password', '');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Cleared', { exact: true }).first().waitFor();
 });
 
@@ -327,7 +327,7 @@ const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 test('passings for another decoder removed on the server are dropped, and the ready panel says so', async (t) => {
   const { page } = await toPairing(t);
   await page.getByLabel('Decoder name').fill('Here');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Here', { exact: true }).first().waitFor();
   // A passing an earlier visit left for a decoder the server no longer has; this decoder's own 404 is the test below.
   await page.evaluate(async () => {
@@ -354,7 +354,7 @@ test('passings for another decoder removed on the server are dropped, and the re
 test('signed out while forwarding, passings wait here and the page says to sign in again', async (t) => {
   const { context, page } = await toPairing(t);
   await page.getByLabel('Decoder name').fill('Kept');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Kept', { exact: true }).first().waitFor();
   const cookies = await context.cookies();
   await context.clearCookies();
@@ -449,7 +449,7 @@ async function replug(t, devices) {
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByRole('heading', { name: 'Pair this decoder' }).waitFor();
   await page.getByLabel('Decoder name').fill('First');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: /didn't answer/ }).waitFor({ timeout: 10_000 });
   await page.evaluate(() => /** @type {any} */ (window).__unplug());
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
@@ -463,7 +463,7 @@ test('a decoder made for one device is forgotten when another device is connecte
   assert.equal(app.store.decoders(personal).length, before + 1);
   assert.equal(await page.getByLabel('Decoder name').isEditable(), true, 'the name is free again');
   await page.getByLabel('Decoder name').fill('Second');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Second', { exact: true }).first().waitFor();
   const made = app.store.decoders(personal).slice(before).map((d) => d.name).sort();
   assert.deepEqual(made, ['First', 'Second'], 'the new device gets its own decoder');
@@ -473,7 +473,7 @@ test('the same device plugged in again keeps the decoder made for it', async (t)
   const before = app.store.decoders(personal).length;
   const page = await replug(t, [{ usbVendorId: 0x1a86, usbProductId: 0x7523 }, { usbVendorId: 0x1a86, usbProductId: 0x7523 }]);
   assert.equal(await page.getByLabel('Decoder name').isEditable(), false, 'the name stays as it is');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from First', { exact: true }).first().waitFor();
   assert.equal(app.store.decoders(personal).length, before + 1, 'no second decoder');
 });
@@ -503,7 +503,7 @@ test('passings for a club without access wait, say why, and never hold up this d
 
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByLabel('Decoder name').fill('Mine');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Mine', { exact: true }).first().waitFor();
   const before = app.engine.snapshot(own).crossings.length;
   const panel = page.locator('[data-bridge-refused]');
@@ -532,7 +532,7 @@ test('a decoder this server doesn\'t know shows at once on connect, before any p
   await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByLabel('Decoder name').fill('Gate');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   const [old] = app.store.decoders(space);
   assert.equal((await app.api(uma, 'DELETE', `/workspaces/${space}/decoders/${old.id}`)).status, 204);
@@ -558,7 +558,7 @@ test('a decoder the server no longer knows stops forwarding and offers to pair a
   await page.goto('/personal/bridge');
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.getByLabel('Decoder name').fill('Gate');
-  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
   const [old] = app.store.decoders(space);
   assert.equal((await app.api(vic, 'DELETE', `/workspaces/${space}/decoders/${old.id}`)).status, 204);
