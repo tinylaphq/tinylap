@@ -1153,7 +1153,11 @@ class TlBridge extends HTMLElement {
       const old = had.get(id);
       const served = before.get(id);
       if (old && served && canonical(served) === canonical(card)) continue;
-      if (old?.querySelector('dialog[open]')) continue;
+      if (old?.querySelector('dialog[open]')) {
+        // Held back: it still shows the server's last copy, so that is the one a later message is compared with.
+        if (served) this.served.set(id, served);
+        continue;
+      }
       if (old) old.replaceWith(card);
       else current.append(card);
       replaced.add(id);

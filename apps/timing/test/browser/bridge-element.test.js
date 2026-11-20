@@ -833,7 +833,8 @@ test('a stream update keeps an open Unpair dialog', async (t) => {
   await page.waitForTimeout(1000);
   assert.equal(await dialog.isVisible(), true, 'still open');
   await dialog.getByRole('button', { name: 'Keep it' }).click();
-  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Its laps are turned away' }).waitFor();
+  // At once, from the message the dialog held back, not from a later one.
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Its laps are turned away' }).waitFor({ timeout: 150 });
   assert.deepEqual(errors, []);
 });
 
