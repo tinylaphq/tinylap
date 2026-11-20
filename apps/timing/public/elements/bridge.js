@@ -395,6 +395,7 @@ class TlBridge extends HTMLElement {
     const error = this.$(run, '[data-bridge-error]');
     error.hidden = true;
     error.textContent = '';
+    this.$(run, '[data-bridge-busy]').hidden = true;
     this.$(run, '[data-bridge-earlier]').hidden = true;
     this.$(run, '[data-bridge-live]').textContent = '';
     for (const form of /** @type {NodeListOf<HTMLFormElement>} */ (run.root.querySelectorAll('[data-bridge-pair], [data-bridge-repair]'))) {
@@ -895,7 +896,7 @@ class TlBridge extends HTMLElement {
     const cableRow = card.querySelector('[data-row="cable"]');
     fill(cableRow, { state: 'ok', words: 'Connected', detail: '' });
     for (const b of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-bridge-connect]') ?? [])) b.hidden = true;
-    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = note.dataset.cableNote !== 'only' || !onlyThisTab(bridge);
+    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = note.dataset.cableNote !== (bridge.kind === 'tinylap' ? 'only' : 'only-cable') || !onlyThisTab(bridge);
     const wifiRow = /** @type {HTMLElement | null} */ (card.querySelector('[data-row="wifi"]'));
     const tinylap = bridge.kind === 'tinylap';
     if (wifiRow) wifiRow.hidden = !tinylap;

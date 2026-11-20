@@ -147,8 +147,21 @@ test('a port open somewhere else says so, and Connect decoder works again', asyn
     assert.match(await page.locator('[data-bridge-busy]').innerText(), /^The decoder is open somewhere else/, name);
     assert.equal(await page.locator('[data-bridge-error]').isVisible(), false, `${name}: not the browser's words`);
     assert.equal(await connect.isEnabled(), true, `${name}: Connect decoder works again`);
+    assert.equal(await page.locator('[data-bridge-busy]').evaluate((x) => getComputedStyle(x).marginBottom), await page.locator('[data-bridge-error]').evaluate((x) => getComputedStyle(x).marginBottom), `${name}: spaced as the error is`);
     assert.deepEqual(errors, [], name);
   }
+});
+
+test('a move after a busy port starts fresh: the busy message goes', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(REFUSED_SERIAL, 'NetworkError');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-busy]').waitFor();
+  await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
+  await page.locator('[data-bridge-busy]').waitFor({ state: 'hidden' });
+  assert.deepEqual(errors, []);
 });
 
 test('a port refused for another reason keeps its own message', async (t) => {

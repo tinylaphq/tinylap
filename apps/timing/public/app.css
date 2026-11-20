@@ -446,7 +446,7 @@ p:has(> [data-bridge-connect]) { display: flex; flex-wrap: wrap; gap: var(--p-sp
 .bridge-state { display: flex; gap: var(--p-space-md); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--p-space-md); background: var(--p-dark); color: var(--p-text-on-fill); box-shadow: var(--p-shadow-lg) var(--p-accent-1); }
 .bridge-state p { margin: 0; }
 /* A failure sits at the top, above the card it is about; so does the sign-out, above the cards it stopped. */
-#bridge > [data-bridge-error], #bridge > [data-bridge-signed-out] { margin: 0 0 var(--p-space-md); }
+#bridge > [data-bridge-error], #bridge > [data-bridge-busy], #bridge > [data-bridge-signed-out] { margin: 0 0 var(--p-space-md); }
 .bridge-state [data-bridge-status] { overflow-wrap: anywhere; min-width: 0; }
 .bridge-state.is-offline { box-shadow: var(--p-shadow-lg) var(--p-warning); }
 /* A stat: the label small, the count under it, at the right of the strip. */

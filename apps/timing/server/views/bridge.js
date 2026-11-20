@@ -62,8 +62,9 @@ const WIFI_ROW = {
   unknown: { state: 'unknown', words: () => null, detail: () => 'Connect the cable to see its Wi-Fi.' },
 };
 
-// What the Cable row says after this tab's cable to the decoder was pulled; tl-bridge shows them (connections spec §2).
-const CABLE_NOTES = html`<p class="decoder-row-help" data-cable-note="back" hidden>It reconnects when you plug it back in.</p><p class="decoder-row-help" data-cable-note="gap" hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p><p class="decoder-row-help" data-cable-note="only" hidden>Laps reach TinyLap only through this tab. Leaving this page stops them; set up Wi-Fi to time without it.</p>`;
+// What the Cable row says after this tab's cable to the decoder was pulled, and (only, only-cable: a TinyLap decoder, or one with no
+// Wi-Fi at all) while this tab is its only way; tl-bridge shows them (connections spec §2).
+const CABLE_NOTES = html`<p class="decoder-row-help" data-cable-note="back" hidden>It reconnects when you plug it back in.</p><p class="decoder-row-help" data-cable-note="gap" hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p><p class="decoder-row-help" data-cable-note="only" hidden>Laps reach TinyLap only through this tab. Leaving this page stops them; set up Wi-Fi to time without it.</p><p class="decoder-row-help" data-cable-note="only-cable" hidden>Laps reach TinyLap only through this tab. Leaving this page stops them.</p>`;
 
 /** A decoder's card, as the server knows it: no cable on this tab (connections spec §3). @param {any} request @param {boolean} mayPair */
 function decoderCard(request, d, mayPair) {
