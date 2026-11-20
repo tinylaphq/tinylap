@@ -6,7 +6,15 @@
 namespace tinylap {
 
 void Uplink::configure(const UplinkConfig& c) {
-  if (c.token != config_.token) paused_ = false;
+  // A new token, or a new server (pairing sends the token first, so a post in between went to the old one): try again.
+  if (c.token != config_.token || c.server != config_.server) {
+    paused_ = false;
+    // Paired again: the last post's answer was the old pairing's, and one post now says whether the new one works.
+    if (!config_.token.empty()) {
+      lastStatus_ = -1;
+      heartbeatDue_ = true;
+    }
+  }
   if (c.decoder != config_.decoder && !config_.decoder.empty()) {   // paired again: the old pairing's backlog is not this one's
     head_ = count_ = sent_ = 0;
     sentBootLineGen_ = sentStatGen_ = 0;
@@ -121,6 +129,7 @@ bool Uplink::next(int64_t nowUs, Request& out) {
   out.url = server + "/decoders/" + config_.decoder + "/passings";
   out.auth = "Bearer " + config_.token;
   sentToken_ = config_.token;
+  sentServer_ = config_.server;
   out.body = batchBody(*bootId(seq), passings, logs, current ? &nowMs : nullptr, quiet);
 
   inFlight_ = true;
@@ -137,7 +146,9 @@ bool Uplink::next(int64_t nowUs, Request& out) {
 void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t retryAfterS) {
   if (!inFlight_) return;
   inFlight_ = false;
-  lastStatus_ = status;
+  // An answer to the old pairing (its token or its address) says nothing of this one: no status, pause or backoff.
+  const bool current = sentToken_ == config_.token && sentServer_ == config_.server;
+  if (current) lastStatus_ = status;
   bool delivered = false;
   int64_t through = 0;
   const bool readable = status == 200 && readThrough(body, through);
@@ -153,14 +164,14 @@ void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t 
     backoffUs_ = kBackoffMinUs;
     delivered = true;
   } else if (status == 401) {
-    if (sentToken_ == config_.token) paused_ = true;   // not when a new token came meanwhile
+    if (current) paused_ = true;   // not when a new token or address came meanwhile
   } else if (status == 404 || status == 422) {
     head_ = (head_ + sent_) % kCapacity;   // never taken: drop that batch's passings
     count_ -= sent_;
     delivered = true;
   } else if (status == 429 && retryAfterS > 0) {
     waitUntilUs_ = nowUs + std::min<int64_t>(retryAfterS, kMaxRetryAfterS) * 1000000;
-  } else {   // also a 200 without a readable through for passings it carried (a captive portal, a proxy)
+  } else if (current) {   // also a 200 without a readable through for passings it carried (a captive portal, a proxy)
     waitUntilUs_ = nowUs + backoffUs_;
     backoffUs_ = std::min(backoffUs_ * 2, kBackoffMaxUs);
   }
