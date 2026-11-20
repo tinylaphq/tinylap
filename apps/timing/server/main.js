@@ -45,7 +45,7 @@ const needed = {
   TINYLAP_PLANNER_URL: env.TINYLAP_PLANNER_URL,
 };
 const missing = Object.keys(needed).filter((name) => !needed[name]);
-if (missing.length) refuse(`Timing needs ${missing.join(', ')}. See "Self-hosting TinyLap Timing" in README.md.`);
+if (missing.length) refuse(`Timing needs ${missing.join(', ')}. See "Self-hosting", "Timing" in README.md.`);
 
 let keys;
 try {

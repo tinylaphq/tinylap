@@ -1,6 +1,7 @@
 node_modules/
 .turbo/
 packages/*/dist/
+apps/site/dist/
 *.tgz
 packages/*/LICENSE
 CLAUDE.local.md
