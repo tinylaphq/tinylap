@@ -59,6 +59,8 @@ const postPassings = withSession(async (request, match) => {
     const token = BEARER.exec(header)?.[1];
     const found = token ? request.store.decoderByTokenHash(tokenHash(token)) : null;
     if (!found || found.id !== decoderId) return refuse('unauthorized', "Send this decoder's token as a Bearer token.");
+    // Pair again's token, used for the first time: from now on it is the only one.
+    if (found.next) request.store.promoteNextToken(found.id, tokenHash(token));
     decoder = found;
     via = 'net';
   } else {
