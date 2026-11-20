@@ -6,7 +6,8 @@
 namespace tinylap {
 
 void Uplink::configure(const UplinkConfig& c) {
-  if (c.token != config_.token) paused_ = false;
+  // A new token, or a new server (pairing sends the token first, so a post in between went to the old one): try again.
+  if (c.token != config_.token || c.server != config_.server) paused_ = false;
   if (c.decoder != config_.decoder && !config_.decoder.empty()) {   // paired again: the old pairing's backlog is not this one's
     head_ = count_ = sent_ = 0;
     sentBootLineGen_ = sentStatGen_ = 0;

@@ -322,6 +322,21 @@ static void test_a_new_decoder_id_leaves_the_old_backlog_behind() {
   TEST_ASSERT_FALSE(has(r.body, "\"transponder\":\"2A\""));
 }
 
+// Pairing sends the new token, then the server address: a post in between goes to the old server, which refuses the
+// new token. The new address ends that pause, so the decoder tries the server that paired it.
+static void test_a_new_server_address_ends_a_401_pause() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  u.configure({"https://old", "d1", kToken2});
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.answer(401, "", 0);
+  TEST_ASSERT_TRUE(u.paused());
+  u.configure({"https://new", "d1", kToken2});
+  TEST_ASSERT_FALSE(u.paused());
+  TEST_ASSERT_TRUE(u.next(100 * kS, r));
+}
+
 static void test_a_401_for_an_old_token_does_not_pause_the_new_one() {
   Uplink u; ready(u);
   u.onPassing("2A", 1000, 0);
@@ -417,6 +432,7 @@ int main() {
   RUN_TEST(test_full_outbox_drops_the_oldest);
   RUN_TEST(test_batch_holds_at_most_500);
   RUN_TEST(test_401_pauses_until_configure_gives_a_new_token);
+  RUN_TEST(test_a_new_server_address_ends_a_401_pause);
   RUN_TEST(test_a_new_decoder_id_leaves_the_old_backlog_behind);
   RUN_TEST(test_a_401_for_an_old_token_does_not_pause_the_new_one);
   RUN_TEST(test_404_and_422_drop_the_batch);
