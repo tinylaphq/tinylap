@@ -122,6 +122,7 @@ docker run -p 8080:8080 -v tinylap-timing:/data -e TINYLAP_PUBLIC_URL=https://ti
 | `PORT` | `8080` | Port to listen on |
 | `TINYLAP_DB` | `/data/timing.sqlite` | SQLite file |
 | `TINYLAP_PUBLIC_URL` | required | The `https://` origin timing is served at |
+| `TINYLAP_DECODER_URL` | `TINYLAP_PUBLIC_URL` | Where a decoder paired here sends its passings over Wi-Fi, when it can't reach the public URL (a laptop on `localhost`: its network address) |
 | `TINYLAP_ISSUER` | required | The Accounts origin |
 | `TINYLAP_CLIENT_ID`, `TINYLAP_CLIENT_SECRET` | required | Timing's entry in Accounts' `TINYLAP_CLIENTS` |
 | `TINYLAP_TOKEN_KEYS` | required | Keys that seal stored tokens, as for the planner |

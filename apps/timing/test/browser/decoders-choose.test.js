@@ -18,6 +18,12 @@ test('D1: a plain ZRound decoder is chosen as a new decoder and forwards; the br
   await page.getByLabel('Name for the new decoder').fill('Gate');
   await page.getByRole('button', { name: 'Use this decoder' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  // No Wi-Fi on a plain ZRound decoder: this tab is always its only way, and its card says what leaving does.
+  const note = page.locator('[data-decoder] [data-cable-note="only-cable"]');
+  await note.waitFor();
+  assert.equal(await note.innerText(), 'Laps reach TinyLap only through this tab. Leaving this page stops them.', 'no Wi-Fi to suggest');
+  assert.equal(await page.locator('[data-decoder] [data-cable-note="only"]').isVisible(), false);
+  assert.equal(await page.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); dispatchEvent(e); return e.defaultPrevented; }), true);
   await page.locator('[data-bridge-preview] li').first().waitFor({ timeout: 30_000 });
   assert.deepEqual(app.store.decoders(space).map((d) => d.name), ['Gate']);
   assert.ok(app.engine.snapshot(space).crossings.length > 0);
@@ -36,6 +42,31 @@ test('D1: a plain ZRound decoder is chosen as a new decoder and forwards; the br
     return { ...separate, forgotten: await devices.recall('w1', device), mineAfter: await devices.recall(w, device) };
   }, [space, ZROUND_DEVICE]);
   assert.deepEqual(store, { w1: 'one', w2: null, mine: decoderNamed(space, 'Gate').id, forgotten: null, mineAfter: decoderNamed(space, 'Gate').id });
+  assert.deepEqual(errors, []);
+});
+
+test('D1c: a chosen decoder the server says it doesn\'t know: the page holds the cards stream, and asks for that cable no more', async (t) => {
+  const { page, errors } = await fresh(t);
+  // The decoder goes between Choose and its cable stream: the server answers that stream with its unknown event.
+  const cable = [];
+  await page.route(/\/decoders\/[^/]+\/cable\?/, (route) => {
+    cable.push(route.request().url());
+    return route.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body: 'retry: 3600000\n\nevent: unknown\ndata:\n\n' });
+  });
+  const cards = [];
+  page.on('request', (r) => { if (/\/bridge\/events\?/.test(r.url())) cards.push(r.url()); });
+  await openZround(t, page);
+  await toChoose(page);
+  await page.getByLabel('Name for the new decoder').fill('Gate');
+  const before = cards.length;
+  await page.getByRole('button', { name: 'Use this decoder' }).click();
+  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  for (const end = Date.now() + 5000; cable.length === 0 && Date.now() < end;) await page.waitForTimeout(50);
+  // Laps every 2 s repaint the page: none of them may ask for the unknown cable again.
+  await page.waitForTimeout(5000);
+  assert.equal(cable.length, 1, 'asked once');
+  assert.ok(cards.length > before, 'the cards stream instead, so the cards stay live');
+  assert.equal(await page.evaluate(() => document.querySelector('tl-bridge').run.stream !== null), true);
   assert.deepEqual(errors, []);
 });
 

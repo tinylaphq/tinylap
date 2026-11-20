@@ -523,6 +523,30 @@ test('passings for a club without access wait, say why, and never hold up this d
   assert.equal(await page.locator('[data-bridge-status]').innerText(), 'Forwarding from Mine');
 });
 
+test('a decoder this server doesn\'t know shows at once on connect, before any post', async (t) => {
+  const uma = await app.login(await app.signUp('Uma'));
+  const space = (await (await app.api(uma, 'GET', '/auth/me')).json()).workspaces[0].id;
+  const { context, page } = await pageAs(browser, app, uma);
+  t.after(() => context.close());
+  simulating(t, 'tinylap');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.getByLabel('Decoder name').fill('Gate');
+  await page.getByRole('button', { name: 'Pair' }).click();
+  await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  const [old] = app.store.decoders(space);
+  assert.equal((await app.api(uma, 'DELETE', `/workspaces/${space}/decoders/${old.id}`)).status, 204);
+  // The device keeps its pairing; this page load finds a server that no longer has it.
+  await page.reload();
+  const posts = [];
+  page.on('request', (request) => { if (request.method() === 'POST' && /\/passings$/.test(request.url())) posts.push(request.url()); });
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-unknown]').filter({ hasText: "This decoder's pairing isn't known here." }).waitFor({ timeout: 3_000 });
+  assert.deepEqual(posts, [], 'the cable stream said so, not a refused post');
+  assert.equal(await page.locator('#decoder-none').isVisible(), false, 'no "No decoder yet" above the decoder on the cable');
+  assert.equal(await page.locator('[data-bridge-status]').isVisible(), false, 'no longer says it forwards');
+});
+
 test('a decoder the server no longer knows stops forwarding and offers to pair again', async (t) => {
   // Its own member: the file's member has used up their pairings for the minute.
   const vic = await app.login(await app.signUp('Vic'));

@@ -27,6 +27,9 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const again = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
   assert.notEqual(/data-page="([^"]+)"/.exec(again)[1], /data-page="([^"]+)"/.exec(body)[1], 'one id per render');
   assert.match(body, /<p hidden data-bridge-say="disconnected">Decoder disconnected\.<\/p>/, 'the words the page announces on an unplug');
+  assert.doesNotMatch(body, /Keep this tab open while racing/, 'the cable row says it, only where it is true');
+  assert.match(body, /<p class="status status-error" role="alert" data-bridge-busy hidden>The decoder is open somewhere else: another tab, another browser or another app\. Close it there, then connect again\.<\/p>/, 'a port that won\'t open says why, in the server\'s words');
+  assert.match(body, /<p class="status status-error" role="alert" data-bridge-gone hidden>The decoder was unplugged while it connected\. Plug it in again, then connect\.<\/p>/);
   // The words the page announces for each state, in the server's words (#84).
   const said = {
     connect: 'Ready to connect.',
@@ -130,6 +133,8 @@ test('the decoder cards: every decoder of the club by name, above the connect fl
   assert.match(body, /Laps get through over Wi-Fi\./);
   assert.match(body, /If it's on, its laps wait on it\. Connect the cable to see why\./);
   assert.equal(body.match(/data-bridge-wifi hidden>Change Wi-Fi</g).length, 2, 'a member who may pair has it, hidden until the cable is in');
+  assert.equal(body.match(/<p class="decoder-row-help" data-cable-note="only" hidden>Laps reach TinyLap only through this tab\. Leaving this page stops them; set up Wi-Fi to time without it\.<\/p>/g).length, 2, 'each card says, once its cable is here and it has no Wi-Fi, what leaving does');
+  assert.equal(body.match(/<p class="decoder-row-help" data-cable-note="only-cable" hidden>Laps reach TinyLap only through this tab\. Leaving this page stops them\.<\/p>/g).length, 2, 'and for a decoder that has no Wi-Fi at all, without suggesting it');
   assert.match(body, /<dialog id="wifi-dialog"/);
   assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="ready"'), 'outside the cards, so a swap keeps it');
 });
@@ -216,13 +221,19 @@ test('the cable stream sends new cards when only the decoder\'s Wi-Fi state chan
   await cable.return();
 });
 
-test('the cable stream: another club\'s decoder or an unknown one is not found; another site or a stranger are refused; a page load goes to the Bridge page', async () => {
+test('the cable stream: an unknown decoder is told unknown, once; another club\'s decoder is not found; another site or a stranger are refused; a page load goes to the Bridge page', async () => {
   const { user, gate, base, who, cableOf } = await clubWithGate('Eve');
   const theirs = app.club(user, 'Theirs');
   const eve = await app.login(user);
   const other = await (await app.api(eve, 'POST', `/workspaces/${theirs.id}/decoders`, { name: 'Theirs' })).json();
+  // EventSource can't see a 404: the page learns in the stream that this space doesn't know the decoder, and the long retry holds it back.
+  const res = await app.api(eve, 'GET', `${base}/decoders/nope/cable`, undefined, SSE);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /^text\/event-stream/);
+  assert.equal(await res.text(), 'retry: 3600000\n\nevent: unknown\ndata:\n\n');
+  // Another space's decoder is known, and its passings still get through (ingest checks the member's access): only its cable isn't counted here.
   assert.equal((await app.api(eve, 'GET', `${base}/decoders/${other.id}/cable`, undefined, SSE)).status, 404);
-  assert.equal((await app.api(eve, 'GET', `${base}/decoders/nope/cable`, undefined, SSE)).status, 404);
+  assert.equal((await app.api(eve, 'GET', `${base}/decoders/nope/cable`, undefined, { accept: 'text/html' })).status, 303, 'a page load still goes to the Bridge page');
   assert.equal((await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { ...SSE, origin: 'https://elsewhere.example' })).status, 403);
   assert.equal((await app.api(who, 'GET', `${base}/decoders/${gate.id}/cable`, undefined, { ...SSE, 'sec-fetch-site': 'cross-site' })).status, 403);
   const stranger = await app.login(await app.signUp('Finn'));
@@ -335,4 +346,17 @@ test('a cable stream whose setup throws ends, logs once, and counts nothing', as
     console.error = error;
     await rig.close();
   }
+});
+
+test('the address the decoder is paired to post to: the public URL, or the decoder URL when one is set', async () => {
+  const own = await startTiming({ decoderUrl: 'http://192.168.1.20:8100/' });
+  try {
+    const who = await own.login(await own.signUp('Dev'));
+    const body = await (await own.api(who, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+    assert.match(body, /data-server="http:\/\/192\.168\.1\.20:8100"/, 'a laptop on localhost pairs a decoder that must reach it over the network');
+  } finally {
+    await own.close();
+  }
+  const body = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
+  assert.match(body, /data-server="http:\/\/(127\.0\.0\.1|localhost):\d+"/, 'without one, the public URL');
 });

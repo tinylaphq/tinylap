@@ -127,6 +127,95 @@ async function toPairing(t, { viewport, init = [] } = {}) {
   return who;
 }
 
+/**
+ * navigator.serial whose one port won't open, rejecting with a DOMException named `name`; `unplugged`, it is gone from
+ * getPorts() too, as a port pulled out while it opens. @param {{ name: string, unplugged?: boolean }} options
+ */
+const REFUSED_SERIAL = ({ name, unplugged = false }) => {
+  const port = { readable: null, writable: null, open: async () => { throw new DOMException(name === 'SecurityError' ? 'Not allowed here.' : 'Failed to open serial port.', name); }, close: async () => {}, getInfo: () => ({ usbVendorId: 0x10c4, usbProductId: 0xea60 }) };
+  Object.defineProperty(navigator, 'serial', {
+    configurable: true,
+    value: Object.assign(new EventTarget(), { requestPort: async () => port, getPorts: async () => (unplugged ? [] : [port]) }),
+  });
+};
+
+test('a port open somewhere else says so, and Connect decoder works again', async (t) => {
+  for (const name of ['NetworkError', 'InvalidStateError']) {
+    const { context, page, errors } = await pageAs(browser, app, member);
+    t.after(() => context.close());
+    await page.addInitScript(REFUSED_SERIAL, { name });
+    await page.goto('/personal/bridge');
+    const connect = page.getByRole('button', { name: 'Connect decoder' }).first();
+    await connect.click();
+    await page.locator('[data-bridge-busy]').waitFor();
+    assert.match(await page.locator('[data-bridge-busy]').innerText(), /^The decoder is open somewhere else/, name);
+    assert.equal(await page.locator('[data-bridge-error]').isVisible(), false, `${name}: not the browser's words`);
+    assert.equal(await connect.isEnabled(), true, `${name}: Connect decoder works again`);
+    assert.equal(await page.locator('[data-bridge-busy]').evaluate((x) => getComputedStyle(x).marginBottom), await page.locator('[data-bridge-error]').evaluate((x) => getComputedStyle(x).marginBottom), `${name}: spaced as the error is`);
+    assert.deepEqual(errors, [], name);
+  }
+});
+
+test('a move after a busy port starts fresh: the busy message goes', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(REFUSED_SERIAL, { name: 'NetworkError' });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-busy]').waitFor();
+  await page.evaluate(() => document.querySelector('main .container').append(document.querySelector('tl-bridge')));
+  await page.locator('[data-bridge-busy]').waitFor({ state: 'hidden' });
+  assert.deepEqual(errors, []);
+});
+
+test('a port pulled out while it opens says so, not that it is open somewhere else', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(REFUSED_SERIAL, { name: 'NetworkError', unplugged: true });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-gone]').filter({ hasText: 'The decoder was unplugged while it connected. Plug it in again, then connect.' }).waitFor();
+  assert.equal(await page.locator('[data-bridge-busy]').isVisible(), false);
+  assert.equal(await page.locator('[data-bridge-error]').isVisible(), false);
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isEnabled(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('a port refused for another reason keeps its own message', async (t) => {
+  const { context, page } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(REFUSED_SERIAL, { name: 'SecurityError', unplugged: true });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-error]').filter({ hasText: 'Not allowed here.' }).waitFor();
+  assert.equal(await page.locator('[data-bridge-busy]').isVisible(), false);
+});
+
+test('a device on the cable hides the empty card; unplugged, it comes back with Connect decoder working', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  // A silent port whose cable window.__unplug() pulls.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'serial', {
+      configurable: true,
+      value: { requestPort: async () => ({
+        readable: new ReadableStream({ start: (c) => { window.__unplug = () => c.close(); } }), writable: new WritableStream(),
+        open: async () => {}, close: async () => {}, getInfo: () => ({ usbVendorId: 0x1a86, usbProductId: 0x7523 }),
+      }) },
+    });
+  });
+  await page.goto('/personal/bridge');
+  const empty = page.locator('#decoder-none');
+  assert.equal(await empty.isVisible(), true, 'no decoder yet');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-state="listening"]').waitFor();
+  assert.equal(await empty.isVisible(), false, 'a device is on the cable: no "No decoder yet" above it');
+  await page.evaluate(() => window.__unplug());
+  await empty.waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isEnabled(), true);
+  assert.deepEqual(errors, []);
+});
+
 test('E5: a lap row comes from its template', async (t) => {
   const { page, errors } = await toPairing(t);
   assert.equal(await page.locator('template[data-bridge-row]').count(), 2);
@@ -633,6 +722,36 @@ test('change wifi lists 25 networks that scroll, strongest first, another networ
   const at = await another.boundingBox();
   assert.ok(at.y + at.height <= 800, 'and in view');
   assert.equal(await page.evaluate(() => document.activeElement?.matches('button.net')), true, 'focus on the first network');
+  assert.deepEqual(errors, []);
+});
+
+test('on the cable without Wi-Fi, leaving asks and the cable row says why; with Wi-Fi connected it doesn\'t', async (t) => {
+  const { page, errors, board, row } = await cabledPage(t);
+  const note = row(board, 'cable').locator('[data-cable-note="only"]');
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Not set up' }).waitFor();
+  assert.equal(await blocksLeaving(page), true, 'the cable is its only way');
+  assert.equal(await note.isVisible(), true);
+  const send = (line) => page.evaluate((l) => window.__port.send(new TextEncoder().encode(l)), line);
+  await send('%TLNET connected Q2x1YmhhdXM -50 none&');
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Connected to “Clubhaus”' }).waitFor();
+  assert.equal(await blocksLeaving(page), false, 'its laps get through over Wi-Fi too');
+  assert.equal(await note.isVisible(), false);
+  await send('%TLNET failed Q2x1YmhhdXM 0 notfound&');
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Can\'t find “Clubhaus” from here' }).waitFor();
+  assert.equal(await blocksLeaving(page), true, 'Wi-Fi gone: the cable is its only way again');
+  assert.equal(await note.isVisible(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('staying at the leave prompt hands this tab\'s cable to no other tab: a second Bridge tab sees it connected elsewhere', async (t) => {
+  const { page, context, errors, board, row } = await cabledPage(t);
+  // The leave prompt came and the member stayed: beforeunload ran, and the page is still here.
+  assert.equal(await blocksLeaving(page), true);
+  await page.waitForTimeout(1500);
+  const other = await context.newPage();
+  await other.goto('/personal/bridge');
+  await other.locator(`[data-decoder="${board.id}"] [data-row="cable"] [data-slot="state"]`, { hasText: 'Connected on another laptop' }).waitFor({ timeout: 5000 });
+  assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Connected', 'the first tab still has it');
   assert.deepEqual(errors, []);
 });
 
@@ -1539,18 +1658,17 @@ test('after a reload without the leaving page\'s cookie, its stale hold still re
   assert.deepEqual(errors, []);
 });
 
-test('a reload the member cancels leaves the cookie to the next render only', async (t) => {
+test('a reload the member cancels leaves no cookie behind once the prompt closes', async (t) => {
   const { page, errors, board, row, pageId } = await reloading(t);
   page.once('dialog', (dialog) => dialog.dismiss());
   await page.reload({ timeout: 2000 }).catch(() => {});
   // Still the same page, still forwarding.
   assert.equal(await page.locator('#bridge').getAttribute('data-page'), pageId);
   assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Connected');
-  // The next render in this browser reads it and clears it; the one after counts this page as another.
+  // Stayed: a second after the prompt the page takes its cookie back, so no other render (another tab's, say) takes its cable.
+  await page.waitForFunction(() => !document.cookie.includes('tl-bridge-leaving'), null, { timeout: 3000 });
   const render = () => page.evaluate(async () => (await fetch(location.pathname, { headers: { accept: 'text/html' } })).text());
-  assert.doesNotMatch(await render(), /Connected on another laptop/, 'the leftover: that render takes this page for its own');
-  assert.equal(await page.evaluate(() => document.cookie.includes('tl-bridge-leaving')), false, 'cleared by the render that read it');
-  assert.match(await render(), /Connected on another laptop/);
+  assert.match(await render(), /Connected on another laptop/, 'the next render counts this page as another');
   assert.deepEqual(errors, []);
 });
 

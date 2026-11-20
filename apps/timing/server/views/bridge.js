@@ -62,8 +62,9 @@ const WIFI_ROW = {
   unknown: { state: 'unknown', words: () => null, detail: () => 'Connect the cable to see its Wi-Fi.' },
 };
 
-// What the Cable row says after this tab's cable to the decoder was pulled; tl-bridge shows them (connections spec §2).
-const CABLE_NOTES = html`<p class="decoder-row-help" data-cable-note="back" hidden>It reconnects when you plug it back in.</p><p class="decoder-row-help" data-cable-note="gap" hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p>`;
+// What the Cable row says after this tab's cable to the decoder was pulled, and (only, only-cable: a TinyLap decoder, or one with no
+// Wi-Fi at all) while this tab is its only way; tl-bridge shows them (connections spec §2).
+const CABLE_NOTES = html`<p class="decoder-row-help" data-cable-note="back" hidden>It reconnects when you plug it back in.</p><p class="decoder-row-help" data-cable-note="gap" hidden>Crossings while it is unplugged are lost, and each car's lap starts over when you connect again.</p><p class="decoder-row-help" data-cable-note="only" hidden>Laps reach TinyLap only through this tab. Leaving this page stops them; set up Wi-Fi to time without it.</p><p class="decoder-row-help" data-cable-note="only-cable" hidden>Laps reach TinyLap only through this tab. Leaving this page stops them.</p>`;
 
 /** A decoder's card, as the server knows it: no cable on this tab (connections spec §3). @param {any} request @param {boolean} mayPair */
 function decoderCard(request, d, mayPair) {
@@ -251,9 +252,11 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     body: html`<div class="container space-lg screen">
   <h1>Bridge</h1>
   <tl-bridge>
-  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}"${after ? html` data-after="${after}"` : null}>
+  <div id="bridge" data-workspace="${request.workspaceId}" data-server="${request.decoderUrl ?? request.origin}" data-cable-stream="${base}/decoders/{id}/cable" data-cards-stream="${base}/bridge/events" data-page="${randomBytes(12).toString('base64url')}"${after ? html` data-after="${after}"` : null}>
     <p class="visually-hidden" role="status" data-bridge-live></p>
     <p class="status status-error" role="alert" data-bridge-error hidden></p>
+    <p class="status status-error" role="alert" data-bridge-busy hidden>The decoder is open somewhere else: another tab, another browser or another app. Close it there, then connect again.</p>
+    <p class="status status-error" role="alert" data-bridge-gone hidden>The decoder was unplugged while it connected. Plug it in again, then connect.</p>
     <p hidden data-bridge-say="connect">Ready to connect.</p>
     <p hidden data-bridge-say="connecting">Talking to the decoder.</p>
     <p hidden data-bridge-say="listening">Connected. Nothing from the device yet.</p>
@@ -269,7 +272,6 @@ export function bridgePage(request, importMap, decoders = [], known = decoders.m
     </section>
     ${decoderCards(request, connections, { mayPair })}
     <section data-bridge-state="connect" hidden class="bridge-more space-sm">
-      <p>Keep this tab open while racing; the board runs in any other tab or screen.</p>
       <p>An EasyLap? Use Connect EasyLap: it doesn't show up in the decoder list.</p>
       <p><button type="button" class="btn btn-outline" data-bridge-connect="hid">Connect EasyLap</button></p>
       <p class="status status-warning" data-bridge-missing="serial" hidden>This browser can't reach USB decoders, only an EasyLap.</p>

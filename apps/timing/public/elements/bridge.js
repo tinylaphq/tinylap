@@ -7,7 +7,7 @@
 // #bridge markup the server rendered inside it. It shows one
 // [data-bridge-state] section at a time, fills in the ready panel from the
 // server's row templates, sends passings an earlier visit left behind, and
-// guards leaving the page while a decoder is forwarding. Pairing posts to
+// guards leaving the page while it is the only way a decoder's laps get through. Pairing posts to
 // the JSON API, because the decoder's token must reach the board over serial.
 // - Each start, on connect, makes a fresh run: the page's state, held in
 //   one object. Every async path writes to the page only while its run is
@@ -92,6 +92,13 @@ function netRow(net, mayChange, silent = false) {
   if (net.cause === 'notfound') return { state: 'fail', words: `Can't find ${name} from here`, detail: 'It may be out of reach of the decoder, or switched off.' };
   return { state: 'fail', words: `Can't join ${name}`, detail: '' };
 }
+
+/**
+ * Whether leaving this page stops the decoder's laps: it is ready on this tab's cable, and has no Wi-Fi of its own (a
+ * plain ZRound decoder or an EasyLap never has; a TinyLap decoder whose last %TLNET isn't connected hasn't now).
+ * @param {any} bridge
+ */
+const onlyThisTab = (bridge) => bridge?.state === 'ready' && !(bridge.kind === 'tinylap' && bridge.net?.state === 'connected');
 
 let warned = false;
 /**
@@ -261,6 +268,7 @@ async function pick(which) {
  *   transport: 'serial' | 'hid' | null, list: { decoders: { id: string, name: string, lastSeenAt: number | null }[], serverNow: number | null } | null,
  *   remembered: string | null, devices: any, connecting: boolean, wizard: WifiWizard | null, silent: Bridge | null,
  *   stream: { url: string, source: EventSource, wait: number, retry?: ReturnType<typeof setTimeout> } | null,
+ *   unknownCable: string | null,
  *   last: { port: any, device: string, decoder: string | null, refused?: boolean } | null,
  *   gone: { decoder: string, kind: string, serial: boolean, back: boolean, before: any[], port: any } | null,
  *   onPort: ((event: Event) => void) | null, autoFocus?: { id: string | null, which: string | null } | null, failures: number,
@@ -288,7 +296,7 @@ class TlBridge extends HTMLElement {
     const root = /** @type {HTMLElement | null} */ (this.querySelector('#bridge'));
     if (!root) return;
     const run = { root, workspaceId: root.dataset.workspace ?? '', bridge: null, preview: [], names: new Map(), asked: new Set(), made: null, transport: null, list: null, remembered: null, devices: null, connecting: false,
-      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, failures: 0 };
+      wizard: null, silent: null, last: null, gone: null, onPort: null, stream: null, unknownCable: null, failures: 0 };
     this.run = run;
     // Without Web Serial or WebHID only the live cards are on: no cable, no connect flow, the server's notice stays.
     if (!supported) {
@@ -388,6 +396,8 @@ class TlBridge extends HTMLElement {
     const error = this.$(run, '[data-bridge-error]');
     error.hidden = true;
     error.textContent = '';
+    this.$(run, '[data-bridge-busy]').hidden = true;
+    this.$(run, '[data-bridge-gone]').hidden = true;
     this.$(run, '[data-bridge-earlier]').hidden = true;
     this.$(run, '[data-bridge-live]').textContent = '';
     for (const form of /** @type {NodeListOf<HTMLFormElement>} */ (run.root.querySelectorAll('[data-bridge-pair], [data-bridge-repair]'))) {
@@ -424,7 +434,11 @@ class TlBridge extends HTMLElement {
       // A reload's request carries it: the new page counts this page's cable, held until its answer comes, as its own.
       // Long enough for the leave prompt, which comes after this: the server clears it on its first read anyway.
       this.leaving(this.run, 60);
-      if (this.run.bridge?.state === 'ready') event.preventDefault();
+      // Stayed at the leave prompt (this runs only once it closes), or a reload whose request has long gone with the cookie:
+      // either way no later page may take this page's cable, another tab's least of all.
+      const run = this.run;
+      setTimeout(() => { if (run === this.run) this.leaving(run, 0); }, 1000);
+      if (onlyThisTab(this.run.bridge)) event.preventDefault();
       return;
     }
     // Leaving the page closes the port, and the stream: a page in the back/forward cache forwards nothing either.
@@ -523,13 +537,23 @@ class TlBridge extends HTMLElement {
   /** @param {Run} run */
   fail(run, caught) {
     run.failures += 1;
+    // Chrome's words for a serial port held elsewhere (another tab, browser or app) say nothing useful: the server's do.
+    // An EasyLap's errors keep their own words: WebHID uses these names for other things.
+    const gone = Boolean(caught?.unplugged);
+    const busy = !gone && run.transport === 'serial' && (caught?.name === 'NetworkError' || caught?.name === 'InvalidStateError');
     const error = this.$(run, '[data-bridge-error]');
-    error.textContent = caught.message;
-    error.hidden = false;
+    if (!busy && !gone) error.textContent = caught.message;
+    error.hidden = busy || gone;
+    this.$(run, '[data-bridge-busy]').hidden = !busy;
+    this.$(run, '[data-bridge-gone]').hidden = !gone;
   }
 
   /** @param {Run} run */
-  ok(run) { this.$(run, '[data-bridge-error]').hidden = true; }
+  ok(run) {
+    this.$(run, '[data-bridge-error]').hidden = true;
+    this.$(run, '[data-bridge-busy]').hidden = true;
+    this.$(run, '[data-bridge-gone]').hidden = true;
+  }
 
   /** @param {Run} run */
   show(run, state) {
@@ -632,7 +656,11 @@ class TlBridge extends HTMLElement {
     } catch (caught) {
       await next.close();
       if (run.bridge === next) run.bridge = null;
-      if (run === this.run) this.show(run, 'connect');
+      if (run === this.run) {
+        this.show(run, 'connect');
+        // The cards' Connect decoder buttons were disabled while it opened: no bridge now, so they work again.
+        this.paint(run);
+      }
       // Held by another tab, say: a click goes on to the picker, and the next one goes there at once; a port that came
       // back is left alone. The picker needs the click, which the stores and the decoder list may have outlasted: then
       // the card's Connect decoder stays for a click of its own.
@@ -641,6 +669,11 @@ class TlBridge extends HTMLElement {
         return this.connect(run, 'serial').catch((error) => { if (error?.name !== 'SecurityError') throw error; });
       }
       if (which === 'auto') return undefined;
+      // Chrome says the same for a serial port held elsewhere and one pulled out while it opened: a pulled one is gone from getPorts().
+      if (run.transport === 'serial' && caught?.name === 'NetworkError' && run.last?.port) {
+        const ports = await /** @type {any} */ (navigator).serial?.getPorts?.().catch(() => null);
+        if (Array.isArray(ports) && !ports.includes(run.last.port)) Object.assign(caught, { unplugged: true });
+      }
       throw caught;
     }
     return undefined;
@@ -680,6 +713,7 @@ class TlBridge extends HTMLElement {
     const cameBack = Boolean(port && run.gone?.serial && port !== run.gone.port && chipOf(port) !== null && sameDevice(port, run.gone.port));
     if (run.made && run.made.device !== transport.device) this.forget(run);
     this.$(run, '[data-bridge-taken]').hidden = true;
+    run.unknownCable = null;
     await run.bridge?.close();
     // From here the replaced bridge's late events find no bridge, and leaving the page isn't guarded; its stream goes.
     run.bridge = null;
@@ -820,6 +854,9 @@ class TlBridge extends HTMLElement {
     this.arrange(run, list, card && bridge ? id : null);
     const busy = run.connecting || (bridge !== null && bridge.state !== 'disconnected');
     for (const button of /** @type {NodeListOf<HTMLButtonElement>} */ (list.querySelectorAll('[data-bridge-connect]'))) button.disabled = busy;
+    // "No decoder yet" would contradict the device on the cable: the state below it says what that device is.
+    const empty = list.querySelector('#decoder-none');
+    if (empty instanceof HTMLElement) empty.hidden = busy;
     for (const time of /** @type {NodeListOf<HTMLTimeElement>} */ (list.querySelectorAll('time[data-when]'))) {
       const at = Date.parse(time.dateTime);
       const text = Number.isNaN(at) ? time.textContent : formatWhen(at, Date.now());
@@ -875,7 +912,7 @@ class TlBridge extends HTMLElement {
     const cableRow = card.querySelector('[data-row="cable"]');
     fill(cableRow, { state: 'ok', words: 'Connected', detail: '' });
     for (const b of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-bridge-connect]') ?? [])) b.hidden = true;
-    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = true;
+    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = note.dataset.cableNote !== (bridge.kind === 'tinylap' ? 'only' : 'only-cable') || !onlyThisTab(bridge);
     const wifiRow = /** @type {HTMLElement | null} */ (card.querySelector('[data-row="wifi"]'));
     const tinylap = bridge.kind === 'tinylap';
     if (wifiRow) wifiRow.hidden = !tinylap;
@@ -972,7 +1009,8 @@ class TlBridge extends HTMLElement {
     // Signed out, the server said: nothing more until the page comes back.
     if (!('EventSource' in window) || run.stopped) return;
     const bridge = run.bridge;
-    const id = bridge?.decoder && bridge.state === 'ready' ? bridge.decoder : null;
+    // A cable the server said it doesn't know (a chosen decoder removed since) is never asked for again: the cards stream instead.
+    const id = bridge?.decoder && bridge.state === 'ready' && bridge.decoder !== run.unknownCable ? bridge.decoder : null;
     const address = id ? run.root.dataset.cableStream?.replace('{id}', encodeURIComponent(id)) : run.root.dataset.cardsStream;
     if (!address) return;
     const { page, after } = run.root.dataset;
@@ -999,6 +1037,16 @@ class TlBridge extends HTMLElement {
       this.unfollow(run);
       Object.assign(run, { signedOut: true, stopped: true });
       this.signedOutNotice(run);
+    });
+    // The server doesn't know the decoder on this cable (deleted, or paired with another server): offer to pair it again.
+    source.addEventListener('unknown', () => {
+      if (run !== this.run || run.stream !== stream) return;
+      const bridge = run.bridge;
+      run.unknownCable = bridge?.decoder ?? null;
+      this.unfollow(run);
+      // A TinyLap decoder goes to unknown, and offers Pair again; a chosen one keeps its state, so hold the cards stream.
+      bridge?.notKnown();
+      this.follow(run);
     });
     source.addEventListener('error', () => {
       if (run !== this.run || run.stream !== stream || source.readyState !== EventSource.CLOSED || stream.retry) return;

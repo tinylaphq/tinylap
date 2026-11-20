@@ -117,7 +117,7 @@ const LIMITS = { ingest: 600, logs: 600, pair: 10, mcp: 300, mcpAnon: 60 };
 const ACCESS_CHECK_MS = 15_000;
 
 /**
- * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string,
+ * @param {{ store?: any, engine?: any, hub?: any, auth?: any, keys?: any[], root?: string, appDir: string, publicUrl?: string, decoderUrl?: string,
  *   plannerUrl?: string, clientIpHeader?: string, build?: string, now?: () => number, log?: boolean | ((line: string) => void),
  *   routes?: any[], settings?: { simulate: string | null }, fetch?: typeof fetch, limits?: { ingest?: number, logs?: number, pair?: number, mcp?: number, mcpAnon?: number }, accessCheckMs?: number, noticeToken?: string,
  *   streams?: import('./member-streams.js').MemberStreams }} options
@@ -141,6 +141,8 @@ export function createHandler(options) {
     auth: options.auth ?? null,
     keys: options.keys ?? null,
     publicUrl: options.publicUrl?.replace(/\/$/, '') ?? null,
+    // Where a decoder paired here posts over Wi-Fi, when that isn't the public URL (a laptop on localhost, say).
+    decoderUrl: options.decoderUrl?.replace(/\/$/, '') ?? null,
     plannerUrl: options.plannerUrl?.replace(/\/$/, '') ?? null,
     build: options.build ?? 'dev',
     settings: options.settings ?? { simulate: null },

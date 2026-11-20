@@ -38,6 +38,22 @@ test('with its configuration it starts and stops cleanly on SIGTERM', async () =
   assert.equal(code, 0);
 });
 
+test('in dev it listens on this machine only, unless a decoder must reach it (TINYLAP_DECODER_URL)', async () => {
+  for (const [env, host] of [[{}, '127.0.0.1'], [{ TINYLAP_DECODER_URL: 'http://192.168.1.20:8100' }, '0.0.0.0']]) {
+    const child = run({ ...FULL, ...env });
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
+    child.stderr.resume();
+    try {
+      while (!/timing on http:/.test(out)) await once(child.stdout, 'data');
+      assert.ok(out.includes(`timing on http://${host}:`), `${JSON.stringify(env)}: ${out}`);
+    } finally {
+      child.kill('SIGTERM');
+      await once(child, 'exit');
+    }
+  }
+});
+
 test('timing refuses a TINYLAP_SIMULATE it does not understand', async () => {
   const child = run({ ...FULL, TINYLAP_SIMULATE: 'amb' });
   let err = '';
