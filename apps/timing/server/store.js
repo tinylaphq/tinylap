@@ -594,10 +594,12 @@ export function openStore(path) {
     setNextToken(ws, id, hash) {
       s.setNextToken.run(id, ws, hash);
     },
-    /** Makes the pending token the decoder's only one; false if `hash` isn't the pending one. */
+    /** Makes the pending token the decoder's only one; true too when it already is (the decoder used it first), false otherwise. */
     promoteNextToken(id, hash) {
       return transaction(() => {
-        if (s.nextToken.get(id)?.token_hash !== hash) return false;
+        const pending = s.nextToken.get(id)?.token_hash;
+        // Already promoted by the decoder's own post: no pending one left, and it is the decoder's token.
+        if (pending !== hash) return pending === undefined && s.decoderByHash.get(hash)?.id === id;
         s.dropNextToken.run(id);
         s.useNextToken.run(hash, id);
         return true;

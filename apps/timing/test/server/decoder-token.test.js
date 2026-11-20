@@ -81,3 +81,11 @@ test("deleting a decoder removes its pending token", async () => {
   assert.ok(app.store.deleteDecoder(office.id, old.id));
   assert.equal(app.store.decoderByTokenHash(tokenHash(next.token)), null);
 });
+
+test('token/taken after the decoder already posted with its new token is 204', async () => {
+  const old = await pair('Raced');
+  const next = await (await newToken(member, old.id)).json();
+  assert.equal(await posts(old.id, next.token), 200, 'the decoder posts first, promoting it');
+  assert.equal((await app.api(member, 'POST', path(`decoders/${old.id}/token/taken`), { token: next.token })).status, 204);
+  assert.equal(await posts(old.id, next.token), 200);
+});
