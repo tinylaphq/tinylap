@@ -28,6 +28,8 @@ const FASTEST = 10;
 const UNKNOWN_WINDOW_MS = 60 * 60_000;
 /** A Wi-Fi decoder that has been silent this long is offline (decoder Wi-Fi spec §6). */
 export const OFFLINE_AFTER_MS = 25_000;
+/** How long a decoder's failed or refused Wi-Fi post is shown (bridge decoder home spec, Design 2). */
+export const FAULT_FOR_MS = 30_000;
 /** After this long without a batch a decoder counts as switched off, and its banner goes. */
 export const EXPECTED_FOR_MS = 30 * 60_000;
 const ACTIVE = new Set(['countdown', 'running', 'finishing']);
@@ -273,6 +275,12 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
    * @type {Map<string, Map<string, number>>}
    */
   const cableHolders = new Map();
+  /** Each decoder's latest Wi-Fi delivery fault: `unreachable` (its posts don't reach a server) or `refused` (401), and when. */
+  const faults = new Map();
+  const faultOf = (decoder, t) => {
+    const f = faults.get(decoder);
+    return f && t - f.at < FAULT_FOR_MS ? f.kind : null;
+  };
   const held = (decoder) => (cableHolders.get(decoder)?.size ?? 0) > 0;
   const fresh = (workspaceId) => ({ workspaceId, netAt: null, quiet: false, cableSince: null, cableGoneAt: null });
 
@@ -302,10 +310,11 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
       const others = [...(pages?.keys() ?? [])].filter((p) => !mine.includes(p)).length;
       const netAt = h?.netAt ?? null;
       const state = netAt !== null && t - netAt < OFFLINE_AFTER_MS ? 'reporting' : h?.quiet ? 'idle' : offline.has(d.id) ? 'offline' : 'unknown';
+      const fault = faultOf(d.id, t);
       return {
         ...d,
         cable: { state: others > 0 ? 'other' : 'none' },
-        wifi: { state, at: netAt },
+        wifi: { state, at: netAt, ...(fault ? { fault } : {}) },
       };
     });
   }
@@ -336,6 +345,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const receivedAt = now();
     // A batch over the cable says nothing of the cable: its stream does (cable presence spec §2).
     if (via === 'net') {
+      faults.delete(decoder);
       const h = heard.get(decoder) ?? fresh(workspaceId);
       h.workspaceId = workspaceId;
       h.netAt = receivedAt;
@@ -403,6 +413,28 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
   }
 
   /**
+   * What a decoder said of its Wi-Fi posts: a stat line's `post` (forwarded by a cable), or `401` for a post the server
+   * refused. `err` and `401` are faults; a 2xx clears one; anything else changes nothing.
+   * @param {string} decoder @param {string} post
+   */
+  function noteDelivery(decoder, post) {
+    const workspaceId = store.decoder(decoder)?.workspaceId;
+    if (!workspaceId) return;
+    const t = now();
+    if (post === 'err' || post === '401') faults.set(decoder, { kind: post === 'err' ? 'unreachable' : 'refused', at: t });
+    else if (/^2\d\d$/.test(post)) faults.delete(decoder);
+    else return;
+    publishDecoders(workspaceId, t);
+  }
+
+  /** A new token: whatever the decoder's posts said before is old news. @param {string} decoder */
+  function clearFault(decoder) {
+    const workspaceId = store.decoder(decoder)?.workspaceId;
+    if (!faults.delete(decoder) || !workspaceId) return;
+    publishDecoders(workspaceId, now());
+  }
+
+  /**
    * Publishes a workspace's offline list and header when they changed since last published, or, with `force`, always:
    * a cable that came or went changes the Bridge pages even when the header stays.
    */
@@ -410,7 +442,7 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     const offline = offlineOf(workspaceId, t);
     const header = headerOf(workspaceId, t);
     // Each decoder's cable and Wi-Fi state too, not their timestamps: the Bridge cards say more than the header does.
-    const states = connectionsOf(workspaceId).map((d) => [d.id, d.cable.state, d.wifi.state]);
+    const states = connectionsOf(workspaceId).map((d) => [d.id, d.cable.state, d.wifi.state, d.wifi.fault ?? null]);
     const key = JSON.stringify({ offline, header, states });
     if (!force && key === (offlineShown.get(workspaceId) ?? '{"offline":[],"header":[],"states":[]}')) return;
     offlineShown.set(workspaceId, key);
@@ -639,5 +671,5 @@ export function createEngine({ store, hub, now = Date.now, minLap = MIN_LAP_MS, 
     return resultInput(workspaceId, kept);
   }
 
-  return { ingest, holdCable, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail, resultInput };
+  return { ingest, noteDelivery, clearFault, holdCable, start, end, abort, tick, assign, publishUnknown, endPractice, snapshot, connectionsOf, headerOf, idleOf, driverCount, bestsOf, sessionDetail, resultInput };
 }

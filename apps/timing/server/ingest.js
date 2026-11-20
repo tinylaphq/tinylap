@@ -43,6 +43,15 @@ function writeDecoderLogs(request, { decoder, boot, via, lines }) {
   }
 }
 
+/** What the stat lines a cable forwards say of the decoder's own Wi-Fi posts (`post`), whatever the log limiter kept. */
+function noteStats(request, decoder, lines) {
+  for (const text of lines) {
+    const parsed = parseLog(text);
+    const post = parsed?.kind === 'stat' ? parsed.fields.find(([key]) => key === 'post')?.[1] : undefined;
+    if (post !== undefined) request.engine.noteDelivery(decoder, post);
+  }
+}
+
 const BEARER = /^Bearer ([A-Za-z0-9_-]{43})$/;
 
 const postPassings = withSession(async (request, match) => {
@@ -58,7 +67,11 @@ const postPassings = withSession(async (request, match) => {
   if (header !== undefined) {
     const token = BEARER.exec(header)?.[1];
     const found = token ? request.store.decoderByTokenHash(tokenHash(token)) : null;
-    if (!found || found.id !== decoderId) return refuse('unauthorized', "Send this decoder's token as a Bearer token.");
+    if (!found || found.id !== decoderId) {
+      // The decoder's Bridge card says its laps are turned away (bridge decoder home spec, Design 2).
+      if (request.store.decoder(decoderId)) request.engine.noteDelivery(decoderId, '401');
+      return refuse('unauthorized', "Send this decoder's token as a Bearer token.");
+    }
     // Pair again's token, used for the first time: from now on it is the only one.
     if (found.next) request.store.promoteNextToken(found.id, tokenHash(token));
     decoder = found;
@@ -86,6 +99,7 @@ const postPassings = withSession(async (request, match) => {
   if (!('batch' in result)) return problem(request, 'invalid-request', result.error);
   const answer = request.engine.ingest({ workspaceId: decoder.workspaceId, decoder: decoderId, via, batch: result.batch });
   writeDecoderLogs(request, { decoder: decoderId, boot: result.batch.boot, via, lines: result.batch.logs });
+  if (via === 'serial') noteStats(request, decoderId, result.batch.logs);
   return json(200, { ...answer, watched: request.boardViewers.count(decoder.workspaceId) > 0 }, NO_STORE);
 });
 
