@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyLap</title>
+<meta name="description" content="Every lap shows up on the laptop, the phones in the pits and the TV on the wall, with personal bests and track records as they happen.">
+<link rel="icon" href="mark.svg">
+<link rel="stylesheet" href="palace.css">
+<link rel="stylesheet" href="design.css">
+<style>
+  /*
+    The split hero. Words on the left in five of twelve columns,
+    the race board playing on the right in seven, in a palace frame with a pink
+    offset shadow. Then the hardware timing needs, and the two ways to get it.
+  */
+  :root {
+    --page: 1120px;
+    --gutter: var(--p-space-xl);
+    --section: calc(var(--p-space-2xl) * 2);
+    --inset: var(--p-space-xl);
+  }
+
+  body { background: var(--p-bg); }
+  p, h1, h2, h3, figure { margin: 0; }
+
+  .page { max-width: calc(var(--page) + 2 * var(--gutter)); margin: 0 auto; padding: 0 var(--gutter); }
+
+  .top { display: flex; align-items: center; justify-content: space-between; padding: var(--p-space-lg) 0; }
+  .top .brand { font-size: var(--p-text-md); color: var(--p-text); letter-spacing: 2px; }
+
+  /*
+    Hero: five columns of words beside seven of board. The headline stacks in
+    three lines to fill its column; the board gets the wider share so its lap
+    times stay readable (640px, two thirds of its own size).
+  */
+  .hero {
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter);
+    align-items: center;
+    padding: var(--p-space-2xl) 0 var(--section);
+  }
+  .hero .words { grid-column: 1 / span 5; }
+  .hero h1 {
+    font-size: calc(var(--p-text-4xl) * 2.1);
+    line-height: 0.95;
+    letter-spacing: 0;
+  }
+  /* Three lines, broken by sense: what, what, for whom. */
+  .hero h1 span { display: block; }
+  .hero .lead { margin-top: var(--p-space-lg); font-size: var(--p-text-xl); line-height: var(--p-leading-prose); color: var(--p-text); text-wrap: pretty; }
+  .hero .where { margin-top: var(--p-space-sm); font-size: var(--p-text-lg); color: var(--p-text-secondary); }
+  .hero .actions { margin-top: var(--p-space-xl); }
+
+  /* The frame: palace's 2px line and a pink offset shadow, on the light page. */
+  .board { grid-column: 6 / -1; border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-accent-1); background: var(--p-surface); }
+  .board-view video { display: block; width: 100%; height: auto; }
+
+  /*
+    The hero plays by itself, silent and looping, unless the visitor asked
+    for less motion. One small square button in the corner pauses it.
+  */
+  tl-autoplay { position: relative; display: block; }
+  .autoplay-toggle {
+    position: absolute; right: var(--p-space-sm); bottom: var(--p-space-sm);
+    display: grid; place-items: center; width: var(--p-control-height-sm); height: var(--p-control-height-sm); min-height: 0; padding: 0;
+    border: var(--p-border-width) solid var(--p-text); background: var(--p-surface); color: var(--p-text);
+    box-shadow: var(--p-shadow-sm) var(--p-text); cursor: pointer;
+  }
+  .autoplay-toggle:hover { background: var(--p-text); color: var(--p-surface); }
+  .autoplay-toggle:active { translate: 2px 2px; box-shadow: none; }
+  .autoplay-toggle svg { width: 14px; height: 14px; fill: currentColor; }
+  .autoplay-toggle .play { display: none; }
+  .autoplay-toggle[aria-pressed="false"] .play { display: block; }
+  .autoplay-toggle[aria-pressed="false"] .pause { display: none; }
+
+  /*
+    The finish line: one statement of the choice beside the drawing, which
+    already shows where the decoder and transponders go. Then the two ways,
+    as two rows of one box. The parts for building stay folded in a
+    <details> until asked for.
+  */
+  .need { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); align-items: center; }
+  .need .words { grid-column: 1 / span 5; }
+  .need h2 { font-size: var(--p-text-3xl); line-height: var(--p-leading-tight); letter-spacing: 1px; }
+  .need .words p { margin-top: var(--p-space-md); font-size: var(--p-text-lg); line-height: var(--p-leading-prose); color: var(--p-text-secondary); text-wrap: pretty; }
+  .need figure { grid-column: 7 / -1; color: var(--p-text); }
+  .need svg { display: block; width: 100%; height: auto; }
+  .need svg text { font-family: var(--p-font); font-size: 22px; font-weight: 600; fill: currentColor; }
+  .need svg .soft { fill: var(--p-text-muted); font-weight: 400; }
+
+  /* Two rows, title in four columns, words in eight; a dashed rule between. */
+  .ways { margin-top: calc(var(--p-space-2xl) + var(--p-space-md)); padding: 0 var(--inset); }
+  .way {
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter);
+    padding: var(--inset) 0;
+  }
+  .way + .way { border-top: var(--p-border-width) dashed var(--p-border-dashed); }
+  .way h3 { grid-column: 1 / span 4; color: var(--p-text); font-size: var(--p-text-xl); line-height: var(--p-leading-tight); letter-spacing: 1px; padding-top: 2px; }
+  .way .body { grid-column: 5 / -1; }
+  .way .body > p { font-size: var(--p-text-lg); line-height: var(--p-leading-prose); color: var(--p-text); max-width: 40em; }
+  .way .body > a { display: inline-block; margin-top: var(--p-space-sm); font-weight: 600; }
+
+  /* The control: an outline button with a plus that turns into a minus. */
+  .build { margin-top: var(--p-space-md); }
+  .build > summary { list-style: none; display: inline-flex; gap: var(--p-space-sm); align-items: center; }
+  .build > summary::-webkit-details-marker { display: none; }
+  .build > summary::after {
+    content: ""; width: 12px; height: 12px; flex: none;
+    background:
+      linear-gradient(currentColor, currentColor) center / 12px 2px no-repeat,
+      linear-gradient(currentColor, currentColor) center / 2px 12px no-repeat;
+    transition: transform 0.1s;
+  }
+  .build[open] > summary { background: var(--p-dark); color: var(--p-text-on-fill); border-color: var(--p-dark); }
+  .build[open] > summary::after { background: linear-gradient(currentColor, currentColor) center / 12px 2px no-repeat; }
+
+  /*
+    The panel slides out of the row: where the browser can animate to a
+    keyword size it grows from nothing, elsewhere it simply opens.
+  */
+  .build::details-content {
+    block-size: 0; overflow: clip;
+    transition: block-size 0.24s cubic-bezier(.2, .7, .2, 1), content-visibility 0.24s allow-discrete;
+  }
+  .build[open]::details-content { block-size: auto; }
+  @supports (interpolate-size: allow-keywords) {
+    .build { interpolate-size: allow-keywords; }
+  }
+  @supports not (interpolate-size: allow-keywords) {
+    .build::details-content { block-size: auto; transition: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .build::details-content, .build > summary::after { transition: none; }
+  }
+
+  .panel { margin-top: var(--p-space-lg); padding: var(--inset); background: var(--p-bg); border-left: var(--p-border-width) solid var(--p-text); }
+  .panel .steps { list-style: none; margin: 0; padding: 0; }
+  .panel .firmware { margin-top: var(--p-space-lg); display: flex; gap: var(--p-space-lg); flex-wrap: wrap; font-weight: 600; }
+  .panel > p { color: var(--p-text-secondary); font-size: var(--p-text-md); line-height: var(--p-leading-prose); max-width: 44em; }
+
+
+  /*
+    Planner: second to Timing, so smaller, and it shows its own work: the
+    Planner laying a track, played when asked. Film left, words right, the
+    other way round from the hero. Its accent is the third, cyan.
+  */
+  .planner {
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter);
+    grid-template-areas: "plan plan plan plan plan plan plan head head head head head" "plan plan plan plan plan plan plan body body body body body";
+    grid-template-rows: auto 1fr; align-items: start;
+    margin-top: var(--section);
+    padding-bottom: var(--section);
+    border-bottom: var(--p-border-width) dashed var(--p-border-dashed);
+  }
+  .plan { grid-area: plan; align-self: start; margin: 0; border: var(--p-border-width) solid var(--p-text); box-shadow: var(--p-shadow-lg) var(--p-accent-3); background: var(--tl-track-bg); }
+  .plan video { display: block; width: 100%; height: auto; }
+
+
+  /* The heading sits on the drawing's top edge; on phones it comes before the drawing. */
+  .planner .head { grid-area: head; padding-left: var(--p-space-md); align-self: end; }
+  .planner .body { grid-area: body; padding-left: var(--p-space-md); }
+  .planner h2 { font-size: var(--p-text-2xl); line-height: var(--p-leading-tight); letter-spacing: 1px; }
+  .planner .head p { margin-top: var(--p-space-sm); max-width: 34em; font-size: var(--p-text-lg); line-height: var(--p-leading-prose); color: var(--p-text); text-wrap: pretty; }
+  .planner .body > p { margin-top: var(--p-space-lg); max-width: 34em; font-size: var(--p-text-lg); line-height: var(--p-leading-prose); color: var(--p-text-secondary); text-wrap: pretty; }
+
+  .planner .body > .btn { margin-top: var(--p-space-lg); }
+
+  .foot { padding: var(--p-space-lg) 0 var(--p-space-2xl); color: var(--p-text-faint); font-size: var(--p-text-xs); }
+
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: minmax(0, 1fr); row-gap: var(--p-space-2xl); }
+    .hero .words, .board { grid-column: 1 / -1; }
+    .hero h1 { font-size: calc(var(--p-text-4xl) * 1.8); }
+    .hero .words { max-width: 36em; }
+    .need { grid-template-columns: minmax(0, 1fr); row-gap: var(--p-space-xl); }
+    .need .words, .need figure { grid-column: 1 / -1; }
+    .need .words { max-width: 36em; }
+    .need figure { max-width: 560px; }
+    .way { grid-template-columns: minmax(0, 1fr); row-gap: var(--p-space-sm); }
+    .way h3, .way .body { grid-column: 1 / -1; }
+    .planner { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "plan" "body"; grid-template-rows: none; row-gap: var(--p-space-lg); }
+    .plan { max-width: none; }
+    .planner .head, .planner .body { padding-left: 0; }
+  }
+
+
+  @media (max-width: 480px) {
+    :root { --gutter: 16px; --inset: var(--p-space-lg); --section: calc(var(--p-space-2xl) + var(--p-space-md)); }
+    .top { padding: var(--p-space-md) 0; }
+    .hero { padding-top: var(--p-space-xl); row-gap: var(--p-space-xl); }
+    .hero h1 { font-size: calc(var(--p-text-4xl) * 1.2); line-height: 1; }
+    .hero .lead { margin-top: var(--p-space-lg); font-size: var(--p-text-lg); }
+    .hero .where { font-size: var(--p-text-md); }
+    .hero .actions { margin-top: var(--p-space-lg); }
+    .hero .actions .cta { width: 100%; }
+    .need h2 { font-size: var(--p-text-2xl); }
+    .need .words p { font-size: var(--p-text-md); }
+    .need svg text { font-size: 24px; }
+    .way h3 { font-size: var(--p-text-lg); }
+    .way .body > p { font-size: var(--p-text-md); }
+    .build > summary { display: flex; width: 100%; justify-content: space-between; }
+    .panel { padding: var(--p-space-lg) var(--p-space-md); border-left: 0; border-top: var(--p-border-width) solid var(--p-text); }
+    .planner h2 { font-size: var(--p-text-2xl); }
+    .planner .head p, .planner .body > p { font-size: var(--p-text-md); }
+    .planner .body > .btn { width: 100%; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="top">
+    <div class="brand-lockup">
+      <img src="mark.svg" alt="">
+      <p class="brand">TinyLap</p>
+    </div>
+    <a class="btn btn-sm btn-outline" href="https://github.com/tinylaphq/tinylap">GitHub</a>
+  </header>
+
+  <section class="hero" aria-labelledby="title">
+    <div class="words">
+      <h1 class="h1-hero" id="title"><span>Live lap</span> <span>timing</span> <span>for Mini-Z</span></h1>
+      <p class="lead">Every lap shows up on the laptop, the phones in the pits and the TV on the wall, with personal bests and track records as they happen.</p>
+      <p class="where">On a track at home, or as your club's timing system.</p>
+      <div class="actions"><a class="cta cta-primary" href="https://github.com/tinylaphq/tinylap/blob/main/README.md#timing">Set up Timing</a></div>
+    </div>
+    <figure class="board">
+      <div class="board-view">
+        <tl-autoplay>
+          <video src="media/walkthrough.mp4" poster="media/walkthrough-poster.png" width="960" height="600" muted loop playsinline controls aria-label="TinyLap Timing on a laptop: a new driver gets the transponder that just crossed the line, a race starts, laps come in, Mia sets a personal best and Ana takes the track record."></video>
+        </tl-autoplay>
+      </div>
+    </figure>
+  </section>
+
+  <section class="hardware" aria-labelledby="need">
+    <div class="need">
+      <div class="words">
+        <h2 id="need">Build it, or bring yours</h2>
+        <p>Timing reads a transponder in each car as it passes a decoder at the finish line. Build both yourself, or bring the decoder you already have: an EasyLap, or any decoder that speaks ZRound.</p>
+      </div>
+      <figure>
+        <svg viewBox="0 0 800 300" role="img" aria-labelledby="line-title">
+          <title id="line-title">The finish line seen along the track: a bridge about 30 cm over the track carries four receivers in funnels, wired to the decoder low on its left leg, which takes USB power. The car passing under it carries a transponder on its roof that shines up to the receivers.</title>
+          <!-- Drawn at 0.8 units to the millimetre: bridge 300 mm high, lane 350 mm, car 90 mm wide. Structure 2, detail 1. -->
+          <g class="line-art" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="miter">
+            <!-- the mats and their barriers -->
+            <rect x="64" y="280" width="568" height="10" fill="var(--tl-track-mat)" stroke="none"/>
+            <path d="M64 280 H632" stroke-width="1"/>
+            <rect x="264" y="264" width="16" height="16" fill="var(--p-surface)"/>
+            <rect x="560" y="264" width="16" height="16" fill="var(--p-surface)"/>
+            <path d="M264 271 H280 M560 271 H576" stroke-width="1"/>
+
+            <!-- the bridge: two posts on feet, a crossbeam, gussets in the corners -->
+            <g fill="var(--p-surface)">
+              <rect x="232" y="56" width="16" height="216"/>
+              <rect x="592" y="56" width="16" height="216"/>
+              <rect x="220" y="272" width="40" height="8"/>
+              <rect x="580" y="272" width="40" height="8"/>
+              <rect x="224" y="40" width="392" height="16"/>
+              <path d="M248 56 H272 L248 80 Z M592 56 H568 L592 80 Z" stroke-width="1"/>
+            </g>
+            <path d="M226 276 H230 M250 276 H254 M586 276 H590 M610 276 H614" stroke-width="1"/>
+
+            <!-- the receivers: a clip on the beam, the receiver, its funnel -->
+            <g fill="var(--p-surface)">
+              <path d="M303 56 h24 v5 h-24 z M373 56 h24 v5 h-24 z M443 56 h24 v5 h-24 z M513 56 h24 v5 h-24 z" stroke-width="1"/>
+              <path d="M304 68 h22 l-5 28 h-12 z M374 68 h22 l-5 28 h-12 z M444 68 h22 l-5 28 h-12 z M514 68 h22 l-5 28 h-12 z"/>
+              <path d="M312 96 h6 M382 96 h6 M452 96 h6 M522 96 h6" stroke="var(--p-text)" stroke-width="1"/>
+            </g>
+            <path d="M308 61 h14 v7 h-14 z M378 61 h14 v7 h-14 z M448 61 h14 v7 h-14 z M518 61 h14 v7 h-14 z" fill="currentColor" stroke-width="1"/>
+
+            <!-- the wiring: one bus along the beam, all four receivers on it, down the left post to the decoder -->
+            <g stroke="var(--p-accent-2)" stroke-width="1.5">
+              <path d="M315 50 V61 M385 50 V61 M455 50 V61 M525 50 V61"/>
+              <path d="M525 50 H240 V198"/>
+            </g>
+            <g fill="var(--p-accent-2)" stroke="none">
+              <circle cx="315" cy="50" r="2.5"/><circle cx="385" cy="50" r="2.5"/><circle cx="455" cy="50" r="2.5"/>
+            </g>
+            <path d="M231 110 h18 v4 h-18 z M231 160 h18 v4 h-18 z" fill="var(--p-surface)" stroke-width="1"/>
+
+            <!-- the decoder in its box, low on the left post, and its USB cable -->
+            <rect x="234" y="198" width="12" height="6" fill="var(--p-surface)" stroke-width="1"/>
+            <rect x="208" y="204" width="64" height="36" fill="var(--p-accent-2)"/>
+            <path d="M208 211 H272" stroke-width="1"/>
+            <circle cx="262" cy="225" r="2.5" fill="var(--p-surface)" stroke-width="1"/>
+            <rect x="207" y="240" width="10" height="4" fill="var(--p-surface)" stroke-width="1"/>
+            <path d="M212 244 V268 Q212 277 203 277 H128"/>
+            <rect x="112" y="272" width="16" height="9" fill="var(--p-surface)"/>
+            <rect x="104" y="274" width="8" height="5" fill="var(--p-surface)" stroke-width="1"/>
+
+            <!-- what the transponder sends up -->
+            <path d="M420 237 L309 97 H531 Z" fill="var(--p-accent-1)" fill-opacity="0.1" stroke="none"/>
+            <path d="M418 234 L311 99 M422 234 L529 99" stroke="var(--p-accent-1)" stroke-width="1.5" stroke-dasharray="6 5"/>
+            <path d="M415 228.3 A10 10 0 0 1 425 228.3 M411.5 222.3 A17 17 0 0 1 428.5 222.3 M408 216.2 A24 24 0 0 1 432 216.2" stroke="var(--p-accent-1)"/>
+
+            <!-- the Mini-Z from the front: tyres, body with fenders and cabin, chin, transponder on the roof -->
+            <rect x="382" y="262" width="12" height="18" rx="2" fill="currentColor"/>
+            <rect x="446" y="262" width="12" height="18" rx="2" fill="currentColor"/>
+            <path d="M382 268 V260 L390 256 L404 255 L409 246 H431 L436 255 L450 256 L458 260 V268 Z" fill="var(--p-surface)"/>
+            <rect x="394" y="268" width="52" height="6" fill="var(--p-surface)"/>
+            <path d="M411 254 L414 249 H426 L429 254 Z" fill="var(--p-border-light)" stroke-width="1"/>
+            <path d="M386 259 h7 v3 h-7 z M447 259 h7 v3 h-7 z M404 271 H436" stroke-width="1"/>
+            <rect x="413" y="241" width="14" height="5" fill="var(--p-accent-1)" stroke-width="1.5"/>
+            <circle cx="420" cy="238.5" r="2.5" fill="var(--p-surface)" stroke-width="1"/>
+
+            <!-- height over the track -->
+            <g stroke="var(--p-text-muted)" stroke-width="1">
+              <path d="M48 40 V280 M40 40 H220 M40 280 H64"/>
+              <path d="M44 44 L52 36 M44 284 L52 276" stroke-width="2"/>
+            </g>
+
+            <!-- leaders: from a dot on the part to the label -->
+            <g stroke="var(--p-text-muted)" stroke-width="1">
+              <path d="M535 82 H636 M429 243 H636 M184 222 H206"/>
+            </g>
+            <g fill="var(--p-text-muted)" stroke="none">
+              <circle cx="535" cy="82" r="2.5"/><circle cx="429" cy="243" r="2.5"/><circle cx="206" cy="222" r="2.5"/>
+            </g>
+          </g>
+          <text x="644" y="88">Receivers</text>
+          <text x="644" y="114" class="soft">4, in funnels</text>
+          <text x="644" y="249">Transponder</text>
+          <text x="644" y="275" class="soft">in each car</text>
+          <text x="72" y="228">Decoder</text>
+          <text x="72" y="254" class="soft">ESP32</text>
+          <text class="soft" transform="translate(36 160) rotate(-90)" text-anchor="middle">about 30 cm</text>
+        </svg>
+      </figure>
+    </div>
+
+    <div class="ways card-static">
+      <div class="way">
+        <h3>Build your own</h3>
+        <div class="body">
+          <p>A decoder at the finish line and a transponder in each car, running our firmware.</p>
+          <details class="build">
+            <summary class="btn btn-outline">How it goes</summary>
+            <div class="panel">
+              <ol class="steps">
+                <li class="step"><span class="step-num">1</span><p><strong>Build the decoder.</strong> An ESP32 board with four infrared receivers.</p></li>
+                <li class="step"><span class="step-num">2</span><p><strong>Mount the receivers</strong> on a bridge over the finish line, about 30 cm up.</p></li>
+                <li class="step"><span class="step-num">3</span><p><strong>Install a transponder</strong> in each car.</p></li>
+                <li class="step"><span class="step-num">4</span><p><strong>Flash our firmware</strong> onto the decoder and the transponders. The decoder then sends laps over Wi-Fi.</p></li>
+              </ol>
+              <p class="firmware"><a href="https://github.com/tinylaphq/tinylap/blob/main/firmware/tinylap-decoder/README.md">Decoder firmware</a> <a href="https://github.com/tinylaphq/tinylap/blob/main/firmware/tinylap-transponder/README.md">Transponder firmware</a></p>
+            </div>
+          </details>
+        </div>
+      </div>
+      <div class="way">
+        <h3>Bring your system</h3>
+        <div class="body">
+          <p>An EasyLap, or any decoder that speaks ZRound, plugs into the laptop over USB and keeps its own transponders.</p>
+          <a href="https://github.com/tinylaphq/tinylap/blob/main/docs/timing.md">Connecting a decoder</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="planner" aria-labelledby="planner">
+    <figure class="plan">
+      <video src="media/planner.mp4" poster="media/planner-poster.png" width="960" height="600" controls muted playsinline preload="none" aria-label="TinyLap Planner: a track is laid piece by piece, the materials panel counts the pieces, and a closed circuit is in stock once a Large Corner box is added"></video>
+    </figure>
+    <div class="head">
+      <h2 id="planner">Planner</h2>
+      <p>Design a Grand Prix Circuit 30 track on its 300 mm mats, from straights and R30 and R60 corners.</p>
+    </div>
+    <div class="body">
+      <p>It counts the pieces as you go, says what your boxes are short of, and downloads the track as one file.</p>
+      <a class="btn btn-outline" href="https://github.com/tinylaphq/tinylap/blob/main/README.md#planner">Set up Planner</a>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>Apps under AGPL-3.0, libraries under MPL-2.0. Contributions welcome.</p>
+  </footer>
+
+</div>
+<script type="module" src="elements/autoplay.js"></script>
+</body>
+</html>
