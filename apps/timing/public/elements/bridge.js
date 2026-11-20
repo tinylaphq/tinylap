@@ -7,7 +7,7 @@
 // #bridge markup the server rendered inside it. It shows one
 // [data-bridge-state] section at a time, fills in the ready panel from the
 // server's row templates, sends passings an earlier visit left behind, and
-// guards leaving the page while a decoder is forwarding. Pairing posts to
+// guards leaving the page while it is the only way a decoder's laps get through. Pairing posts to
 // the JSON API, because the decoder's token must reach the board over serial.
 // - Each start, on connect, makes a fresh run: the page's state, held in
 //   one object. Every async path writes to the page only while its run is
@@ -92,6 +92,13 @@ function netRow(net, mayChange, silent = false) {
   if (net.cause === 'notfound') return { state: 'fail', words: `Can't find ${name} from here`, detail: 'It may be out of reach of the decoder, or switched off.' };
   return { state: 'fail', words: `Can't join ${name}`, detail: '' };
 }
+
+/**
+ * Whether leaving this page stops the decoder's laps: it is ready on this tab's cable, and has no Wi-Fi of its own (a
+ * plain ZRound decoder or an EasyLap never has; a TinyLap decoder whose last %TLNET isn't connected hasn't now).
+ * @param {any} bridge
+ */
+const onlyThisTab = (bridge) => bridge?.state === 'ready' && !(bridge.kind === 'tinylap' && bridge.net?.state === 'connected');
 
 let warned = false;
 /**
@@ -424,7 +431,7 @@ class TlBridge extends HTMLElement {
       // A reload's request carries it: the new page counts this page's cable, held until its answer comes, as its own.
       // Long enough for the leave prompt, which comes after this: the server clears it on its first read anyway.
       this.leaving(this.run, 60);
-      if (this.run.bridge?.state === 'ready') event.preventDefault();
+      if (onlyThisTab(this.run.bridge)) event.preventDefault();
       return;
     }
     // Leaving the page closes the port, and the stream: a page in the back/forward cache forwards nothing either.
@@ -888,7 +895,7 @@ class TlBridge extends HTMLElement {
     const cableRow = card.querySelector('[data-row="cable"]');
     fill(cableRow, { state: 'ok', words: 'Connected', detail: '' });
     for (const b of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-bridge-connect]') ?? [])) b.hidden = true;
-    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = true;
+    for (const note of /** @type {NodeListOf<HTMLElement>} */ (cableRow?.querySelectorAll('[data-cable-note]') ?? [])) note.hidden = note.dataset.cableNote !== 'only' || !onlyThisTab(bridge);
     const wifiRow = /** @type {HTMLElement | null} */ (card.querySelector('[data-row="wifi"]'));
     const tinylap = bridge.kind === 'tinylap';
     if (wifiRow) wifiRow.hidden = !tinylap;

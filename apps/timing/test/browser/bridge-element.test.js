@@ -695,6 +695,24 @@ test('change wifi lists 25 networks that scroll, strongest first, another networ
   assert.deepEqual(errors, []);
 });
 
+test('on the cable without Wi-Fi, leaving asks and the cable row says why; with Wi-Fi connected it doesn\'t', async (t) => {
+  const { page, errors, board, row } = await cabledPage(t);
+  const note = row(board, 'cable').locator('[data-cable-note="only"]');
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Not set up' }).waitFor();
+  assert.equal(await blocksLeaving(page), true, 'the cable is its only way');
+  assert.equal(await note.isVisible(), true);
+  const send = (line) => page.evaluate((l) => window.__port.send(new TextEncoder().encode(l)), line);
+  await send('%TLNET connected Q2x1YmhhdXM -50 none&');
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Connected to “Clubhaus”' }).waitFor();
+  assert.equal(await blocksLeaving(page), false, 'its laps get through over Wi-Fi too');
+  assert.equal(await note.isVisible(), false);
+  await send('%TLNET failed Q2x1YmhhdXM 0 notfound&');
+  await row(board, 'wifi').locator('[data-slot="state"]', { hasText: 'Can\'t find “Clubhaus” from here' }).waitFor();
+  assert.equal(await blocksLeaving(page), true, 'Wi-Fi gone: the cable is its only way again');
+  assert.equal(await note.isVisible(), true);
+  assert.deepEqual(errors, []);
+});
+
 test('joining the right password ends joined', async (t) => {
   const { page, errors, board, card, row } = await cabledPage(t);
   const dialog = await openWifi(page, card(board));

@@ -18,6 +18,9 @@ test('D1: a plain ZRound decoder is chosen as a new decoder and forwards; the br
   await page.getByLabel('Name for the new decoder').fill('Gate');
   await page.getByRole('button', { name: 'Use this decoder' }).click();
   await page.getByText('Forwarding from Gate', { exact: true }).first().waitFor();
+  // No Wi-Fi on a plain ZRound decoder: this tab is always its only way, and its card says what leaving does.
+  await page.locator(`[data-decoder] [data-cable-note="only"]`).waitFor();
+  assert.equal(await page.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); dispatchEvent(e); return e.defaultPrevented; }), true);
   await page.locator('[data-bridge-preview] li').first().waitFor({ timeout: 30_000 });
   assert.deepEqual(app.store.decoders(space).map((d) => d.name), ['Gate']);
   assert.ok(app.engine.snapshot(space).crossings.length > 0);

@@ -27,6 +27,7 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const again = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
   assert.notEqual(/data-page="([^"]+)"/.exec(again)[1], /data-page="([^"]+)"/.exec(body)[1], 'one id per render');
   assert.match(body, /<p hidden data-bridge-say="disconnected">Decoder disconnected\.<\/p>/, 'the words the page announces on an unplug');
+  assert.doesNotMatch(body, /Keep this tab open while racing/, 'the cable row says it, only where it is true');
   assert.match(body, /<p class="status status-error" role="alert" data-bridge-busy hidden>The decoder is open somewhere else: another tab, another browser or another app\. Close it there, then connect again\.<\/p>/, 'a port that won\'t open says why, in the server\'s words');
   // The words the page announces for each state, in the server's words (#84).
   const said = {
@@ -131,6 +132,7 @@ test('the decoder cards: every decoder of the club by name, above the connect fl
   assert.match(body, /Laps get through over Wi-Fi\./);
   assert.match(body, /If it's on, its laps wait on it\. Connect the cable to see why\./);
   assert.equal(body.match(/data-bridge-wifi hidden>Change Wi-Fi</g).length, 2, 'a member who may pair has it, hidden until the cable is in');
+  assert.equal(body.match(/<p class="decoder-row-help" data-cable-note="only" hidden>Laps reach TinyLap only through this tab\. Leaving this page stops them; set up Wi-Fi to time without it\.<\/p>/g).length, 2, 'each card says, once its cable is here and it has no Wi-Fi, what leaving does');
   assert.match(body, /<dialog id="wifi-dialog"/);
   assert.ok(body.indexOf('<dialog id="wifi-dialog"') > body.indexOf('data-bridge-state="ready"'), 'outside the cards, so a swap keeps it');
 });
