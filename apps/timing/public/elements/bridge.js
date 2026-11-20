@@ -663,11 +663,14 @@ class TlBridge extends HTMLElement {
   async connect(run, which, port = null) {
     // One connect at a time until its bridge exists: a second click would put a second bridge on the picked port.
     if (run.connecting) return;
+    // The load's look for its port holds nothing up: a click meanwhile is the member's, and goes first.
+    const found = which === 'load' ? await permittedPort(null, [], true) : null;
+    if (which === 'load' && (!found || run.connecting || run !== this.run || (run.bridge && run.bridge.state !== 'disconnected'))) return undefined;
     run.connecting = true;
     this.paint(run);
     const mine = which === 'again' || which === 'auto' || which === 'load';
-    const remembered = mine ? port ?? await permittedPort(run.last, [], which !== 'auto') : null;
-    if ((which === 'auto' || which === 'load') && !remembered) {
+    const remembered = mine ? found ?? port ?? await permittedPort(run.last, [], which !== 'auto') : null;
+    if (which === 'auto' && !remembered) {
       run.connecting = false;
       if (run === this.run) this.paint(run);
       return undefined;

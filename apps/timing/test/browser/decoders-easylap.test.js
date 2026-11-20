@@ -65,6 +65,20 @@ test('D11: a closed HID picker is no error, and Connect stays', async (t) => {
   assert.deepEqual(errors, []);
 });
 
+test('D11b: a click while the page still looks for its permitted port on load opens the picker', async (t) => {
+  const { page, errors } = await fresh(t);
+  await page.addInitScript(HID, { none: true });
+  // The load's look at the permitted ports takes a while, as on a slow machine.
+  await page.addInitScript(() => {
+    const serial = /** @type {any} */ (navigator).serial;
+    if (serial) serial.getPorts = () => new Promise((resolve) => { setTimeout(() => resolve([]), 1500); });
+  });
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect EasyLap' }).click();
+  await page.waitForFunction(() => /** @type {any} */ (window).__picks === 1, null, { timeout: 1000 });
+  assert.deepEqual(errors, []);
+});
+
 test('D12: an EasyLap that can\'t be opened shows the error as an alert, and Connect stays', async (t) => {
   const { page } = await fresh(t);
   await page.addInitScript(HID, { failOpen: true });
