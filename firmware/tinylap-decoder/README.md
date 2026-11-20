@@ -84,7 +84,7 @@ What the Bridge page shows (`docs/timing.md`, The Bridge page): with this board 
 Reading the logs (serial monitor or the bridge):
 
 - `%TLLOG wifi state=connecting|connected|failed rssi=… reason=…&` on each change. `rssi=` shows when connected, `reason=` (the ESP-IDF disconnect reason) when not. A wrong password shows `state=failed`.
-- The `stat` line carries `net=` (off, connecting, connected, or paused after a `401`), `outbox=` (passings waiting), `odrop=` (dropped because the outbox was full) and `post=` (the status of the last answer, or `err`; absent before the first answer).
+- The `stat` line carries `net=` (off, connecting, connected, or paused after a `401`), `outbox=` (passings waiting), `odrop=` (dropped because the outbox was full) and `post=` (the status of the last answer, or `err`; absent before the first answer, and again after a new token or server address, until the one post it then makes is answered).
 - Log lines over 510 bytes are left out of Wi-Fi batches. Only `stat` and `boot` go over Wi-Fi.
 
 To try the server side without a board: `node tools/decoder-sim.js net --url <origin> --decoder <id> --token <token> [--silent-after <s>]`.

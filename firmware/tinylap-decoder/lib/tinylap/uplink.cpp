@@ -7,7 +7,14 @@ namespace tinylap {
 
 void Uplink::configure(const UplinkConfig& c) {
   // A new token, or a new server (pairing sends the token first, so a post in between went to the old one): try again.
-  if (c.token != config_.token || c.server != config_.server) paused_ = false;
+  if (c.token != config_.token || c.server != config_.server) {
+    paused_ = false;
+    // Paired again: the last post's answer was the old pairing's, and one post now says whether the new one works.
+    if (!config_.token.empty()) {
+      lastStatus_ = -1;
+      heartbeatDue_ = true;
+    }
+  }
   if (c.decoder != config_.decoder && !config_.decoder.empty()) {   // paired again: the old pairing's backlog is not this one's
     head_ = count_ = sent_ = 0;
     sentBootLineGen_ = sentStatGen_ = 0;
@@ -138,7 +145,7 @@ bool Uplink::next(int64_t nowUs, Request& out) {
 void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t retryAfterS) {
   if (!inFlight_) return;
   inFlight_ = false;
-  lastStatus_ = status;
+  if (sentToken_ == config_.token) lastStatus_ = status;   // an answer to the old pairing says nothing of this one
   bool delivered = false;
   int64_t through = 0;
   const bool readable = status == 200 && readThrough(body, through);
