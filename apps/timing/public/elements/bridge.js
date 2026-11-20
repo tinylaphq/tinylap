@@ -55,6 +55,8 @@ import { WifiWizard } from './wifi-dialog.js';
 // navigator.hid before this module runs (decoders spec §5.4).
 const has = { serial: 'serial' in navigator, hid: 'hid' in navigator };
 const supported = has.serial || has.hid;
+/** Whether this page load has tried its one permitted port yet (bridge reconnect on load spec). */
+let loadTried = false;
 /** Opening a serial port resets an Arduino-based decoder: give it this long (decoders spec §2.4, C2). */
 const SERIAL_OPEN_DELAY_MS = 1500;
 const BROWSER_ASSIGNED = new Set(['zround', 'easylap']);
@@ -339,6 +341,13 @@ class TlBridge extends HTMLElement {
     run.onPort = (event) => { if (run === this.run) void this.portBack(run, event); };
     /** @type {any} */ (navigator).serial?.addEventListener?.('connect', run.onPort);
     void this.sendEarlier(run).catch(() => {});
+    // Back on the page (the board and back, a reload): the one port this browser may open without the picker opens by
+    // itself (bridge reconnect on load spec). Only a busy one says so; the server's words, as for a click.
+    // Once per page load: a move or a swap of the element is no coming back.
+    if (has.serial && !loadTried) {
+      loadTried = true;
+      void this.connect(run, 'load').catch((caught) => { if (run === this.run) this.fail(run, caught); });
+    }
   }
 
   stop() {
@@ -647,17 +656,18 @@ class TlBridge extends HTMLElement {
 
   /**
    * 'again' opens the serial port this tab last had without the picker, and falls back to the picker when it isn't
-   * there or won't open; 'auto' (the port came back) only tries it, quietly.
-   * @param {Run} run @param {'serial' | 'hid' | 'last' | 'again' | 'auto'} which @param {any} [port] for 'auto': the port that came back
+   * there or won't open; 'auto' (the port came back) only tries it, quietly; 'load' (the page just loaded) tries the
+   * one permitted port, and rejects only when it is open somewhere else.
+   * @param {Run} run @param {'serial' | 'hid' | 'last' | 'again' | 'auto' | 'load'} which @param {any} [port] for 'auto': the port that came back
    */
   async connect(run, which, port = null) {
     // One connect at a time until its bridge exists: a second click would put a second bridge on the picked port.
     if (run.connecting) return;
     run.connecting = true;
     this.paint(run);
-    const mine = which === 'again' || which === 'auto';
-    const remembered = mine ? port ?? await permittedPort(run.last, [], which === 'again') : null;
-    if (which === 'auto' && !remembered) {
+    const mine = which === 'again' || which === 'auto' || which === 'load';
+    const remembered = mine ? port ?? await permittedPort(run.last, [], which !== 'auto') : null;
+    if ((which === 'auto' || which === 'load') && !remembered) {
       run.connecting = false;
       if (run === this.run) this.paint(run);
       return undefined;
@@ -691,6 +701,7 @@ class TlBridge extends HTMLElement {
         const ports = await /** @type {any} */ (navigator).serial?.getPorts?.().catch(() => null);
         if (Array.isArray(ports) && !ports.includes(run.last.port)) Object.assign(caught, { unplugged: true });
       }
+      if (which === 'load' && (caught?.unplugged || !['NetworkError', 'InvalidStateError'].includes(caught?.name))) return undefined;
       throw caught;
     }
     return undefined;

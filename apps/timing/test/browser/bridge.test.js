@@ -540,7 +540,7 @@ test('a decoder this server doesn\'t know shows at once on connect, before any p
   await page.reload();
   const posts = [];
   page.on('request', (request) => { if (request.method() === 'POST' && /\/passings$/.test(request.url())) posts.push(request.url()); });
-  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  // The page opens its one permitted port by itself on load.
   await page.locator('[data-bridge-unknown]').filter({ hasText: "This decoder's pairing isn't known here." }).waitFor({ timeout: 3_000 });
   assert.deepEqual(posts, [], 'the cable stream said so, not a refused post');
   assert.equal(await page.locator('#decoder-none').isVisible(), false, 'no "No decoder yet" above the decoder on the cable');

@@ -842,9 +842,9 @@ test('unpairing the decoder on this cable shows its pairing isn\'t known here', 
   const { page, errors, board, card } = await cabledPage(t);
   await card(board).getByRole('button', { name: `Unpair ${board.name}` }).click();
   await page.getByRole('dialog', { name: `Unpair ${board.name}?` }).getByRole('button', { name: 'Unpair', exact: true }).click();
-  await page.locator('#decoder-none').waitFor();
-  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  // Back on the Bridge, the page opens its one permitted port by itself: the decoder's pairing is gone.
   await page.getByText('This decoder\'s pairing isn\'t known here.', { exact: false }).first().waitFor({ timeout: 20_000 });
+  assert.equal(await page.getByRole('button', { name: 'Pair again', exact: true }).isVisible(), true);
   assert.deepEqual(errors, []);
 });
 
@@ -1544,6 +1544,45 @@ async function reloadedWith(t, granted) {
   await countPicks(made.page);
   return made;
 }
+
+// Reconnect on load (bridge reconnect on load spec).
+test('back from the board, the Bridge reconnects with no click', async (t) => {
+  const { page, errors, board, row } = await cabledPage(t);
+  await countPicks(page);
+  await page.goto('/personal/board');
+  await page.goto('/personal/bridge');
+  await row(board, 'cable').locator('[data-slot="state"]', { hasText: /^Connected$/ }).waitFor({ timeout: 20_000 });
+  assert.equal(await page.evaluate(() => window.__picks ?? 0), 0, 'no picker');
+  assert.deepEqual(errors, []);
+});
+
+test('a busy port on load says so, and Connect decoder stays', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(REFUSED_SERIAL, { name: 'InvalidStateError' });
+  await page.goto('/personal/bridge');
+  await page.locator('[data-bridge-busy]').waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isEnabled(), true);
+  assert.deepEqual(errors, []);
+});
+
+test('a port gone or refused otherwise on load says nothing', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(REFUSED_SERIAL, { name: 'SecurityError' });
+  await page.goto('/personal/bridge');
+  await page.waitForTimeout(800);
+  assert.equal(await page.locator('[data-bridge-error], [data-bridge-busy], [data-bridge-gone]').filter({ visible: true }).count(), 0);
+  assert.deepEqual(errors, []);
+});
+
+test('two permitted ports: nothing opens on its own', async (t) => {
+  const { page, errors, board, row } = await reloadedWith(t, 2);
+  await page.reload();
+  await page.waitForTimeout(1500);
+  assert.equal(await row(board, 'cable').locator('[data-slot="state"]').innerText(), 'Not connected');
+  assert.deepEqual(errors, []);
+});
 
 test('after a reload, Connect decoder opens the one permitted port without the picker', async (t) => {
   const { page, errors, board, card, row } = await reloadedWith(t, 1);

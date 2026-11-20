@@ -240,3 +240,19 @@ test('install stands in for the pickers: the model\'s transport gets a fresh dev
   install(none, null);
   assert.deepEqual(none, {}, 'no setting, no change');
 });
+
+test('the simulated permitted ports outlive a page load, as Chrome keeps them', async () => {
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  const first = {};
+  install(first, 'tinylap,fast', storage);
+  const a = await first.serial.requestPort();
+  await first.serial.requestPort();
+  a.unplug();
+  const next = {};
+  install(next, 'tinylap,fast', storage);
+  assert.equal((await next.serial.getPorts()).length, 1, 'the one still plugged in, permitted after the load');
+  const none = {};
+  install(none, 'tinylap,fast', { getItem: () => null, setItem: () => {} });
+  assert.deepEqual(await none.serial.getPorts(), []);
+});
