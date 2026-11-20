@@ -37,6 +37,7 @@ jobs:
       - run: google-chrome --version
       - run: pnpm --filter @tinylap/accounts test:browser
       - run: pnpm --filter @tinylap/timing-app test:browser
+      - run: pnpm --filter @tinylap/site test:browser
 
   smoke:
     runs-on: ubuntu-latest

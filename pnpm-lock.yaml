@@ -67,6 +67,19 @@ importers:
         specifier: ^1.64.1
         version: 1.64.1
 
+  apps/site:
+    dependencies:
+      '@tinylap/design':
+        specifier: workspace:*
+        version: link:../../packages/design
+      palace-ui:
+        specifier: ^0.17.1
+        version: 0.17.1
+    devDependencies:
+      playwright-core:
+        specifier: ^1.64.1
+        version: 1.64.1
+
   apps/timing:
     dependencies:
       '@modelcontextprotocol/server':
