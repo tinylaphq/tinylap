@@ -543,6 +543,7 @@ test('a decoder this server doesn\'t know shows at once on connect, before any p
   await page.getByRole('button', { name: 'Connect decoder' }).first().click();
   await page.locator('[data-bridge-unknown]').filter({ hasText: "This decoder's pairing isn't known here." }).waitFor({ timeout: 3_000 });
   assert.deepEqual(posts, [], 'the cable stream said so, not a refused post');
+  assert.equal(await page.locator('#decoder-none').isVisible(), false, 'no "No decoder yet" above the decoder on the cable');
   assert.equal(await page.locator('[data-bridge-status]').isVisible(), false, 'no longer says it forwards');
 });
 

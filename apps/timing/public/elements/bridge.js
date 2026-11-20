@@ -830,6 +830,9 @@ class TlBridge extends HTMLElement {
     this.arrange(run, list, card && bridge ? id : null);
     const busy = run.connecting || (bridge !== null && bridge.state !== 'disconnected');
     for (const button of /** @type {NodeListOf<HTMLButtonElement>} */ (list.querySelectorAll('[data-bridge-connect]'))) button.disabled = busy;
+    // "No decoder yet" would contradict the device on the cable: the state below it says what that device is.
+    const empty = list.querySelector('#decoder-none');
+    if (empty instanceof HTMLElement) empty.hidden = busy;
     for (const time of /** @type {NodeListOf<HTMLTimeElement>} */ (list.querySelectorAll('time[data-when]'))) {
       const at = Date.parse(time.dateTime);
       const text = Number.isNaN(at) ? time.textContent : formatWhen(at, Date.now());

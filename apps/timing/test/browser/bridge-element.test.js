@@ -161,6 +161,31 @@ test('a port refused for another reason keeps its own message', async (t) => {
   assert.equal(await page.locator('[data-bridge-busy]').isVisible(), false);
 });
 
+test('a device on the cable hides the empty card; unplugged, it comes back with Connect decoder working', async (t) => {
+  const { context, page, errors } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  // A silent port whose cable window.__unplug() pulls.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'serial', {
+      configurable: true,
+      value: { requestPort: async () => ({
+        readable: new ReadableStream({ start: (c) => { window.__unplug = () => c.close(); } }), writable: new WritableStream(),
+        open: async () => {}, close: async () => {}, getInfo: () => ({ usbVendorId: 0x1a86, usbProductId: 0x7523 }),
+      }) },
+    });
+  });
+  await page.goto('/personal/bridge');
+  const empty = page.locator('#decoder-none');
+  assert.equal(await empty.isVisible(), true, 'no decoder yet');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-state="listening"]').waitFor();
+  assert.equal(await empty.isVisible(), false, 'a device is on the cable: no "No decoder yet" above it');
+  await page.evaluate(() => window.__unplug());
+  await empty.waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isEnabled(), true);
+  assert.deepEqual(errors, []);
+});
+
 test('E5: a lap row comes from its template', async (t) => {
   const { page, errors } = await toPairing(t);
   assert.equal(await page.locator('template[data-bridge-row]').count(), 2);
