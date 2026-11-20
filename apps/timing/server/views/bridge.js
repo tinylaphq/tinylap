@@ -265,7 +265,7 @@ export function wifiDialog() {
 /**
  * @param {any} request @param {{ tag: unknown }} importMap @param {{ id: string, name: string }[]} [decoders] the decoders a device may be chosen as
  * @param {string[]} [known] every decoder's id, choosable or not, so tl-bridge can tell when one was made since this render
- * @param {{ connections?: any[], mayPair?: boolean, after?: string | null }} [cards] every decoder's connections (engine.connectionsOf), whether the member may pair,
+ * @param {{ connections?: any[], mayPair?: boolean, mayDelete?: boolean, after?: string | null }} [cards] every decoder's connections (engine.connectionsOf), whether the member may pair and unpair,
  *   and the page this render replaces (a reload), whose cable is this page's
  */
 export function bridgePage(request, importMap, decoders = [], known = decoders.map((d) => d.id), { connections = [], mayPair = false, mayDelete = false, after = null } = {}) {
