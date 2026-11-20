@@ -1,0 +1,21 @@
+{
+  "name": "@tinylap/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test 'test/*.test.js'",
+    "test:browser": "node --test 'test/browser/*.test.js'",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tinylap/design": "workspace:*",
+    "palace-ui": "^0.17.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}
