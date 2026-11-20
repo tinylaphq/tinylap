@@ -322,6 +322,88 @@ static void test_a_new_decoder_id_leaves_the_old_backlog_behind() {
   TEST_ASSERT_FALSE(has(r.body, "\"transponder\":\"2A\""));
 }
 
+// Pairing sends the new token, then the server address: a post in between goes to the old server, which refuses the
+// new token. The new address ends that pause, so the decoder tries the server that paired it.
+static void test_a_new_server_address_ends_a_401_pause() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  u.configure({"https://old", "d1", kToken2});
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.answer(401, "", 0);
+  TEST_ASSERT_TRUE(u.paused());
+  u.configure({"https://new", "d1", kToken2});
+  TEST_ASSERT_FALSE(u.paused());
+  TEST_ASSERT_TRUE(u.next(100 * kS, r));
+}
+
+// Pair again (bridge decoder home spec, Design 2): the stat line's post= is about the new pairing only.
+static void refused(Uplink& u) {
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.answer(401, "", 0);
+  TEST_ASSERT_EQUAL(401, u.lastStatus());
+}
+
+static void test_a_new_token_clears_the_last_post_result() {
+  Uplink u; ready(u); refused(u);
+  u.configure({"https://x", "d1", kToken2});
+  TEST_ASSERT_EQUAL(-1, u.lastStatus());
+}
+
+static void test_a_new_server_clears_the_last_post_result() {
+  Uplink u; ready(u); refused(u);
+  u.configure({"https://y", "d1", kToken});
+  TEST_ASSERT_EQUAL(-1, u.lastStatus());
+}
+
+static void test_the_same_config_again_keeps_the_last_post_result() {
+  Uplink u; ready(u); refused(u);
+  u.configure({"https://x", "d1", kToken});
+  TEST_ASSERT_EQUAL(401, u.lastStatus());
+}
+
+static void test_a_new_pairing_posts_a_heartbeat_at_once_when_not_in_use() {
+  Uplink u; ready(u);
+  u.onStat("stat up=1", 0);
+  Request r;
+  TEST_ASSERT_FALSE(u.next(0, r));   // not in use: no heartbeat
+  u.configure({"https://y", "d1", kToken2});
+  TEST_ASSERT_TRUE(u.next(0, r));
+  TEST_ASSERT_TRUE(has(r.body, "stat up=1"));
+  TEST_ASSERT_EQUAL_STRING(("Bearer " + kToken2).c_str(), r.auth.c_str());
+}
+
+static void test_the_first_configuration_at_power_up_posts_nothing() {
+  Uplink u; ready(u);
+  u.onStat("stat up=1", 0);
+  Request r;
+  TEST_ASSERT_FALSE(u.next(0, r));
+}
+
+static void test_an_answer_to_the_old_pairing_leaves_the_post_result_unset() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.configure({"https://x", "d1", kToken2});
+  u.answer(401, "", 0);
+  TEST_ASSERT_EQUAL(-1, u.lastStatus());
+}
+
+static void test_an_answer_from_the_old_server_says_nothing_of_the_new_one() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.configure({"https://y", "d1", kToken});
+  u.answer(0, "", 0);   // the old address never answered
+  TEST_ASSERT_EQUAL(-1, u.lastStatus());
+  TEST_ASSERT_TRUE(u.next(0, r));   // no backoff: the new address is tried at once
+  TEST_ASSERT_EQUAL_STRING("https://y/decoders/d1/passings", r.url.c_str());
+}
+
 static void test_a_401_for_an_old_token_does_not_pause_the_new_one() {
   Uplink u; ready(u);
   u.onPassing("2A", 1000, 0);
@@ -417,8 +499,16 @@ int main() {
   RUN_TEST(test_full_outbox_drops_the_oldest);
   RUN_TEST(test_batch_holds_at_most_500);
   RUN_TEST(test_401_pauses_until_configure_gives_a_new_token);
+  RUN_TEST(test_a_new_server_address_ends_a_401_pause);
   RUN_TEST(test_a_new_decoder_id_leaves_the_old_backlog_behind);
   RUN_TEST(test_a_401_for_an_old_token_does_not_pause_the_new_one);
+  RUN_TEST(test_a_new_token_clears_the_last_post_result);
+  RUN_TEST(test_a_new_server_clears_the_last_post_result);
+  RUN_TEST(test_the_same_config_again_keeps_the_last_post_result);
+  RUN_TEST(test_a_new_pairing_posts_a_heartbeat_at_once_when_not_in_use);
+  RUN_TEST(test_the_first_configuration_at_power_up_posts_nothing);
+  RUN_TEST(test_an_answer_to_the_old_pairing_leaves_the_post_result_unset);
+  RUN_TEST(test_an_answer_from_the_old_server_says_nothing_of_the_new_one);
   RUN_TEST(test_404_and_422_drop_the_batch);
   RUN_TEST(test_429_waits_retry_after);
   RUN_TEST(test_backoff_doubles_to_30_s_and_resets_on_200);

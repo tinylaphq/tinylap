@@ -70,7 +70,7 @@ Pairing in the timing app stores the decoder id and token (`%TLPAIR`), where to 
 
 - **The outbox** holds the last 2000 passings in RAM, not in flash; when full the oldest goes. A batch of up to 500 is posted to `<server>/decoders/<id>/passings` as soon as passings wait, one request at a time, over HTTPS checked against the ESP-IDF certificate bundle (`http://` works for a local server). What a batch carried leaves the outbox once an answer's `through` covers it, so cable and Wi-Fi together store each passing once.
 - **In use:** for 15 minutes after joining Wi-Fi, after each passing and after each answer with `"watched": true` (someone has the board on screen), the board posts the `stat` line every 10 s, which tells the server it is alive. Then it sends one batch with `quiet` and stays silent until the next passing.
-- **Answers:** `401` pauses sending until the board is paired again; `404` and `422` drop the batch; `429` waits `Retry-After`; anything else retries with back-off from 1 s to 30 s.
+- **Answers:** `401` pauses sending until the board gets a new token or server address (paired again); `404` and `422` drop the batch; `429` waits `Retry-After`; anything else retries with back-off from 1 s to 30 s.
 - **Tasks:** the IR task runs on core 1 at priority 10, above everything else there, so Wi-Fi does not delay the frame stamps. The network task runs on core 1 too, at `loop()`'s priority: the first HTTPS handshake computes for about 6 s while the two take turns, and on core 0 it would starve the idle task until the task watchdog reset the board (`boot reason=wdt`). Later posts reuse the connection.
 
 Over the cable, for the bridge page's Wi-Fi card and its Change Wi-Fi dialog (`docs/timing.md`):
@@ -84,7 +84,7 @@ What the Bridge page shows (`docs/timing.md`, The Bridge page): with this board 
 Reading the logs (serial monitor or the bridge):
 
 - `%TLLOG wifi state=connecting|connected|failed rssi=… reason=…&` on each change. `rssi=` shows when connected, `reason=` (the ESP-IDF disconnect reason) when not. A wrong password shows `state=failed`.
-- The `stat` line carries `net=` (off, connecting, connected, or paused after a `401`), `outbox=` (passings waiting), `odrop=` (dropped because the outbox was full) and `post=` (the status of the last answer, or `err`; absent before the first answer).
+- The `stat` line carries `net=` (off, connecting, connected, or paused after a `401`), `outbox=` (passings waiting), `odrop=` (dropped because the outbox was full) and `post=` (the status of the last answer, or `err`; absent before the first answer, and again after a new token or server address, until the one post it then makes is answered).
 - Log lines over 510 bytes are left out of Wi-Fi batches. Only `stat` and `boot` go over Wi-Fi.
 
 To try the server side without a board: `node tools/decoder-sim.js net --url <origin> --decoder <id> --token <token> [--silent-after <s>]`.
