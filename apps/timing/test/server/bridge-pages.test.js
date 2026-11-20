@@ -27,6 +27,7 @@ test('the bridge page: every state rendered, the explanation shown, the import m
   const again = await (await app.api(member, 'GET', '/personal/bridge', undefined, { accept: 'text/html' })).text();
   assert.notEqual(/data-page="([^"]+)"/.exec(again)[1], /data-page="([^"]+)"/.exec(body)[1], 'one id per render');
   assert.match(body, /<p hidden data-bridge-say="disconnected">Decoder disconnected\.<\/p>/, 'the words the page announces on an unplug');
+  assert.match(body, /<p class="status status-error" role="alert" data-bridge-busy hidden>The decoder is open somewhere else: another tab, another browser or another app\. Close it there, then connect again\.<\/p>/, 'a port that won\'t open says why, in the server\'s words');
   // The words the page announces for each state, in the server's words (#84).
   const said = {
     connect: 'Ready to connect.',

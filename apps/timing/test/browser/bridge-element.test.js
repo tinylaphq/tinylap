@@ -127,6 +127,40 @@ async function toPairing(t, { viewport, init = [] } = {}) {
   return who;
 }
 
+/** navigator.serial whose one port won't open, rejecting with a DOMException named `name`. @param {string} name */
+const REFUSED_SERIAL = (name) => {
+  Object.defineProperty(navigator, 'serial', {
+    configurable: true,
+    value: { requestPort: async () => ({ readable: null, writable: null, open: async () => { throw new DOMException(name === 'SecurityError' ? 'Not allowed here.' : 'Failed to open serial port.', name); }, close: async () => {}, getInfo: () => ({ usbVendorId: 0x10c4, usbProductId: 0xea60 }) }), getPorts: async () => [] },
+  });
+};
+
+test('a port open somewhere else says so, and Connect decoder works again', async (t) => {
+  for (const name of ['NetworkError', 'InvalidStateError']) {
+    const { context, page, errors } = await pageAs(browser, app, member);
+    t.after(() => context.close());
+    await page.addInitScript(REFUSED_SERIAL, name);
+    await page.goto('/personal/bridge');
+    const connect = page.getByRole('button', { name: 'Connect decoder' }).first();
+    await connect.click();
+    await page.locator('[data-bridge-busy]').waitFor();
+    assert.match(await page.locator('[data-bridge-busy]').innerText(), /^The decoder is open somewhere else/, name);
+    assert.equal(await page.locator('[data-bridge-error]').isVisible(), false, `${name}: not the browser's words`);
+    assert.equal(await connect.isEnabled(), true, `${name}: Connect decoder works again`);
+    assert.deepEqual(errors, [], name);
+  }
+});
+
+test('a port refused for another reason keeps its own message', async (t) => {
+  const { context, page } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  await page.addInitScript(REFUSED_SERIAL, 'SecurityError');
+  await page.goto('/personal/bridge');
+  await page.getByRole('button', { name: 'Connect decoder' }).first().click();
+  await page.locator('[data-bridge-error]').filter({ hasText: 'Not allowed here.' }).waitFor();
+  assert.equal(await page.locator('[data-bridge-busy]').isVisible(), false);
+});
+
 test('E5: a lap row comes from its template', async (t) => {
   const { page, errors } = await toPairing(t);
   assert.equal(await page.locator('template[data-bridge-row]').count(), 2);

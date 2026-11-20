@@ -523,13 +523,19 @@ class TlBridge extends HTMLElement {
   /** @param {Run} run */
   fail(run, caught) {
     run.failures += 1;
+    // Chrome's words for a port held elsewhere (another tab, browser or app) say nothing useful: the server's do.
+    const busy = caught?.name === 'NetworkError' || caught?.name === 'InvalidStateError';
     const error = this.$(run, '[data-bridge-error]');
-    error.textContent = caught.message;
-    error.hidden = false;
+    if (!busy) error.textContent = caught.message;
+    error.hidden = busy;
+    this.$(run, '[data-bridge-busy]').hidden = !busy;
   }
 
   /** @param {Run} run */
-  ok(run) { this.$(run, '[data-bridge-error]').hidden = true; }
+  ok(run) {
+    this.$(run, '[data-bridge-error]').hidden = true;
+    this.$(run, '[data-bridge-busy]').hidden = true;
+  }
 
   /** @param {Run} run */
   show(run, state) {
@@ -632,7 +638,11 @@ class TlBridge extends HTMLElement {
     } catch (caught) {
       await next.close();
       if (run.bridge === next) run.bridge = null;
-      if (run === this.run) this.show(run, 'connect');
+      if (run === this.run) {
+        this.show(run, 'connect');
+        // The cards' Connect decoder buttons were disabled while it opened: no bridge now, so they work again.
+        this.paint(run);
+      }
       // Held by another tab, say: a click goes on to the picker, and the next one goes there at once; a port that came
       // back is left alone. The picker needs the click, which the stores and the decoder list may have outlasted: then
       // the card's Connect decoder stays for a click of its own.
