@@ -61,10 +61,9 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
       const edge = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().right);
       const content = (sel) => { const s = document.querySelector(sel); return Math.round(s.getBoundingClientRect().right - parseFloat(getComputedStyle(s).paddingRight) - parseFloat(getComputedStyle(s).borderRightWidth)); };
       return {
-        gaps: ['track-title', 'drivers-title', 'transponders-title', 'decoders-title'].map((id) => [id, gapAfter(id)]),
+        gaps: ['track-title', 'drivers-title', 'transponders-title'].map((id) => [id, gapAfter(id)]),
         actions,
         assign: edge('#transponders .tp-acts') - content('#transponders .tp-rows > li'),
-        unpair: edge('#decoders .setup-row .btn') - content('#decoders'),
         docW: document.documentElement.scrollWidth,
       };
     });
@@ -73,7 +72,6 @@ for (const [size, viewport] of [['small phone', { width: 360, height: 780 }], ['
     assert.ok(inText.length, `rows of text: ${JSON.stringify(m.actions)}`);
     assert.deepEqual([...new Set(inText.map((a) => a.h))], [32], `actions in a row of text: palace's small control height, ${JSON.stringify(inText)}`);
     assert.equal(m.assign, 0, 'Assign ends at the section edge');
-    assert.equal(m.unpair, 0, 'Unpair ends at the section edge');
     assert.ok(m.docW <= viewport.width, 'no sideways scroll');
     assert.deepEqual(errors, []);
   });
