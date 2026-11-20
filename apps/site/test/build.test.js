@@ -69,6 +69,11 @@ test('github appears once', () => {
   assert.equal(values('href').filter((h) => h.startsWith('https://github.com/') && !h.startsWith(BLOB)).length, 1);
 });
 
+test('the headline says what it is, in three lines', () => {
+  const h1 = html.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1] ?? '';
+  assert.deepEqual([...h1.matchAll(/<span>([^<]*)<\/span>/g)].map((m) => m[1]), ['Lap timing', 'for Mini-Z', 'racing']);
+});
+
 test('the hero film is described as the README describes it', () => {
   const readme = readFileSync(new URL('README.md', REPO), 'utf8');
   const alt = readme.match(/!\[([^\]]+)\]\(docs\/walkthrough\.gif\)/)?.[1];
@@ -78,11 +83,12 @@ test('the hero film is described as the README describes it', () => {
 test('link previews get a title, a description and the share card', () => {
   /** @param {string} key */
   const meta = (key) => html.match(new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)">`))?.[1];
-  assert.equal(meta('og:title'), 'TinyLap: live lap timing for Mini-Z');
+  assert.equal(meta('og:title'), 'TinyLap: lap timing for Mini-Z racing');
   assert.equal(meta('og:description'), meta('description'));
   assert.equal(meta('og:url'), 'https://tinylaphq.github.io/tinylap/');
   assert.equal(meta('og:type'), 'website');
-  assert.equal(meta('og:image'), 'https://tinylaphq.github.io/tinylap/share.png');
+  // Bump ?v= with every new card: previews cache an image by its URL.
+  assert.equal(meta('og:image'), 'https://tinylaphq.github.io/tinylap/share.png?v=2');
   assert.equal(meta('og:image:width'), '1200');
   assert.equal(meta('og:image:height'), '630');
   assert.ok(meta('og:image:alt'));

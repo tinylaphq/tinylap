@@ -7,13 +7,13 @@
 <meta name="description" content="Every lap shows up on the laptop, the phones in the pits and the TV on the wall, with personal bests and track records as they happen.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TinyLap">
-<meta property="og:title" content="TinyLap: live lap timing for Mini-Z">
+<meta property="og:title" content="TinyLap: lap timing for Mini-Z racing">
 <meta property="og:description" content="Every lap shows up on the laptop, the phones in the pits and the TV on the wall, with personal bests and track records as they happen.">
 <meta property="og:url" content="https://tinylaphq.github.io/tinylap/">
-<meta property="og:image" content="https://tinylaphq.github.io/tinylap/share.png">
+<meta property="og:image" content="https://tinylaphq.github.io/tinylap/share.png?v=2">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="TinyLap: live lap timing for Mini-Z, over the race board of a race with a new track record">
+<meta property="og:image:alt" content="TinyLap: lap timing for Mini-Z racing, over a strip of last laps with a new track record">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="mark.svg">
 <link rel="stylesheet" href="palace.css">
@@ -49,13 +49,14 @@
     align-items: center;
     padding: var(--p-space-2xl) 0 var(--section);
   }
-  .hero .words { grid-column: 1 / span 5; }
+  .hero .words { grid-column: 1 / span 5; container-type: inline-size; }
   .hero h1 {
-    font-size: calc(var(--p-text-4xl) * 2.1);
+    /* As big as palace's display size allows, never wider than its column. */
+    font-size: min(calc(var(--p-text-4xl) * 2.1), 18.5cqi);
     line-height: 0.95;
     letter-spacing: 0;
   }
-  /* Three lines, broken by sense: what, what, for whom. */
+  /* Three lines: what, and what for. */
   .hero h1 span { display: block; }
   .hero .lead { margin-top: var(--p-space-lg); font-size: var(--p-text-xl); line-height: var(--p-leading-prose); color: var(--p-text); text-wrap: pretty; }
   .hero .where { margin-top: var(--p-space-sm); font-size: var(--p-text-lg); color: var(--p-text-secondary); }
@@ -180,7 +181,6 @@
   @media (max-width: 960px) {
     .hero { grid-template-columns: minmax(0, 1fr); row-gap: var(--p-space-2xl); }
     .hero .words, .board { grid-column: 1 / -1; }
-    .hero h1 { font-size: calc(var(--p-text-4xl) * 1.8); }
     .hero .words { max-width: 36em; }
     .need { grid-template-columns: minmax(0, 1fr); row-gap: var(--p-space-xl); }
     .need .words, .need figure { grid-column: 1 / -1; }
@@ -198,7 +198,7 @@
     :root { --gutter: 16px; --inset: var(--p-space-lg); --section: calc(var(--p-space-2xl) + var(--p-space-md)); }
     .top { padding: var(--p-space-md) 0; }
     .hero { padding-top: var(--p-space-xl); row-gap: var(--p-space-xl); }
-    .hero h1 { font-size: calc(var(--p-text-4xl) * 1.2); line-height: 1; }
+    .hero h1 { line-height: 1; }
     .hero .lead { margin-top: var(--p-space-lg); font-size: var(--p-text-lg); }
     .hero .where { font-size: var(--p-text-md); }
     .hero .actions { margin-top: var(--p-space-lg); }
@@ -229,7 +229,7 @@
 
   <section class="hero" aria-labelledby="title">
     <div class="words">
-      <h1 class="h1-hero" id="title"><span>Live lap</span> <span>timing</span> <span>for Mini-Z</span></h1>
+      <h1 class="h1-hero" id="title"><span>Lap timing</span> <span>for Mini-Z</span> <span>racing</span></h1>
       <p class="lead">Every lap shows up on the laptop, the phones in the pits and the TV on the wall, with personal bests and track records as they happen.</p>
       <p class="where">On a track at home, or as your club's timing system.</p>
       <div class="actions"><a class="cta cta-primary" href="https://github.com/tinylaphq/tinylap/blob/main/README.md#timing">Set up Timing</a></div>
