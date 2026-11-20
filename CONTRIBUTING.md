@@ -2,13 +2,25 @@
 
 ## Setup
 
-    corepack enable
-    pnpm install
-    pnpm check                                   # tests, lint, types in every package
-    pnpm --filter @tinylap/track-planner dev     # http://localhost:8000
+You need Node 24.
+
+```sh
+corepack enable
+pnpm install
+pnpm check                                   # tests, lint, types in every package
+pnpm --filter @tinylap/track-planner dev     # http://localhost:8000
+```
+
+ES modules cannot be imported over `file://`, so the apps must be served.
+Running timing with accounts and the planner beside it:
+[apps/timing/README.md](apps/timing/README.md) (Development).
 
 The firmware in `firmware/` builds with [PlatformIO](https://platformio.org/)
 Core; each project's README says how to build, test and flash it.
+
+## Designs
+
+Designs are in `docs/superpowers/specs/`, one dated file per piece of work.
 
 ## Sign your commits (DCO)
 
