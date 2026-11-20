@@ -129,6 +129,7 @@ bool Uplink::next(int64_t nowUs, Request& out) {
   out.url = server + "/decoders/" + config_.decoder + "/passings";
   out.auth = "Bearer " + config_.token;
   sentToken_ = config_.token;
+  sentServer_ = config_.server;
   out.body = batchBody(*bootId(seq), passings, logs, current ? &nowMs : nullptr, quiet);
 
   inFlight_ = true;
@@ -145,7 +146,9 @@ bool Uplink::next(int64_t nowUs, Request& out) {
 void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t retryAfterS) {
   if (!inFlight_) return;
   inFlight_ = false;
-  if (sentToken_ == config_.token) lastStatus_ = status;   // an answer to the old pairing says nothing of this one
+  // An answer to the old pairing (its token or its address) says nothing of this one: no status, pause or backoff.
+  const bool current = sentToken_ == config_.token && sentServer_ == config_.server;
+  if (current) lastStatus_ = status;
   bool delivered = false;
   int64_t through = 0;
   const bool readable = status == 200 && readThrough(body, through);
@@ -161,14 +164,14 @@ void Uplink::answer(int status, const std::string& body, int64_t nowUs, int64_t 
     backoffUs_ = kBackoffMinUs;
     delivered = true;
   } else if (status == 401) {
-    if (sentToken_ == config_.token) paused_ = true;   // not when a new token came meanwhile
+    if (current) paused_ = true;   // not when a new token or address came meanwhile
   } else if (status == 404 || status == 422) {
     head_ = (head_ + sent_) % kCapacity;   // never taken: drop that batch's passings
     count_ -= sent_;
     delivered = true;
   } else if (status == 429 && retryAfterS > 0) {
     waitUntilUs_ = nowUs + std::min<int64_t>(retryAfterS, kMaxRetryAfterS) * 1000000;
-  } else {   // also a 200 without a readable through for passings it carried (a captive portal, a proxy)
+  } else if (current) {   // also a 200 without a readable through for passings it carried (a captive portal, a proxy)
     waitUntilUs_ = nowUs + backoffUs_;
     backoffUs_ = std::min(backoffUs_ * 2, kBackoffMaxUs);
   }

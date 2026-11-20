@@ -392,6 +392,18 @@ static void test_an_answer_to_the_old_pairing_leaves_the_post_result_unset() {
   TEST_ASSERT_EQUAL(-1, u.lastStatus());
 }
 
+static void test_an_answer_from_the_old_server_says_nothing_of_the_new_one() {
+  Uplink u; ready(u);
+  u.onPassing("2A", 1000, 0);
+  Request r;
+  TEST_ASSERT_TRUE(u.next(0, r));
+  u.configure({"https://y", "d1", kToken});
+  u.answer(0, "", 0);   // the old address never answered
+  TEST_ASSERT_EQUAL(-1, u.lastStatus());
+  TEST_ASSERT_TRUE(u.next(0, r));   // no backoff: the new address is tried at once
+  TEST_ASSERT_EQUAL_STRING("https://y/decoders/d1/passings", r.url.c_str());
+}
+
 static void test_a_401_for_an_old_token_does_not_pause_the_new_one() {
   Uplink u; ready(u);
   u.onPassing("2A", 1000, 0);
@@ -496,6 +508,7 @@ int main() {
   RUN_TEST(test_a_new_pairing_posts_a_heartbeat_at_once_when_not_in_use);
   RUN_TEST(test_the_first_configuration_at_power_up_posts_nothing);
   RUN_TEST(test_an_answer_to_the_old_pairing_leaves_the_post_result_unset);
+  RUN_TEST(test_an_answer_from_the_old_server_says_nothing_of_the_new_one);
   RUN_TEST(test_404_and_422_drop_the_batch);
   RUN_TEST(test_429_waits_retry_after);
   RUN_TEST(test_backoff_doubles_to_30_s_and_resets_on_200);

@@ -55,6 +55,7 @@ class Uplink {
   size_t sent_ = 0;
   uint32_t sentBootLineGen_ = 0, sentStatGen_ = 0;   // which log lines it carried, 0 for none
   std::string sentToken_;                            // the token it was sent with
+  std::string sentServer_;                           // and the address
 
   std::string bootLine_, stat_;                  // stat_: the latest stat line
   bool bootLinePending_ = false, statPending_ = false;
