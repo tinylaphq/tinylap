@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TinyLap share card</title>
+<link rel="stylesheet" href="palace.css">
+<link rel="stylesheet" href="design.css">
+<style>
+/*
+  The link preview (og:image), laid out at 400 x 210, the size previews show
+  it, and rendered at 3x to 1200 x 630: the race board behind, and the
+  name and headline on a slab in the middle, which a square crop keeps whole.
+  Rendered to share.png by render.js, inside a built site.
+*/
+html, body { margin: 0; width: 400px; height: 210px; overflow: hidden; }
+body { position: relative; background: var(--p-bg) url('media/walkthrough-poster.png') no-repeat; background-size: 400px 250px; background-position: 0 -19.33px; }
+/* Hides the recording's pointer dot on the last-laps list of this poster;
+   check it again when the poster is recorded anew. */
+.patch { position: absolute; left: 316.67px; top: 170.67px; width: 16.67px; height: 15.33px; background: linear-gradient(#fff 0 7.33px, #f3f3f3 7.33px 8px, #fff 8px); }
+.slab { position: absolute; left: 50%; top: 47.33px; transform: translateX(-50%); width: max-content; box-sizing: border-box;
+  padding: 12.67px 14.67px 14.67px; background: var(--p-dark); border: var(--p-border-width) solid var(--p-dark);
+  box-shadow: var(--p-shadow-lg) var(--p-accent-2);
+  display: flex; flex-direction: column; align-items: center; gap: 9.33px; text-align: center; }
+.lockup { display: flex; align-items: center; gap: 5.33px; }
+.lockup img { width: 18.67px; height: 18.67px; display: block; outline: var(--p-border-thin) solid var(--p-text-on-fill); }
+.lockup span { font-size: 13.33px; font-weight: 700; letter-spacing: 1.33px; text-transform: uppercase; color: var(--p-text-on-fill); line-height: 1; }
+.slab h1 { white-space: nowrap; font-size: 31.33px; line-height: 0.98; letter-spacing: 0.33px; margin: 0; }
+</style>
+</head>
+<body role="img" aria-label="TinyLap: live lap timing for Mini-Z, over the race board of a race with a new track record">
+<div class="patch"></div>
+<div class="slab">
+  <div class="lockup"><img src="mark.svg" alt=""><span>TinyLap</span></div>
+  <h1 class="h1-hero">Live lap<br>timing<br>for Mini-Z</h1>
+</div>
+</body>
+</html>
