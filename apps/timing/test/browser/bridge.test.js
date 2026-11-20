@@ -74,6 +74,20 @@ test('without JavaScript, the page says what the bridge needs', async (t) => {
   assert.equal(await page.getByText('A TinyLap decoder needs it once, to pair; after that it can time over Wi-Fi without it.').isVisible(), true);
 });
 
+test('with JavaScript on, the "needs Chrome or Edge" notice never flashes while the bridge script loads', async (t) => {
+  const { context, page } = await pageAs(browser, app, member);
+  t.after(() => context.close());
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route('**/public/elements/bridge.js', async (route) => { await held; await route.continue(); });
+  // A module script holds DOMContentLoaded back: the page is painted, the bridge not started.
+  await page.goto('/personal/bridge', { waitUntil: 'commit' });
+  await page.locator('#bridge-decoders').waitFor();
+  assert.equal(await page.getByText(/needs Chrome or Edge/).isVisible(), false, 'hidden until the bridge says it is needed');
+  assert.equal(await page.getByRole('button', { name: 'Connect decoder' }).first().isVisible(), true, 'and the cards keep their button');
+  release();
+});
+
 test('without Web Serial or WebHID, the notice stays and no button is offered', async (t) => {
   const { context, page, errors } = await pageAs(browser, app, member, { viewport: { width: 390, height: 844 } });
   t.after(() => context.close());

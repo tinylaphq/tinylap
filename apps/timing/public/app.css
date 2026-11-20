@@ -336,6 +336,9 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
    between rows, sm inside a row. */
 #bridge-decoders { margin-bottom: var(--p-space-lg); }
 #bridge > [data-bridge-state="unsupported"] { margin-bottom: var(--p-space-lg); }
+/* With script on, the notice waits for tl-bridge to say it is needed (Web Serial and WebHID missing): until the
+   element is defined it would flash on every visit, hiding the cards' Connect decoder with it. Without script it shows. */
+@media (scripting: enabled) { tl-bridge:not(:defined) [data-bridge-state="unsupported"] { display: none; } }
 /* One gap (lg) between heading, status box and rows, and each side of a row divider; the status box's hard shadow
    (4px, the xs step) is added under it so the gap to the first row is lg past the shadow too. */
 .decoder-card { display: grid; gap: var(--p-space-lg); }
@@ -361,7 +364,10 @@ legend { padding: 0; margin-bottom: var(--p-space-xs); font-weight: 600; }
 /* Where the browser can't reach USB decoders (or tl-bridge can't run), no Connect decoder: it couldn't work.
    This rule owns only that; tl-bridge (TlBridge.paint) disables every card's Connect decoder while a connection
    is in progress or a decoder is on the cable, and hides the one on the cabled card. */
-#bridge:has([data-bridge-missing="serial"]:not([hidden]), [data-bridge-state="unsupported"]:not([hidden])) #bridge-decoders [data-bridge-connect] { display: none; }
+#bridge:has([data-bridge-missing="serial"]:not([hidden])) #bridge-decoders [data-bridge-connect],
+tl-bridge:defined #bridge:has([data-bridge-state="unsupported"]:not([hidden])) #bridge-decoders [data-bridge-connect] { display: none; }
+/* Without script, or while it loads, the notice's state is not known yet: without script it shows, and no button could work. */
+@media (scripting: none) { #bridge-decoders [data-bridge-connect] { display: none; } }
 /* A plain ZRound decoder or EasyLap on the cable: no Wi-Fi row, and the Cable row ends the card. */
 .decoder-row[hidden] { display: none; }
 .decoder-row:has(+ .decoder-row[hidden]) { padding-bottom: 0; }
