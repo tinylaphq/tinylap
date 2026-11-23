@@ -74,6 +74,16 @@ test("in dev decoders post to this machine's network address, or TINYLAP_DECODER
   }
 });
 
+test('timing refuses a TINYLAP_DECODER_URL that is not a URL', async () => {
+  const child = run({ ...FULL, TINYLAP_DECODER_URL: '192.168.1.20:8100' });
+  let err = '';
+  child.stderr.on('data', (d) => { err += d; });
+  child.stdout.resume();
+  const [code] = await once(child, 'exit');
+  assert.equal(code, 1);
+  assert.match(err, /TINYLAP_DECODER_URL:/);
+});
+
 test('timing refuses a TINYLAP_SIMULATE it does not understand', async () => {
   const child = run({ ...FULL, TINYLAP_SIMULATE: 'amb' });
   let err = '';

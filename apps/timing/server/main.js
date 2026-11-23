@@ -55,6 +55,9 @@ try {
   refuse(`TINYLAP_TOKEN_KEYS: ${error.message}`);
 }
 
+// Decoders are paired with it and the Bridge reads it: it must be a URL.
+if (env.TINYLAP_DECODER_URL && !URL.canParse(env.TINYLAP_DECODER_URL)) refuse(`TINYLAP_DECODER_URL: "${env.TINYLAP_DECODER_URL}" is not a URL, e.g. http://192.168.1.20:8100`);
+
 let simulate = null;
 try {
   simulate = readSimulate(env.TINYLAP_SIMULATE);
