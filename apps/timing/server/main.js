@@ -19,6 +19,7 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseKeys } from '@tinylap/auth';
+import { lanAddress } from './addresses.js';
 import { createHandler } from './app.js';
 import { createAuth } from './auth.js';
 import { createEngine } from './engine.js';
@@ -87,12 +88,17 @@ const ticker = setInterval(() => {
   }
 }, TICK_MS);
 
+// A decoder posts to the address it was paired with, and on a decoder localhost is the decoder itself: dev gives it
+// this machine's network address, unless TINYLAP_DECODER_URL names another. A random port (PORT=0) isn't known yet.
+const lan = dev && !env.TINYLAP_DECODER_URL && port !== 0 ? lanAddress() : null;
+const decoderUrl = env.TINYLAP_DECODER_URL || (lan ? `http://${lan}:${port}` : undefined);
+
 const handler = createHandler({
   store, hub, engine, auth, keys,
   root: dev ? undefined : env.TINYLAP_ROOT ?? '/srv',
   appDir: resolve(fileURLToPath(new URL('..', import.meta.url))),
   publicUrl,
-  decoderUrl: env.TINYLAP_DECODER_URL || undefined,
+  decoderUrl,
   plannerUrl: env.TINYLAP_PLANNER_URL,
   clientIpHeader: env.TINYLAP_CLIENT_IP_HEADER,
   build: env.TINYLAP_BUILD,
@@ -100,10 +106,11 @@ const handler = createHandler({
   noticeToken: env.TINYLAP_NOTICE_TOKEN || undefined,
 });
 
-// Dev stays on this machine, unless a decoder must reach it over the network (TINYLAP_DECODER_URL).
-const host = dev && !env.TINYLAP_DECODER_URL ? '127.0.0.1' : '0.0.0.0';
+// Dev listens on the network for its decoders; without a network address it stays on this machine.
+const host = dev && !decoderUrl ? '127.0.0.1' : '0.0.0.0';
+const decoders = decoderUrl ? `, decoders post to ${decoderUrl}` : dev ? ", decoders can't reach it over Wi-Fi (no network)" : '';
 const server = createServer(handler).listen(port, host, () => {
-  console.log(`timing on http://${host}:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}${dev ? ' (dev, no-store)' : ''}, sign-in through ${env.TINYLAP_ISSUER}`);
+  console.log(`timing on http://${host}:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}${dev ? ' (dev, no-store)' : ''}, sign-in through ${env.TINYLAP_ISSUER}${decoders}`);
 });
 
 // Stop ticking and accepting, end the open streams, close the database, leave.
