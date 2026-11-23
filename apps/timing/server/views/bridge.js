@@ -74,7 +74,7 @@ const FAULTS = {
 };
 const ELSEWHERE = 'Plug it into this laptop, then pair it again.';
 // A loopback address on the server (dev decoder address spec §2): pairing again would hand out the same one.
-const LOCAL = (address) => `It has “${address}” as TinyLap's address, which on a decoder means the decoder itself. Set TINYLAP_DECODER_URL to the network address of the computer TinyLap runs on, then pair it again.`;
+const LOCAL = (address) => `TinyLap gives decoders “${address}” as its address, which on a decoder means the decoder itself. Set TINYLAP_DECODER_URL to the network address of the computer TinyLap runs on, then pair it again.`;
 
 /** Unpair's question, opened by the card's Unpair without script (invoker commands); it posts, and the Bridge comes back. */
 const unpairDialog = (request, d) => html`<dialog id="unpair-${d.id}" class="confirm-dialog" aria-labelledby="unpair-${d.id}-title">

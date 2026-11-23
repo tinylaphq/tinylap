@@ -273,7 +273,7 @@ test("an unreachable decoder's Wi-Fi row says its laps don't get through", () =>
 });
 
 // Dev decoder address spec §2: pairing again would hand out the same loopback address.
-const LOCAL_HELP = 'It has “http://localhost:8100” as TinyLap&#39;s address, which on a decoder means the decoder itself. Set TINYLAP_DECODER_URL to the network address of the computer TinyLap runs on, then pair it again.';
+const LOCAL_HELP = 'TinyLap gives decoders “http://localhost:8100” as its address, which on a decoder means the decoder itself. Set TINYLAP_DECODER_URL to the network address of the computer TinyLap runs on, then pair it again.';
 
 test('an unreachable decoder on a localhost server is told to set TINYLAP_DECODER_URL, with no Pair again', () => {
   for (const mayPair of [true, false]) {

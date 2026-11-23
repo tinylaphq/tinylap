@@ -111,7 +111,7 @@ const handler = createHandler({
 
 // Dev listens on the network for its decoders; without a network address it stays on this machine.
 const host = dev && !decoderUrl ? '127.0.0.1' : '0.0.0.0';
-const decoders = decoderUrl ? `, decoders post to ${decoderUrl}` : dev ? ", decoders can't reach it over Wi-Fi (no network)" : '';
+const decoders = decoderUrl ? `, decoders post to ${decoderUrl}` : dev ? `, decoders can't reach it over Wi-Fi (${port === 0 ? 'random port' : 'no network'})` : '';
 const server = createServer(handler).listen(port, host, () => {
   console.log(`timing on http://${host}:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}${dev ? ' (dev, no-store)' : ''}, sign-in through ${env.TINYLAP_ISSUER}${decoders}`);
 });

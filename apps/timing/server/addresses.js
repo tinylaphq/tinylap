@@ -15,8 +15,8 @@ export function lanAddress(interfaces = networkInterfaces()) {
   return null;
 }
 
-/** Whether a URL names this machine only (localhost, 127.0.0.0/8, [::1]): a decoder can't post to it. @param {string} url */
+/** Whether a URL names this machine only (localhost, 127.0.0.0/8, [::1], or the any-address 0.0.0.0 or [::] a listen line shows): a decoder can't post to it. @param {string} url */
 export function isLoopback(url) {
   const host = new URL(url).hostname;
-  return host === 'localhost' || host === '[::1]' || /^127\.\d+\.\d+\.\d+$/.test(host);
+  return ['localhost', '[::1]', '0.0.0.0', '[::]'].includes(host) || /^127\.\d+\.\d+\.\d+$/.test(host);
 }

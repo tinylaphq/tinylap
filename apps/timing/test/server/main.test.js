@@ -56,7 +56,7 @@ test("in dev decoders post to this machine's network address, or TINYLAP_DECODER
   const cases = [
     [{ PORT: port }, lan ? `timing on http://0.0.0.0:${port}` : 'timing on http://127.0.0.1:', lan ? `decoders post to http://${lan}:${port}` : "decoders can't reach it over Wi-Fi (no network)"],
     [{ TINYLAP_DECODER_URL: 'http://192.168.1.20:8100' }, 'timing on http://0.0.0.0:', 'decoders post to http://192.168.1.20:8100'],
-    [{}, 'timing on http://127.0.0.1:', "decoders can't reach it over Wi-Fi (no network)"],
+    [{}, 'timing on http://127.0.0.1:', "decoders can't reach it over Wi-Fi (random port)"],
   ];
   for (const [env, listens, decoders] of cases) {
     const child = run({ ...FULL, ...env });
