@@ -272,6 +272,32 @@ test("an unreachable decoder's Wi-Fi row says its laps don't get through", () =>
   assert.match(wifi, /data-fault-help="elsewhere">It can&#39;t reach TinyLap at the address it has\. Plug it into this laptop, then pair it again\.<\/p>/);
 });
 
+// Dev decoder address spec §2: pairing again would hand out the same loopback address.
+const LOCAL_HELP = 'TinyLap gives decoders “http://localhost:8100” as its address, which on a decoder means the decoder itself. Set TINYLAP_DECODER_URL to the network address of the computer TinyLap runs on, then pair it again.';
+
+test('an unreachable decoder on a localhost server is told to set TINYLAP_DECODER_URL, with no Pair again', () => {
+  for (const mayPair of [true, false]) {
+    const card = cardOf(String(decoderCards({ ...homeRequest, decoderUrl: null, origin: 'http://localhost:8100' }, [faulty('u', 'Gate', 'unreachable')], { mayPair })), 'u');
+    const [, , wifi] = wifiRowOf(card);
+    assert.equal(slot(wifi, 'state'), 'Its laps don&#39;t get through');
+    assert.ok(wifi.includes(`data-fault-help="here" hidden>${LOCAL_HELP}</p>`), wifi);
+    assert.ok(wifi.includes(`data-fault-help="elsewhere">${LOCAL_HELP}</p>`), wifi);
+    assert.doesNotMatch(card, /data-bridge-pair-again/);
+    if (mayPair) assert.match(card, /<div class="decoder-foot"><button type="button" class="btn btn-sm btn-outline" data-bridge-wifi hidden>Change Wi-Fi<\/button>/);
+  }
+});
+
+test('a decoder URL on the network wins over a localhost origin; a refused pairing on localhost still pairs again', () => {
+  const lan = { ...homeRequest, decoderUrl: 'http://192.168.1.20:8100', origin: 'http://localhost:8100' };
+  const [, , unreachable] = wifiRowOf(cardOf(String(decoderCards(lan, [faulty('u', 'Gate', 'unreachable')], { mayPair: true })), 'u'));
+  assert.match(unreachable, /Pair it again to give it this one\.<\/p>/);
+  assert.match(unreachable, /data-bridge-pair-again/);
+  const local = { ...homeRequest, decoderUrl: null, origin: 'http://localhost:8100' };
+  const [, , refused] = wifiRowOf(cardOf(String(decoderCards(local, [faulty('r', 'Gate', 'refused')], { mayPair: true })), 'r'));
+  assert.match(refused, /Pair it again to fix it\.<\/p>/);
+  assert.match(refused, /data-bridge-pair-again/);
+});
+
 test('no fault, no fault row; a member who may only see has no Pair again', () => {
   const ok = cardOf(String(decoderCards(homeRequest, [row('a', 'Gate', 'none', 'reporting', T, T)], { mayPair: true })), 'a');
   assert.doesNotMatch(ok, /data-fault/);

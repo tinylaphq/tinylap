@@ -12,6 +12,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { formatAgo } from '@tinylap/design/format-ago.js';
 import { formatWhen } from '../../public/format.js';
+import { isLoopback } from '../addresses.js';
 import { html, safe } from './html.js';
 import { selectField, textField } from './form-parts.js';
 import { asset, layout } from './layout.js';
@@ -72,6 +73,8 @@ const FAULTS = {
   refused: { words: 'Its laps are turned away', why: 'TinyLap no longer accepts its pairing.', here: 'Pair it again to fix it.' },
 };
 const ELSEWHERE = 'Plug it into this laptop, then pair it again.';
+// A loopback address on the server (dev decoder address spec §2): pairing again would hand out the same one.
+const LOCAL = (address) => `TinyLap gives decoders “${address}” as its address, which on a decoder means the decoder itself. Set TINYLAP_DECODER_URL to the network address of the computer TinyLap runs on, then pair it again.`;
 
 /** Unpair's question, opened by the card's Unpair without script (invoker commands); it posts, and the Bridge comes back. */
 const unpairDialog = (request, d) => html`<dialog id="unpair-${d.id}" class="confirm-dialog" aria-labelledby="unpair-${d.id}-title">
@@ -103,10 +106,12 @@ function decoderCard(request, d, mayPair, mayDelete) {
   const change = mayPair ? html`<button type="button" class="btn btn-sm btn-outline" data-bridge-wifi hidden>Change Wi-Fi</button>` : null;
   const repair = (style) => (mayPair ? html`<button type="button" class="btn btn-sm ${style}" data-bridge-pair-again hidden>Pair again</button>` : null);
   const fault = FAULTS[d.wifi.fault] ?? null;
+  const address = request.decoderUrl ?? request.origin;
+  const local = d.wifi.fault === 'unreachable' && address != null && isLoopback(address) ? LOCAL(address) : null;
   // A fault's row has one action, the fix: Change Wi-Fi and Pair again's quiet place give way to it.
   const wifiRow = fault
     ? connectionRow({ which: 'wifi', name: 'Wi-Fi', icon: WIFI_ICON, state: 'fail', words: fault.words, detail: null, fault: d.wifi.fault,
-      action: html`<p class="decoder-row-help" data-fault-help="here" hidden>${fault.why} ${fault.here}</p><p class="decoder-row-help" data-fault-help="elsewhere">${fault.why} ${ELSEWHERE}</p>${repair('btn-primary')}` })
+      action: html`<p class="decoder-row-help" data-fault-help="here" hidden>${local ?? `${fault.why} ${fault.here}`}</p><p class="decoder-row-help" data-fault-help="elsewhere">${local ?? `${fault.why} ${ELSEWHERE}`}</p>${local ? null : repair('btn-primary')}` })
     : connectionRow({ which: 'wifi', name: 'Wi-Fi', icon: WIFI_ICON, state: wifi.state, words: wifi.words(request, d.wifi.at), detail: wifi.detail(request, d.wifi.at), action: html`${hint}${change}` });
   const unpair = mayDelete ? html`<button type="button" class="decoder-unpair" commandfor="unpair-${d.id}" command="show-modal">Unpair<span class="visually-hidden"> ${d.name}</span></button>` : null;
   const foot = mayPair || mayDelete ? html`<div class="decoder-foot">${fault ? change : repair('btn-outline')}${unpair}</div>` : null;

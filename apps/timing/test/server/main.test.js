@@ -6,7 +6,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { lanAddress } from '../../server/addresses.js';
 
 const MAIN = fileURLToPath(new URL('../../server/main.js', import.meta.url));
 const FULL = {
@@ -38,20 +40,48 @@ test('with its configuration it starts and stops cleanly on SIGTERM', async () =
   assert.equal(code, 0);
 });
 
-test('in dev it listens on this machine only, unless a decoder must reach it (TINYLAP_DECODER_URL)', async () => {
-  for (const [env, host] of [[{}, '127.0.0.1'], [{ TINYLAP_DECODER_URL: 'http://192.168.1.20:8100' }, '0.0.0.0']]) {
+/** A port free right now, for a run whose decoder address names it. */
+async function freePort() {
+  const server = createServer().listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = /** @type {import('node:net').AddressInfo} */ (server.address());
+  server.close();
+  await once(server, 'close');
+  return port;
+}
+
+test("in dev decoders post to this machine's network address, or TINYLAP_DECODER_URL; on a random port it stays on this machine", async () => {
+  const port = String(await freePort());
+  const lan = lanAddress();
+  const cases = [
+    [{ PORT: port }, lan ? `timing on http://0.0.0.0:${port}` : 'timing on http://127.0.0.1:', lan ? `decoders post to http://${lan}:${port}` : "decoders can't reach it over Wi-Fi (no network)"],
+    [{ TINYLAP_DECODER_URL: 'http://192.168.1.20:8100' }, 'timing on http://0.0.0.0:', 'decoders post to http://192.168.1.20:8100'],
+    [{}, 'timing on http://127.0.0.1:', "decoders can't reach it over Wi-Fi (random port)"],
+  ];
+  for (const [env, listens, decoders] of cases) {
     const child = run({ ...FULL, ...env });
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.resume();
     try {
       while (!/timing on http:/.test(out)) await once(child.stdout, 'data');
-      assert.ok(out.includes(`timing on http://${host}:`), `${JSON.stringify(env)}: ${out}`);
+      assert.ok(out.includes(listens), `${JSON.stringify(env)}: ${out}`);
+      assert.ok(out.includes(decoders), `${JSON.stringify(env)}: ${out}`);
     } finally {
       child.kill('SIGTERM');
       await once(child, 'exit');
     }
   }
+});
+
+test('timing refuses a TINYLAP_DECODER_URL that is not a URL', async () => {
+  const child = run({ ...FULL, TINYLAP_DECODER_URL: '192.168.1.20:8100' });
+  let err = '';
+  child.stderr.on('data', (d) => { err += d; });
+  child.stdout.resume();
+  const [code] = await once(child, 'exit');
+  assert.equal(code, 1);
+  assert.match(err, /TINYLAP_DECODER_URL:/);
 });
 
 test('timing refuses a TINYLAP_SIMULATE it does not understand', async () => {
