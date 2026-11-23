@@ -124,6 +124,15 @@ class Parsing(unittest.TestCase):
             main(["osccal", "--current", "100", "--start-us", "2040"])
         self.assertEqual(out.getvalue(), "102\n")
 
+    def test_osccal_takes_read_cal_hex(self):
+        import contextlib
+        import io
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["osccal", "--current", "0x64", "--start-us", "2040"])
+        self.assertEqual(out.getvalue(), "102\n")
+
     def test_baud_reaches_avrdude(self):
         with mock.patch("flash.conf_path", return_value="a.conf"), mock.patch("flash.run_avrdude", return_value=0) as run:
             main(["flash", "--id", "12", "--programmer", "avrisp", "--port", "/dev/ttyACM0", "--baud", "9600"])

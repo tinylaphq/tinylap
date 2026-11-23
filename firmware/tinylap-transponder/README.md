@@ -94,7 +94,7 @@ Python 3.9 or later. The script runs avrdude through PlatformIO, so build first 
    python3 tools/flash.py osccal --current 150 --start-us 2080
    ```
 
-   `--current` is the value `read-cal` printed (or the one already stored); `--start-us` is the averaged start period. The script moves OSCCAL by one step per about 1% of error, stays within the chip's half of the range, and refuses a reading more than 15% off. Aiming at a 2000 µs start period keeps the clock at about 8 MHz, below the 8.8 MHz limit for EEPROM writes.
+   `--current` is the value `read-cal` printed, in hex as it prints it or in decimal (or the one already stored); `--start-us` is the averaged start period. The script moves OSCCAL by one step per about 1% of error, stays within the chip's half of the range, and refuses a reading more than 15% off. Aiming at a 2000 µs start period keeps the clock at about 8 MHz, below the 8.8 MHz limit for EEPROM writes.
 
 5. **Reflash with the new value, and check again.**
 

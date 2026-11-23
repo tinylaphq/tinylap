@@ -67,6 +67,14 @@ def positive_int(text: str) -> int:
     return value
 
 
+def number(text: str) -> int:
+    # Decimal, or hex with 0x as read-cal prints it.
+    try:
+        return int(text, 0)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text} is not a number") from None
+
+
 def run_avrdude(args: list[str]) -> int:
     cmd = ["pio", "pkg", "exec", "-p", "tool-avrdude", "--", "avrdude"] + args
     return subprocess.call(cmd, cwd=PROJECT)
@@ -122,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(run=read_cal)
 
     s = sub.add_parser("osccal", help="print the corrected OSCCAL")
-    s.add_argument("--current", type=int, required=True)
+    s.add_argument("--current", type=number, required=True)
     s.add_argument("--start-us", type=float, required=True)
     s.set_defaults(run=osccal)
 
